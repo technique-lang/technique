@@ -47,7 +47,13 @@ lookupTarget x' = catch
     x = read $ S.unpack x'
 
 
-handleGetMethod = undefined
+handleGetMethod :: Snap ()
+handleGetMethod = do
+	modifyResponse $ setContentType "application/json"
+	modifyResponse $ setHeader "Cache-Control" "max-age=1"
+	sendFile "hello.js"
+
+
 handlePutMethod = undefined
 handlePostMethod = undefined
 
@@ -100,7 +106,7 @@ serveHome = do
 site :: Snap ()
 site = route
     [("/", serveHome),
-     ("/resouce/:id", serveResource)]
+     ("/resource/:id", serveResource)]
     <|> serveNotFound
 
 main :: IO ()
