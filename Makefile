@@ -18,12 +18,12 @@ dirs: $(BUILDDIR)/.dir
 $(BUILDDIR)/.dir:
 	@echo "MKDIR\t$(BUILDDIR)"
 	mkdir -p $(BUILDDIR)
-	touch $(BUILDDIR).dir
+	touch $(BUILDDIR)/.dir
 
 technique: $(SOURCES)
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
-	ghc --make -O -outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
+	ghc --make -O -dynamic -outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
 	@echo "STRIP\ttechnique"
 	strip -o ./technique $(BUILDDIR)/technique.bin
 	-rm -f $(BUILDDIR)/technique.bin
