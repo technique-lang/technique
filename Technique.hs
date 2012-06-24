@@ -97,22 +97,34 @@ handleGetMethod = do
         otherwise                -> handleAsText
 
 
+handleAsREST :: Snap ()
 handleAsREST = do
     modifyResponse $ setContentType "application/json"
     modifyResponse $ setHeader "Cache-Control" "max-age=1"
     sendFile "hello.js"
 
+
+handleAsBrowser :: Snap ()
 handleAsBrowser = do
     modifyResponse $ setContentType "text/html; charset=UTF-8"
     modifyResponse $ setHeader "Cache-Control" "max-age=1"
     sendFile "hello.html"
 
+
+handleAsText :: Snap ()
 handleAsText = do
     modifyResponse $ setContentType "text/plain"
     writeBS "Sounds good to me\n"
 
-handlePutMethod = undefined
-handlePostMethod = undefined
+
+handlePutMethod :: Snap ()
+handlePutMethod =
+    undefined
+
+
+handlePostMethod :: Snap ()
+handlePostMethod =
+    undefined
 
 
 
