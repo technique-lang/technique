@@ -37,25 +37,19 @@ import Control.Exception (SomeException)
 
 import Lookup (lookupTemp)
 
-lookupTarget :: S.ByteString -> Snap S.ByteString
-lookupTarget x' = catch
-    (liftIO $ lookupTemp x)
-    (\e -> do
-        serveError x' e
-        return "")
-  where
-    x = read $ S.unpack x'
+--
+-- Top level URL routing logic.
+--
 
+main :: IO ()
+main = quickHttpServe site
 
-handleGetMethod :: Snap ()
-handleGetMethod = do
-	modifyResponse $ setContentType "application/json"
-	modifyResponse $ setHeader "Cache-Control" "max-age=1"
-	sendFile "hello.js"
+site :: Snap ()
+site = route
+    [("/", serveHome),
+     ("/resource/:id", serveResource)]
+    <|> serveNotFound
 
-
-handlePutMethod = undefined
-handlePostMethod = undefined
 
 serveResource :: Snap ()
 serveResource = do
@@ -66,6 +60,60 @@ serveResource = do
         PUT     -> handlePutMethod
         POST    -> handlePostMethod
         otherwise -> serveBadRequest -- wrong! There's actually a 4xx code for this
+
+--
+-- If they request / then we send them to an info page. 
+--
+
+serveHome :: Snap ()
+serveHome = do
+    writeBS "Home\n"
+
+
+serveNotFound :: Snap ()
+serveNotFound = do
+    modifyResponse $ setResponseStatus 404 "Not Found"
+    sendFile "content/404.html"
+
+
+serveBadRequest :: Snap ()
+serveBadRequest = do
+    modifyResponse $ setResponseStatus 400 "Bad Request"
+    writeBS "400 Bad Request\n"
+
+
+--
+-- Dispatch normal GET requests based on MIME type.
+--
+
+handleGetMethod :: Snap ()
+handleGetMethod = do
+    r <- getRequest
+    let mime0 = getHeader "Accept" r
+
+    case mime0 of
+        Just "application/json"  -> handleAsREST
+        Just "text/html"         -> handleAsBrowser
+        otherwise                -> handleAsText
+
+
+handleAsREST = do
+    modifyResponse $ setContentType "application/json"
+    modifyResponse $ setHeader "Cache-Control" "max-age=1"
+    sendFile "hello.js"
+
+handleAsBrowser = do
+    modifyResponse $ setContentType "text/html; charset=UTF-8"
+    modifyResponse $ setHeader "Cache-Control" "max-age=1"
+    sendFile "hello.html"
+
+handleAsText = do
+    modifyResponse $ setContentType "text/plain"
+    writeBS "Sounds good to me\n"
+
+handlePutMethod = undefined
+handlePostMethod = undefined
+
 
 
 serveError :: S.ByteString -> SomeException -> Snap ()
@@ -79,36 +127,21 @@ serveError x e = do
     msg = S.pack $ show (e :: SomeException)
 
 
-serveNotFound :: Snap ()
-serveNotFound = do
-    modifyResponse $ setResponseStatus 404 "Not Found"
-    sendFile "content/404.html"
 
-serveBadRequest :: Snap ()
-serveBadRequest = do
-    modifyResponse $ setResponseStatus 400 "Bad Request"
-    writeBS "400 Bad Request\n"
 
 
 
 --
--- If they request / then we send them to an info page. 
+-- Placeholder
 --
 
-serveHome :: Snap ()
-serveHome = do
-    writeBS "Home\n"
+lookupTarget :: S.ByteString -> Snap S.ByteString
+lookupTarget x' = catch
+    (liftIO $ lookupTemp x)
+    (\e -> do
+        serveError x' e
+        return "")
+  where
+    x = read $ S.unpack x'
 
---
--- Top level URL routing logic.
---
-
-site :: Snap ()
-site = route
-    [("/", serveHome),
-     ("/resource/:id", serveResource)]
-    <|> serveNotFound
-
-main :: IO ()
-main = quickHttpServe site
 
