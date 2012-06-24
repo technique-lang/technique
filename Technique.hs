@@ -123,9 +123,10 @@ handlePutMethod =
 
 
 handlePostMethod :: Snap ()
-handlePostMethod =
-    undefined
-
+handlePostMethod = do
+    modifyResponse $ setResponseStatus 201 "Created"
+    modifyResponse $ setHeader "Cache-Control" "no-cache"
+    modifyResponse $ setHeader "Location" "http://server.example.com/something/788"
 
 
 serveError :: S.ByteString -> SomeException -> Snap ()
