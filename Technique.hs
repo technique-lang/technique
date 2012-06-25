@@ -129,7 +129,7 @@ handlePostMethod = do
     modifyResponse $ setHeader "Location" "http://server.example.com/something/788"
 
 
-serveError :: S.ByteString -> SomeException -> Snap ()
+serveError :: ByteString -> SomeException -> Snap ()
 serveError x e = do
     logError msg
     modifyResponse $ setResponseStatus 500 "Internal Server Error"
@@ -148,7 +148,7 @@ serveError x e = do
 -- Placeholder
 --
 
-lookupTarget :: S.ByteString -> Snap S.ByteString
+lookupTarget :: ByteString -> Snap ByteString
 lookupTarget x' = catch
     (liftIO $ lookupTemp x)
     (\e -> do

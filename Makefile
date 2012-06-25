@@ -27,6 +27,7 @@ technique: $(SOURCES)
 	@echo "STRIP\ttechnique"
 	strip -o ./technique $(BUILDDIR)/technique.bin
 	-rm -f $(BUILDDIR)/technique.bin
+	@echo
 
 clean:
 	@echo "RM\ttemp files"
