@@ -20,13 +20,16 @@ $(BUILDDIR)/.dir:
 	mkdir -p $(BUILDDIR)
 	touch $(BUILDDIR)/.dir
 
-technique: $(SOURCES)
+technique: $(BUILDDIR)/technique.bin
+
+$(BUILDDIR)/technique.bin: $(SOURCES)
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
-	ghc --make -O -dynamic -outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
+	ghc --make -O -threaded  \
+		-prof -fprof-auto \
+		-outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
 	@echo "STRIP\ttechnique"
-	strip -o ./technique $(BUILDDIR)/technique.bin
-	-rm -f $(BUILDDIR)/technique.bin
+	strip $(BUILDDIR)/technique.bin
 	@echo
 
 clean:
