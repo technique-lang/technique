@@ -117,9 +117,9 @@ handleAsText = do
     writeBS "Sounds good to me\n"
 
 
-handlePutMethod :: Snap ()
-handlePutMethod =
-    undefined
+--
+-- Create a new procedures
+--
 
 
 handlePostMethod :: Snap ()
@@ -129,19 +129,67 @@ handlePostMethod = do
     modifyResponse $ setHeader "Location" "http://server.example.com/something/788"
 
 
+
+--
+-- Given an correctly addressed procedure, update it with the inbound entity.
+--
+
+handlePutMethod :: Snap ()
+handlePutMethod = do
+    r <- getRequest
+    let mime0 = getHeader "Content-Type" r
+
+    case mime0 of
+        Just "application/json"  -> updateResource2
+        otherwise                -> serveUnsupported
+
+  where
+    updateResource2 = catch
+        (updateResource)
+        (\e -> serveError "Splat\n" e)
+
+
+updateResource :: Snap ()
+updateResource = do
+    body <- readRequestBody 4
+    modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
+    modifyResponse $ setHeader "Cache-Control" "no-cache"
+    return ()
+
+
+serveUnsupported :: Snap ()
+serveUnsupported = do
+    modifyResponse $ setResponseStatus 415 "Unsupported Media Type"
+    writeBS "415 Unsupported Media Type\n"
+    r <- getResponse
+    finishWith r
+
+
+--
+-- The exception will be dumped to the server's stdout, while the supplied
+-- message will be sent out with the response (ideally only for debugging
+-- purposes, but easier than looking in log/error.log for details). 
+--
+
 serveError :: ByteString -> SomeException -> Snap ()
-serveError x e = do
-    logError msg
+serveError x' e = do
+    debug msg
     modifyResponse $ setResponseStatus 500 "Internal Server Error"
-    writeBS "500 Internal Server Error\n"
+    writeBS x'
     r <- getResponse
     finishWith r
   where
-    msg = S.pack $ show (e :: SomeException)
+    msg = show (e :: SomeException)
 
 
+debug :: String -> Snap ()
+debug cs = do
+    liftIO $ putStrLn cs 
 
 
+debug' :: ByteString -> Snap ()
+debug' x' = do
+    debug $ S.unpack x'
 
 
 --
