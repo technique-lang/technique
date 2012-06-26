@@ -42,7 +42,12 @@ import Lookup (lookupTemp)
 --
 
 main :: IO ()
-main = quickHttpServe site
+main = quickHttpServe wrapSiteLogic
+
+wrapSiteLogic :: Snap ()
+wrapSiteLogic = catch
+        (site)
+        (\e -> serveError "Splat\n" e)
 
 site :: Snap ()
 site = route
@@ -140,13 +145,8 @@ handlePutMethod = do
     let mime0 = getHeader "Content-Type" r
 
     case mime0 of
-        Just "application/json"  -> updateResource2
+        Just "application/json"  -> updateResource
         otherwise                -> serveUnsupported
-
-  where
-    updateResource2 = catch
-        (updateResource)
-        (\e -> serveError "Splat\n" e)
 
 
 updateResource :: Snap ()
