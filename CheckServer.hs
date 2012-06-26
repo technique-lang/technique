@@ -22,23 +22,36 @@
 import Prelude hiding (catch)
 
 import Snap.Http.Server
-import Snap.Core
+import Snap.Core (hiding setHeader)
+import Snap.Test
 import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Maybe (fromMaybe)
-import Data.String (fromString)
-import Numeric
-import Data.Char
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Control.Monad.Trans (liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.CatchIO (catch, throw)
 import Control.Exception (SomeException)
 
---
--- Top level URL routing logic.
---
+import Technique (site)
 
 main :: IO ()
-main = quickHttpServe Technique.site
+main = do
+    runHandler example1 
+
+
+example1 :: (MonadIO m) => RequestBuilder m ()
+example1 = do
+    get "/headers" Map.empty
+    setHeader "Accept" "application/xml"
+    setContentType "text/html"
+
+
+
+example2 :: (MonadIO m) => RequestBuilder m ()
+example2 = do
+    put "/bonus" "text/plain" (S.pack "This is a test")
+
 

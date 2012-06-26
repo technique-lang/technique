@@ -1,4 +1,4 @@
-all: dirs technique
+all: dirs build
 
 BUILDDIR = /tmp/build/technique
 
@@ -20,7 +20,7 @@ $(BUILDDIR)/.dir:
 	mkdir -p $(BUILDDIR)
 	touch $(BUILDDIR)/.dir
 
-technique: $(BUILDDIR)/technique.bin
+build: $(BUILDDIR)/technique.bin $(BUILDDIR)/check.bin
 
 $(BUILDDIR)/technique.bin: $(SOURCES)
 	hasktags -cx .
@@ -30,6 +30,16 @@ $(BUILDDIR)/technique.bin: $(SOURCES)
 		-outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
 	@echo "STRIP\ttechnique"
 	strip $(BUILDDIR)/technique.bin
+	@echo
+
+$(BUILDDIR)/check.bin: $(SOURCES)
+	hasktags -cx .
+	@echo "GHC\tCheck.hs"
+	ghc --make -O -threaded  \
+		-prof -fprof-auto \
+		-outputdir $(BUILDDIR) -o $(BUILDDIR)/check.bin Check.hs
+	@echo "STRIP\tcheck"
+	strip $(BUILDDIR)/check.bin
 	@echo
 
 clean:
