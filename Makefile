@@ -1,4 +1,4 @@
-all: dirs build
+all: build-core
 
 BUILDDIR = /tmp/build/technique
 
@@ -9,7 +9,7 @@ MAKEFLAGS=-s -R
 REDIRECT=>/dev/null
 endif
 
-.PHONY: dirs
+.PHONY: all dirs test build-core build-test
 
 SOURCES=$(shell find . -name '*.hs')
 
@@ -20,9 +20,10 @@ $(BUILDDIR)/.dir:
 	mkdir -p $(BUILDDIR)
 	touch $(BUILDDIR)/.dir
 
-build: $(BUILDDIR)/technique.bin $(BUILDDIR)/check.bin
 
-$(BUILDDIR)/technique.bin: $(SOURCES)
+build-core: dirs $(BUILDDIR)/technique.bin
+
+$(BUILDDIR)/technique.bin: Technique.hs HttpServer.hs
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
 	ghc --make -O -threaded  \
@@ -30,17 +31,20 @@ $(BUILDDIR)/technique.bin: $(SOURCES)
 		-outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
 	@echo "STRIP\ttechnique"
 	strip $(BUILDDIR)/technique.bin
-	@echo
 
-$(BUILDDIR)/check.bin: $(SOURCES)
+build-test: dirs $(BUILDDIR)/check.bin
+
+$(BUILDDIR)/check.bin: CheckServer.hs HttpServer.hs
 	hasktags -cx .
 	@echo "GHC\tCheck.hs"
 	ghc --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -o $(BUILDDIR)/check.bin Check.hs
+		-outputdir $(BUILDDIR) -o $(BUILDDIR)/check.bin CheckServer.hs
 	@echo "STRIP\tcheck"
 	strip $(BUILDDIR)/check.bin
-	@echo
+
+test: build-test
+	$(BUILDDIR)/check.bin
 
 clean:
 	@echo "RM\ttemp files"
