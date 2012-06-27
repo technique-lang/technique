@@ -35,10 +35,12 @@ import Control.Monad.Trans (liftIO)
 import Control.Monad.CatchIO (catch, throw)
 import Control.Exception (SomeException)
 
+import HttpServer (site)
+
 --
 -- Top level URL routing logic.
 --
 
 main :: IO ()
-main = quickHttpServe Technique.site
+main = quickHttpServe site
 

@@ -19,7 +19,7 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Technique (site) where
+module HttpServer (site) where
 
 import Prelude hiding (catch)
 
@@ -49,9 +49,10 @@ site = catch
         (\e -> serveError "Splat\n" e)
 
 routeRequests :: Snap ()
-routeRequests = route
-    [("/", serveHome),
-     ("/resource/:id", serveResource)]
+routeRequests =
+        ifTop serveHome
+    <|> route
+            [("/resource/:id", serveResource)]
     <|> serveNotFound
 
 
