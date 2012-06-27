@@ -22,24 +22,47 @@
 import Prelude hiding (catch)
 
 import Snap.Http.Server
-import Snap.Core (hiding setHeader)
+import Snap.Core (Snap, Request, Response )
 import Snap.Test
-import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad.Trans (liftIO)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.CatchIO (catch, throw)
-import Control.Exception (SomeException)
+import Test.HUnit
 
-import Technique (site)
+import HttpServer (site)
 
-main :: IO ()
-main = do
-    runHandler example1 
+
+main :: IO Counts
+main = runTestTT tests
+
+
+tests = TestList
+        [TestLabel "Basic routing" testRouting]
+
+
+testRouting = TestList
+        [testBogusUrl,
+         testHomepage]
+
+testBogusUrl = TestCase $ do
+    res <- runHandler bogusUrlR site
+    assert404 res
+
+bogusUrlR :: (MonadIO m) => RequestBuilder m ()
+bogusUrlR = do
+    get "/booga" Map.empty
+
+
+testHomepage = TestCase $ do
+    res <- runHandler homepageR site
+    assertSuccess res
+
+homepageR :: (MonadIO m) => RequestBuilder m ()
+homepageR = do
+    get "/" Map.empty
 
 
 example1 :: (MonadIO m) => RequestBuilder m ()
@@ -49,9 +72,9 @@ example1 = do
     setContentType "text/html"
 
 
-
 example2 :: (MonadIO m) => RequestBuilder m ()
 example2 = do
-    put "/bonus" "text/plain" (S.pack "This is a test")
-
+    put "/bonus" "text/plain" body
+  where
+    body = "This is a test"
 
