@@ -44,6 +44,7 @@ $(BUILDDIR)/check.bin: CheckServer.hs HttpServer.hs
 	strip $(BUILDDIR)/check.bin
 
 test: build-test
+	@echo "EXEC\tcheck"
 	$(BUILDDIR)/check.bin
 
 clean:

@@ -22,7 +22,7 @@
 import Prelude hiding (catch)
 
 import Snap.Http.Server
-import Snap.Core (Snap, Request, Response, Method(..))
+import Snap.Core hiding (setHeader, setContentType)
 import Snap.Test
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -31,9 +31,17 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (MonadIO)
 import Test.HUnit
+import Data.Maybe (fromMaybe)
 
 import HttpServer (site)
 
+--
+-- Naming convention used is Requests as q and Responses as p.
+--
+
+type ContentType = ByteString
+
+type AcceptType = ByteString
 
 main :: IO Counts
 main = runTestTT tests
@@ -45,37 +53,98 @@ tests = TestList
 
 testRouting = TestList
         [testBogusUrl,
-         testHomepage]
+         testHomepage,
+         testBasicUpdate]
 
 
 testBogusUrl = TestCase $ do
-    res <- makeRequest GET "/booga" "text/html"
-    assert404 res
+    (q,p) <- makeRequest GET "/booga" "text/html"
+    assert404 p
 
 testHomepage = TestCase $ do
-    res <- makeRequest GET "/" "text/html"
-    assertSuccess res
+    (q,p) <- makeRequest GET "/" "text/html"
+    assertSuccess p
 
 
+testBasicUpdate = TestCase $ do
+    (q,p) <- makeRequest PUT "/resource/254" "application/json"
+    expectCode 204 (q,p)
+    expectType "" (q,p)
+    expectLength 0 (q,p)
 
-makeRequest :: Method -> ByteString -> ByteString -> IO Response
+
+--
+-- Carry out an HTTP request, internally, creating the request out of the
+-- supplied method, URL, and content type that you're willing to accept. The
+-- site varable is the top level Snap handler from HttpServer, per import.
+--
+
+makeRequest :: Method -> ByteString -> AcceptType -> IO (Request, Response)
 makeRequest method url' accept' = do
-    res <- runHandler req site
-    return res
+    q <- buildRequest request
+    p <- runHandler request site
+    return (q,p)
   where
-    req = case method of
+    request = case method of
         GET         -> setupGetRequest url' accept'
-        PUT         
+        PUT         -> setupPutRequest url' accept'
         otherwise   -> undefined
     
 
-setupGetRequest :: (MonadIO m) => ByteString -> ByteString -> RequestBuilder m ()
+setupGetRequest :: (MonadIO m) => ByteString -> AcceptType -> RequestBuilder m ()
 setupGetRequest url' mime' = do
     get url' Map.empty
     setHeader "Accept" mime'
 
 
+setupPutRequest :: (MonadIO m) => ByteString -> ContentType -> RequestBuilder m ()
+setupPutRequest url' mime' = do
+    put url' mime' body'
+  where
+    body' = "This is a test"
 
+
+expectCode :: Int -> (Request, Response) -> Assertion
+expectCode i (q,p) = do
+    assertEqual msg i code
+  where
+    code = rspStatus p
+    msg = summarize (q,p)
+
+expectType :: ContentType -> (Request, Response) -> Assertion
+expectType t' (q,p) = do
+    assertEqual msg t' mime'
+  where
+    mime'0 = getHeader "Content-Type" p
+    mime'  = fromMaybe "" mime'0
+    msg   = summarize (q,p)
+
+
+expectLength :: Int -> (Request, Response) -> Assertion
+expectLength i (q,p) = do
+    assertBool (msg ++ "\nBut no Content-Length header!") (len > -1)
+    assertEqual msg i len
+  where
+    len'0 = getHeader "Content-Length" p
+    len'  = fromMaybe "-1" len'0
+    len   = read $ S.unpack len'
+    msg   = summarize (q,p)
+
+
+--
+-- Summarize a Request and Response pair, used for output from HUnit when an
+-- assertion fails.
+--
+
+summarize :: (Request, Response) -> String
+summarize (q,p) =
+    ">>> " ++ method ++ " " ++ uri ++ "\n<<< " ++ code ++ " " ++ label
+  where
+    method = show $ rqMethod q
+    uri = S.unpack $ rqURI q
+    code = show $ rspStatus p
+    label = S.unpack $ rspStatusReason p
+    
 
 example1 :: (MonadIO m) => RequestBuilder m ()
 example1 = do
