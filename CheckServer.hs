@@ -22,7 +22,7 @@
 import Prelude hiding (catch)
 
 import Snap.Http.Server
-import Snap.Core (Snap, Request, Response )
+import Snap.Core (Snap, Request, Response, Method(..))
 import Snap.Test
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -47,22 +47,34 @@ testRouting = TestList
         [testBogusUrl,
          testHomepage]
 
+
 testBogusUrl = TestCase $ do
-    res <- runHandler bogusUrlR site
+    res <- makeRequest GET "/booga" "text/html"
     assert404 res
 
-bogusUrlR :: (MonadIO m) => RequestBuilder m ()
-bogusUrlR = do
-    get "/booga" Map.empty
-
-
 testHomepage = TestCase $ do
-    res <- runHandler homepageR site
+    res <- makeRequest GET "/" "text/html"
     assertSuccess res
 
-homepageR :: (MonadIO m) => RequestBuilder m ()
-homepageR = do
-    get "/" Map.empty
+
+
+makeRequest :: Method -> ByteString -> ByteString -> IO Response
+makeRequest method url' accept' = do
+    res <- runHandler req site
+    return res
+  where
+    req = case method of
+        GET         -> setupGetRequest url' accept'
+        PUT         
+        otherwise   -> undefined
+    
+
+setupGetRequest :: (MonadIO m) => ByteString -> ByteString -> RequestBuilder m ()
+setupGetRequest url' mime' = do
+    get url' Map.empty
+    setHeader "Accept" mime'
+
+
 
 
 example1 :: (MonadIO m) => RequestBuilder m ()
