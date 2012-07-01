@@ -39,9 +39,12 @@ import HttpServer (site)
 -- Naming convention used is Requests as q and Responses as p.
 --
 
+type URL = ByteString
+
 type ContentType = ByteString
 
 type AcceptType = ByteString
+
 
 main :: IO Counts
 main = runTestTT tests
@@ -57,25 +60,25 @@ tests =
 testBogusUrl =
     TestLabel "Request for a bogus URL should fail" $
     TestCase $ do
-        (q,p) <- makeRequest GET "/booga" "text/html"
+        (q,p) <- makeRequest GET "/booga" "text/html" ""
         assert404 p
 
 testHomepage =
     TestLabel "Request for homepage should succeed" $
     TestCase $ do
-        (q,p) <- makeRequest GET "/" "text/html"
+        (q,p) <- makeRequest GET "/" "text/html" ""
         assertSuccess p
 
 testWrongMedia = 
     TestLabel "Update via PUT with wrong media type should be rejected" $
     TestCase $ do
-        (q,p) <- makeRequest PUT "/resource/254" "application/xml"
+        (q,p) <- makeRequest PUT "/resource/254" "application/xml" "<html/>"
         expectCode 415 (q,p)
 
 testBasicUpdate =
     TestLabel "Update via PUT should result in 204" $
     TestCase $ do
-        (q,p) <- makeRequest PUT "/resource/254" "application/json"
+        (q,p) <- makeRequest PUT "/resource/254" "application/json" "{ }"
         expectCode 204 (q,p)
         expectType "" (q,p)
         expectLength 0 (q,p)
@@ -87,31 +90,41 @@ testBasicUpdate =
 -- site varable is the top level Snap handler from HttpServer, per import.
 --
 
-makeRequest :: Method -> ByteString -> AcceptType -> IO (Request, Response)
-makeRequest method url' accept' = do
+makeRequest :: Method -> URL -> AcceptType -> ByteString -> IO (Request, Response)
+makeRequest method url' mime' payload' = do
     q <- buildRequest request
     p <- runHandler request handler
     return (q,p)
   where
     request = case method of
-        GET         -> setupGetRequest url' accept'
-        PUT         -> setupPutRequest url' accept'
+        GET         -> setupGetRequest url' mime'
+        PUT         -> setupPutRequest url' mime' payload'
         otherwise   -> undefined
     handler = HttpServer.site
 
 
-setupGetRequest :: (MonadIO m) => ByteString -> AcceptType -> RequestBuilder m ()
+--
+-- Create a GET request, including an Accept header of the given MIME type.
+--
+
+setupGetRequest :: (MonadIO m) => URL -> AcceptType -> RequestBuilder m ()
 setupGetRequest url' mime' = do
     get url' Map.empty
     setHeader "Accept" mime'
 
+--
+-- Create a PUT request, specifying the MIME type of the payload.
+--
 
-setupPutRequest :: (MonadIO m) => ByteString -> ContentType -> RequestBuilder m ()
-setupPutRequest url' mime' = do
-    put url' mime' body'
-  where
-    body' = "This is a test"
+setupPutRequest :: (MonadIO m) => URL -> ContentType -> ByteString -> RequestBuilder m ()
+setupPutRequest url' mime' payload' = do
+    put url' mime' payload'
 
+--
+-- Utility functions for test cases. Depending on the activity, we can require
+-- a specific status code, content type, and so on. These functions wrap calls
+-- to assert.
+--
 
 expectCode :: Int -> (Request, Response) -> Assertion
 expectCode i (q,p) = do
