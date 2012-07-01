@@ -31,7 +31,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (MonadIO)
 import Test.HUnit
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust)
 
 import HttpServer (site)
 
@@ -99,7 +99,7 @@ makeRequest method url' mime' payload' = do
     request = case method of
         GET         -> setupGetRequest url' mime'
         PUT         -> setupPutRequest url' mime' payload'
-        otherwise   -> undefined
+        otherwise   -> undefined   
     handler = HttpServer.site
 
 
@@ -144,14 +144,24 @@ expectType t' (q,p) = do
 
 expectLength :: Int -> (Request, Response) -> Assertion
 expectLength i (q,p) = do
-    assertBool (msg ++ "\nBut no Content-Length header!") (len > -1)
-    assertEqual msg i len
+    assertMaybe (msg ++ "But no Content-Length header!") len'0
+    assertEqual (msg ++ "Content-Length header wrong") i len
   where
     len'0 = getHeader "Content-Length" p
-    len'  = fromMaybe "-1" len'0
+    len'  = fromJust len'0
     len   = read $ S.unpack len'
     msg   = summarize (q,p)
 
+
+--
+-- Seems a glaring omission from HUnit; assert that a Maybe is not Nothing.
+--
+
+assertMaybe :: String -> Maybe a -> Assertion
+assertMaybe prefix m0 =
+    case m0 of
+        Nothing -> assertFailure prefix
+        Just _  -> assertBool "" True
 
 --
 -- Summarize a Request and Response pair, used for output from HUnit when an
@@ -160,7 +170,7 @@ expectLength i (q,p) = do
 
 summarize :: (Request, Response) -> String
 summarize (q,p) =
-    ">>> " ++ method ++ " " ++ uri ++ "\n<<< " ++ code ++ " " ++ label
+    ">>> " ++ method ++ " " ++ uri ++ "\n<<< " ++ code ++ " " ++ label ++ "\n"
   where
     method = show $ rqMethod q
     uri = S.unpack $ rqURI q
