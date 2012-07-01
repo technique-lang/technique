@@ -47,31 +47,39 @@ main :: IO Counts
 main = runTestTT tests
 
 
-tests = TestList
-        [TestLabel "Basic routing" testRouting]
-
-
-testRouting = TestList
+tests =
+    TestLabel "All tests" $
+    TestList
         [testBogusUrl,
          testHomepage,
          testBasicUpdate]
 
+testBogusUrl =
+    TestLabel "Request for a bogus URL should fail" $
+    TestCase $ do
+        (q,p) <- makeRequest GET "/booga" "text/html"
+        assert404 p
 
-testBogusUrl = TestCase $ do
-    (q,p) <- makeRequest GET "/booga" "text/html"
-    assert404 p
+testHomepage =
+    TestLabel "Request for homepage should succeed" $
+    TestCase $ do
+        (q,p) <- makeRequest GET "/" "text/html"
+        assertSuccess p
 
-testHomepage = TestCase $ do
-    (q,p) <- makeRequest GET "/" "text/html"
-    assertSuccess p
+testWrongMedia = 
+    TestLabel "Update via PUT with wrong media type should be rejected" $
+    TestCase $ do
+        (q,p) <- makeRequest PUT "/resource/254" "application/xml"
+        expectCode 415 (q,p)
 
-
-testBasicUpdate = TestCase $ do
-    (q,p) <- makeRequest PUT "/resource/254" "application/json"
-    expectCode 204 (q,p)
-    expectType "" (q,p)
-    expectLength 0 (q,p)
-
+testBasicUpdate =
+    TestLabel "Update via PUT should result in 204" $
+    TestCase $ do
+        (q,p) <- makeRequest PUT "/resource/254" "application/json"
+        expectCode 204 (q,p)
+        expectType "" (q,p)
+        expectLength 0 (q,p)
+    
 
 --
 -- Carry out an HTTP request, internally, creating the request out of the
@@ -82,14 +90,15 @@ testBasicUpdate = TestCase $ do
 makeRequest :: Method -> ByteString -> AcceptType -> IO (Request, Response)
 makeRequest method url' accept' = do
     q <- buildRequest request
-    p <- runHandler request site
+    p <- runHandler request handler
     return (q,p)
   where
     request = case method of
         GET         -> setupGetRequest url' accept'
         PUT         -> setupPutRequest url' accept'
         otherwise   -> undefined
-    
+    handler = HttpServer.site
+
 
 setupGetRequest :: (MonadIO m) => ByteString -> AcceptType -> RequestBuilder m ()
 setupGetRequest url' mime' = do

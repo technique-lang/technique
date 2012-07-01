@@ -154,6 +154,7 @@ updateResource = do
     body <- readRequestBody 4096
     modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
     modifyResponse $ setHeader "Cache-Control" "no-cache"
+    modifyResponse $ setContentLength 0
     return ()
 
 
