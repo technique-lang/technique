@@ -23,24 +23,24 @@ $(BUILDDIR)/.dir:
 
 build-core: dirs $(BUILDDIR)/technique.bin
 
-$(BUILDDIR)/technique.bin: Technique.hs HttpServer.hs Lookup.hs
+$(BUILDDIR)/technique.bin: src/Technique.hs src/HttpServer.hs src/Lookup.hs
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
 	ghc --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -o $(BUILDDIR)/technique.bin Technique.hs
-	@echo "STRIP\ttechnique"
+		-outputdir $(BUILDDIR) -i"src" -o $(BUILDDIR)/technique.bin src/Technique.hs
+	@echo "STRIP\t$(BUILDDIR)/technique"
 	strip $(BUILDDIR)/technique.bin
 
 build-test: dirs $(BUILDDIR)/check.bin
 
-$(BUILDDIR)/check.bin: CheckServer.hs HttpServer.hs
+$(BUILDDIR)/check.bin: tests/CheckServer.hs src/HttpServer.hs
 	hasktags -cx .
 	@echo "GHC\tCheck.hs"
 	ghc --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -o $(BUILDDIR)/check.bin CheckServer.hs
-	@echo "STRIP\tcheck"
+		-outputdir $(BUILDDIR) -i"src:tests" -o $(BUILDDIR)/check.bin tests/CheckServer.hs
+	@echo "STRIP\t$(BUILDDIR)/check"
 	strip $(BUILDDIR)/check.bin
 
 test: build-test
