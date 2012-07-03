@@ -23,7 +23,7 @@ $(BUILDDIR)/.dir:
 
 build-core: dirs $(BUILDDIR)/technique.bin
 
-$(BUILDDIR)/technique.bin: Technique.hs HttpServer.hs
+$(BUILDDIR)/technique.bin: Technique.hs HttpServer.hs Lookup.hs
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
 	ghc --make -O -threaded  \
