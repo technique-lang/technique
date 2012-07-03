@@ -1,0 +1,36 @@
+cabal-version:       >= 1.2
+name:                technique
+version:             0.1.1.0
+synopsis:            Procedures and Sequences
+license:             GPL-2
+license-file:        COPYING
+author:              Andrew Cowie <andrew@operationaldynamics.com>
+maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
+copyright:           © 2011-2012 Operational Dynamics Consulting, Pty Ltd
+category:            Web
+tested-with:         GHC == 7.4
+
+build-type:          Simple
+
+executable           technique
+  build-depends:     base,
+                     bytestring,
+                     MonadCatchIO-transformers,
+                     mtl,
+                     hedis >= 0.5,
+                     snap-core,
+                     snap-server
+  main-is:           Technique.hs
+
+test-suite           check
+  type:              exitcode-stdio-1.0
+  main-is:           CheckServer.hs
+  build-depends:     base,
+                     containers,
+                     transformers,
+                     HUnit,
+                     snap-core,
+                     snap-server
+                      
+
+-- vim: set tabstop=21 expandtab:
