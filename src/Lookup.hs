@@ -43,7 +43,7 @@ fromReply x =
     first other     = "Kaboom!\n" 
 
     second :: (Maybe S.ByteString) -> S.ByteString
-    second = fromMaybe ""
+    second = fromMaybe "Nada"
 
 
 queryResource :: Int -> Redis S.ByteString
@@ -60,9 +60,13 @@ queryResource x = do
 -- external entity (ie, socket connection to database) has to happen in IO.
 --
 
+settings = defaultConnectInfo {
+        connectPort = UnixSocket "./redis.sock"
+    }
+    
 lookupResource :: Int -> IO S.ByteString
 lookupResource d = bracket
-    (connect defaultConnectInfo)
+    (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ queryResource d)
 
@@ -79,7 +83,7 @@ writeResource d t = do
 
 storeResource :: Int -> Int -> IO ()
 storeResource d t = bracket
-    (connect defaultConnectInfo)
+    (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ writeResource d t)
 
