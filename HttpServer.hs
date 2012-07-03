@@ -37,7 +37,7 @@ import Control.Monad.Trans (liftIO)
 import Control.Monad.CatchIO (catch, throw)
 import Control.Exception (SomeException)
 
-import Lookup (lookupTemp)
+import Lookup (lookupResource)
 
 --
 -- Top level URL routing logic.
@@ -104,9 +104,14 @@ handleGetMethod = do
 
 handleAsREST :: Snap ()
 handleAsREST = do
+    id0 <- getParam "id"
+    let id = fromMaybe "0" id0
+    e' <- lookupById id
+
     modifyResponse $ setContentType "application/json"
     modifyResponse $ setHeader "Cache-Control" "max-age=1"
-    sendFile "hello.js"
+    writeBS e'
+    modifyResponse $ setContentLength $ fromIntegral $ S.length e'
 
 
 handleAsBrowser :: Snap ()
@@ -197,9 +202,9 @@ debug' x' = do
 -- Placeholder
 --
 
-lookupTarget :: ByteString -> Snap ByteString
-lookupTarget x' = catch
-    (liftIO $ lookupTemp x)
+lookupById :: ByteString -> Snap ByteString
+lookupById x' = catch
+    (liftIO $ lookupResource x)
     (\e -> do
         serveError x' e
         return "")
