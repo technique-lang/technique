@@ -109,10 +109,13 @@ handleAsREST = do
     let id = fromMaybe "0" id0
     e' <- lookupById id
 
+    let r' = S.append e' "\n"
+        l  = fromIntegral $ S.length r'
+
     modifyResponse $ setContentType "application/json"
     modifyResponse $ setHeader "Cache-Control" "max-age=42"
-    writeBS e'
-    modifyResponse $ setContentLength $ fromIntegral $ S.length e'
+    modifyResponse $ setContentLength $ l
+    writeBS r'
 
 
 handleAsBrowser :: Snap ()

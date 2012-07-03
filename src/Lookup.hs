@@ -18,7 +18,6 @@
 --
 
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleInstances #-}
 
 module Lookup (lookupResource, storeResource) where
 
