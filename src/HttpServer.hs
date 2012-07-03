@@ -36,6 +36,7 @@ import Data.Char
 import Control.Monad.Trans (liftIO)
 import Control.Monad.CatchIO (catch, throw)
 import Control.Exception (SomeException)
+import System.IO (stdout, stderr, hPutStrLn, hFlush)
 
 import Lookup (lookupResource)
 
@@ -109,7 +110,7 @@ handleAsREST = do
     e' <- lookupById id
 
     modifyResponse $ setContentType "application/json"
-    modifyResponse $ setHeader "Cache-Control" "max-age=1"
+    modifyResponse $ setHeader "Cache-Control" "max-age=42"
     writeBS e'
     modifyResponse $ setContentLength $ fromIntegral $ S.length e'
 
@@ -190,7 +191,10 @@ serveError x' e = do
 
 debug :: String -> Snap ()
 debug cs = do
-    liftIO $ putStrLn cs 
+    liftIO $ do
+        hPutStrLn stderr ""
+        hPutStrLn stderr cs
+        hFlush stderr
 
 
 debug' :: ByteString -> Snap ()
@@ -203,11 +207,8 @@ debug' x' = do
 --
 
 lookupById :: ByteString -> Snap ByteString
-lookupById x' = catch
-    (liftIO $ lookupResource x)
-    (\e -> do
-        serveError x' e
-        return "")
+lookupById x' = do
+    liftIO $ lookupResource x
   where
     x = read $ S.unpack x'
 

@@ -28,9 +28,9 @@ $(BUILDDIR)/technique.bin: src/Technique.hs src/HttpServer.hs src/Lookup.hs
 	@echo "GHC\tTechnique.hs"
 	ghc --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -i"src" -o $(BUILDDIR)/technique.bin src/Technique.hs
-	@echo "STRIP\t$(BUILDDIR)/technique"
-	strip $(BUILDDIR)/technique.bin
+		-outputdir $(BUILDDIR) -i"src" -o $@ src/Technique.hs
+	@echo "STRIP\t$@"
+	strip $@
 
 build-test: dirs $(BUILDDIR)/check.bin
 

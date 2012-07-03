@@ -43,7 +43,7 @@ fromReply x =
     first other     = "Kaboom!\n" 
 
     second :: (Maybe S.ByteString) -> S.ByteString
-    second = fromMaybe "Nada"
+    second = fromMaybe ""
 
 
 queryResource :: Int -> Redis S.ByteString
@@ -60,7 +60,8 @@ queryResource x = do
 -- external entity (ie, socket connection to database) has to happen in IO.
 --
 
-settings = defaultConnectInfo {
+settings =
+    defaultConnectInfo {
         connectPort = UnixSocket "./redis.sock"
     }
     

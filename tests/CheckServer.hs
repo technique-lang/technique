@@ -51,10 +51,11 @@ main = runTestTT tests
 
 
 tests =
-    TestLabel "All tests" $
+    TestLabel "Unit tests" $
     TestList
         [testBogusUrl,
          testHomepage,
+         testBasicRequest,
          testBasicUpdate]
 
 testBogusUrl =
@@ -67,6 +68,12 @@ testHomepage =
     TestLabel "Request for homepage should succeed" $
     TestCase $ do
         (q,p) <- makeRequest GET "/" "text/html" ""
+        assertSuccess p
+
+testBasicRequest =
+    TestLabel "Request for known good resource should succeed" $
+    TestCase $ do
+        (q,p) <- makeRequest GET "/resource/254" "application/json" ""
         assertSuccess p
 
 testWrongMedia = 
