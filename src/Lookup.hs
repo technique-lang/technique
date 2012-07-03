@@ -30,7 +30,8 @@ import Control.Monad.Trans (liftIO)
 import Control.Monad.CatchIO (MonadCatchIO, bracket)
 
 --
--- Store and Access keys from Redis database
+-- Store and Access keys from Redis database. This treats unset and empty as
+-- the same.
 --
 
 fromReply :: (Either Reply (Maybe S.ByteString)) -> S.ByteString
@@ -39,7 +40,7 @@ fromReply x =
   where
     first :: Reply -> S.ByteString
     first (Error s) = s
-    first _         = ""
+    first other     = "Kaboom!\n" 
 
     second :: (Maybe S.ByteString) -> S.ByteString
     second = fromMaybe ""
@@ -52,6 +53,12 @@ queryResource x = do
   where
     key = S.append "resource:" $ S.pack $ show x
 
+
+--
+-- Establish connection to redis database and conduct query. This is more or
+-- less lifting from the IO monad to Redis monad, but you connection to an
+-- external entity (ie, socket connection to database) has to happen in IO.
+--
 
 lookupResource :: Int -> IO S.ByteString
 lookupResource d = bracket
