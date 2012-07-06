@@ -22,18 +22,6 @@
 import Prelude hiding (catch)
 
 import Snap.Http.Server
-import Snap.Core
-import Control.Applicative
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Maybe (fromMaybe)
-import Data.String (fromString)
-import Numeric
-import Data.Char
-import Control.Monad.Trans (liftIO)
-import Control.Monad.CatchIO (catch, throw)
-import Control.Exception (SomeException)
 
 import HttpServer (site)
 

@@ -11,6 +11,8 @@ endif
 
 .PHONY: all dirs test build-core build-test
 
+GHC=ghc -Wall -Werror -fwarn-tabs
+
 SOURCES=$(shell find . -name '*.hs')
 
 dirs: $(BUILDDIR)/.dir
@@ -26,7 +28,7 @@ build-core: dirs $(BUILDDIR)/technique.bin
 $(BUILDDIR)/technique.bin: src/Technique.hs src/HttpServer.hs src/Lookup.hs
 	hasktags -cx .
 	@echo "GHC\tTechnique.hs"
-	ghc --make -O -threaded  \
+	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
 		-outputdir $(BUILDDIR) -i"src" -o $@ src/Technique.hs
 	@echo "STRIP\t$@"
@@ -37,7 +39,7 @@ build-test: dirs $(BUILDDIR)/check.bin
 $(BUILDDIR)/check.bin: tests/CheckServer.hs src/HttpServer.hs
 	hasktags -cx .
 	@echo "GHC\tCheck.hs"
-	ghc --make -O -threaded  \
+	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
 		-outputdir $(BUILDDIR) -i"src:tests" -o $(BUILDDIR)/check.bin tests/CheckServer.hs
 	@echo "STRIP\t$(BUILDDIR)/check"
