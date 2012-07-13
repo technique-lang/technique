@@ -79,6 +79,7 @@ serveHome = do
 serveNotFound :: Snap ()
 serveNotFound = do
     modifyResponse $ setResponseStatus 404 "Not Found"
+    modifyResponse $ setHeader "Content-Type" "text/html"
     sendFile "content/404.html"
 
 
