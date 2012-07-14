@@ -20,17 +20,19 @@ executable           technique
                      hedis >= 0.5,
                      snap-core,
                      snap-server
+  hs-source-dirs:    src
   main-is:           Technique.hs
 
 test-suite           check
   type:              exitcode-stdio-1.0
-  main-is:           CheckServer.hs
   build-depends:     base,
                      containers,
                      transformers,
                      HUnit,
                      snap-core,
                      snap-server
+  hs-source-dirs:    src,tests
+  main-is:           CheckServer.hs
                       
 
 -- vim: set tabstop=21 expandtab:
