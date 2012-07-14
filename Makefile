@@ -20,9 +20,19 @@ endif
 
 GHC=ghc -Wall -Werror -fwarn-tabs -fno-warn-missing-signatures -fno-warn-unused-binds
 
-SOURCES=$(shell find src -name '*.hs')
-#OBJECTS=$(patsubst %.hs,%.o,$(SOURCES))
-OBJECTS=$(patsubst ./src/%.hs,$(BUILDDIR)/%.o,$(SOURCES))
+CORE_SOURCES=$(shell find src -name '*.hs')
+TEST_SOURCES=$(shell find tests -name '*.hs')
+CORE_OBJECTS=$(patsubst src/%.hs,$(BUILDDIR)/%.o,$(CORE_SOURCES))
+TEST_OBJECTS=$(patsubst tests/%.hs,$(BUILDDIR)/%.o,$(TEST_SOURCES))
+
+PACKAGES=\
+-package base \
+-package bytestring \
+-package MonadCatchIO-transformers \
+-package mtl \
+-package hedis \
+-package snap-core \
+-package snap-server
 
 dirs: $(BUILDDIR)/.dir
 
@@ -33,11 +43,12 @@ $(BUILDDIR)/.dir:
 
 depends: .depends
 
-.depends: $(SOURCES)
-	@echo "GHC -M\t*.hs"
+.depends: $(CORE_SOURCES) $(TEST_SOURCES)
+	@echo "GHC -M\t.depends"
 	ghc -M -isrc:tests -outputdir $(BUILDDIR) \
 		-dep-makefile .depends \
-		$(SOURCES)
+		$(PACKAGES) \
+		$(CORE_SOURCES) $(TEST_SOURCES)
 	@echo "HASKTAGS"
 	hasktags -cx .
 
@@ -48,32 +59,49 @@ include .depends
 
 build-core: dirs $(BUILDDIR)/technique.bin
 
-$(BUILDDIR)/%.hi: $(BUILDDIR)/%.o
+#$(BUILDDIR)/%.hi: $(BUILDDIR)/%.o
+#
 
 $(BUILDDIR)/%.o: src/%.hs 
 	@echo "GHC\t$<"
 	$(GHC) -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -i"src:$(BUILDDIR)" -o $@ -c $<
+		-outputdir $(BUILDDIR) -i"$(BUILDDIR):src" \
+		-main-is Technique \
+		-o $@ -c $<
 
-$(BUILDDIR)/technique.bin: $(OBJECTS)
-	@echo "LINK\tTechnique.hs"
+$(BUILDDIR)/technique.bin: $(CORE_OBJECTS)
+	@echo "LINK\t$@"
 	$(GHC) -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -i"src:$(BUILDDIR)" -o $@ $(OBJECTS)
+		-outputdir $(BUILDDIR) -i"$(BUILDDIR):src" \
+		-main-is Technique \
+		$(PACKAGES) \
+		-o $@ $(CORE_OBJECTS)
 	@echo "STRIP\t$@"
 	strip $@
 
 build-test: dirs $(BUILDDIR)/check.bin
 
-$(BUILDDIR)/check.bin: tests/CheckServer.hs src/HttpServer.hs
+$(BUILDDIR)/%.o: tests/%.hs 
+	@echo "GHC\t$<"
+	$(GHC) -O -threaded  \
+		-prof -fprof-auto \
+		-outputdir $(BUILDDIR) -i"$(BUILDDIR):src:tests" \
+		-main-is CheckServer \
+		-o $@ -c $<
+
+$(BUILDDIR)/check.bin: $(CORE_OBJECTS) $(TEST_OBJECTS)
 	hasktags -cx .
-	@echo "GHC\tCheck.hs"
+	@echo "GHC\t$@"
 	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR) -i"src:tests:$(BUILDDIR)" -o $(BUILDDIR)/check.bin tests/CheckServer.hs
-	@echo "STRIP\t$(BUILDDIR)/check"
-	strip $(BUILDDIR)/check.bin
+		-main-is CheckServer \
+		$(PACKAGES) \
+		-outputdir $(BUILDDIR) -i"$(BUILDDIR):src:tests" \
+		-o $@ $(CORE_OBJECTS) $(TEST_OBJECTS) 
+	@echo "STRIP\t$@"
+	strip $@
 
 test: build-test
 	@echo "EXEC\tcheck"
