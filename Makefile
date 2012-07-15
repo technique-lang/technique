@@ -43,8 +43,6 @@ $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
 		-outputdir $(BUILDDIR)/core -i"$(BUILDDIR):src" \
-		-main-is Technique \
-		$(PACKAGES) \
 		-o $@ src/Technique.hs
 	@echo "STRIP\t$@"
 	strip $@
@@ -56,8 +54,6 @@ $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
 	@echo "GHC\t$@"
 	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
-		-main-is CheckServer \
-		$(PACKAGES) \
 		-outputdir $(BUILDDIR)/tests -i"$(BUILDDIR):src:tests" \
 		-o $@ tests/CheckServer.hs
 	@echo "STRIP\t$@"
