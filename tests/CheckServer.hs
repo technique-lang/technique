@@ -21,13 +21,10 @@
 
 import Prelude hiding (catch)
 
-import Snap.Http.Server
-import Snap.Core hiding (setHeader, setContentType)
+import Snap.Core hiding (setHeader, setContentType, method)
 import Snap.Test
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (MonadIO)
 import Test.HUnit
@@ -50,6 +47,7 @@ main :: IO Counts
 main = runTestTT tests
 
 
+tests :: Test
 tests =
     TestLabel "Unit tests" $
     TestList
@@ -61,19 +59,19 @@ tests =
 testBogusUrl =
     TestLabel "Request for a bogus URL should fail" $
     TestCase $ do
-        (q,p) <- makeRequest GET "/booga" "text/html" ""
+        (_,p) <- makeRequest GET "/booga" "text/html" ""
         assert404 p
 
 testHomepage =
     TestLabel "Request for homepage should succeed" $
     TestCase $ do
-        (q,p) <- makeRequest GET "/" "text/html" ""
+        (_,p) <- makeRequest GET "/" "text/html" ""
         assertSuccess p
 
 testBasicRequest =
     TestLabel "Request for known good resource should succeed" $
     TestCase $ do
-        (q,p) <- makeRequest GET "/resource/254" "application/json" ""
+        (_,p) <- makeRequest GET "/resource/254" "application/json" ""
         assertSuccess p
 
 testWrongMedia = 
@@ -106,7 +104,7 @@ makeRequest method url' mime' payload' = do
     request = case method of
         GET         -> setupGetRequest url' mime'
         PUT         -> setupPutRequest url' mime' payload'
-        otherwise   -> undefined   
+        _           -> undefined   
     handler = HttpServer.site
 
 

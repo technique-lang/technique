@@ -23,22 +23,18 @@ module HttpServer (site) where
 
 import Prelude hiding (catch)
 
-import Snap.Http.Server
 import Snap.Core
 import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Maybe (fromMaybe)
-import Data.String (fromString)
-import Numeric
-import Data.Char
 import Control.Monad.Trans (liftIO)
-import Control.Monad.CatchIO (catch, throw)
+import Control.Monad.CatchIO (catch)
 import Control.Exception (SomeException)
-import System.IO (stdout, stderr, hPutStrLn, hFlush)
+import System.IO (stderr, hPutStrLn, hFlush)
 
-import Lookup (lookupResource)
+import Lookup (lookupResource, storeResource)
 
 --
 -- Top level URL routing logic.
@@ -65,7 +61,7 @@ serveResource = do
         GET     -> handleGetMethod
         PUT     -> handlePutMethod
         POST    -> handlePostMethod
-        otherwise -> serveBadRequest -- wrong! There's actually a 4xx code for this
+        _       -> serveBadRequest -- wrong! There's actually a 4xx code for this
 
 --
 -- If they request / then we send them to an info page. 
@@ -99,16 +95,16 @@ handleGetMethod = do
     let mime0 = getHeader "Accept" r
 
     case mime0 of
-        Just "application/json"  -> handleAsREST
-        Just "text/html"         -> handleAsBrowser
-        otherwise                -> handleAsText
+        Just "application/json" -> handleAsREST
+        Just "text/html"        -> handleAsBrowser
+        _                       -> handleAsText
 
 
 handleAsREST :: Snap ()
 handleAsREST = do
-    id0 <- getParam "id"
-    let id = fromMaybe "0" id0
-    e' <- lookupById id
+    i0 <- getParam "id"
+    let i = fromMaybe "0" i0
+    e' <- lookupById i
 
     let r' = S.append e' "\n"
         l  = fromIntegral $ S.length r'
@@ -155,17 +151,22 @@ handlePutMethod = do
     let mime0 = getHeader "Content-Type" r
 
     case mime0 of
-        Just "application/json"  -> updateResource
-        otherwise                -> serveUnsupported
+        Just "application/json" -> updateResource
+        _                       -> serveUnsupported
 
 
 updateResource :: Snap ()
 updateResource = do
-    body <- readRequestBody 4096
+    b'' <- readRequestBody 4096
+    let b' = fromLazy b''
+    storeById b'
     modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
     modifyResponse $ setHeader "Cache-Control" "no-cache"
     modifyResponse $ setContentLength 0
     return ()
+  where
+    fromLazy l'' = S.concat $ L.toChunks l''
+    
 
 
 serveUnsupported :: Snap ()
@@ -200,12 +201,6 @@ debug cs = do
         hPutStrLn stderr cs
         hFlush stderr
 
-
-debug' :: ByteString -> Snap ()
-debug' x' = do
-    debug $ S.unpack x'
-
-
 --
 -- Placeholder
 --
@@ -216,4 +211,9 @@ lookupById x' = do
   where
     x = read $ S.unpack x'
 
+storeById :: ByteString -> Snap ()
+storeById x' = do
+    liftIO $ storeResource i x'
+  where
+    i = 42
 

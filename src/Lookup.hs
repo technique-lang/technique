@@ -22,11 +22,9 @@
 module Lookup (lookupResource, storeResource) where
 
 import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Maybe (fromMaybe)
 import Database.Redis
-import Control.Monad.Trans (liftIO)
-import Control.Monad.CatchIO (MonadCatchIO, bracket)
+import Control.Monad.CatchIO (bracket)
 
 --
 -- Store and Access keys from Redis database. This treats unset and empty as
@@ -39,7 +37,7 @@ fromReply x =
   where
     first :: Reply -> S.ByteString
     first (Error s) = s
-    first other     = "Kaboom!\n" 
+    first _         = "Kaboom!\n"
 
     second :: (Maybe S.ByteString) -> S.ByteString
     second = fromMaybe ""
@@ -61,9 +59,10 @@ queryResource x = do
 
 settings =
     defaultConnectInfo {
-        connectPort = UnixSocket "./redis.sock"
+        connectPort = UnixSocket "tests/redis.sock"
     }
-    
+
+
 lookupResource :: Int -> IO S.ByteString
 lookupResource d = bracket
     (connect settings)
@@ -71,19 +70,18 @@ lookupResource d = bracket
     (\r -> runRedis r $ queryResource d)
 
 
-writeResource :: Int -> Int -> Redis ()
-writeResource d t = do
-    set key value
+writeResource :: Int -> S.ByteString -> Redis ()
+writeResource d t' = do
+    _ <- set key value      -- FIXME there's a return value; check for errors!
     return ()
   where
     key   = S.append "resource:" $ S.pack $ show d
-    value = S.pack $ show t
+    value = t'
 
 
-
-storeResource :: Int -> Int -> IO ()
-storeResource d t = bracket
+storeResource :: Int -> S.ByteString -> IO ()
+storeResource d t' = bracket
     (connect settings)
     (\r -> runRedis r $ quit)
-    (\r -> runRedis r $ writeResource d t)
+    (\r -> runRedis r $ writeResource d t')
 
