@@ -18,7 +18,12 @@ endif
 # various alternative implementations of a function.
 #
 
-GHC=ghc -Wall -Werror -fwarn-tabs -fno-warn-missing-signatures -fno-warn-unused-binds
+GHC=ghc \
+	-Wall \
+	-Werror \
+	-fwarn-tabs \
+	-fno-warn-missing-signatures \
+	-fno-warn-unused-binds
 
 CORE_SOURCES=$(shell find src -name '*.hs')
 TEST_SOURCES=$(shell find tests -name '*.hs')
@@ -42,8 +47,10 @@ $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 	@echo "GHC\t$@"
 	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR)/core -i"$(BUILDDIR):src" \
-		-o $@ src/Technique.hs
+		-outputdir $(BUILDDIR)/core \
+		-i"$(BUILDDIR):src" \
+		-o $@ \
+		src/Technique.hs
 	@echo "STRIP\t$@"
 	strip $@
 
@@ -54,8 +61,10 @@ $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
 	@echo "GHC\t$@"
 	$(GHC) --make -O -threaded  \
 		-prof -fprof-auto \
-		-outputdir $(BUILDDIR)/tests -i"$(BUILDDIR):src:tests" \
-		-o $@ tests/CheckServer.hs
+		-outputdir $(BUILDDIR)/tests \
+		-i"$(BUILDDIR):src:tests" \
+		-o $@ \
+		tests/CheckServer.hs
 	@echo "STRIP\t$@"
 	strip $@
 
