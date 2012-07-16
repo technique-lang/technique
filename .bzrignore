@@ -2,3 +2,5 @@ tags
 *.hi
 *.o
 log/*
+redis.sock
+dump.rdb
