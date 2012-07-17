@@ -28,7 +28,9 @@ import qualified Data.ByteString.Char8 as S
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (MonadIO)
 import Test.HUnit
+import Test.Hspec (Spec, hspec, describe, it)
 import Data.Maybe (fromMaybe, fromJust)
+
 
 import HttpServer (site)
 
@@ -43,51 +45,47 @@ type ContentType = ByteString
 type AcceptType = ByteString
 
 
-main :: IO Counts
-main = runTestTT tests
+main :: IO ()
+main = hspec spec
 
 
-tests :: Test
-tests =
-    TestLabel "Unit tests" $
-    TestList
-        [testBogusUrl,
-         testHomepage,
-         testBasicRequest,
-         testBasicUpdate]
+spec :: Spec
+spec =
+    describe "HTTP server" $ do
+        testBogusUrl
+        testHomepage
+        testBasicRequest
+        testWrongMedia
+        testBasicUpdate
+
+
 
 testBogusUrl =
-    TestLabel "Request for a bogus URL should fail" $
-    TestCase $ do
+    it "rejects a request for a bogus URL, responding 404" $ do
         (_,p) <- makeRequest GET "/booga" "text/html" ""
         assert404 p
 
 testHomepage =
-    TestLabel "Request for homepage should succeed" $
-    TestCase $ do
+    it "accepts request for homepage, responding 200" $ do
         (_,p) <- makeRequest GET "/" "text/html" ""
         assertSuccess p
 
 testBasicRequest =
-    TestLabel "Request for known good resource should succeed" $
-    TestCase $ do
+    it "accepts request for a known good resource, responding 200" $ do
         (_,p) <- makeRequest GET "/resource/254" "application/json" ""
         assertSuccess p
 
-testWrongMedia = 
-    TestLabel "Update via PUT with wrong media type should be rejected" $
-    TestCase $ do
+testWrongMedia =
+    it "rejects update via PUT with wrong media type, responding 415" $ do
         (q,p) <- makeRequest PUT "/resource/254" "application/xml" "<html/>"
         expectCode 415 (q,p)
 
 testBasicUpdate =
-    TestLabel "Update via PUT should result in 204" $
-    TestCase $ do
+    it "accepts update via PUT, responding 204" $ do
         (q,p) <- makeRequest PUT "/resource/254" "application/json" "{ }"
         expectCode 204 (q,p)
         expectType "" (q,p)
         expectLength 0 (q,p)
-    
 
 --
 -- Carry out an HTTP request, internally, creating the request out of the

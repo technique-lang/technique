@@ -29,6 +29,7 @@ test-suite           check
                      containers,
                      transformers,
                      HUnit,
+                     hspec,
                      snap-core,
                      snap-server
   hs-source-dirs:    src,tests
