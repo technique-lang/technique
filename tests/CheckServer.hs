@@ -95,9 +95,8 @@ testBasicUpdate =
 -- this will be combined into above test case
 testResultOfUpdate =
     it "returns up to date represenations" $ do
-        (_,p) <- makeRequest GET "/resource/254" "application/json" Nothing
-        body' <- getResponseBody p
-        assertEqual "Expected" "Regan" body'
+        (q,p) <- makeRequest GET "/resource/254" "application/json" Nothing
+        expectBody "Regan" (q,p)
 
 testBasicUpdate2 :: Spec
 testBasicUpdate2 = do
