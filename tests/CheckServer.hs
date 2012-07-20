@@ -19,6 +19,8 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
+module CheckServer (spec) where
+
 import Prelude hiding (catch)
 
 import Snap.Core hiding (setHeader, setContentType, method)
@@ -28,9 +30,8 @@ import qualified Data.ByteString.Char8 as S
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (MonadIO)
 import Test.HUnit
-import Test.Hspec (Spec, hspec, describe, it)
+import Test.Hspec (Spec, describe, it)
 import Data.Maybe (fromMaybe, fromJust)
-
 
 import HttpServer (site)
 
@@ -44,13 +45,8 @@ type ContentType = ByteString
 
 type AcceptType = ByteString
 
-
-main :: IO ()
-main = hspec spec
-
-
 spec :: Spec
-spec =
+spec = do
     describe "HTTP server" $ do
         testBogusUrl
         testHomepage
@@ -59,7 +55,6 @@ spec =
         testWrongMedia
         testBasicUpdate
         testResultOfUpdate
-
 
 
 testBogusUrl =
@@ -76,7 +71,6 @@ testBasicRequest =
     it "accepts request for a known good resource, responding 200" $ do
         (_,p) <- makeRequest GET "/resource/254" "application/json" Nothing
         assertSuccess p
-
 
 testBasicRequestContent =
     it "accepts request for a known good resource, and its content is correct" $ do
