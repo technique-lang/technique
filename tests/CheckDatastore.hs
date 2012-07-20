@@ -24,7 +24,6 @@ module CheckDatastore (spec) where
 import Prelude hiding (catch)
 
 import Data.ByteString (ByteString)
--- import qualified Data.ByteString.Char8 as S
 import Test.HUnit
 import Test.Hspec (Spec, describe, it)
 
@@ -41,15 +40,15 @@ answer' :: ByteString
 answer' = "Life, universe, and everything"
 
 testStoreKey =
-    it "stores a key" $ do
+    it "stores a value at a given key" $ do
         storeResource k v'
-        assertBool "" True
+        assertBool "" True      -- it didn't throw an exception; good
   where
     k  = 42
     v' = answer'
     
 testReadKey =
-    it "reads a key" $ do
+    it "reads that key and gets the same value back" $ do
         res' <- lookupResource k
         assertEqual "wrong value returned" v' res'
   where
