@@ -69,15 +69,18 @@ serveResource = do
 
 serveHome :: Snap ()
 serveHome = do
+    modifyResponse $ setContentType "text/plain"
     writeBS "Home\n"
 
 
-serveNotFound :: Snap ()
+serveNotFound :: Snap a
 serveNotFound = do
     modifyResponse $ setResponseStatus 404 "Not Found"
     modifyResponse $ setHeader "Content-Type" "text/html"
     sendFile "content/404.html"
 
+    r <- getResponse
+    finishWith r
 
 serveBadRequest :: Snap ()
 serveBadRequest = do
@@ -104,8 +107,14 @@ handleAsREST :: Snap ()
 handleAsREST = do
     i'0 <- getParam "id"
     let i' = fromMaybe "0" i'0
+    
     e' <- lookupById i'
 
+{-
+    case e'0 of
+        Just e' -> e'
+        Nothing -> serveNotFound
+-}
     let r' = S.append e' "\n"
         l  = fromIntegral $ S.length r'
 
@@ -206,14 +215,17 @@ debug cs = do
         hFlush stderr
 
 --
--- Placeholder
+-- Switch from Snap monad (through IO) to Redis. The Maybe return represents a
+-- key with no vaue.
 --
 
 lookupById :: ByteString -> Snap ByteString
 lookupById i' = do
-    liftIO $ lookupResource i
-  where
-    i = read $ S.unpack i'
+    x'0 <- liftIO $ lookupResource i'
+    case x'0 of
+        Just x' -> return x'
+        Nothing -> serveNotFound
+
 
 storeById :: ByteString -> ByteString -> Snap ()
 storeById i' x' = do

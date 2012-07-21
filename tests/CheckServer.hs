@@ -33,6 +33,7 @@ import Test.HUnit
 import Test.Hspec (Spec, describe, it)
 import Data.Maybe (fromMaybe, fromJust)
 
+import Utilities (assertMaybe)
 import HttpServer (site)
 
 --
@@ -52,6 +53,7 @@ spec = do
         testHomepage
         testBasicRequest
         testBasicRequestContent
+        testNonexistentResource
         testWrongMedia
         testBasicUpdate
         testResultOfUpdate
@@ -76,7 +78,12 @@ testBasicRequestContent =
     it "accepts request for a known good resource, and its content is correct" $ do
         (q,p) <- makeRequest GET "/resource/254" "application/json" Nothing
         expectCode 200 (q,p)
-        expectBody "president" (q,p) -- WRONG hasn't been set yet!
+        expectBody "president" (q,p)
+
+testNonexistentResource =
+    it "rejects request a non-existent resource, responding 404" $ do
+        (q,p) <- makeRequest GET "/resource/a9s1t$y9e" "application/json" Nothing
+        expectCode 404 (q,p)
 
 testWrongMedia =
     it "rejects update via PUT with wrong media type, responding 415" $ do
@@ -189,16 +196,6 @@ expectBody str' (q,p) = do
     msg  = summarize (q,p)
     find n' h' = not $ S.null $ snd $ S.breakSubstring n' h'
 
-
---
--- Seems a glaring omission from HUnit; assert that a Maybe is not Nothing.
---
-
-assertMaybe :: String -> Maybe a -> Assertion
-assertMaybe prefix m0 =
-    case m0 of
-        Nothing -> assertFailure prefix
-        Just _  -> assertBool "" True
 
 --
 -- Summarize a Request and Response pair, used for output from HUnit when an

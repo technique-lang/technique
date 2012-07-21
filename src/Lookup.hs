@@ -22,7 +22,6 @@
 module Lookup (lookupResource, storeResource) where
 
 import qualified Data.ByteString.Char8 as S
-import Data.Maybe (fromMaybe)
 import Database.Redis
 import Control.Monad.CatchIO (bracket)
 
@@ -31,24 +30,24 @@ import Control.Monad.CatchIO (bracket)
 -- the same.
 --
 
-fromReply :: (Either Reply (Maybe S.ByteString)) -> S.ByteString
-fromReply x = 
+fromReply :: (Either Reply (Maybe S.ByteString)) -> Maybe S.ByteString
+fromReply x =  
     either first second x
   where
-    first :: Reply -> S.ByteString
-    first (Error s) = s
-    first _         = "Kaboom!\n"
+    first :: Reply -> Maybe S.ByteString
+    first (Error s) = Just s
+    first _         = Just "Kaboom!\n"
 
-    second :: (Maybe S.ByteString) -> S.ByteString
-    second = fromMaybe ""
+    second :: Maybe S.ByteString -> Maybe S.ByteString
+    second = id
 
 
-queryResource :: Int -> Redis S.ByteString
-queryResource x = do
-    k <- get key
+queryResource :: S.ByteString -> Redis (Maybe S.ByteString)
+queryResource x' = do
+    k <- get key'
     return $ fromReply k
   where
-    key = S.append "resource:" $ S.pack $ show x
+    key' = S.append "resource:" x'
 
 
 --
@@ -63,7 +62,7 @@ settings =
     }
 
 
-lookupResource :: Int -> IO S.ByteString
+lookupResource :: S.ByteString -> IO (Maybe S.ByteString)
 lookupResource d = bracket
     (connect settings)
     (\r -> runRedis r $ quit)
