@@ -37,8 +37,9 @@ spec =
     describe "Redis backend" $ do
         testStoreKey
         testReadKey
-        testSetFakeData
         testNonexistentKey
+        testSetFakeData
+
 
 answer' :: ByteString
 answer' = "Life, universe, and everything"

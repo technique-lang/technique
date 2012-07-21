@@ -26,20 +26,16 @@ import Database.Redis
 import Control.Monad.CatchIO (bracket)
 
 --
--- Store and Access keys from Redis database. This treats unset and empty as
--- the same.
+-- Store and Access keys from Redis database. If the key is unset returns
+-- Nothing.
 --
 
 fromReply :: (Either Reply (Maybe S.ByteString)) -> Maybe S.ByteString
-fromReply x =  
-    either first second x
-  where
-    first :: Reply -> Maybe S.ByteString
-    first (Error s) = Just s
-    first _         = Just "Kaboom!\n"
-
-    second :: Maybe S.ByteString -> Maybe S.ByteString
-    second = id
+fromReply x =
+    case x of
+        Right s'0       -> s'0
+        Left (Error s') -> Just s'
+        Left _          -> Just "Kaboom!\n"     -- Is this even possible?
 
 
 queryResource :: S.ByteString -> Redis (Maybe S.ByteString)
