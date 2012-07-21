@@ -229,7 +229,5 @@ lookupById i' = do
 
 storeById :: ByteString -> ByteString -> Snap ()
 storeById i' x' = do
-    liftIO $ storeResource i x'
-  where
-    i = read $ S.unpack i'
+    liftIO $ storeResource i' x'
 

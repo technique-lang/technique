@@ -46,10 +46,10 @@ answer' = "Life, universe, and everything"
 
 testStoreKey =
     it "stores a value at a given key" $ do
-        storeResource k v'
+        storeResource k' v'
         assertBool "" True      -- it didn't throw an exception; good
   where
-    k  = 42
+    k' = "42"
     v' = answer'
     
 testReadKey =
@@ -75,8 +75,8 @@ testNonexistentKey =
 
 testSetFakeData =
   it "setup mock data" $ do
-        storeResource k v'
+        storeResource k' v'
         assertBool "" True      -- it didn't throw an exception; good
   where
-    k  = 254
+    k' = "254"
     v' = "{\"president\": \"\"}"

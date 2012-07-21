@@ -65,18 +65,18 @@ lookupResource d = bracket
     (\r -> runRedis r $ queryResource d)
 
 
-writeResource :: Int -> S.ByteString -> Redis ()
-writeResource d t' = do
+writeResource :: S.ByteString -> S.ByteString -> Redis ()
+writeResource d' t' = do
     _ <- set key value      -- FIXME there's a return value; check for errors!
     return ()
   where
-    key   = S.append "resource:" $ S.pack $ show d
+    key   = S.append "resource:" d'
     value = t'
 
 
-storeResource :: Int -> S.ByteString -> IO ()
-storeResource d t' = bracket
+storeResource :: S.ByteString -> S.ByteString -> IO ()
+storeResource d' t' = bracket
     (connect settings)
     (\r -> runRedis r $ quit)
-    (\r -> runRedis r $ writeResource d t')
+    (\r -> runRedis r $ writeResource d' t')
 
