@@ -49,13 +49,14 @@ routeRequests :: Snap ()
 routeRequests =
         ifTop serveHome
     <|> route
-            [("/resource/:id", serveResource)]
+            [("resource/:id", serveResource)]
     <|> serveNotFound
 
 
 serveResource :: Snap ()
 serveResource = do
     r <- getRequest
+
     let m = rqMethod r
     case m of
         GET     -> handleGetMethod
@@ -110,11 +111,6 @@ handleAsREST = do
     
     e' <- lookupById i'
 
-{-
-    case e'0 of
-        Just e' -> e'
-        Nothing -> serveNotFound
--}
     let r' = S.append e' "\n"
         l  = fromIntegral $ S.length r'
 
