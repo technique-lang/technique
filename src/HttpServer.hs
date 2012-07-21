@@ -102,9 +102,9 @@ handleGetMethod = do
 
 handleAsREST :: Snap ()
 handleAsREST = do
-    i0 <- getParam "id"
-    let i = fromMaybe "0" i0
-    e' <- lookupById i
+    i'0 <- getParam "id"
+    let i' = fromMaybe "0" i'0
+    e' <- lookupById i'
 
     let r' = S.append e' "\n"
         l  = fromIntegral $ S.length r'
@@ -149,7 +149,7 @@ handlePutMethod :: Snap ()
 handlePutMethod = do
     r <- getRequest
     let mime0 = getHeader "Content-Type" r
-
+    
     case mime0 of
         Just "application/json" -> updateResource
         _                       -> serveUnsupported
@@ -159,7 +159,11 @@ updateResource :: Snap ()
 updateResource = do
     b'' <- readRequestBody 4096
     let b' = fromLazy b''
-    storeById b'
+    
+    i'0 <- getParam "id"
+    let i' = fromMaybe "0" i'0
+
+    storeById i' b'
     modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
     modifyResponse $ setHeader "Cache-Control" "no-cache"
     modifyResponse $ setContentLength 0
@@ -206,14 +210,14 @@ debug cs = do
 --
 
 lookupById :: ByteString -> Snap ByteString
-lookupById x' = do
-    liftIO $ lookupResource x
+lookupById i' = do
+    liftIO $ lookupResource i
   where
-    x = read $ S.unpack x'
+    i = read $ S.unpack i'
 
-storeById :: ByteString -> Snap ()
-storeById x' = do
+storeById :: ByteString -> ByteString -> Snap ()
+storeById i' x' = do
     liftIO $ storeResource i x'
   where
-    i = 42
+    i = read $ S.unpack i'
 

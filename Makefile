@@ -64,7 +64,7 @@ $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
 		-outputdir $(BUILDDIR)/tests \
 		-i"$(BUILDDIR):src:tests" \
 		-o $@ \
-		tests/CheckServer.hs
+		tests/Check.hs
 	@echo "STRIP\t$@"
 	strip $@
 
