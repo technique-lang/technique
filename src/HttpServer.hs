@@ -114,14 +114,12 @@ handleAsREST = do
     
     e' <- lookupById k'
     
-
-    let r' = S.append e' "\n"
-        l  = fromIntegral $ S.length r'
-
+    let l  = fromIntegral $ S.length e'
+    
     modifyResponse $ setContentType "application/json"
     modifyResponse $ setHeader "Cache-Control" "max-age=42"
     modifyResponse $ setContentLength $ l
-    writeBS r'
+    writeBS e'
 
 
 --
