@@ -54,6 +54,8 @@ spec = do
         testBasicRequest
         testBasicRequestContent
         testNonexistentResource
+        testNonexistentSubresource
+        testSubresourceContent
         testWrongMedia
         testBasicUpdate
         testResultOfUpdate
@@ -84,6 +86,18 @@ testNonexistentResource =
     it "rejects request a non-existent resource, responding 404" $ do
         (q,p) <- makeRequest GET "/resource/a9s1t$y9e" "application/json" Nothing
         expectCode 404 (q,p)
+
+testNonexistentSubresource =
+    it "rejects request a non-existent sub-resource under valid resource" $ do
+        (q,p) <- makeRequest GET "/resource/254/config" "application/json" Nothing
+        expectCode 404 (q,p)
+
+testSubresourceContent =
+    it "accepts request for a valid sub-resource" $ do
+        (q,p) <- makeRequest GET "/resource/42/config" "application/json" Nothing
+        expectCode 200 (q,p)
+        expectBody "[ null ]" (q,p)
+
 
 testWrongMedia =
     it "rejects update via PUT with wrong media type, responding 415" $ do

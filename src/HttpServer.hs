@@ -49,7 +49,8 @@ routeRequests :: Snap ()
 routeRequests =
         ifTop serveHome
     <|> route
-            [("resource/:id", serveResource)]
+            [("resource/:id/:other", serveResource),
+             ("resource/:id", serveResource)]
     <|> serveNotFound
 
 
@@ -107,9 +108,12 @@ handleGetMethod = do
 handleAsREST :: Snap ()
 handleAsREST = do
     i'0 <- getParam "id"
-    let i' = fromMaybe "0" i'0
+    o'0 <- getParam "other"
     
-    e' <- lookupById i'
+    let k' = combine i'0 o'0
+    
+    e' <- lookupById k'
+    
 
     let r' = S.append e' "\n"
         l  = fromIntegral $ S.length r'
@@ -119,6 +123,19 @@ handleAsREST = do
     modifyResponse $ setContentLength $ l
     writeBS r'
 
+
+--
+-- Need to route second parameter. Concatoncate it as first:second, otherwise
+-- return first only.
+--
+
+combine :: Maybe ByteString -> Maybe ByteString -> ByteString
+combine first'0 second'0 =
+    case first'0 of
+        Just first' -> case second'0 of
+                            Just second'    -> S.intercalate ":" [ first', second' ]
+                            Nothing         -> first'
+        Nothing     -> "0"
 
 handleAsBrowser :: Snap ()
 handleAsBrowser = do

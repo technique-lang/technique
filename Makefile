@@ -54,6 +54,7 @@ $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 	@echo "STRIP\t$@"
 	strip $@
 
+check: build-test
 build-test: dirs $(BUILDDIR)/tests/check.bin
 
 $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
