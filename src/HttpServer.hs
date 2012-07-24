@@ -181,7 +181,7 @@ updateResource :: Snap ()
 updateResource = do
     b'' <- readRequestBody 4096
     let b' = fromLazy b''
-    
+
     i'0 <- getParam "id"
     let i' = fromMaybe "0" i'0
 

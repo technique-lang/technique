@@ -1,0 +1,10 @@
+#!/bin/sh
+
+#
+# Compose an HTTP GET request. Set appropriate Accept header so we get API data
+# not browser facing result.
+#
+
+exec curl -X GET -i \
+	-H "Accept: application/json" \
+	"$@"

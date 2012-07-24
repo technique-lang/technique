@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#
+# Compose an HTTP PUT request. The important part is using --data-binary
+# instead of plain short -d; for whatever reason curl does strnge newline
+# convesions if in "ascii" mode. @- specifies a file to read from, in this case
+# stdin.
+#
+# Front load the call to curl with cat because for some reason curl doesn't
+# take ^D properly.
+#
+
+exec cat | curl -X PUT -i \
+	-H "Content-Type: application/json" \
+	--data-binary "@-" \
+	"$@"
