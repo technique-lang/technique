@@ -33,11 +33,13 @@ import Lookup (lookupResource, storeResource)
 
 
 spec :: Spec
-spec =
+spec = do
     describe "Redis backend" $ do
         testStoreKey
         testReadKey
         testNonexistentKey
+
+    describe "Setup for tests" $ do
         testSetFakeData
 
 
@@ -74,7 +76,7 @@ testNonexistentKey =
 
 
 testSetFakeData =
-  it "setup mock data" $ do
+  it "store mock data" $ do
         storeResource k' v'
         assertBool "" True      -- it didn't throw an exception; good
   where
