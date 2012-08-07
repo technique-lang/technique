@@ -81,5 +81,5 @@ testSetFakeData =
         assertBool "" True      -- it didn't throw an exception; good
   where
     k' = "254"
-    v' = "{\"president\": \"\"}"
+    v' = "{\"president\": \"Kennedy\"}\n"
 

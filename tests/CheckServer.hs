@@ -111,7 +111,7 @@ testBasicUpdate =
         expectType "" (q,p)
         expectLength 0 (q,p)
   where
-    body = Just "{\"president\": \"Regan\"}"
+    body = Just "{\"president\": \"Regan\"}\n"
 
 -- this will be combined into above test case
 testResultOfUpdate =
