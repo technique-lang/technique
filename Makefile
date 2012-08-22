@@ -40,8 +40,13 @@ $(BUILDDIR)/.dir:
 	mkdir $(BUILDDIR)/tests
 	touch $(BUILDDIR)/.dir
 
+#
+# Build core program. If using inotify, invoke using:
+#
+# $ inotifymake -- ./technique
+#
 
-build-core: dirs $(BUILDDIR)/core/technique.bin
+build-core: dirs $(BUILDDIR)/core/technique.bin technique
 
 $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 	@echo "GHC\t$@"
@@ -54,8 +59,15 @@ $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 	@echo "STRIP\t$@"
 	strip $@
 
-check: build-test
-build-test: dirs $(BUILDDIR)/tests/check.bin
+technique:
+	@echo "LN -s\t$@"
+	ln -s $(BUILDDIR)/core/technique.bin $@
+
+#
+# Build test suite code
+#
+
+build-tests: dirs $(BUILDDIR)/tests/check.bin check
 
 $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
 	hasktags -cx .
@@ -68,6 +80,16 @@ $(BUILDDIR)/tests/check.bin: $(CORE_SOURCES) $(TEST_SOURCES)
 		tests/Check.hs
 	@echo "STRIP\t$@"
 	strip $@
+
+check:
+	@echo "LN -s\t$@"
+	ln -s $(BUILDDIR)/tests/check.bin $@
+
+#
+# Run tests directly. If using inotify, invoke instead as follows:
+#
+# $ inotifymake build-tests -- ./check
+#
 
 test: build-test
 	@echo "EXEC\tcheck"
