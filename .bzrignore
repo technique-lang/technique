@@ -4,3 +4,5 @@ tags
 log/*
 tests/redis.sock
 tests/dump.rdb
+technique
+check
