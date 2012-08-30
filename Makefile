@@ -91,7 +91,7 @@ check:
 # $ inotifymake build-tests -- ./check
 #
 
-test: build-test
+test: build-tests
 	@echo "EXEC\tcheck"
 	$(BUILDDIR)/tests/check.bin
 
