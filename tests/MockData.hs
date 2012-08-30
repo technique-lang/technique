@@ -19,18 +19,28 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-import Test.Hspec (Spec, hspec)
+module MockData (spec) where
+ 
+import Prelude hiding (catch)
 
-import qualified CheckDatastore as Datastore (spec) 
-import qualified CheckServer as Server (spec)
-import qualified MockData as Mock (spec)
+--import Data.ByteString (ByteString)
+import Test.Hspec (Spec, describe, it)
 
-main :: IO ()
-main = hspec spec
+import Utilities (assertPass)
+import Lookup (storeResource)
+
 
 spec :: Spec
 spec = do
-    Datastore.spec
-    Mock.spec
-    Server.spec
+    describe "Load mock data for tests" $ do
+        testSetFakeData
+
+
+testSetFakeData =
+  it "store mock data" $ do
+        storeResource k' v'
+        assertPass
+  where
+    k' = "254"
+    v' = "{\"president\": \"Kennedy\"}\n"
 

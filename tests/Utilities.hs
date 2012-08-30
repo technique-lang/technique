@@ -20,7 +20,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utilities (
-    assertMaybe
+    assertMaybe,
+    assertPass
 ) where
 
 import Test.HUnit
@@ -35,4 +36,10 @@ assertMaybe prefix m0 =
         Nothing -> assertFailure prefix
         Just _  -> assertBool "" True
 
+--
+-- For when code didn't throw an exception; puts it in Assertion which is IO ().
+--
+assertPass :: Assertion
+assertPass = do
+    assertBool "" True      
 

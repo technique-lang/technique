@@ -39,9 +39,6 @@ spec = do
         testReadKey
         testNonexistentKey
 
-    describe "Setup for tests" $ do
-        testSetFakeData
-
 
 answer' :: ByteString
 answer' = "Life, universe, and everything"
@@ -72,14 +69,4 @@ testNonexistentKey =
             Nothing -> return ()
   where
     k  = "a9s1t$y9e"
-
-
-
-testSetFakeData =
-  it "store mock data" $ do
-        storeResource k' v'
-        assertBool "" True      -- it didn't throw an exception; good
-  where
-    k' = "254"
-    v' = "{\"president\": \"Kennedy\"}\n"
 
