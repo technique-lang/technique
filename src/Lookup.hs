@@ -33,7 +33,7 @@ import Control.Monad.CatchIO (bracket)
 fromReply :: (Either Reply (Maybe S.ByteString)) -> Maybe S.ByteString
 fromReply x =
     case x of
-        Right s'0       -> s'0
+        Right sm'       -> sm'
         Left (Error s') -> Just s'
         Left _          -> Just "Kaboom!\n"     -- Is this even possible?
 

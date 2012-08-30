@@ -107,10 +107,10 @@ handleGetMethod = do
 
 handleAsREST :: Snap ()
 handleAsREST = do
-    i'0 <- getParam "id"
-    o'0 <- getParam "other"
+    im' <- getParam "id"
+    om' <- getParam "other"
     
-    let k' = combine i'0 o'0
+    let k' = combine im' om'
     
     e' <- lookupById k'
     
@@ -128,12 +128,12 @@ handleAsREST = do
 --
 
 combine :: Maybe ByteString -> Maybe ByteString -> ByteString
-combine first'0 second'0 =
-    case first'0 of
-        Just first' -> case second'0 of
-                            Just second'    -> S.intercalate ":" [ first', second' ]
-                            Nothing         -> first'
-        Nothing     -> "0"
+combine am' bm' =
+    case am' of
+        Just a' -> case bm' of
+            Just b' -> S.intercalate ":" [ a', b' ]
+            Nothing -> a'
+        Nothing -> "0"
 
 handleAsBrowser :: Snap ()
 handleAsBrowser = do
@@ -177,11 +177,11 @@ handlePutMethod = do
 
 updateResource :: Snap ()
 updateResource = do
-    b'' <- readRequestBody 4096
-    let b' = fromLazy b''
+    bs' <- readRequestBody 4096
+    let b' = fromLazy bs'
 
-    i'0 <- getParam "id"
-    let i' = fromMaybe "0" i'0
+    im' <- getParam "id"
+    let i' = fromMaybe "0" im'
 
     storeById i' b'
     modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
@@ -189,7 +189,7 @@ updateResource = do
     modifyResponse $ setContentLength 0
     return ()
   where
-    fromLazy l'' = S.concat $ L.toChunks l''
+    fromLazy ls' = S.concat $ L.toChunks ls'
     
 
 
@@ -232,8 +232,8 @@ debug cs = do
 
 lookupById :: ByteString -> Snap ByteString
 lookupById i' = do
-    x'0 <- liftIO $ lookupResource i'
-    case x'0 of
+    xm' <- liftIO $ lookupResource i'
+    case xm' of
         Just x' -> return x'
         Nothing -> serveNotFound
 
