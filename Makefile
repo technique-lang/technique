@@ -91,11 +91,19 @@ check:
 # $ inotifymake build-tests -- ./check
 #
 
-test: build-tests
+test: build-tests run-data
 	@echo "EXEC\tcheck"
 	$(BUILDDIR)/tests/check.bin
+
+data: run-data
+run-data: tests/redis.pid
+tests/redis.pid:
+	@echo "REDIS\ttests/redis.sock"
+	redis-server tests/redis.conf
 
 clean:
 	@echo "RM\ttemp files"
 	-rm -f *.hi *.o technique snippet check tags
 	-rm -rf $(BUILDDIR)
+	@echo "KILL\ttests/redis.pid"
+	-kill `cat tests/redis.pid`
