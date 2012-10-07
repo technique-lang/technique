@@ -21,9 +21,6 @@
 
 module MockData (spec) where
  
-import Prelude hiding (catch)
-
---import Data.ByteString (ByteString)
 import Test.Hspec (Spec, describe, it)
 
 import Utilities (assertPass)
