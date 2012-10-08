@@ -20,18 +20,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module MockData (spec) where
- 
+
 import Test.Hspec (Spec, describe, it)
 
 import Utilities (assertPass)
-import Lookup (storeResource)
+import Lookup (storeResource, flushDatastore)
 
 
 spec :: Spec
 spec = do
     describe "Load mock data for tests" $ do
+        testFlushDatastore
         testSetFakeData
 
+testFlushDatastore =
+    it "ensure clean slate" $ do
+        flushDatastore
 
 testSetFakeData =
   it "store mock data" $ do
