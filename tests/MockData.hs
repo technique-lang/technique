@@ -35,9 +35,10 @@ spec = do
 
 testSetFakeData =
   it "store mock data" $ do
-        storeResource k' v'
+        storeResource "254" "{\"president\": \"Kennedy\"}\n"
+        storeResource "42:config" "[null]"
         assertPass
-  where
-    k' = "254"
-    v' = "{\"president\": \"Kennedy\"}\n"
+
+
+
 

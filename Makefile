@@ -9,7 +9,7 @@ MAKEFLAGS=-s -R
 REDIRECT=>/dev/null
 endif
 
-.PHONY: all dirs test build-core build-test
+.PHONY: all dirs test build-core build-tests
 
 #
 # Disable missing signatures so that you can actually do development and
@@ -107,3 +107,5 @@ clean:
 	-rm -rf $(BUILDDIR)
 	@echo "KILL\ttests/redis.pid"
 	-kill `cat tests/redis.pid`
+	-rm -f tests/redis.pid tests/redis.log 
+	-rm -f tests/dump.rdb
