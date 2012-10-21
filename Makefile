@@ -9,7 +9,7 @@ MAKEFLAGS=-s -R
 REDIRECT=>/dev/null
 endif
 
-.PHONY: all dirs test build-core build-tests
+.PHONY: all dirs test build-core build-tests run-data
 
 #
 # Disable missing signatures so that you can actually do development and
@@ -98,14 +98,11 @@ test: build-tests run-data
 data: run-data
 run-data: tests/redis.pid
 tests/redis.pid:
-	@echo "REDIS\ttests/redis.sock"
-	redis-server tests/redis.conf
+	tests/start.sh
 
-clean:
+clean: 
 	@echo "RM\ttemp files"
 	-rm -f *.hi *.o technique snippet check tags
 	-rm -rf $(BUILDDIR)
-	@echo "KILL\ttests/redis.pid"
-	-kill `cat tests/redis.pid`
-	-rm -f tests/redis.pid tests/redis.log 
+	tests/stop.sh
 	-rm -f tests/dump.rdb
