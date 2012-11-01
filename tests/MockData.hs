@@ -20,27 +20,29 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module MockData (spec) where
- 
-import Prelude hiding (catch)
 
---import Data.ByteString (ByteString)
 import Test.Hspec (Spec, describe, it)
 
 import Utilities (assertPass)
-import Lookup (storeResource)
+import Lookup (storeResource, flushDatastore)
 
 
 spec :: Spec
 spec = do
     describe "Load mock data for tests" $ do
+        testFlushDatastore
         testSetFakeData
 
+testFlushDatastore =
+    it "ensure clean slate" $ do
+        flushDatastore
 
 testSetFakeData =
   it "store mock data" $ do
-        storeResource k' v'
+        storeResource "254" "{\"president\": \"Kennedy\"}\n"
+        storeResource "42:config" "[null]"
         assertPass
-  where
-    k' = "254"
-    v' = "{\"president\": \"Kennedy\"}\n"
+
+
+
 

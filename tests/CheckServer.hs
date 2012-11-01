@@ -96,7 +96,7 @@ testSubresourceContent =
     it "accepts request for a valid sub-resource" $ do
         (q,p) <- makeRequest GET "/resource/42/config" "application/json" Nothing
         expectCode 200 (q,p)
-        expectBody "[ null ]" (q,p)
+        expectBody "[null]" (q,p)
 
 
 testWrongMedia =

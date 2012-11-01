@@ -6,3 +6,5 @@ tests/redis.sock
 tests/dump.rdb
 technique
 check
+tests/redis.log
+tests/redis.pid

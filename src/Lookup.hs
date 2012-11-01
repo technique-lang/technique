@@ -19,7 +19,7 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lookup (lookupResource, storeResource) where
+module Lookup (lookupResource, storeResource, flushDatastore) where
 
 import qualified Data.ByteString.Char8 as S
 import Database.Redis
@@ -33,7 +33,7 @@ import Control.Monad.CatchIO (bracket)
 fromReply :: (Either Reply (Maybe S.ByteString)) -> Maybe S.ByteString
 fromReply x =
     case x of
-        Right s'0       -> s'0
+        Right sm'       -> sm'
         Left (Error s') -> Just s'
         Left _          -> Just "Kaboom!\n"     -- Is this even possible?
 
@@ -79,4 +79,23 @@ storeResource d' t' = bracket
     (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ writeResource d' t')
+
+
+--
+-- For tests,
+--
+
+flushDatastore :: IO ()
+flushDatastore = bracket
+    (connect settings)
+    (\r -> runRedis r $ quit)
+    (\r -> runRedis r $ dropResources)
+
+
+dropResources :: Redis ()
+dropResources = do
+    _ <- flushdb
+    return ()
+
+
 

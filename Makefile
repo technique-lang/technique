@@ -9,7 +9,7 @@ MAKEFLAGS=-s -R
 REDIRECT=>/dev/null
 endif
 
-.PHONY: all dirs test build-core build-test
+.PHONY: all dirs test build-core build-tests run-data
 
 #
 # Disable missing signatures so that you can actually do development and
@@ -91,11 +91,18 @@ check:
 # $ inotifymake build-tests -- ./check
 #
 
-test: build-tests
+test: build-tests run-data
 	@echo "EXEC\tcheck"
 	$(BUILDDIR)/tests/check.bin
 
-clean:
+data: run-data
+run-data: tests/redis.pid
+tests/redis.pid:
+	tests/start.sh
+
+clean: 
 	@echo "RM\ttemp files"
 	-rm -f *.hi *.o technique snippet check tags
 	-rm -rf $(BUILDDIR)
+	tests/stop.sh
+	-rm -f tests/dump.rdb
