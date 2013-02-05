@@ -19,8 +19,8 @@ endif
 #
 
 GHC=ghc \
+	-rtsopts \
 	-Wall \
-	-Werror \
 	-fwarn-tabs \
 	-fno-warn-missing-signatures \
 	-fno-warn-unused-binds
@@ -62,6 +62,20 @@ $(BUILDDIR)/core/technique.bin: $(CORE_SOURCES)
 technique:
 	@echo "LN -s\t$@"
 	ln -s $(BUILDDIR)/core/technique.bin $@
+
+#
+# `make tags` from command line should force rebuild
+#
+tags: clean-tags build-tags
+
+clean-tags:
+	@if [ -f tags ] ; then echo "RM\ttags" ; rm -f tags ; fi
+
+build-tags: $(CORE_SOURCES) $(TEST_SOURCES)
+	@echo "CTAGS\ttags"
+	hothasktags $^ > tags
+
+
 
 #
 # Build test suite code
@@ -106,3 +120,17 @@ clean:
 	-rm -rf $(BUILDDIR)
 	tests/stop.sh
 	-rm -f tests/dump.rdb
+
+
+doc: dist/setup-config
+	@echo "CABAL\thaddock"
+	cabal haddock
+
+dist/setup-config:
+	@echo "CABAL\tconfigure"
+	cabal configure
+
+
+format: $(CORE_SOURCES) $(TEST_SOURCES)
+	stylish-haskell -i $^
+

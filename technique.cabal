@@ -1,12 +1,12 @@
 cabal-version:       >= 1.2
 name:                technique
-version:             0.1.1.0
+version:             0.1.2
 synopsis:            Procedures and Sequences
 license:             GPL-2
 license-file:        COPYING
 author:              Andrew Cowie <andrew@operationaldynamics.com>
 maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
-copyright:           © 2011-2012 Operational Dynamics Consulting, Pty Ltd
+copyright:           © 2011-2013 Operational Dynamics Consulting, Pty Ltd
 category:            Web
 tested-with:         GHC == 7.4
 
@@ -19,9 +19,23 @@ executable           technique
                      mtl,
                      hedis >= 0.5,
                      snap-core,
-                     snap-server
+                     snap-server,
+                     http-streams
   hs-source-dirs:    src
   main-is:           Technique.hs
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -funbox-strict-fields
+                     -fno-warn-missing-signatures
+                     -fno-warn-unused-binds
+                     -fno-warn-unused-do-bind
+
+  ghc-prof-options:  -prof -fprof-auto-top
+
 
 test-suite           check
   type:              exitcode-stdio-1.0
@@ -30,8 +44,11 @@ test-suite           check
                      transformers,
                      HUnit,
                      hspec,
-                     snap-core,
-                     snap-server
+                     snap-core       >= 0.9    && < 1.0,
+                     snap-server     >= 0.9    && < 1.0,
+                     snap            >= 0.9    && < 1.0,
+                     unordered-containers,
+                     http-streams
   hs-source-dirs:    src,tests
   main-is:           CheckServer.hs
                       
