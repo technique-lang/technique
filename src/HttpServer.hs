@@ -139,7 +139,7 @@ handleAsBrowser :: Snap ()
 handleAsBrowser = do
     modifyResponse $ setContentType "text/html; charset=UTF-8"
     modifyResponse $ setHeader "Cache-Control" "max-age=1"
-    sendFile "hello.html"
+    sendFile "content/hello.html"
 
 
 handleAsText :: Snap ()
