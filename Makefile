@@ -46,10 +46,11 @@ $(BUILDDIR)/.dir:
 	touch $(BUILDDIR)/.dir
 
 
-config: config.h
-config.h: Setup.hs technique.cabal
+config: dist/setup-config
+dist/setup-config: technique.cabal
 	@/bin/echo -e "CABAL\tconfigure"
-	cabal configure --enable-tests
+#	cabal configure --enable-tests
+	cabal configure
 
 
 
