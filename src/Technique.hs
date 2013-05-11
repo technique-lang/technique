@@ -23,10 +23,14 @@ import Snap.Http.Server
 
 import HttpServer (site)
 
---
--- Top level URL routing logic.
---
-
 main :: IO ()
-main = quickHttpServe site
+main =
+    httpServe c site
+  where
+    c = setAccessLog ConfigNoLog $
+        setErrorLog ConfigNoLog $
+        setHostname "localhost" $
+        setBind "localhost" $
+        setPort 8000 $
+        setVerbose False emptyConfig
 
