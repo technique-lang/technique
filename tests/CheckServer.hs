@@ -23,18 +23,18 @@ module CheckServer (spec) where
 
 import Prelude hiding (catch)
 
-import Snap.Core hiding (setHeader, setContentType, method)
-import Snap.Test
+import Control.Monad.IO.Class (MonadIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.Map as Map
-import Control.Monad.IO.Class (MonadIO)
-import Test.HUnit
+import Data.Maybe (fromJust, fromMaybe)
+import Snap.Core hiding (method, setContentType, setHeader)
+import Snap.Test
 import Test.Hspec (Spec, describe, it)
-import Data.Maybe (fromMaybe, fromJust)
+import Test.HUnit
 
-import Utilities (assertMaybe)
 import HttpServer (site)
+import Utilities (assertMaybe)
 
 --
 -- Naming convention used is Requests as q and Responses as p.
@@ -149,7 +149,7 @@ makeRequest method url' mime' payload'0 = do
     request = case method of
         GET         -> setupGetRequest url' mime'
         PUT         -> setupPutRequest url' mime' payload'
-        _           -> undefined   
+        _           -> undefined
     handler = HttpServer.site
 
 
@@ -224,7 +224,7 @@ summarize (q,p) =
     uri = S.unpack $ rqURI q
     code = show $ rspStatus p
     label = S.unpack $ rspStatusReason p
-    
+
 
 example1 :: (MonadIO m) => RequestBuilder m ()
 example1 = do

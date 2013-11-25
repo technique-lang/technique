@@ -41,5 +41,5 @@ assertMaybe prefix m0 =
 --
 assertPass :: Assertion
 assertPass = do
-    assertBool "" True      
+    assertBool "" True
 

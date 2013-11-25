@@ -23,16 +23,16 @@ module HttpServer (site) where
 
 import Prelude
 
-import Snap.Core
 import Control.Applicative
+import Control.Exception (SomeException)
+import Control.Monad.CatchIO (catch)
+import Control.Monad.Trans (liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Maybe (fromMaybe)
-import Control.Monad.Trans (liftIO)
-import Control.Monad.CatchIO (catch)
-import Control.Exception (SomeException)
-import System.IO (stderr, hPutStrLn, hFlush)
+import Snap.Core
+import System.IO (hFlush, hPutStrLn, stderr)
 
 import Lookup (lookupResource, storeResource)
 
@@ -66,7 +66,7 @@ serveResource = do
         _       -> serveBadRequest -- wrong! There's actually a 4xx code for this
 
 --
--- If they request / then we send them to an info page. 
+-- If they request / then we send them to an info page.
 --
 
 serveHome :: Snap ()
@@ -109,13 +109,13 @@ handleAsREST :: Snap ()
 handleAsREST = do
     im' <- getParam "id"
     om' <- getParam "other"
-    
+
     let k' = combine im' om'
-    
+
     e' <- lookupById k'
-    
+
     let l  = fromIntegral $ S.length e'
-    
+
     modifyResponse $ setContentType "application/json"
     modifyResponse $ setHeader "Cache-Control" "max-age=42"
     modifyResponse $ setContentLength $ l
@@ -169,7 +169,7 @@ handlePutMethod :: Snap ()
 handlePutMethod = do
     r <- getRequest
     let mime0 = getHeader "Content-Type" r
-    
+
     case mime0 of
         Just "application/json" -> updateResource
         _                       -> serveUnsupported
@@ -190,7 +190,7 @@ updateResource = do
     return ()
   where
     fromLazy ls' = S.concat $ L.toChunks ls'
-    
+
 
 
 serveUnsupported :: Snap ()
@@ -204,7 +204,7 @@ serveUnsupported = do
 --
 -- The exception will be dumped to the server's stdout, while the supplied
 -- message will be sent out with the response (ideally only for debugging
--- purposes, but easier than looking in log/error.log for details). 
+-- purposes, but easier than looking in log/error.log for details).
 --
 
 serveError :: ByteString -> SomeException -> Snap ()

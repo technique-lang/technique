@@ -23,8 +23,8 @@ module MockData (spec) where
 
 import Test.Hspec (Spec, describe, it)
 
+import Lookup (flushDatastore, storeResource)
 import Utilities (assertPass)
-import Lookup (storeResource, flushDatastore)
 
 
 spec :: Spec

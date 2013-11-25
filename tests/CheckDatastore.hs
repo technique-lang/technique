@@ -20,16 +20,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module CheckDatastore (spec) where
- 
+
 import Prelude hiding (catch)
 
 import Data.ByteString (ByteString)
-import Test.HUnit
-import Test.Hspec (Spec, describe, it)
 import Data.Maybe (fromJust)
+import Test.Hspec (Spec, describe, it)
+import Test.HUnit
 
-import Utilities (assertMaybe)
 import Lookup (lookupResource, storeResource)
+import Utilities (assertMaybe)
 
 
 spec :: Spec
@@ -50,7 +50,7 @@ testStoreKey =
   where
     k' = "42"
     v' = answer'
-    
+
 testReadKey =
     it "reads that key and gets the same value back" $ do
         res'0 <- lookupResource k

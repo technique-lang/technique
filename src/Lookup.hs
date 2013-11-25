@@ -21,9 +21,9 @@
 
 module Lookup (lookupResource, storeResource, flushDatastore) where
 
+import Control.Monad.CatchIO (bracket)
 import qualified Data.ByteString.Char8 as S
 import Database.Redis
-import Control.Monad.CatchIO (bracket)
 
 --
 -- Store and Access keys from Redis database. If the key is unset returns
