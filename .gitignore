@@ -8,3 +8,5 @@ technique
 check
 tests/redis.log
 tests/redis.pid
+config.h
+dist
