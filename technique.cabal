@@ -1,4 +1,4 @@
-cabal-version:       >= 1.2
+cabal-version:       >= 1.10
 name:                technique
 version:             0.1.2
 synopsis:            Procedures and Sequences
@@ -6,13 +6,15 @@ license:             GPL-2
 license-file:        COPYING
 author:              Andrew Cowie <andrew@operationaldynamics.com>
 maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
-copyright:           © 2011-2013 Operational Dynamics Consulting, Pty Ltd
+copyright:           © 2011-2015 Operational Dynamics Consulting, Pty Ltd and Others
 category:            Web
-tested-with:         GHC == 7.6
+tested-with:         GHC == 7.10
 
 build-type:          Simple
 
 executable           technique
+  default-language:  Haskell2010
+
   build-depends:     base,
                      bytestring,
                      MonadCatchIO-transformers,
@@ -21,6 +23,7 @@ executable           technique
                      snap-core,
                      snap-server,
                      http-streams
+
   hs-source-dirs:    src
   main-is:           Technique.hs
 
@@ -38,19 +41,26 @@ executable           technique
 
 
 test-suite           check
+  default-language:  Haskell2010
   type:              exitcode-stdio-1.0
+
   build-depends:     base,
+                     bytestring,
                      containers,
                      transformers,
+                     MonadCatchIO-transformers,
+                     mtl,
                      HUnit,
+                     hedis,
                      hspec,
-                     snap-core       >= 0.9    && < 1.0,
-                     snap-server     >= 0.9    && < 1.0,
-                     snap            >= 0.9    && < 1.0,
+                     snap-core,
+                     snap-server,
+                     snap,
                      unordered-containers,
                      http-streams
+
   hs-source-dirs:    src,tests
-  main-is:           CheckServer.hs
+  main-is:           TestProgram.hs
                       
 
 -- vim: set tabstop=21 expandtab:

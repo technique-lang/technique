@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if [ -f tests/redis.pid ] ; then
-	echo "KILL\ttests/redis.pid"
+	echo -e "KILL\ttests/redis.pid"
 	PID=`cat tests/redis.pid`
 	kill $PID
 	rm -f tests/redis.pid
