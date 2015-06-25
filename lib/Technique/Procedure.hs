@@ -1,7 +1,7 @@
 --
 -- Procedures
 --
--- Copyright © 2012-2013 Operational Dynamics Consulting, Pty Ltd
+-- Copyright © 2012-2015 Operational Dynamics Consulting, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is made available
 -- to you by its authors as open source software: you can redistribute it
@@ -19,19 +19,5 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-import Snap.Http.Server
-
-import HttpServer (site)
-import Technique.Procedure ()
-
-main :: IO ()
-main =
-    httpServe c site
-  where
-    c = setAccessLog ConfigNoLog $
-        setErrorLog ConfigNoLog $
-        setHostname "localhost" $
-        setBind "localhost" $
-        setPort 8000 $
-        setVerbose False emptyConfig
+module Technique.Procedure where
 
