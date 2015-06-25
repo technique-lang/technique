@@ -1,4 +1,5 @@
 /tags
+/codex.tags
 /log/*
 /tests/redis.sock
 /tests/dump.rdb
