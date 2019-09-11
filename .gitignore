@@ -1,6 +1,5 @@
+/technique.cabal
 /tags
-/codex.tags
-/log/*
 /tests/redis.sock
 /tests/dump.rdb
 /technique
@@ -8,4 +7,4 @@
 /tests/redis.log
 /tests/redis.pid
 /.stack-work/
-/stack.yaml
+/stack.yaml.lock
