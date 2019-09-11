@@ -21,20 +21,30 @@ dependencies:
  - core-program >= 0.2.0
  - free
 
-ghc-options: -threaded -Wall -Wwarn -fwarn-tabs
+ghc-options: -Wall -Wwarn -fwarn-tabs
+
+library:
+  dependencies:
+   - async
+  source-dirs: lib
+  exposed-modules:
+   - Technique.Procedure
+  other-modules: []
 
 executables:
   technique:
-    source-dirs: src
     dependencies:
      - technique
-    main: ExperimentalMain.hs
+    ghc-options: -threaded -dynamic
+    source-dirs: src
+    main: TechniqueMain.hs
     other-modules: []
+
 tests:
   check:
     dependencies:
      - hspec
-    ghc-options: -threaded
+    ghc-options: -threaded -dynamic
     source-dirs:
      - src
      - tests
