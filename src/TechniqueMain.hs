@@ -1,8 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 import Core.Program
 import Technique.Procedure ()
 
-main :: IO ()
-main = execute $ do
+program :: Program None ()
+program = do
     write "Start"
+
+version :: Version
+version = $(fromPackage)
+
+main :: IO ()
+main = do
+    context <- configure version None (simple
+        [
+        ])
+    executeWith context program
