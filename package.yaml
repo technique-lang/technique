@@ -46,8 +46,7 @@ tests:
      - hspec
     ghc-options: -threaded -dynamic
     source-dirs:
-     - src
      - tests
-    main: TestSuite.hs
+    main: TestProgram.hs
     other-modules: []
 
