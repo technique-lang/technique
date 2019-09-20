@@ -20,6 +20,8 @@ dependencies:
  - core-text >= 0.2.0
  - core-program >= 0.2.0
  - free
+ - megaparsec
+ - text
 
 ghc-options: -Wall -Wwarn -fwarn-tabs
 
