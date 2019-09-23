@@ -1,20 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Test.Hspec (Spec, hspec, it, describe, shouldBe)
+import Test.Hspec (Spec, hspec)
 
--- import qualified CheckDatastore as Datastore (spec)
--- import qualified CheckServer as Server (spec)
--- import qualified MockData as Mock (spec)
+import CheckSkeletonParser
+import Core.System
 
 main :: IO ()
-main = hspec spec
+main = do
+    finally (hspec suite) (putStrLn ".")
 
-spec :: Spec
-spec = do
-    describe "Things" $
-        it "Does stuff" $ do
-            True `shouldBe` True
-
---  Datastore.spec
---  Mock.spec
---  Server.spec
+suite :: Spec
+suite = do
+    checkSkeletonParser

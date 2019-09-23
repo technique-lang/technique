@@ -20,7 +20,6 @@ parseMagicLine = do
     void spaceChar <?> "a space character"
     void (char 'v') <?> "the character v and then a number"
     v <- L.decimal <?> "the language version"
-    unless (v == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
     void newline
     return v
 
@@ -28,5 +27,7 @@ type AbstractSyntaxTree = ()    -- FIXME
 
 parseBookfile :: Parser AbstractSyntaxTree
 parseBookfile = do
-    version <- parseMagicLine
+    v <- parseMagicLine
+    unless (v == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
+
     return ()
