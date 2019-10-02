@@ -39,7 +39,8 @@ library:
    - Technique.Quantity
    - Technique.Formatter
    - Technique.Parser
-  other-modules: []
+  other-modules:
+   - Technique.Evaluator
 
 executables:
   technique:
