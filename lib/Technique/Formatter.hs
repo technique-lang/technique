@@ -68,7 +68,7 @@ instance Render Procedure where
         annotate TypeToken from <+>
         annotate SymbolToken "->" <+>
         annotate TypeToken into <>
-        block
+        line <> block
 
 {-|
 punctuate a list with commas annotated with Symbol highlighting.
@@ -85,7 +85,6 @@ instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Block statements) =
-        line <>
         nest 4 (
             annotate SymbolToken lbrace <>
             foldl' f emptyDoc statements
