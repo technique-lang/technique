@@ -117,8 +117,8 @@ instance Render Role where
     type Token Role = TechniqueToken
     colourize = colourizeTechnique
     intoDocA role =  case role of
-        Any -> annotate RoleToken "$*"
-        Role name -> annotate RoleToken ("$" <> pretty name)
+        Any -> annotate RoleToken "@*"
+        Role name -> annotate RoleToken ("@" <> pretty name)
 
 instance Render Expression where
     type Token Expression = TechniqueToken

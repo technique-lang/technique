@@ -83,37 +83,40 @@ exampleRoastTurkey =
     i = Type { typeName = "Ingredients" }
     o = Type { typeName = "Turkey" }
     celsius = fromJust (lookupKeyValue "°C" units)
+    chef = Role "chef"
     block = Block
-                [ Assignment
-                    (Name "preheat")
-                    (Application
-                        exampleProcedureOven
-                        (Grouping (Literal (Quantity 180 celsius))))
-                , Execute
-                    (Application
-                        builtinProcedureTask
-                        (Literal (Text "Bacon strips onto bird")))
-                , Execute
-                    (Variable (Name "preheat"))
-                , Execute
-                    (Literal None)
-                , Blank
-                , Execute
-                    (Operation (Operator "&")
-                        (Variable (Name "w1"))
-                        (Grouping (Operation (Operator "|")
-                            (Variable (Name "w2"))
-                            (Variable (Name "w3")))))
-                , Blank
-                , Assignment
-                    (Name "temp")
-                    (Application
-                        builtinProcedureRecord
-                        (Literal (Text "Probe bird temperature")))
-                , Execute
-                    (Table
-                        (Tablet
-                            [ Binding "Final temperature" (Variable (Name "temp")) ]))
+                [ Attribute chef (Block
+                    [ Assignment
+                        (Name "preheat")
+                        (Application
+                            exampleProcedureOven
+                            (Grouping (Literal (Quantity 180 celsius))))
+                    , Execute
+                        (Application
+                            builtinProcedureTask
+                            (Literal (Text "Bacon strips onto bird")))
+                    , Execute
+                        (Variable (Name "preheat"))
+                    , Execute
+                        (Literal None)
+                    , Blank
+                    , Execute
+                        (Operation (Operator "&")
+                            (Variable (Name "w1"))
+                            (Grouping (Operation (Operator "|")
+                                (Variable (Name "w2"))
+                                (Variable (Name "w3")))))
+                    , Blank
+                    , Assignment
+                        (Name "temp")
+                        (Application
+                            builtinProcedureRecord
+                            (Literal (Text "Probe bird temperature")))
+                    , Execute
+                        (Table
+                            (Tablet
+                                [ Binding "Final temperature" (Variable (Name "temp")) ]))
+                    ])
                 ]
   in
     Procedure
