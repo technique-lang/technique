@@ -15,8 +15,8 @@ type Parser = Parsec Void Text
 __VERSION__ :: Int
 __VERSION__ = 0
 
-parseMagicLine :: Parser Int
-parseMagicLine = do
+pMagicLine :: Parser Int
+pMagicLine = do
     void (char '%') <?> "first line to begin with % character"
     void spaceChar <?> "a space character"
     void (string "technique")
@@ -26,8 +26,8 @@ parseMagicLine = do
     void newline
     return v
 
-parseSpdxLine :: Parser (Text,Maybe Text)
-parseSpdxLine = do
+pSpdxLine :: Parser (Text,Maybe Text)
+pSpdxLine = do
     void (char '!') <?> "second line to begin with ! character"
     void spaceChar <?> "a space character"
 
@@ -46,10 +46,10 @@ parseSpdxLine = do
 
 type AbstractSyntaxTree = ()    -- FIXME
 
-parseProcfileHeader :: Parser AbstractSyntaxTree
-parseProcfileHeader = do
-    version <- parseMagicLine
+pProcfileHeader :: Parser AbstractSyntaxTree
+pProcfileHeader = do
+    version <- pMagicLine
     unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
-    _ <- parseSpdxLine
+    _ <- pSpdxLine
 
     return ()
