@@ -8,3 +8,5 @@
 /tests/redis.pid
 /.stack-work/
 /stack.yaml.lock
+/zzz
+/.vscode
