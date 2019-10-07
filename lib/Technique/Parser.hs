@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Technique.Parser where
 
@@ -14,6 +15,12 @@ type Parser = Parsec Void Text
 
 __VERSION__ :: Int
 __VERSION__ = 0
+
+consumer :: (MonadParsec e s m, Token s ~ Char) => m ()
+consumer = L.space space1 empty empty
+
+lexeme :: (MonadParsec e s m, Token s ~ Char) => m a -> m a
+lexeme = L.lexeme consumer
 
 pMagicLine :: Parser Int
 pMagicLine = do
@@ -52,4 +59,10 @@ pProcfileHeader = do
     unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
     _ <- pSpdxLine
 
+    return ()
+
+type Procedure = ()             -- FIXME
+
+pProcedureFunction :: Parser Procedure
+pProcedureFunction = do
     return ()
