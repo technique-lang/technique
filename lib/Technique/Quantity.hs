@@ -1,22 +1,50 @@
-module Technique.Quantity where
+{-# LANGUAGE OverloadedStrings #-}
+
+module Technique.Quantity
+(
+      Quantity(..)
+    , Symbol
+    , Unit(..)
+    , Group(..)
+    , Scales(..)
+    , units     
+) where
+
+import Core.Text.Rope
+import Core.Data.Structures
 
 data Quantity
     = Number Int                -- FIXME not Int
-    | Quantity Int Units
+    | Quantity Int Unit
 
 
--- this is Not Very Scalable to say the least. Units need to not be Haskell
--- host language sum type. They need to be declared inside the objective
--- langauage.
-data Units
-    = Grams
-    | Metres
-    | Seconds
-    | Hours
-    | Days
-    | Teaspoon
-    | Tablespoon
-    | Litres
+type Symbol = Rope
+
+units :: Map Symbol Unit
+units =
+    foldr f emptyMap knownUnits
+  where
+    f unit m = insertKeyValue (unitSymbol unit) unit m
+
+{-|
+Whether Système International metric prefixes can be used, or (as is the case 
+of time units) quantities should not be aggregated to other scales.
+-}
+data Group
+    = Metric
+    | Time
+    | Scientific        -- probable collision with type from **base**
+    | Engineering
+
+knownUnits :: [Unit]
+knownUnits =
+    [ Unit "metre" "metres" "m" Metric
+    , Unit "gram" "grams" "g" Metric
+    , Unit "litre" "litres" "L" Metric
+    , Unit "second" "seconds" "s" Time
+    , Unit "hour" "hours" "h" Time
+    , Unit "day" "days" "d" Time
+    ]
 
 data Scales
     = Peta
@@ -30,8 +58,9 @@ data Scales
     | Nano
     | Pico
 
-data Units = Units
-    { unitsName :: Rope
-    , unitsPlural :: Rope
-    , unitsSymbol :: Rope
+data Unit = Unit
+    { unitName :: Rope
+    , unitPlural :: Rope
+    , unitSymbol :: Rope
+    , unitGroup :: Group
     }
