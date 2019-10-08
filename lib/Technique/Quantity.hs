@@ -6,7 +6,7 @@ module Technique.Quantity
     , Symbol
     , Unit(..)
     , Group(..)
-    , Scales(..)
+    , Prefix(..)
     , units     
 ) where
 
@@ -41,22 +41,37 @@ knownUnits =
     [ Unit "metre" "metres" "m" Metric
     , Unit "gram" "grams" "g" Metric
     , Unit "litre" "litres" "L" Metric
-    , Unit "second" "seconds" "s" Time
-    , Unit "hour" "hours" "h" Time
+    , Unit "second" "seconds" "sec" Time
+    , Unit "minute" "minutes" "min" Time
+    , Unit "hour" "hours" "hr" Time
     , Unit "day" "days" "d" Time
     ]
 
-data Scales
-    = Peta
-    | Tera
-    | Giga
-    | Mega
-    | Kilo
-    | Zero
-    | Milli
-    | Micro
-    | Nano
-    | Pico
+prefixes :: Map Symbol Prefix
+prefixes =
+    foldr g emptyMap knownPrefixes
+  where
+    g prefix m = insertKeyValue (prefixSymbol prefix) prefix m
+
+knownPrefixes :: [Prefix]
+knownPrefixes =
+    [ Prefix "peta" "P" 15
+    , Prefix "tera" "T" 12
+    , Prefix "giga" "G" 9
+    , Prefix "mega" "M" 6
+    , Prefix "kilo" "k" 3
+    , Prefix "" "" 0
+    , Prefix "milli" "m" (-3)
+    , Prefix "micro" "μ" (-6)
+    , Prefix "nano" "n" (-9)
+    , Prefix "pico" "p" (-12)
+    ]
+
+data Prefix = Prefix
+    { prefixName :: Rope
+    , prefixSymbol :: Symbol
+    , prefixScale :: Int        -- FIXME change this to a hard coded numerical constant?
+    }
 
 data Unit = Unit
     { unitName :: Rope
