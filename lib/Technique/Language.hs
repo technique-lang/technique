@@ -7,9 +7,15 @@ import Core.Text.Rope
 
 import Technique.Quantity
 
-data Variable b
-    = Constant b
-    | Future b
+-- TODO
+data Variable
+    = Constant
+    | Future
+
+data Value = Value
+    { valueType :: Type
+    , valueActual :: Maybe String       -- FIXME no wtf
+    }
 
 data Role
     = None
@@ -28,44 +34,49 @@ data Expression b where
 -}
 
 
-data Type t = Type
+data Type = Type
     { typeName :: Rope
-    , typeInternal :: t
+--  , typeInternal :: t
     }
 
-data Procedure a b = Expression
+data Procedure = Procedure
     { procedureName :: Rope
-    , procedureInput :: Type a
-    , procedureOutput :: Type b
+    , procedureInput :: Type
+    , procedureOutput :: Type
     , procedureLabel :: Markdown
     , procedureDescription :: Markdown
-    , procedureBlock :: Statement b
+    , procedureBlock :: Block
     }
 
-data Block b = Block [Statement b]      -- wrong, because they have different types along the way
+data Block = Block [Statement]
 
-data Statement b where
-    Binding :: Variable b -> Expression a -> Statement b
-    Comment :: Rope -> Statement ()
-    Attribute :: Role -> Block b -> Statement b
+data Statement where
+    Binding :: Variable -> Expression -> Statement
+    Comment :: Rope -> Statement
+    Declaration :: Procedure -> Statement
+    Attribute :: Role -> Block -> Statement
+    Result :: Expression -> Statement
 
-data Expression b where
-    Application :: Expression (a -> b) -> Expression a -> Expression b
-    Value :: Quantity b -> Expression b
-    Declaration :: Procedure a b -> Statement b
+data Expression where
+    Application :: Procedure -> Expression -> Expression
+    Quantity :: Quantity -> Expression
 
 
 -- aka apply
-execute :: Procedure a b -> Value a -> b
+execute :: Procedure -> Value -> b
 execute proc value =
   let
-    body = procedureBody proc
+    body = procedureBlock proc
   in
     evaluate body
 
 type Context = Map String Value -- ?
 
+evaluate = undefined
+
+{-
 evaluate :: Context -> Expression -> Value
 evaluate e = case e of
     Comment _ -> ()
     _ -> undefined
+-}
