@@ -15,9 +15,10 @@ import Core.Text.Rope
 import Core.Data.Structures
 
 data Quantity
-    = Number Int                -- FIXME not Int
+    = Nil                       -- ?!?
+    | Number Int                -- FIXME not Int
     | Quantity Int Unit
-
+    | Text Rope
 
 type Symbol = Rope
 
