@@ -61,6 +61,8 @@ data Procedure = Procedure
 
 data Block = Block [Statement]
 
+-- TODO are Execute and Result the same? From an evaluation standpoint, no,
+-- but from a raw abstract syntax tree perspective? Perhaps.
 data Statement where
     Assignment :: Variable -> Expression -> Statement
     Execute :: Expression -> Statement
@@ -74,6 +76,7 @@ data Expression where
     Literal :: Quantity -> Expression
     Table :: Tablet -> Expression
     Binding :: Label -> Expression -> Expression    -- only valid are Literal and Variable?
+    Evaluate :: Variable -> Expression
 
 data Tablet = Tablet [(Label,Quantity)]
 
