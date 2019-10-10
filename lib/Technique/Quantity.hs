@@ -7,7 +7,8 @@ module Technique.Quantity
     , Unit(..)
     , Group(..)
     , Prefix(..)
-    , units     
+    , units
+    , prefixes
 ) where
 
 import Core.Text.Rope
@@ -31,8 +32,9 @@ Whether Système International metric prefixes can be used, or (as is the case
 of time units) quantities should not be aggregated to other scales.
 -}
 data Group
-    = Metric
+    = Metric            -- has prefixes
     | Time
+    | Normal
     | Scientific        -- probable collision with type from **base**
     | Engineering
 
@@ -45,6 +47,8 @@ knownUnits =
     , Unit "minute" "minutes" "min" Time
     , Unit "hour" "hours" "hr" Time
     , Unit "day" "days" "d" Time
+    , Unit "degree celsius" "degrees celsius" "°C" Normal
+    , Unit "degree kelvin" "degrees kelvin" "K" Metric
     ]
 
 prefixes :: Map Symbol Prefix
