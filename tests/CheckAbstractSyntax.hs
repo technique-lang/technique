@@ -35,37 +35,42 @@ import Technique.Quantity
         }
 -}
 
-oven :: Procedure
-oven =
+exampleProcedureOven :: Procedure
+exampleProcedureOven =
     Procedure
         { procedureName = "oven"
         , procedureInput = Type "Temperature"
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Result (Literal (Text "builtin!")) ]
+        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
         }
 
-task :: Procedure
-task =
+
+-- TODO these two are actual builin standard library procedures, so a
+-- future change to this test case will involve doing a lookup of these
+-- names in some environment or context.
+
+builtinProcedureTask :: Procedure
+builtinProcedureTask =
     Procedure
         { procedureName = "task"
         , procedureInput = Type "Text"
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "A task")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Result (Literal (Text "builtin!")) ]
+        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
         }
 
-wait :: Procedure
-wait =
+builtinProcedureWait :: Procedure
+builtinProcedureWait =
     Procedure
         { procedureName = "wait"
         , procedureInput = Type "*"
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Wait")
         , procedureDescription = Just (Markdown "Wait for a procedure to complete.")
-        , procedureBlock = Block [ Result (Literal (Text "builtin!")) ]
+        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
         }
 
 
@@ -76,9 +81,9 @@ exampleRoastTurkey =
     output = Type { typeName = "Turkey" }
     celsius = fromJust (lookupKeyValue "°C" units)
     block = Block
-                [ Assignment (Variable "preheat") (Application oven (Literal (Quantity 180 celsius)))
-                , Execute (Application task (Literal (Text "Bacon strips onto bird")))
-                , Execute (Application wait (Evaluate (Variable "preheat")))
+                [ Assignment (Variable "preheat") (Application exampleProcedureOven (Literal (Quantity 180 celsius)))
+                , Execute (Application builtinProcedureTask (Literal (Text "Bacon strips onto bird")))
+                , Execute (Application builtinProcedureWait (Evaluate (Variable "preheat")))
                 , Result (Literal Nil)
                 ]
   in
@@ -91,8 +96,17 @@ exampleRoastTurkey =
         , procedureBlock = block
         }
 
+
+{-|
+These are less tests than a body of code that exercises construction of
+an abstract syntax tree.
+-}
 checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
-        it "Correctly parses a complete magic line" $ do
+        it "Key builtinProcedure procedures are available" $ do
+            procedureName builtinProcedureWait `shouldBe` "wait"
+
+        it "Procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
+
