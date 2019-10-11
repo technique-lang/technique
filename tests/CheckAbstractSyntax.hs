@@ -3,16 +3,24 @@
 
 module CheckAbstractSyntax
     ( checkAbstractSyntax
+    , main
     )
 where
 
 import Core.Data.Structures
-import Core.Text.Rope ()
+import Core.Text.Rope
+import Core.Text.Utilities
+import Data.Text.Prettyprint.Doc
+    ( Doc, Pretty(pretty)
+    )
+import Core.Program.Execute
+import Core.Program.Logging
 import Data.Maybe (fromJust)
 import Test.Hspec
 
 import Technique.Language
 import Technique.Quantity
+import Technique.Formatter
 
 {-
     roast_turkey i : Ingredients -> Turkey
@@ -110,3 +118,7 @@ checkAbstractSyntax = do
         it "Procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
 
+main :: IO ()
+main = execute $ do
+    writeR exampleRoastTurkey
+    writeS (pretty exampleRoastTurkey)
