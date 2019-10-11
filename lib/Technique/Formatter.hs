@@ -6,13 +6,13 @@ module Technique.Formatter where
 
 import Core.Text.Rope
 import Core.Text.Utilities
+import Data.Foldable (foldl')
 import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
-    , rbracket, vsep, (<+>), indent, lbrace, rbrace
+    , rbracket, vsep, (<+>), indent, lbrace, rbrace, emptyDoc
     , line, sep, hcat, annotate
     , unAnnotate, line', group, nest
     )
-
 import Data.Text.Prettyprint.Doc.Render.Terminal
     ( color, colorDull, Color(..), AnsiStyle
     )
@@ -28,13 +28,8 @@ data TechniqueToken
     | QuantityToken
     | RoleToken
 
-instance Render Procedure where
-    type Token Procedure = TechniqueToken
-    colourize = colourizeTechnique
-    intoDocA = prettyProcedure
-
 instance Pretty Procedure where
-    pretty = unAnnotate . prettyProcedure
+    pretty = unAnnotate . intoDocA
 
 colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
@@ -45,15 +40,17 @@ colourizeTechnique token = case token of
     QuantityToken -> colorDull Green
     RoleToken -> colorDull Yellow
 
-prettyProcedure :: Procedure -> Doc TechniqueToken
-prettyProcedure proc =
-  let
-    name = pretty . procedureName $ proc
-    from = pretty . typeName . procedureInput $ proc
-    into = pretty . typeName . procedureOutput $ proc
-  in
-    annotate ProcedureToken name
-    <+> annotate SymbolToken ":"
-    <+> annotate TypeToken from
-    <+> annotate SymbolToken "->"
-    <+> annotate TypeToken into
+instance Render Procedure where
+    type Token Procedure = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA proc =
+      let
+        name = pretty . procedureName $ proc
+        from = pretty . typeName . procedureInput $ proc
+        into = pretty . typeName . procedureOutput $ proc
+      in
+        annotate ProcedureToken name
+        <+> annotate SymbolToken ":"
+        <+> annotate TypeToken from
+        <+> annotate SymbolToken "->"
+        <+> annotate TypeToken into
