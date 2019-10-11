@@ -29,11 +29,16 @@ library:
    - async
    - megaparsec
    - parser-combinators
+   - prettyprinter
+   - prettyprinter-ansi-terminal
    - text
   source-dirs: lib
   exposed-modules:
    - Technique.Procedure
-  other-modules: []
+  other-modules:
+   - Technique.Language
+   - Technique.Quantity
+   - Technique.Formatter
 
 executables:
   technique:
