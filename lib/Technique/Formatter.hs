@@ -48,9 +48,30 @@ instance Render Procedure where
         name = pretty . procedureName $ proc
         from = pretty . typeName . procedureInput $ proc
         into = pretty . typeName . procedureOutput $ proc
+        block = intoDocA . procedureBlock $ proc
       in
         annotate ProcedureToken name
         <+> annotate SymbolToken ":"
         <+> annotate TypeToken from
         <+> annotate SymbolToken "->"
         <+> annotate TypeToken into
+
+instance Render Block where
+    type Token Block = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Block statements) =
+        foldl' f emptyDoc statements
+      where
+        f :: Doc TechniqueToken -> Statement -> Doc TechniqueToken
+        f built statement = built <> line <> intoDocA statement
+
+instance Render Statement where
+    type Token Statement = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA statement = case statement of
+        (Assignment var expr) -> undefined
+        (Execute expr) -> undefined
+        (Comment text) -> "-- " <> pretty text  -- TODO what about multiple lines?
+        (Declaration proc) -> intoDocA proc
+        (Attribute role block) -> undefined
+        (Result expr) -> undefined
