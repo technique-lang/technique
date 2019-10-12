@@ -77,12 +77,31 @@ instance Render Statement where
     type Token Statement = TechniqueToken
     colourize = colourizeTechnique
     intoDocA statement = case statement of
-        (Assignment var expr) -> undefined
-        (Execute expr) -> undefined
-        (Comment text) -> "-- " <> pretty text  -- TODO what about multiple lines?
-        (Declaration proc) -> intoDocA proc
-        (Attribute role block) -> undefined
-        (Result expr) -> undefined
+        (Assignment var expr) ->
+          let
+            name = pretty . variableName $ var
+          in
+            name <+> annotate SymbolToken "=" <+> intoDocA expr
+        (Execute expr) ->
+            intoDocA expr
+        (Comment text) ->
+            "-- " <> pretty text  -- TODO what about multiple lines?
+        (Declaration proc) ->
+            intoDocA proc
+        (Attribute role block) ->
+            intoDocA role <>
+            line <>
+            intoDocA block        -- TODO some nesting?
+        (Result expr) ->
+            intoDocA expr
+
+instance Render Role where
+    type Token Role = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA role =  case role of
+        None -> ""                      -- FIXME?
+        Any -> annotate RoleToken "$*"
+        Role name -> annotate RoleToken ("$" <> pretty name)
 
 instance Render Expression where
     type Token Expression = TechniqueToken
