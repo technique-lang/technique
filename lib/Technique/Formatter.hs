@@ -14,6 +14,7 @@ import Data.Text.Prettyprint.Doc
     , rbracket, vsep, (<+>), indent, lbrace, rbrace, emptyDoc
     , line, sep, hcat, annotate
     , unAnnotate, line', group, nest
+    , dquotes, parens
     )
 import Data.Text.Prettyprint.Doc.Render.Terminal
     ( color, colorDull, Color(..), AnsiStyle, bold
@@ -70,6 +71,7 @@ instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Block statements) =
+        line <>
         nest 4 (
             annotate SymbolToken lbrace <>
             foldl' f emptyDoc statements
@@ -85,10 +87,7 @@ instance Render Statement where
     colourize = colourizeTechnique
     intoDocA statement = case statement of
         (Assignment var expr) ->
-          let
-            name = pretty . variableName $ var
-          in
-            name <+> annotate SymbolToken "=" <+> intoDocA expr
+            intoDocA var <+> annotate SymbolToken "=" <+> intoDocA expr
         (Execute expr) ->
             intoDocA expr
         (Comment text) ->
@@ -106,7 +105,6 @@ instance Render Role where
     type Token Role = TechniqueToken
     colourize = colourizeTechnique
     intoDocA role =  case role of
-        None -> ""                      -- FIXME?
         Any -> annotate RoleToken "$*"
         Role name -> annotate RoleToken ("$" <> pretty name)
 
@@ -114,8 +112,37 @@ instance Render Expression where
     type Token Expression = TechniqueToken
     colourize = colourizeTechnique
     intoDocA expr = case expr of
-        Application proc subexpr -> undefined
-        Literal quantity -> undefined
+        Application proc subexpr ->
+          let
+            name = pretty . procedureName $ proc
+          in
+            annotate ApplicationToken name <+> intoDocA subexpr
+        Literal qty ->
+            intoDocA qty
         Table tablet -> undefined
         Binding label subexpr -> undefined
-        Evaluate variable -> undefined
+        Evaluate var ->
+            intoDocA var
+
+instance Render Variable where
+    type Token Variable = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA var =
+      let
+        name = pretty . variableName $ var
+      in
+        -- TODO different highlighting for variable names?
+        annotate VariableToken name
+
+instance Render Quantity where
+    type Token Quantity = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA qty = case qty of
+        None ->
+            annotate ErrorToken "?"
+        Number i ->
+            annotate QuantityToken (pretty i)
+        Quantity i unit ->
+            annotate SymbolToken (parens (annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))))
+        Text text ->
+            annotate SymbolToken (dquotes (annotate StringToken (pretty text)))
