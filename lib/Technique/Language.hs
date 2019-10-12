@@ -59,15 +59,12 @@ data Procedure = Procedure
 
 data Block = Block [Statement]
 
--- TODO are Execute and Result the same? From an evaluation standpoint, no,
--- but from a raw abstract syntax tree perspective? Perhaps.
 data Statement where
     Assignment :: Variable -> Expression -> Statement
     Execute :: Expression -> Statement
     Comment :: Rope -> Statement
     Declaration :: Procedure -> Statement
     Attribute :: Role -> Block -> Statement     -- Role, Location, and ...?
-    Result :: Expression -> Statement
 
 data Expression where
     Application :: Procedure -> Expression -> Expression

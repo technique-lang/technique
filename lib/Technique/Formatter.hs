@@ -46,7 +46,7 @@ colourizeTechnique token = case token of
     SymbolToken -> colorDull Cyan <> bold
     VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
-    LabelToken -> color Yellow
+    LabelToken -> color Green <> bold
     StringToken -> color Green <> bold
     QuantityToken -> color Magenta
     RoleToken -> colorDull Yellow
@@ -100,8 +100,6 @@ instance Render Statement where
             intoDocA role <>
             line <>
             intoDocA block        -- TODO some nesting?
-        (Result expr) ->
-            intoDocA expr
 
 instance Render Role where
     type Token Role = TechniqueToken

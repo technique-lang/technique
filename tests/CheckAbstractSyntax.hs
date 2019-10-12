@@ -49,7 +49,7 @@ exampleProcedureOven =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
         }
 
 
@@ -65,18 +65,7 @@ builtinProcedureTask =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "A task")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
-        }
-
-builtinProcedureWait :: Procedure
-builtinProcedureWait =
-    Procedure
-        { procedureName = "wait"
-        , procedureInput = Type "*"
-        , procedureOutput = Type "()" -- ?
-        , procedureLabel = Just (Markdown "Wait")
-        , procedureDescription = Just (Markdown "Wait for a procedure to complete.")
-        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
         }
 
 builtinProcedureRecord :: Procedure
@@ -87,7 +76,7 @@ builtinProcedureRecord =
         , procedureOutput = Type "Text" -- ?
         , procedureLabel = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Record a quantity")
-        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
         }
 
 
@@ -108,17 +97,15 @@ exampleRoastTurkey =
                         builtinProcedureTask
                         (Literal (Text "Bacon strips onto bird")))
                 , Execute
-                    (Application
-                        builtinProcedureWait
-                        (Evaluate (Variable "preheat")))
-                , Result
+                    (Evaluate (Variable "preheat"))
+                , Execute
                     (Literal None)
                 , Assignment
                     (Variable "temp")
                     (Application
                         builtinProcedureRecord
                         (Literal (Text "Probe bird temperature")))
-                , Result
+                , Execute
                     (Table
                         (Tablet
                             [ Binding "Final temperature" (Evaluate (Variable "temp")) ]))
@@ -142,7 +129,7 @@ checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
         it "Key builtinProcedure procedures are available" $ do
-            procedureName builtinProcedureWait `shouldBe` "wait"
+            procedureName builtinProcedureTask `shouldBe` "task"
 
         it "Procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
