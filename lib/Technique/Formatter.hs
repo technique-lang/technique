@@ -29,6 +29,7 @@ data TechniqueToken
     | SymbolToken
     | VariableToken
     | ApplicationToken
+    | LabelToken
     | StringToken
     | QuantityToken
     | RoleToken
@@ -42,13 +43,14 @@ colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
     ProcedureToken -> color Blue
     TypeToken -> colorDull Yellow
-    SymbolToken -> colorDull Cyan
+    SymbolToken -> colorDull Cyan <> bold
     VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
+    LabelToken -> color Yellow
     StringToken -> color Green <> bold
     QuantityToken -> color Magenta
     RoleToken -> colorDull Yellow
-    ErrorToken -> color Red
+    ErrorToken -> color Red <> bold
 
 instance Render Procedure where
     type Token Procedure = TechniqueToken
@@ -119,8 +121,12 @@ instance Render Expression where
             annotate ApplicationToken name <+> intoDocA subexpr
         Literal qty ->
             intoDocA qty
-        Table tablet -> undefined
-        Binding label subexpr -> undefined
+        Table tablet ->
+            intoDocA tablet
+        Binding label subexpr ->
+            annotate SymbolToken (dquotes (annotate LabelToken (pretty label))) <+>
+            annotate SymbolToken "~" <+>
+            intoDocA subexpr
         Evaluate var ->
             intoDocA var
 
@@ -146,3 +152,18 @@ instance Render Quantity where
             annotate SymbolToken (parens (annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))))
         Text text ->
             annotate SymbolToken (dquotes (annotate StringToken (pretty text)))
+
+instance Render Tablet where
+    type Token Tablet = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Tablet exprs) =
+        nest 4 (
+            annotate SymbolToken lbracket <>
+            foldl' g emptyDoc exprs
+        ) <>
+        line <>
+        annotate SymbolToken rbracket
+      where
+        g :: Doc TechniqueToken -> Expression -> Doc TechniqueToken
+        g built expr@(Binding _ _) = built <> line <> intoDocA expr
+        g _ _ = error "Only Binding is valid"

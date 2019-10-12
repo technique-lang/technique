@@ -79,6 +79,17 @@ builtinProcedureWait =
         , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
         }
 
+builtinProcedureRecord :: Procedure
+builtinProcedureRecord =
+    Procedure
+        { procedureName = "record"
+        , procedureInput = Type "Text"
+        , procedureOutput = Type "Text" -- ?
+        , procedureLabel = Just (Markdown "Record")
+        , procedureDescription = Just (Markdown "Record a quantity")
+        , procedureBlock = Block [ Result (Literal (Text "builtinProcedure!")) ]
+        }
+
 
 exampleRoastTurkey :: Procedure
 exampleRoastTurkey =
@@ -87,10 +98,30 @@ exampleRoastTurkey =
     o = Type { typeName = "Turkey" }
     celsius = fromJust (lookupKeyValue "°C" units)
     block = Block
-                [ Assignment (Variable "preheat") (Application exampleProcedureOven (Literal (Quantity 180 celsius)))
-                , Execute (Application builtinProcedureTask (Literal (Text "Bacon strips onto bird")))
-                , Execute (Application builtinProcedureWait (Evaluate (Variable "preheat")))
-                , Result (Literal None)
+                [ Assignment
+                    (Variable "preheat")
+                    (Application
+                        exampleProcedureOven
+                        (Literal (Quantity 180 celsius)))
+                , Execute
+                    (Application
+                        builtinProcedureTask
+                        (Literal (Text "Bacon strips onto bird")))
+                , Execute
+                    (Application
+                        builtinProcedureWait
+                        (Evaluate (Variable "preheat")))
+                , Result
+                    (Literal None)
+                , Assignment
+                    (Variable "temp")
+                    (Application
+                        builtinProcedureRecord
+                        (Literal (Text "Probe bird temperature")))
+                , Result
+                    (Table
+                        (Tablet
+                            [ Binding "Final temperature" (Evaluate (Variable "temp")) ]))
                 ]
   in
     Procedure

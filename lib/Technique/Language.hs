@@ -76,7 +76,7 @@ data Expression where
     Binding :: Label -> Expression -> Expression    -- only valid are Literal and Variable?
     Evaluate :: Variable -> Expression
 
-data Tablet = Tablet [(Label,Quantity)]
+data Tablet = Tablet [Expression]   -- only valid are Binding and?
 
 {-
 -- aka apply
