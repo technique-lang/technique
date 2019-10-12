@@ -83,3 +83,13 @@ instance Render Statement where
         (Declaration proc) -> intoDocA proc
         (Attribute role block) -> undefined
         (Result expr) -> undefined
+
+instance Render Expression where
+    type Token Expression = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA expr = case expr of
+        Application proc subexpr -> undefined
+        Literal quantity -> undefined
+        Table tablet -> undefined
+        Binding label subexpr -> undefined
+        Evaluate variable -> undefined
