@@ -16,7 +16,7 @@ import Data.Text.Prettyprint.Doc
     , unAnnotate, line', group, nest
     )
 import Data.Text.Prettyprint.Doc.Render.Terminal
-    ( color, colorDull, Color(..), AnsiStyle
+    ( color, colorDull, Color(..), AnsiStyle, bold
     )
 
 import Technique.Language
@@ -26,21 +26,28 @@ data TechniqueToken
     = ProcedureToken
     | TypeToken
     | SymbolToken
+    | VariableToken
+    | ApplicationToken
     | StringToken
     | QuantityToken
     | RoleToken
+    | ErrorToken
 
 instance Pretty Procedure where
     pretty = unAnnotate . intoDocA
 
+-- no use of white, suggesting colours
 colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
     ProcedureToken -> color Blue
     TypeToken -> colorDull Yellow
-    SymbolToken -> colorDull White
-    StringToken -> colorDull Cyan
-    QuantityToken -> colorDull Green
+    SymbolToken -> colorDull Cyan <> bold
+    VariableToken -> color Green
+    ApplicationToken -> color Blue <> bold
+    StringToken -> color Cyan <> bold
+    QuantityToken -> color Magenta
     RoleToken -> colorDull Yellow
+    ErrorToken -> color Red
 
 instance Render Procedure where
     type Token Procedure = TechniqueToken
