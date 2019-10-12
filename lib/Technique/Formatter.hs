@@ -88,18 +88,19 @@ instance Render Statement where
     type Token Statement = TechniqueToken
     colourize = colourizeTechnique
     intoDocA statement = case statement of
-        (Assignment var expr) ->
+        Assignment var expr ->
             intoDocA var <+> annotate SymbolToken "=" <+> intoDocA expr
-        (Execute expr) ->
+        Execute expr ->
             intoDocA expr
-        (Comment text) ->
+        Comment text ->
             "-- " <> pretty text  -- TODO what about multiple lines?
-        (Declaration proc) ->
+        Declaration proc ->
             intoDocA proc
-        (Attribute role block) ->
+        Attribute role block ->
             intoDocA role <>
             line <>
             intoDocA block        -- TODO some nesting?
+        Blank -> emptyDoc
 
 instance Render Role where
     type Token Role = TechniqueToken

@@ -100,6 +100,7 @@ exampleRoastTurkey =
                     (Evaluate (Variable "preheat"))
                 , Execute
                     (Literal None)
+                , Blank
                 , Assignment
                     (Variable "temp")
                     (Application

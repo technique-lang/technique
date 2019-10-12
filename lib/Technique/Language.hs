@@ -65,6 +65,7 @@ data Statement where
     Comment :: Rope -> Statement
     Declaration :: Procedure -> Statement
     Attribute :: Role -> Block -> Statement     -- Role, Location, and ...?
+    Blank :: Statement
 
 data Expression where
     Application :: Procedure -> Expression -> Expression
