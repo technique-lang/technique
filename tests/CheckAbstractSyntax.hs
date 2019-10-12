@@ -11,7 +11,7 @@ import Core.Data.Structures
 import Core.Text.Rope ()
 import Core.Text.Utilities ()
 -- import Data.Text.Prettyprint.Doc (Pretty(pretty))
-import Core.Program.Execute
+import Core.Program.Execute hiding (None)
 import Core.Program.Logging
 import Data.Maybe (fromJust)
 import Test.Hspec
@@ -90,7 +90,7 @@ exampleRoastTurkey =
                 [ Assignment (Variable "preheat") (Application exampleProcedureOven (Literal (Quantity 180 celsius)))
                 , Execute (Application builtinProcedureTask (Literal (Text "Bacon strips onto bird")))
                 , Execute (Application builtinProcedureWait (Evaluate (Variable "preheat")))
-                , Result (Literal Nil)
+                , Result (Literal None)
                 ]
   in
     Procedure

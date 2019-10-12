@@ -28,8 +28,7 @@ data Value = Value
     }
 
 data Role
-    = None
-    | Any
+    = Any
     | Role Rope
 
 data Markdown = Markdown Rope

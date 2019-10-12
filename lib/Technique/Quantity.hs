@@ -15,7 +15,7 @@ import Core.Text.Rope
 import Core.Data.Structures
 
 data Quantity
-    = Nil                       -- ?!?
+    = None
     | Number Int                -- FIXME not Int
     | Quantity Int Unit
     | Text Rope
