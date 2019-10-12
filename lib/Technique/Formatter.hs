@@ -57,12 +57,18 @@ instance Render Procedure where
         <+> annotate TypeToken from
         <+> annotate SymbolToken "->"
         <+> annotate TypeToken into
+        <> block
 
 instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Block statements) =
-        foldl' f emptyDoc statements
+        nest 4 (
+            annotate SymbolToken lbrace <>
+            foldl' f emptyDoc statements
+        ) <>
+        line <>
+        annotate SymbolToken rbrace
       where
         f :: Doc TechniqueToken -> Statement -> Doc TechniqueToken
         f built statement = built <> line <> intoDocA statement
