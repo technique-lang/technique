@@ -42,10 +42,10 @@ colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
     ProcedureToken -> color Blue
     TypeToken -> colorDull Yellow
-    SymbolToken -> colorDull Cyan <> bold
-    VariableToken -> color Green
+    SymbolToken -> colorDull Cyan
+    VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
-    StringToken -> color Cyan <> bold
+    StringToken -> color Green <> bold
     QuantityToken -> color Magenta
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red
