@@ -35,10 +35,11 @@ library:
   source-dirs: lib
   exposed-modules:
    - Technique.Procedure
-  other-modules:
    - Technique.Language
    - Technique.Quantity
    - Technique.Formatter
+   - Technique.Parser
+  other-modules: []
 
 executables:
   technique:
@@ -53,9 +54,13 @@ tests:
   check:
     dependencies:
      - hspec
+     - megaparsec
+     - technique
     ghc-options: -threaded -dynamic
     source-dirs:
      - tests
     main: TestProgram.hs
-    other-modules: []
+    other-modules:
+    - CheckAbstractSyntax
+    - CheckSkeletonParser
 

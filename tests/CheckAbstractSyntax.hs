@@ -8,11 +8,9 @@ module CheckAbstractSyntax
 where
 
 import Core.Data.Structures
-import Core.Text.Rope
-import Core.Text.Utilities
-import Data.Text.Prettyprint.Doc
-    ( Doc, Pretty(pretty)
-    )
+import Core.Text.Rope ()
+import Core.Text.Utilities ()
+-- import Data.Text.Prettyprint.Doc (Pretty(pretty))
 import Core.Program.Execute
 import Core.Program.Logging
 import Data.Maybe (fromJust)
@@ -20,7 +18,7 @@ import Test.Hspec
 
 import Technique.Language
 import Technique.Quantity
-import Technique.Formatter
+import Technique.Formatter ()
 
 {-
     roast_turkey i : Ingredients -> Turkey
@@ -85,8 +83,8 @@ builtinProcedureWait =
 exampleRoastTurkey :: Procedure
 exampleRoastTurkey =
   let
-    input = Type { typeName = "Ingredients" }
-    output = Type { typeName = "Turkey" }
+    i = Type { typeName = "Ingredients" }
+    o = Type { typeName = "Turkey" }
     celsius = fromJust (lookupKeyValue "°C" units)
     block = Block
                 [ Assignment (Variable "preheat") (Application exampleProcedureOven (Literal (Quantity 180 celsius)))
@@ -97,8 +95,8 @@ exampleRoastTurkey =
   in
     Procedure
         { procedureName = "roast_turkey"
-        , procedureInput = input
-        , procedureOutput = output
+        , procedureInput = i
+        , procedureOutput = o
         , procedureLabel = Just (Markdown "Roast Turkey")
         , procedureDescription = Nothing
         , procedureBlock = block
@@ -121,4 +119,4 @@ checkAbstractSyntax = do
 main :: IO ()
 main = execute $ do
     writeR exampleRoastTurkey
-    writeS (pretty exampleRoastTurkey)
+--  writeS (pretty exampleRoastTurkey)

@@ -1,10 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-unused-matches -fno-warn-unused-imports #-}
 
 module Technique.Formatter where
 
-import Core.Text.Rope
+import Core.Text.Rope ()
 import Core.Text.Utilities
 import Data.Foldable (foldl')
 import Data.Text.Prettyprint.Doc

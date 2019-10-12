@@ -2,7 +2,6 @@
 
 module Technique.Language where
 
-import Core.Data.Structures
 import Core.Text.Rope
 
 import Technique.Quantity
