@@ -118,5 +118,6 @@ checkAbstractSyntax = do
 
 main :: IO ()
 main = execute $ do
+    setVerbosityLevel Event
     writeR exampleRoastTurkey
 --  writeS (pretty exampleRoastTurkey)

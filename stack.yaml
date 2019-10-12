@@ -2,3 +2,7 @@ resolver: lts-14.4
 
 extra-deps:
  - ivar-simple-0.3.2
+ - git: http://github.com/oprdyn/unbeliever
+   commit: 31da88af6c33dc7a8ad95d016137a940bf18cecd
+   subdirs:
+    - core-program
