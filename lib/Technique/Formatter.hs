@@ -11,10 +11,9 @@ import Core.Text.Utilities
 import Data.Foldable (foldl')
 import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
-    , rbracket, vsep, (<+>), indent, lbrace, rbrace, emptyDoc
+    , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
     , line, sep, hcat, annotate
     , unAnnotate, line', group, nest
-    , dquotes, parens
     )
 import Data.Text.Prettyprint.Doc.Render.Terminal
     ( color, colorDull, Color(..), AnsiStyle, bold
@@ -41,14 +40,14 @@ instance Pretty Procedure where
 -- no use of white, suggesting colours
 colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
-    ProcedureToken -> color Blue
+    ProcedureToken -> colorDull Blue <> bold
     TypeToken -> colorDull Yellow
     SymbolToken -> colorDull Cyan <> bold
     VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
     LabelToken -> color Green <> bold
     StringToken -> color Green <> bold
-    QuantityToken -> color Magenta
+    QuantityToken -> color Magenta <> bold
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red <> bold
 
@@ -127,7 +126,9 @@ instance Render Expression where
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
         Grouping subexpr ->
-            annotate SymbolToken (parens (intoDocA subexpr))
+            annotate SymbolToken lparen <>
+            intoDocA subexpr <>
+            annotate SymbolToken rparen
 
 instance Render Name where
     type Token Name = TechniqueToken
@@ -146,7 +147,10 @@ instance Render Quantity where
         Quantity i unit ->
             annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))
         Text text ->
-            annotate SymbolToken (dquotes (annotate StringToken (pretty text)))
+            annotate SymbolToken dquote <>
+            annotate StringToken (pretty text) <>
+            annotate SymbolToken dquote
+
 
 instance Render Tablet where
     type Token Tablet = TechniqueToken
@@ -169,7 +173,9 @@ instance Render Binding where
     type Token Binding = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Binding label subexpr) =
-            annotate SymbolToken (dquotes (annotate LabelToken (pretty label))) <+>
+            annotate SymbolToken dquote <>
+            annotate LabelToken (pretty label) <>
+            annotate SymbolToken dquote <+>
             annotate SymbolToken "~" <+>
             intoDocA subexpr
 

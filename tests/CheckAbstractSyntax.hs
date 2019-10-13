@@ -102,7 +102,11 @@ exampleRoastTurkey =
                     (Literal None)
                 , Blank
                 , Execute
-                    (Operation (Operator "&") (Variable (Name "w1")) (Variable (Name "w2")))
+                    (Operation (Operator "&")
+                        (Variable (Name "w1"))
+                        (Grouping (Operation (Operator "|")
+                            (Variable (Name "w2"))
+                            (Variable (Name "w3")))))
                 , Blank
                 , Assignment
                     (Name "temp")
