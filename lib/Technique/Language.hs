@@ -71,10 +71,16 @@ data Expression where
     Application :: Procedure -> Expression -> Expression
     Literal :: Quantity -> Expression
     Table :: Tablet -> Expression
-    Binding :: Label -> Expression -> Expression    -- only valid are Literal and Variable?
     Evaluate :: Variable -> Expression
 
-data Tablet = Tablet [Expression]   -- only valid are Binding and?
+data Tablet = Tablet [Binding]
+
+-- only valid Expressions are Literal and Variable. Should we enforce that
+-- somewhere?
+data Binding where
+     Binding :: Label -> Expression -> Binding
+
+
 
 {-
 -- aka apply

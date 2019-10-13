@@ -122,10 +122,6 @@ instance Render Expression where
             intoDocA qty
         Table tablet ->
             intoDocA tablet
-        Binding label subexpr ->
-            annotate SymbolToken (dquotes (annotate LabelToken (pretty label))) <+>
-            annotate SymbolToken "~" <+>
-            intoDocA subexpr
         Evaluate var ->
             intoDocA var
 
@@ -155,14 +151,24 @@ instance Render Quantity where
 instance Render Tablet where
     type Token Tablet = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Tablet exprs) =
+    intoDocA (Tablet bindings) =
         nest 4 (
             annotate SymbolToken lbracket <>
-            foldl' g emptyDoc exprs
+            foldl' g emptyDoc bindings
         ) <>
         line <>
         annotate SymbolToken rbracket
       where
-        g :: Doc TechniqueToken -> Expression -> Doc TechniqueToken
-        g built expr@(Binding _ _) = built <> line <> intoDocA expr
-        g _ _ = error "Only Binding is valid"
+        g :: Doc TechniqueToken -> Binding -> Doc TechniqueToken
+        g built binding = built <> line <> intoDocA binding
+
+-- the annotation for the label duplicates the code Quantity's Text
+-- constructor, but for the LabelToken token. This distinction may not be
+-- necessary (at present we have the same colouring for both).
+instance Render Binding where
+    type Token Binding = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Binding label subexpr) =
+            annotate SymbolToken (dquotes (annotate LabelToken (pretty label))) <+>
+            annotate SymbolToken "~" <+>
+            intoDocA subexpr
