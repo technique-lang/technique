@@ -2,8 +2,10 @@
 
 import Test.Hspec (Spec, hspec)
 
-import CheckSkeletonParser
 import Core.System
+
+import CheckSkeletonParser
+import CheckAbstractSyntax hiding (main)
 
 main :: IO ()
 main = do
@@ -11,4 +13,5 @@ main = do
 
 suite :: Spec
 suite = do
+    checkAbstractSyntax
     checkSkeletonParser
