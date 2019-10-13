@@ -74,6 +74,7 @@ data Expression where
     Table :: Tablet -> Expression
     Variable :: Name -> Expression
     Operation :: Operator -> Expression -> Expression -> Expression
+    Grouping :: Expression -> Expression
 
 data Tablet = Tablet [Binding]
 

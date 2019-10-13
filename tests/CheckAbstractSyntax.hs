@@ -91,7 +91,7 @@ exampleRoastTurkey =
                     (Name "preheat")
                     (Application
                         exampleProcedureOven
-                        (Literal (Quantity 180 celsius)))
+                        (Grouping (Literal (Quantity 180 celsius))))
                 , Execute
                     (Application
                         builtinProcedureTask

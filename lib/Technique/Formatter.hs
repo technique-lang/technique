@@ -126,6 +126,8 @@ instance Render Expression where
             intoDocA var
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
+        Grouping subexpr ->
+            annotate SymbolToken (parens (intoDocA subexpr))
 
 instance Render Name where
     type Token Name = TechniqueToken
@@ -142,7 +144,7 @@ instance Render Quantity where
         Number i ->
             annotate QuantityToken (pretty i)
         Quantity i unit ->
-            annotate SymbolToken (parens (annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))))
+            annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))
         Text text ->
             annotate SymbolToken (dquotes (annotate StringToken (pretty text)))
 
