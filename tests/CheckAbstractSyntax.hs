@@ -45,6 +45,7 @@ exampleProcedureOven :: Procedure
 exampleProcedureOven =
     Procedure
         { procedureName = "oven"
+        , procedureParams = []
         , procedureInput = Type "Temperature"
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
@@ -61,6 +62,7 @@ builtinProcedureTask :: Procedure
 builtinProcedureTask =
     Procedure
         { procedureName = "task"
+        , procedureParams = []
         , procedureInput = Type "Text"
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "A task")
@@ -72,6 +74,7 @@ builtinProcedureRecord :: Procedure
 builtinProcedureRecord =
     Procedure
         { procedureName = "record"
+        , procedureParams = []
         , procedureInput = Type "Text"
         , procedureOutput = Type "Text" -- ?
         , procedureLabel = Just (Markdown "Record")
@@ -121,6 +124,7 @@ exampleRoastTurkey =
   in
     Procedure
         { procedureName = "roast_turkey"
+        , procedureParams = [Name "i"]
         , procedureInput = i
         , procedureOutput = o
         , procedureLabel = Just (Markdown "Roast Turkey")

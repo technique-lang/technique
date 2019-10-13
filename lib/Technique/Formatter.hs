@@ -13,7 +13,7 @@ import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
     , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
     , line, sep, hcat, annotate
-    , unAnnotate, line', group, nest
+    , unAnnotate, line', group, nest, concatWith, surround
     )
 import Data.Text.Prettyprint.Doc.Render.Terminal
     ( color, colorDull, Color(..), AnsiStyle, bold
@@ -57,16 +57,18 @@ instance Render Procedure where
     intoDocA proc =
       let
         name = pretty . procedureName $ proc
+        params = concatWith (surround (annotate SymbolToken comma)) (fmap intoDocA (procedureParams proc))
         from = pretty . typeName . procedureInput $ proc
         into = pretty . typeName . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
       in
-        annotate ProcedureToken name
-        <+> annotate SymbolToken ":"
-        <+> annotate TypeToken from
-        <+> annotate SymbolToken "->"
-        <+> annotate TypeToken into
-        <> block
+        annotate ProcedureToken name <+>
+        params <+>
+        annotate SymbolToken ":" <+>
+        annotate TypeToken from <+>
+        annotate SymbolToken "->" <+>
+        annotate TypeToken into <>
+        block
 
 instance Render Block where
     type Token Block = TechniqueToken
