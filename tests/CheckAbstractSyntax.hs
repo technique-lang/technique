@@ -88,7 +88,7 @@ exampleRoastTurkey =
     celsius = fromJust (lookupKeyValue "°C" units)
     block = Block
                 [ Assignment
-                    (Variable "preheat")
+                    (Name "preheat")
                     (Application
                         exampleProcedureOven
                         (Literal (Quantity 180 celsius)))
@@ -97,22 +97,22 @@ exampleRoastTurkey =
                         builtinProcedureTask
                         (Literal (Text "Bacon strips onto bird")))
                 , Execute
-                    (Evaluate (Variable "preheat"))
+                    (Variable (Name "preheat"))
                 , Execute
                     (Literal None)
                 , Blank
                 , Execute
-                    (Operation (Operator "&") (Evaluate (Variable "w1")) (Evaluate (Variable "w2")))
+                    (Operation (Operator "&") (Variable (Name "w1")) (Variable (Name "w2")))
                 , Blank
                 , Assignment
-                    (Variable "temp")
+                    (Name "temp")
                     (Application
                         builtinProcedureRecord
                         (Literal (Text "Probe bird temperature")))
                 , Execute
                     (Table
                         (Tablet
-                            [ Binding "Final temperature" (Evaluate (Variable "temp")) ]))
+                            [ Binding "Final temperature" (Variable (Name "temp")) ]))
                 ]
   in
     Procedure

@@ -7,9 +7,8 @@ import Core.Text.Rope
 import Technique.Quantity
 
 -- TODO
-data Variable = Variable
-    { variableName :: Rope
-    }
+data Name where
+    Name :: Rope -> Name
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
@@ -21,12 +20,14 @@ type Label = Rope
 
 -- TODO there's an ambiguity here between the type of a table and the type
 -- of an individual quantity. Which is "type"?
+
+{-
 data Value = Value
-    { valueType :: Type
+    { valueType :: Type 
     , valueLabel :: Maybe Label
     , valueData :: Maybe Quantity
     }
-
+-}
 data Role
     = Any
     | Role Rope
@@ -60,7 +61,7 @@ data Procedure = Procedure
 data Block = Block [Statement]
 
 data Statement where
-    Assignment :: Variable -> Expression -> Statement
+    Assignment :: Name -> Expression -> Statement
     Execute :: Expression -> Statement
     Comment :: Rope -> Statement
     Declaration :: Procedure -> Statement
@@ -71,7 +72,7 @@ data Expression where
     Application :: Procedure -> Expression -> Expression
     Literal :: Quantity -> Expression
     Table :: Tablet -> Expression
-    Evaluate :: Variable -> Expression
+    Variable :: Name -> Expression
     Operation :: Operator -> Expression -> Expression -> Expression
 
 data Tablet = Tablet [Binding]

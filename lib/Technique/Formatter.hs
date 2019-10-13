@@ -122,20 +122,16 @@ instance Render Expression where
             intoDocA qty
         Table tablet ->
             intoDocA tablet
-        Evaluate var ->
+        Variable var ->
             intoDocA var
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
 
-instance Render Variable where
-    type Token Variable = TechniqueToken
+instance Render Name where
+    type Token Name = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA var =
-      let
-        name = pretty . variableName $ var
-      in
-        -- TODO different highlighting for variable names?
-        annotate VariableToken name
+    intoDocA (Name name) =
+        annotate VariableToken (pretty name)
 
 instance Render Quantity where
     type Token Quantity = TechniqueToken
