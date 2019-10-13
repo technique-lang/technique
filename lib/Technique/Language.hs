@@ -72,6 +72,7 @@ data Expression where
     Literal :: Quantity -> Expression
     Table :: Tablet -> Expression
     Evaluate :: Variable -> Expression
+    Operation :: Operator -> Expression -> Expression -> Expression
 
 data Tablet = Tablet [Binding]
 
@@ -80,6 +81,8 @@ data Tablet = Tablet [Binding]
 data Binding where
      Binding :: Label -> Expression -> Binding
 
+data Operator where
+    Operator :: Rope -> Operator
 
 
 {-

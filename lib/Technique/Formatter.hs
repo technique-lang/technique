@@ -124,6 +124,8 @@ instance Render Expression where
             intoDocA tablet
         Evaluate var ->
             intoDocA var
+        Operation operator subexpr1 subexpr2 ->
+            intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
 
 instance Render Variable where
     type Token Variable = TechniqueToken
@@ -172,3 +174,9 @@ instance Render Binding where
             annotate SymbolToken (dquotes (annotate LabelToken (pretty label))) <+>
             annotate SymbolToken "~" <+>
             intoDocA subexpr
+
+instance Render Operator where
+    type Token Operator = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Operator symbol) =
+        annotate SymbolToken (pretty symbol)

@@ -27,12 +27,12 @@ import Technique.Formatter ()
         {
             preheat = oven (180 °C)
             task "Bacon strips onto bird"
-            wait preheat
+            preheat
 
             task "Put bird into oven"
 
             t = timer (3 h)
-            wait t
+            t
 
             temp = record "Probe bird temperature"
             [
@@ -100,6 +100,9 @@ exampleRoastTurkey =
                     (Evaluate (Variable "preheat"))
                 , Execute
                     (Literal None)
+                , Blank
+                , Execute
+                    (Operation (Operator "&") (Evaluate (Variable "w1")) (Evaluate (Variable "w2")))
                 , Blank
                 , Assignment
                     (Variable "temp")
