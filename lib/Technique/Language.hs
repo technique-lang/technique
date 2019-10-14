@@ -52,7 +52,7 @@ data Type = Type
 data Procedure = Procedure
     { procedureName :: Rope
     , procedureParams :: [Name]
-    , procedureInput :: Type
+    , procedureInput :: [Type]
     , procedureOutput :: Type
     , procedureLabel :: Maybe Markdown
     , procedureDescription :: Maybe Markdown
