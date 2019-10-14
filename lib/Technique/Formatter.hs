@@ -57,7 +57,7 @@ instance Render Procedure where
     intoDocA proc =
       let
         name = pretty . procedureName $ proc
-        params = concatWith (surround (annotate SymbolToken comma)) (fmap intoDocA (procedureParams proc))
+        params = commaCat . procedureParams $ proc
         from = pretty . typeName . procedureInput $ proc
         into = pretty . typeName . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
@@ -69,6 +69,12 @@ instance Render Procedure where
         annotate SymbolToken "->" <+>
         annotate TypeToken into <>
         block
+
+{-|
+punctuate a list with commas annotated with Symbol highlighting.
+-}
+commaCat :: (Render a, Token a ~ TechniqueToken)  => [a] -> Doc (Token a)
+commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap intoDocA
 
 instance Render Block where
     type Token Block = TechniqueToken

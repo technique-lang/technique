@@ -29,3 +29,8 @@ checkAbstractSyntax = do
         it "Procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
 
+    describe "Rendering of abstract syntax tree to Technique language" $ do
+        it "renders a list as tuple" $ do
+            show (commaCat [Name "one", Name "two", Name "three"])
+                `shouldBe` "one,two,three"
+
