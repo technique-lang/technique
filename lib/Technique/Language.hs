@@ -9,6 +9,7 @@ import Technique.Quantity
 -- TODO
 data Name where
     Name :: Rope -> Name
+    deriving (Show, Eq)
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
@@ -18,11 +19,14 @@ data Role
     = Any
     | Role Rope
     | Place Rope
+    deriving (Show, Eq)
 
 data Markdown = Markdown Rope
+    deriving (Show, Eq)
 
 data Type where
     Type :: Rope -> Type
+    deriving (Show, Eq)
 
 data Procedure = Procedure
     { procedureName :: Rope
@@ -33,8 +37,11 @@ data Procedure = Procedure
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
+    deriving (Show, Eq)
 
-data Block = Block [Statement]
+data Block where
+    Block :: [Statement] -> Block
+    deriving (Show, Eq)
 
 data Statement where
     Assignment :: Name -> Expression -> Statement
@@ -43,6 +50,7 @@ data Statement where
     Declaration :: Procedure -> Statement
     Attribute :: Role -> Block -> Statement     -- Role, Location, and ...?
     Blank :: Statement
+    deriving (Show, Eq)
 
 data Expression where
     Application :: Procedure -> Expression -> Expression
@@ -51,13 +59,18 @@ data Expression where
     Variable :: Name -> Expression
     Operation :: Operator -> Expression -> Expression -> Expression
     Grouping :: Expression -> Expression
+    deriving (Show, Eq)
 
-data Tablet = Tablet [Binding]
+data Tablet where
+    Tablet :: [Binding] -> Tablet
+    deriving (Show, Eq)
 
 -- only valid Expressions are Literal and Variable. Should we enforce that
 -- somewhere?
 data Binding where
-     Binding :: Label -> Expression -> Binding
+    Binding :: Label -> Expression -> Binding
+    deriving (Show, Eq)
 
 data Operator where
     Operator :: Rope -> Operator
+    deriving (Show, Eq)
