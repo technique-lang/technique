@@ -65,4 +65,5 @@ tests:
     other-modules:
     - CheckAbstractSyntax
     - CheckSkeletonParser
+    - ExampleProcedure
 

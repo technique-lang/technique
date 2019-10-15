@@ -21,9 +21,8 @@ data Role
 
 data Markdown = Markdown Rope
 
-data Type = Type
-    { typeName :: Rope
-    }
+data Type where
+    Type :: Rope -> Type
 
 data Procedure = Procedure
     { procedureName :: Rope

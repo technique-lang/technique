@@ -61,7 +61,7 @@ instance Render Procedure where
         name = pretty . procedureName $ proc
         params = commaCat . procedureParams $ proc
         from = commaCat . procedureInput $ proc
-        into = pretty . typeName . procedureOutput $ proc
+        into = intoDocA . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
       in
         annotate ProcedureToken name <+>

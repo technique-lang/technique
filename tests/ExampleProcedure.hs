@@ -80,8 +80,8 @@ builtinProcedureRecord =
 exampleRoastTurkey :: Procedure
 exampleRoastTurkey =
   let
-    i = Type { typeName = "Ingredients" }
-    o = Type { typeName = "Turkey" }
+    i = Type "Ingredients"
+    o = Type "Turkey"
     celsius = fromJust (lookupKeyValue "°C" units)
     chef = Role "chef"
     block = Block
