@@ -5,11 +5,14 @@ module Technique.Parser where
 
 import Control.Monad
 import Control.Monad.Combinators
+import Core.Text.Rope
 import Data.Void (Void)
 import Data.Text (Text)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+
+import Technique.Language
 
 type Parser = Parsec Void Text
 
@@ -50,19 +53,19 @@ pSpdxLine = do
     void newline
     return (license,copyright)
 
-
-type AbstractSyntaxTree = ()    -- FIXME
-
-pProcfileHeader :: Parser AbstractSyntaxTree
+pProcfileHeader :: Parser Technique
 pProcfileHeader = do
     version <- pMagicLine
     unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
-    _ <- pSpdxLine
+    (license,copyright) <- pSpdxLine
 
-    return ()
-
-type Procedure = ()             -- FIXME
+    return $ Technique
+        { techniqueVersion = version
+        , techniqueLicense = intoRope license
+        , techniqueCopyright = fmap intoRope copyright
+        , techniqueBody = []
+        }
 
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
-    return ()
+    fail "unimplemented"

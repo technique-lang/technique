@@ -11,6 +11,7 @@ import Core.Text
 import Test.Hspec
 import Text.Megaparsec
 
+import Technique.Language
 import Technique.Parser
 
 checkSkeletonParser :: Spec
@@ -43,4 +44,9 @@ checkSkeletonParser = do
             parseMaybe pProcfileHeader [quote|
 % technique v0
 ! BSD-3-Clause
-            |] `shouldBe` Just ()
+            |] `shouldBe` Just (Technique
+                            { techniqueVersion = 0
+                            , techniqueLicense = "BSD-3-Clause"
+                            , techniqueCopyright = Nothing
+                            , techniqueBody = []
+                            })

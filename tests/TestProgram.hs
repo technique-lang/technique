@@ -5,7 +5,7 @@ import Test.Hspec (Spec, hspec)
 import Core.System
 
 import CheckSkeletonParser
-import CheckAbstractSyntax hiding (main)
+import CheckAbstractSyntax
 
 main :: IO ()
 main = do

@@ -4,6 +4,14 @@ import Core.Text.Rope
 
 import Technique.Quantity
 
+data Technique = Technique
+    { techniqueVersion :: Int
+    , techniqueLicense :: Rope
+    , techniqueCopyright :: Maybe Rope
+    , techniqueBody :: [Procedure]
+    }
+    deriving (Show, Eq)
+
 -- TODO
 data Name
     = Name Rope
