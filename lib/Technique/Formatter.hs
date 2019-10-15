@@ -26,6 +26,7 @@ data TechniqueToken
     = ProcedureToken
     | TypeToken
     | SymbolToken
+    | OperatorToken
     | VariableToken
     | ApplicationToken
     | LabelToken
@@ -43,6 +44,7 @@ colourizeTechnique token = case token of
     ProcedureToken -> colorDull Blue <> bold
     TypeToken -> colorDull Yellow
     SymbolToken -> colorDull Cyan <> bold
+    OperatorToken -> colorDull Yellow <> bold
     VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
     LabelToken -> color Green <> bold
@@ -119,6 +121,7 @@ instance Render Role where
     intoDocA role =  case role of
         Any -> annotate RoleToken "@*"
         Role name -> annotate RoleToken ("@" <> pretty name)
+        Place name -> annotate RoleToken ("#" <> pretty name)
 
 instance Render Expression where
     type Token Expression = TechniqueToken
@@ -195,4 +198,4 @@ instance Render Operator where
     type Token Operator = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Operator symbol) =
-        annotate SymbolToken (pretty symbol)
+        annotate OperatorToken (pretty symbol)

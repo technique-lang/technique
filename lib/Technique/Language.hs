@@ -17,6 +17,7 @@ type Label = Rope
 data Role
     = Any
     | Role Rope
+    | Place Rope
 
 data Markdown = Markdown Rope
 
