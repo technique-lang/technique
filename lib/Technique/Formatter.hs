@@ -26,6 +26,7 @@ data TechniqueToken
     = ProcedureToken
     | TypeToken
     | SymbolToken
+    | OperatorToken
     | VariableToken
     | ApplicationToken
     | LabelToken
@@ -43,6 +44,7 @@ colourizeTechnique token = case token of
     ProcedureToken -> colorDull Blue <> bold
     TypeToken -> colorDull Yellow
     SymbolToken -> colorDull Cyan <> bold
+    OperatorToken -> colorDull Yellow <> bold
     VariableToken -> color Cyan
     ApplicationToken -> color Blue <> bold
     LabelToken -> color Green <> bold
@@ -57,8 +59,8 @@ instance Render Procedure where
     intoDocA proc =
       let
         name = pretty . procedureName $ proc
-        params = concatWith (surround (annotate SymbolToken comma)) (fmap intoDocA (procedureParams proc))
-        from = pretty . typeName . procedureInput $ proc
+        params = commaCat . procedureParams $ proc
+        from = commaCat . procedureInput $ proc
         into = pretty . typeName . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
       in
@@ -68,13 +70,23 @@ instance Render Procedure where
         annotate TypeToken from <+>
         annotate SymbolToken "->" <+>
         annotate TypeToken into <>
-        block
+        line <> block
+
+{-|
+punctuate a list with commas annotated with Symbol highlighting.
+-}
+commaCat :: (Render a, Token a ~ TechniqueToken)  => [a] -> Doc (Token a)
+commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap intoDocA
+
+instance Render Type where
+    type Token Type = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Type name) = annotate TypeToken (pretty name)
 
 instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Block statements) =
-        line <>
         nest 4 (
             annotate SymbolToken lbrace <>
             foldl' f emptyDoc statements
@@ -107,8 +119,9 @@ instance Render Role where
     type Token Role = TechniqueToken
     colourize = colourizeTechnique
     intoDocA role =  case role of
-        Any -> annotate RoleToken "$*"
-        Role name -> annotate RoleToken ("$" <> pretty name)
+        Any -> annotate RoleToken "@*"
+        Role name -> annotate RoleToken ("@" <> pretty name)
+        Place name -> annotate RoleToken ("#" <> pretty name)
 
 instance Render Expression where
     type Token Expression = TechniqueToken
@@ -185,4 +198,4 @@ instance Render Operator where
     type Token Operator = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Operator symbol) =
-        annotate SymbolToken (pretty symbol)
+        annotate OperatorToken (pretty symbol)
