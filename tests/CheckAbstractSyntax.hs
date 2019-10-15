@@ -34,10 +34,10 @@ an abstract syntax tree.
 checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
-        it "Key builtin procedures are available" $ do
+        it "key builtin procedures are available" $ do
             procedureName builtinProcedureTask `shouldBe` "task"
 
-        it "Procedure's function name is correct" $ do
+        it "procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
 
     describe "Rendering of abstract syntax tree to Technique language" $ do
