@@ -66,6 +66,28 @@ pProcfileHeader = do
         , techniqueBody = []
         }
 
+-- FIXME consider making this top down, not LR
+
+pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],Type)
+pProcedureDeclaration = do
+    name <- pIdentifier
+    void (space1)
+    params <- many pIdentifier
+    space1
+    void (char ':')
+
+    ins <- undefined
+    out <- undefined
+    return (name,params,ins,out)
+
+identifierChar :: Parser Char
+identifierChar = lowerChar <|> digitChar <|> char '_'
+
+pIdentifier :: Parser Identifier
+pIdentifier = Identifier . intoRope <$> some identifierChar
+
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
+    (name,params,ins,out) <- pProcedureDeclaration
+
     fail "unimplemented"

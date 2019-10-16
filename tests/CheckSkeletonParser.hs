@@ -50,3 +50,14 @@ checkSkeletonParser = do
                             , techniqueCopyright = Nothing
                             , techniqueBody = []
                             })
+
+    describe "Parses a proecdure function" $ do
+        it "name parser handles basic valid identifiers" $ do
+            parseMaybe pIdentifier "i" `shouldBe` Just (Identifier "i")
+            parseMaybe pIdentifier "ingredients" `shouldBe` Just (Identifier "ingredients")
+            parseMaybe pIdentifier "roast_turkey" `shouldBe` Just (Identifier "roast_turkey")
+
+
+        it "handles a name and a type" $ do
+            parseMaybe pProcedureDeclaration "roast_turkey i : Ingredients -> Turkey"
+                `shouldBe` Just (Identifier "roast_turkey", [Identifier "i"], [Type "Ingredients"], Type "Turkey")
