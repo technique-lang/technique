@@ -52,11 +52,22 @@ checkSkeletonParser = do
                             })
 
     describe "Parses a proecdure function" $ do
-        it "name parser handles basic valid identifiers" $ do
+        it "name parser handles valid identifiers" $ do
+            parseMaybe pIdentifier "" `shouldBe` Nothing
             parseMaybe pIdentifier "i" `shouldBe` Just (Identifier "i")
             parseMaybe pIdentifier "ingredients" `shouldBe` Just (Identifier "ingredients")
             parseMaybe pIdentifier "roast_turkey" `shouldBe` Just (Identifier "roast_turkey")
+            parseMaybe pIdentifier "1x" `shouldBe` Nothing
+            parseMaybe pIdentifier "x1" `shouldBe` Just (Identifier "x1")
 
+        it "type parser handles valid type names" $ do
+            parseMaybe pType "" `shouldBe` Nothing
+            parseMaybe pType "I" `shouldBe` Just (Type "I")
+            parseMaybe pType "Ingredients" `shouldBe` Just (Type "Ingredients")
+            parseMaybe pType "RoastTurkey" `shouldBe` Just (Type "RoastTurkey")
+            parseMaybe pType "Roast_Turkey" `shouldBe` Nothing
+            parseMaybe pType "2Dinner" `shouldBe` Nothing
+            parseMaybe pType "Dinner3" `shouldBe` Just (Type "Dinner3")
 
         it "handles a name and a type" $ do
             parseMaybe pProcedureDeclaration "roast_turkey i : Ingredients -> Turkey"

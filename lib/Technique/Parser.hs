@@ -67,24 +67,45 @@ pProcfileHeader = do
         }
 
 -- FIXME consider making this top down, not LR
+-- FIXME need to do lexeme to gobble optional whitespace instead of space1
 
 pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],Type)
 pProcedureDeclaration = do
     name <- pIdentifier
-    void (space1)
-    params <- many pIdentifier
-    space1
-    void (char ':')
+    void space1
+    -- zero or more separated by comma
+    params <- sepBy pIdentifier (char ',')
 
-    ins <- undefined
-    out <- undefined
+    void space
+    void (char ':')
+    void space
+
+    ins <- sepBy pType (char ',')
+
+    void space
+    void (char ':')
+    void space
+
+    out <- pType
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
 identifierChar = lowerChar <|> digitChar <|> char '_'
 
 pIdentifier :: Parser Identifier
-pIdentifier = Identifier . intoRope <$> some identifierChar
+pIdentifier = do
+    first <- lowerChar
+    remainder <- many identifierChar
+    return (Identifier (singletonRope first <> intoRope remainder))
+
+typeChar :: Parser Char
+typeChar = upperChar <|> lowerChar <|> digitChar
+
+pType :: Parser Type
+pType = do
+    first <- upperChar
+    remainder <- many typeChar
+    return (Type (singletonRope first <> intoRope remainder))
 
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
