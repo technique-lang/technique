@@ -13,8 +13,8 @@ data Technique = Technique
     deriving (Show, Eq)
 
 -- TODO
-data Name
-    = Name Rope
+data Identifier
+    = Identifier Rope
     deriving (Show, Eq)
 
 -- TODO construction needs to validate internal rules for labels. No
@@ -36,8 +36,8 @@ data Type
     deriving (Show, Eq)
 
 data Procedure = Procedure
-    { procedureName :: Rope
-    , procedureParams :: [Name]
+    { procedureName :: Identifier
+    , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: Type
     , procedureLabel :: Maybe Markdown
@@ -50,7 +50,7 @@ data Block = Block [Statement]
     deriving (Show, Eq)
 
 data Statement
-    = Assignment Name Expression
+    = Assignment Identifier Expression
     | Execute Expression
     | Comment Rope
     | Declaration Procedure
@@ -62,7 +62,7 @@ data Expression
     = Application Procedure Expression
     | Literal Quantity
     | Table Tablet
-    | Variable Name
+    | Variable Identifier
     | Operation Operator Expression Expression
     | Grouping Expression
     deriving (Show, Eq)

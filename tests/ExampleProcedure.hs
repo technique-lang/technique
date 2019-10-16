@@ -38,7 +38,7 @@ import Technique.Formatter () -- Render instances for main function
 exampleProcedureOven :: Procedure
 exampleProcedureOven =
     Procedure
-        { procedureName = "oven"
+        { procedureName = Identifier "oven"
         , procedureParams = []
         , procedureInput = [Type "Temperature"]
         , procedureOutput = Type "()" -- ?
@@ -55,7 +55,7 @@ exampleProcedureOven =
 builtinProcedureTask :: Procedure
 builtinProcedureTask =
     Procedure
-        { procedureName = "task"
+        { procedureName = Identifier "task"
         , procedureParams = []
         , procedureInput = [Type "Text"]
         , procedureOutput = Type "()" -- ?
@@ -67,7 +67,7 @@ builtinProcedureTask =
 builtinProcedureRecord :: Procedure
 builtinProcedureRecord =
     Procedure
-        { procedureName = "record"
+        { procedureName = Identifier "record"
         , procedureParams = []
         , procedureInput = [Type "Text"]
         , procedureOutput = Type "Text" -- ?
@@ -87,7 +87,7 @@ exampleRoastTurkey =
     block = Block
                 [ Attribute chef (Block
                     [ Assignment
-                        (Name "preheat")
+                        (Identifier "preheat")
                         (Application
                             exampleProcedureOven
                             (Grouping (Literal (Quantity 180 celsius))))
@@ -96,32 +96,32 @@ exampleRoastTurkey =
                             builtinProcedureTask
                             (Literal (Text "Bacon strips onto bird")))
                     , Execute
-                        (Variable (Name "preheat"))
+                        (Variable (Identifier "preheat"))
                     , Execute
                         (Literal None)
                     , Blank
                     , Execute
                         (Operation (Operator "&")
-                            (Variable (Name "w1"))
+                            (Variable (Identifier "w1"))
                             (Grouping (Operation (Operator "|")
-                                (Variable (Name "w2"))
-                                (Variable (Name "w3")))))
+                                (Variable (Identifier "w2"))
+                                (Variable (Identifier "w3")))))
                     , Blank
                     , Assignment
-                        (Name "temp")
+                        (Identifier "temp")
                         (Application
                             builtinProcedureRecord
                             (Literal (Text "Probe bird temperature")))
                     , Execute
                         (Table
                             (Tablet
-                                [ Binding "Final temperature" (Variable (Name "temp")) ]))
+                                [ Binding "Final temperature" (Variable (Identifier "temp")) ]))
                     ])
                 ]
   in
     Procedure
-        { procedureName = "roast_turkey"
-        , procedureParams = [Name "i", Name "j", Name "k"]
+        { procedureName = Identifier "roast_turkey"
+        , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
         , procedureInput = [i]
         , procedureOutput = o
         , procedureLabel = Just (Markdown "Roast Turkey")
