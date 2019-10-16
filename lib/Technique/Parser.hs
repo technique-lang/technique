@@ -72,19 +72,19 @@ pProcfileHeader = do
 pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],Type)
 pProcedureDeclaration = do
     name <- pIdentifier
-    void space1
+    void (many space1)
     -- zero or more separated by comma
     params <- sepBy pIdentifier (char ',')
 
-    void space
+    void (many space1)
     void (char ':')
-    void space
+    void (many space1)
 
     ins <- sepBy pType (char ',')
 
-    void space
-    void (char ':')
-    void space
+    void (many space1)
+    void (string "->")
+    void (many space1)
 
     out <- pType
     return (name,params,ins,out)

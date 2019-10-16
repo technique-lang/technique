@@ -69,6 +69,10 @@ checkSkeletonParser = do
             parseMaybe pType "2Dinner" `shouldBe` Nothing
             parseMaybe pType "Dinner3" `shouldBe` Just (Type "Dinner3")
 
-        it "handles a name and a type" $ do
+        it "handles a name, parameters, and a type signature" $ do
             parseMaybe pProcedureDeclaration "roast_turkey i : Ingredients -> Turkey"
                 `shouldBe` Just (Identifier "roast_turkey", [Identifier "i"], [Type "Ingredients"], Type "Turkey")
+            parseMaybe pProcedureDeclaration "roast_turkey  i  :  Ingredients  ->  Turkey"
+                `shouldBe` Just (Identifier "roast_turkey", [Identifier "i"], [Type "Ingredients"], Type "Turkey")
+            parseMaybe pProcedureDeclaration "roast_turkey:Ingredients->Turkey"
+                `shouldBe` Just (Identifier "roast_turkey", [], [Type "Ingredients"], Type "Turkey")
