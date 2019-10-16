@@ -1,14 +1,21 @@
-{-# LANGUAGE GADTs #-}
-
 module Technique.Language where
 
 import Core.Text.Rope
 
 import Technique.Quantity
 
+data Technique = Technique
+    { techniqueVersion :: Int
+    , techniqueLicense :: Rope
+    , techniqueCopyright :: Maybe Rope
+    , techniqueBody :: [Procedure]
+    }
+    deriving (Show, Eq)
+
 -- TODO
-data Name where
-    Name :: Rope -> Name
+data Identifier
+    = Identifier Rope
+    deriving (Show, Eq)
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
@@ -18,46 +25,58 @@ data Role
     = Any
     | Role Rope
     | Place Rope
+    deriving (Show, Eq)
 
-data Markdown = Markdown Rope
+data Markdown
+    = Markdown Rope
+    deriving (Show, Eq)
 
-data Type where
-    Type :: Rope -> Type
+data Type
+    = Type Rope
+    deriving (Show, Eq)
 
 data Procedure = Procedure
-    { procedureName :: Rope
-    , procedureParams :: [Name]
+    { procedureName :: Identifier
+    , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: Type
     , procedureLabel :: Maybe Markdown
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
+    deriving (Show, Eq)
 
 data Block = Block [Statement]
+    deriving (Show, Eq)
 
-data Statement where
-    Assignment :: Name -> Expression -> Statement
-    Execute :: Expression -> Statement
-    Comment :: Rope -> Statement
-    Declaration :: Procedure -> Statement
-    Attribute :: Role -> Block -> Statement     -- Role, Location, and ...?
-    Blank :: Statement
+data Statement
+    = Assignment Identifier Expression
+    | Execute Expression
+    | Comment Rope
+    | Declaration Procedure
+    | Attribute Role Block     -- Role, Location, and ...?
+    | Blank
+    deriving (Show, Eq)
 
-data Expression where
-    Application :: Procedure -> Expression -> Expression
-    Literal :: Quantity -> Expression
-    Table :: Tablet -> Expression
-    Variable :: Name -> Expression
-    Operation :: Operator -> Expression -> Expression -> Expression
-    Grouping :: Expression -> Expression
+data Expression
+    = Application Procedure Expression
+    | Literal Quantity
+    | Table Tablet
+    | Variable Identifier
+    | Operation Operator Expression Expression
+    | Grouping Expression
+    deriving (Show, Eq)
 
-data Tablet = Tablet [Binding]
+data Tablet
+    = Tablet [Binding]
+    deriving (Show, Eq)
 
 -- only valid Expressions are Literal and Variable. Should we enforce that
 -- somewhere?
-data Binding where
-     Binding :: Label -> Expression -> Binding
+data Binding
+    = Binding Label Expression
+    deriving (Show, Eq)
 
-data Operator where
-    Operator :: Rope -> Operator
+data Operator
+    = Operator Rope
+    deriving (Show, Eq)

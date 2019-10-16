@@ -34,22 +34,22 @@ an abstract syntax tree.
 checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
-        it "Key builtin procedures are available" $ do
-            procedureName builtinProcedureTask `shouldBe` "task"
+        it "key builtin procedures are available" $ do
+            procedureName builtinProcedureTask `shouldBe` Identifier "task"
 
-        it "Procedure's function name is correct" $ do
-            procedureName exampleRoastTurkey `shouldBe` "roast_turkey"
+        it "procedure's function name is correct" $ do
+            procedureName exampleRoastTurkey `shouldBe` Identifier "roast_turkey"
 
     describe "Rendering of abstract syntax tree to Technique language" $ do
         it "renders a list as tuple" $ do
-            show (commaCat [Name "one", Name "two", Name "three"])
+            show (commaCat [Identifier "one", Identifier "two", Identifier "three"])
                 `shouldBe` "one,two,three"
 
         it "renders a tablet as expected" $
           let
             hours = fromJust (lookupKeyValue "hr" units)
             tablet = Tablet
-                        [ Binding "Final temperature" (Variable (Name "temp"))
+                        [ Binding "Final temperature" (Variable (Identifier "temp"))
                         , Binding "Cooking time" (Grouping (Literal (Quantity 3 hours)))
                         ]
           in do

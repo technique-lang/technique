@@ -19,6 +19,7 @@ data Quantity
     | Number Int                -- FIXME not Int
     | Quantity Int Unit
     | Text Rope
+    deriving (Show, Eq)
 
 type Symbol = Rope
 
@@ -38,6 +39,7 @@ data Group
     | Normal
     | Scientific        -- probable collision with type from **base**
     | Engineering
+    deriving (Show, Eq)
 
 knownUnits :: [Unit]
 knownUnits =
@@ -77,6 +79,7 @@ data Prefix = Prefix
     , prefixSymbol :: Symbol
     , prefixScale :: Int        -- FIXME change this to a hard coded numerical constant?
     }
+    deriving (Show, Eq)
 
 data Unit = Unit
     { unitName :: Rope
@@ -84,3 +87,4 @@ data Unit = Unit
     , unitSymbol :: Rope
     , unitGroup :: Group
     }
+    deriving (Show, Eq)

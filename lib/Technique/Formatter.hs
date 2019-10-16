@@ -58,7 +58,7 @@ instance Render Procedure where
     colourize = colourizeTechnique
     intoDocA proc =
       let
-        name = pretty . procedureName $ proc
+        name = intoDocA . procedureName $ proc
         params = commaCat . procedureParams $ proc
         from = commaCat . procedureInput $ proc
         into = intoDocA . procedureOutput $ proc
@@ -129,7 +129,7 @@ instance Render Expression where
     intoDocA expr = case expr of
         Application proc subexpr ->
           let
-            name = pretty . procedureName $ proc
+            name = intoDocA . procedureName $ proc
           in
             annotate ApplicationToken name <+> intoDocA subexpr
         Literal qty ->
@@ -145,10 +145,10 @@ instance Render Expression where
             intoDocA subexpr <>
             annotate SymbolToken rparen
 
-instance Render Name where
-    type Token Name = TechniqueToken
+instance Render Identifier where
+    type Token Identifier = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Name name) =
+    intoDocA (Identifier name) =
         annotate VariableToken (pretty name)
 
 instance Render Quantity where
