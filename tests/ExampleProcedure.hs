@@ -89,11 +89,11 @@ exampleRoastTurkey =
                     [ Assignment
                         (Identifier "preheat")
                         (Application
-                            exampleProcedureOven
+                            (Identifier "oven")
                             (Grouping (Literal (Quantity 180 celsius))))
                     , Execute
                         (Application
-                            builtinProcedureTask
+                            (Identifier "task")
                             (Literal (Text "Bacon strips onto bird")))
                     , Execute
                         (Variable (Identifier "preheat"))
@@ -110,7 +110,7 @@ exampleRoastTurkey =
                     , Assignment
                         (Identifier "temp")
                         (Application
-                            builtinProcedureRecord
+                            (Identifier "record")
                             (Literal (Text "Probe bird temperature")))
                     , Execute
                         (Table

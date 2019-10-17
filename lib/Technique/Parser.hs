@@ -112,6 +112,23 @@ pType = do
 
 ---------------------------------------------------------------------
 
+pExpression :: Parser Expression
+pExpression = do
+    try (do
+        between (char '(') (char ')') $ do
+            subexpr <- pExpression
+            return (Grouping subexpr))
+    <|> try (do
+        name <- pIdentifier
+        -- ie at least one space
+        void (some space1)
+        -- FIXME better do this manually, not all valid
+        subexpr <- pExpression
+        return (Application name subexpr))
+    <|> try (do
+        name <- pIdentifier
+        return (Variable name))
+
 pStatement :: Parser Statement
 pStatement = do
     try (do
