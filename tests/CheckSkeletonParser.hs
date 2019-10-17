@@ -13,6 +13,7 @@ import Text.Megaparsec
 
 import Technique.Language
 import Technique.Parser
+import Technique.Quantity
 
 checkSkeletonParser :: Spec
 checkSkeletonParser = do
@@ -51,7 +52,7 @@ checkSkeletonParser = do
                             , techniqueBody = []
                             })
 
-    describe "Parses a proecdure function" $ do
+    describe "Parses a proecdure declaration" $ do
         it "name parser handles valid identifiers" $ do
             parseMaybe pIdentifier "" `shouldBe` Nothing
             parseMaybe pIdentifier "i" `shouldBe` Just (Identifier "i")
@@ -76,3 +77,14 @@ checkSkeletonParser = do
                 `shouldBe` Just (Identifier "roast_turkey", [Identifier "i"], [Type "Ingredients"], Type "Turkey")
             parseMaybe pProcedureDeclaration "roast_turkey:Ingredients->Turkey"
                 `shouldBe` Just (Identifier "roast_turkey", [], [Type "Ingredients"], Type "Turkey")
+
+    describe "Parses statements and expressions" $ do
+        it "a blank line is a Blank" $ do
+            parseMaybe pStatement "\n" `shouldBe` Just Blank
+
+        it "considers a single identifier an Execute" $ do
+            parseMaybe pStatement "x\n"
+                `shouldBe` Just (Execute (Variable (Identifier "x")))
+            parseMaybe pStatement "answer = 42\n"
+                `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
+

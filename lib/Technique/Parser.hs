@@ -66,6 +66,8 @@ pProcfileHeader = do
         , techniqueBody = []
         }
 
+---------------------------------------------------------------------
+
 -- FIXME consider making this top down, not LR
 -- FIXME need to do lexeme to gobble optional whitespace instead of space1
 
@@ -106,6 +108,40 @@ pType = do
     first <- upperChar
     remainder <- many typeChar
     return (Type (singletonRope first <> intoRope remainder))
+
+
+---------------------------------------------------------------------
+
+pStatement :: Parser Statement
+pStatement = do
+    try (do
+        name <- pIdentifier
+        void (many space1)
+        void (char '=')
+        void (many space1)
+        expr <- pExpression
+        void newline
+        return (Assignment name expr))
+    <|> try (do
+        -- only dive into working out if this is a Procedure if there's a ':' here
+        void (lookAhead (takeWhileP Nothing (/= ':') *> char ':' <* eol))
+        proc <- pProcedureFunction
+        void newline
+        return (Declaration proc))
+    <|> try (do
+        expr <- pExpression
+        void newline
+        return (Execute expr))
+    <|> try (do
+        void newline
+        return Blank)
+
+
+-- FIXME documentation says `between (symbol "{") (symbol "}")` which implies lexing yeah?
+pBlock :: Parser Block
+pBlock = do
+    statements <- between (char '{' <* many space1) (many space1 *> char '}') (many pStatement)
+    return (Block statements)
 
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
