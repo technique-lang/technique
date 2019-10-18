@@ -150,6 +150,18 @@ stringLiteral = do
     void (char '\"')
     return (T.pack str)
 
+-- FIXME change this to numbers with decimal points!
+-- FIXME read? Really?
+numberLiteral :: Parser Int
+numberLiteral = do
+    sign <- optional (char '-')
+    digits <- some digitChar
+    void eof
+    let number = read digits
+    return (case sign of
+        Just _ -> negate number
+        Nothing -> number)
+
 pQuantity :: Parser Quantity
 pQuantity = do
     try (do
