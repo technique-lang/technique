@@ -32,11 +32,19 @@ type Parser = Parsec Void Text
 __VERSION__ :: Int
 __VERSION__ = 0
 
-consumer :: (MonadParsec e s m, Token s ~ Char) => m ()
-consumer = L.space space1 empty empty
+{-|
+Skip /zero/ or more actual space characters. The __megaparsec__ function
+@space@ etc consume all whitespace, not just ' '. That includes newlines,
+which is very unhelpful.
+-}
+skipSpace :: Parser ()
+skipSpace = void (many (char ' '))
 
-lexeme :: (MonadParsec e s m, Token s ~ Char) => m a -> m a
-lexeme = L.lexeme consumer
+{-|
+Skip at least /one/ actual space character.
+-}
+skipSpace1 :: Parser ()
+skipSpace1 = void (some (char ' '))
 
 pMagicLine :: Parser Int
 pMagicLine = do
@@ -81,25 +89,22 @@ pProcfileHeader = do
 
 ---------------------------------------------------------------------
 
--- FIXME consider making this top down, not LR
--- FIXME need to do lexeme to gobble optional whitespace instead of space1
-
 pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],Type)
 pProcedureDeclaration = do
     name <- pIdentifier
-    void (many space1)
+    skipSpace
     -- zero or more separated by comma
     params <- sepBy pIdentifier (char ',')
 
-    void (many space1)
+    skipSpace
     void (char ':')
-    void (many space1)
+    skipSpace
 
     ins <- sepBy pType (char ',')
 
-    void (many space1)
+    skipSpace
     void (string "->")
-    void (many space1)
+    skipSpace
 
     out <- pType
     return (name,params,ins,out)
@@ -156,7 +161,6 @@ numberLiteral :: Parser Int
 numberLiteral = label "a number literal" $ do
     sign <- optional (char '-')
     digits <- some digitChar
-    void eof
     let number = read digits
     return (case sign of
         Just _ -> negate number
@@ -186,7 +190,7 @@ pExpression =
     pApplication = do
         name <- pIdentifier
         -- ie at least one space
-        void (some space1)
+        skipSpace1
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
         return (Application name subexpr)
@@ -209,9 +213,9 @@ pStatement =
   where
     pAssignment = label "assignment" $ do
         name <- pIdentifier
-        void (many space1)
+        skipSpace
         void (char '=')
-        void (many space1)
+        skipSpace
         expr <- pExpression
         void newline
         return (Assignment name expr)
