@@ -59,7 +59,7 @@ data Statement
     deriving (Show, Eq)
 
 data Expression
-    = Application Procedure Expression
+    = Application Identifier Expression     -- this had better turn out to be a procedure
     | Literal Quantity
     | Table Tablet
     | Variable Identifier

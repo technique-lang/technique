@@ -127,11 +127,8 @@ instance Render Expression where
     type Token Expression = TechniqueToken
     colourize = colourizeTechnique
     intoDocA expr = case expr of
-        Application proc subexpr ->
-          let
-            name = intoDocA . procedureName $ proc
-          in
-            annotate ApplicationToken name <+> intoDocA subexpr
+        Application name subexpr ->
+            annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
         Literal qty ->
             intoDocA qty
         Table tablet ->

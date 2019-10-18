@@ -13,6 +13,7 @@ import Text.Megaparsec
 
 import Technique.Language
 import Technique.Parser
+import Technique.Quantity
 
 checkSkeletonParser :: Spec
 checkSkeletonParser = do
@@ -51,7 +52,7 @@ checkSkeletonParser = do
                             , techniqueBody = []
                             })
 
-    describe "Parses a proecdure function" $ do
+    describe "Parses a proecdure declaration" $ do
         it "name parser handles valid identifiers" $ do
             parseMaybe pIdentifier "" `shouldBe` Nothing
             parseMaybe pIdentifier "i" `shouldBe` Just (Identifier "i")
@@ -76,3 +77,40 @@ checkSkeletonParser = do
                 `shouldBe` Just (Identifier "roast_turkey", [Identifier "i"], [Type "Ingredients"], Type "Turkey")
             parseMaybe pProcedureDeclaration "roast_turkey:Ingredients->Turkey"
                 `shouldBe` Just (Identifier "roast_turkey", [], [Type "Ingredients"], Type "Turkey")
+
+
+    describe "Literals" $ do
+        it "quoted string is interpreted as text" $ do
+            parseMaybe stringLiteral "\"Hello world\"" `shouldBe` Just "Hello world"
+            parseMaybe stringLiteral "\"Hello \\\"world\"" `shouldBe` Just "Hello \"world"
+            parseMaybe stringLiteral "\"\"" `shouldBe` Just ""
+
+        it "positive and negative integers" $ do
+            parseMaybe numberLiteral "42" `shouldBe` Just 42
+            parseMaybe numberLiteral "-42" `shouldBe` Just (-42)
+            parseMaybe numberLiteral "0" `shouldBe` Just 0
+            parseMaybe numberLiteral "1a" `shouldBe` Nothing
+
+    describe "Parses expressions" $ do
+        it "an empty input is None" $ do
+            parseMaybe pExpression "" `shouldBe` Just (Literal None)
+
+        it "a bare identifier is a Variable" $ do
+            parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))
+
+        it "a quoted string is a Literal Text" $ do
+            parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Literal (Text "Hello world"))
+
+        it "a bare number is a Literal Number" $ do
+            parseMaybe pExpression "42" `shouldBe` Just (Literal (Number 42))
+
+    describe "Parses statements and expressions" $ do
+        it "a blank line is a Blank" $ do
+            parseMaybe pStatement "\n" `shouldBe` Just Blank
+
+        it "considers a single identifier an Execute" $ do
+            parseMaybe pStatement "x\n"
+                `shouldBe` Just (Execute (Variable (Identifier "x")))
+            parseMaybe pStatement "answer = 42\n"
+                `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
+
