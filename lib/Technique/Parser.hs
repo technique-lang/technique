@@ -222,7 +222,6 @@ pStatement =
 
     pDeclaration = label "declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
-        void (lookAhead (takeWhileP Nothing (/= ':') *> char ':' <* eol))
         proc <- pProcedureFunction
         void newline
         return (Declaration proc)
