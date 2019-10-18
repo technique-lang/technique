@@ -108,7 +108,7 @@ identifierChar :: Parser Char
 identifierChar = lowerChar <|> digitChar <|> char '_'
 
 pIdentifier :: Parser Identifier
-pIdentifier = do
+pIdentifier = label "a valid identifier" $ do
     first <- lowerChar
     remainder <- many identifierChar
     return (Identifier (singletonRope first <> intoRope remainder))
@@ -136,7 +136,7 @@ stringLiteral0 = do
     return str
 
 stringLiteral :: Parser Text
-stringLiteral = do
+stringLiteral = label "a string literal" $ do
     void (char '\"')
     str <- many (do
         try (do
@@ -153,7 +153,7 @@ stringLiteral = do
 -- FIXME change this to numbers with decimal points!
 -- FIXME read? Really?
 numberLiteral :: Parser Int
-numberLiteral = do
+numberLiteral = label "a number literal" $ do
     sign <- optional (char '-')
     digits <- some digitChar
     void eof
@@ -172,51 +172,65 @@ pQuantity = do
         return (Number num))
 
 pExpression :: Parser Expression
-pExpression = do
-    try (do
+pExpression =
+    try pGrouping
+    <|> try pApplication
+    <|> try pLiteral
+    <|> try pVariable
+    <|> pNone
+  where
+    pGrouping = do
         between (char '(') (char ')') $ do
             subexpr <- pExpression
-            return (Grouping subexpr))
-    <|> try (do
+            return (Grouping subexpr)
+    pApplication = do
         name <- pIdentifier
         -- ie at least one space
         void (some space1)
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
-        return (Application name subexpr))
-    <|> try (do
+        return (Application name subexpr)
+    pLiteral = do
         qty <- pQuantity
-        return (Literal qty))
-    <|> try (do
+        return (Literal qty)
+    pVariable = do
         name <- pIdentifier
-        return (Variable name))
-    <|> try (do
+        return (Variable name)
+    pNone = do
         eof
-        return (Literal None))
+        return (Literal None)   -- this is almost certainly bad. None should be Unit "()"
 
 pStatement :: Parser Statement
-pStatement = do
-    try (do
+pStatement =
+    try pAssignment
+    <|> try pDeclaration
+    <|> try pExecute
+    <|> pBlank
+  where
+    pAssignment = label "assignment" $ do
         name <- pIdentifier
         void (many space1)
         void (char '=')
         void (many space1)
         expr <- pExpression
         void newline
-        return (Assignment name expr))
-    <|> try (do
+        return (Assignment name expr)
+
+    pDeclaration = label "declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
         void (lookAhead (takeWhileP Nothing (/= ':') *> char ':' <* eol))
         proc <- pProcedureFunction
         void newline
-        return (Declaration proc))
-    <|> try (do
+        return (Declaration proc)
+
+    pExecute = label "execute" $ do
         expr <- pExpression
         void newline
-        return (Execute expr))
-    <|> try (do
+        return (Execute expr)
+
+    pBlank = label "a blank line" $ do
         void newline
-        return Blank)
+        return Blank
 
 
 -- FIXME documentation says `between (symbol "{") (symbol "}")` which implies lexing yeah?
