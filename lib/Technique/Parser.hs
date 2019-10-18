@@ -1,6 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
+{-|
+
+/Commentary/
+
+We're optimizing for simplicity here. The language balances conventions
+from other languages with choices to not overcomplicate things. Not
+overloading operators, for example. Mostly we want to have "good error
+messages" which is tough and subjective anyway. Not having multiline
+anything, for example, might be a good choice, except that we also want to
+be whitepsace insensitive.
+-}
 module Technique.Parser where
 
 import Control.Monad
@@ -8,11 +19,13 @@ import Control.Monad.Combinators
 import Core.Text.Rope
 import Data.Void (Void)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Technique.Language
+import Technique.Quantity
 
 type Parser = Parsec Void Text
 
@@ -112,6 +125,40 @@ pType = do
 
 ---------------------------------------------------------------------
 
+-- TODO What is special about L.charLiteral vs just using normal parsers?
+
+stringLiteral0 :: Parser Text
+stringLiteral0 = do
+    void (char '\"')
+    str <- takeWhileP Nothing (/= '"')
+    notFollowedBy eol
+    void (char '\"')
+    return str
+
+stringLiteral :: Parser Text
+stringLiteral = do
+    void (char '\"')
+    str <- many (do
+        try (do
+            void (char '\\')
+            void (char '"')
+            return '"')
+        <|> try (do
+            notFollowedBy (char '\"')
+            printChar)
+        )
+    void (char '\"')
+    return (T.pack str)
+
+pQuantity :: Parser Quantity
+pQuantity = do
+    try (do
+        str <- stringLiteral
+        return (Text (intoRope str)))
+    <|> try (do
+        num <- numberLiteral
+        return (Number num))
+
 pExpression :: Parser Expression
 pExpression = do
     try (do
@@ -126,8 +173,12 @@ pExpression = do
         subexpr <- pExpression
         return (Application name subexpr))
     <|> try (do
+        qty <- pQuantity
+        return (Literal qty))
+    <|> try (do
         name <- pIdentifier
         return (Variable name))
+
 
 pStatement :: Parser Statement
 pStatement = do
@@ -164,4 +215,4 @@ pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
     (name,params,ins,out) <- pProcedureDeclaration
 
-    fail "unimplemented"
+    fail (show (name,params,ins,out))
