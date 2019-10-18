@@ -78,6 +78,32 @@ checkSkeletonParser = do
             parseMaybe pProcedureDeclaration "roast_turkey:Ingredients->Turkey"
                 `shouldBe` Just (Identifier "roast_turkey", [], [Type "Ingredients"], Type "Turkey")
 
+
+    describe "Literals" $ do
+        it "quoted string is interpreted as text" $ do
+            parseMaybe stringLiteral "\"Hello world\"" `shouldBe` Just "Hello world"
+            parseMaybe stringLiteral "\"Hello \\\"world\"" `shouldBe` Just "Hello \"world"
+            parseMaybe stringLiteral "\"\"" `shouldBe` Just ""
+
+        it "positive and negative integers" $ do
+            parseMaybe numberLiteral "42" `shouldBe` Just 42
+            parseMaybe numberLiteral "-42" `shouldBe` Just (-42)
+            parseMaybe numberLiteral "0" `shouldBe` Just 0
+            parseMaybe numberLiteral "1a" `shouldBe` Nothing
+
+    describe "Parses expressions" $ do
+        it "an empty input is None" $ do
+            parseMaybe pExpression "" `shouldBe` Just (Literal None)
+
+        it "a bare identifier is a Variable" $ do
+            parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))
+
+        it "a quoted string is a Literal Text" $ do
+            parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Literal (Text "Hello world"))
+
+        it "a bare number is a Literal Number" $ do
+            parseMaybe pExpression "42" `shouldBe` Just (Literal (Number 42))
+
     describe "Parses statements and expressions" $ do
         it "a blank line is a Blank" $ do
             parseMaybe pStatement "\n" `shouldBe` Just Blank

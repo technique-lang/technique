@@ -190,7 +190,9 @@ pExpression = do
     <|> try (do
         name <- pIdentifier
         return (Variable name))
-
+    <|> try (do
+        eof
+        return (Literal None))
 
 pStatement :: Parser Statement
 pStatement = do
