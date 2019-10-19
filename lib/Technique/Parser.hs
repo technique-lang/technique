@@ -38,13 +38,13 @@ Skip /zero/ or more actual space characters. The __megaparsec__ function
 which is very unhelpful.
 -}
 skipSpace :: Parser ()
-skipSpace = void (many (char ' '))
+skipSpace = void (hidden (many (char ' ')))
 
 {-|
 Skip at least /one/ actual space character.
 -}
 skipSpace1 :: Parser ()
-skipSpace1 = void (some (char ' '))
+skipSpace1 = void (hidden (some (char ' ')))
 
 pMagicLine :: Parser Int
 pMagicLine = do
@@ -110,7 +110,7 @@ pProcedureDeclaration = do
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
-identifierChar = lowerChar <|> digitChar <|> char '_'
+identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
 pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
@@ -119,10 +119,10 @@ pIdentifier = label "a valid identifier" $ do
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
-typeChar = upperChar <|> lowerChar <|> digitChar
+typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
 
 pType :: Parser Type
-pType = do
+pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
     return (Type (singletonRope first <> intoRope remainder))
