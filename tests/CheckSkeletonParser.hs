@@ -92,8 +92,11 @@ checkSkeletonParser = do
             parseMaybe numberLiteral "1a" `shouldBe` Nothing
 
     describe "Parses expressions" $ do
-        it "an empty input is None" $ do
-            parseMaybe pExpression "" `shouldBe` Just (Literal None)
+        it "an empty input an error" $ do
+            parseMaybe pExpression "" `shouldBe` Nothing
+
+        it "an pair of parentheses is None" $ do
+            parseMaybe pExpression "()" `shouldBe` Just (Literal None)
 
         it "a bare identifier is a Variable" $ do
             parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))
@@ -104,13 +107,64 @@ checkSkeletonParser = do
         it "a bare number is a Literal Number" $ do
             parseMaybe pExpression "42" `shouldBe` Just (Literal (Number 42))
 
-    describe "Parses statements and expressions" $ do
+        it "a nested expression is parsed as Grouped" $ do
+            parseMaybe pExpression "(42)" `shouldBe` Just (Grouping (Literal (Number 42)))
+
+    describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
-            parseMaybe pStatement "\n" `shouldBe` Just Blank
+            parseMaybe pStatement "" `shouldBe` Just Blank
 
         it "considers a single identifier an Execute" $ do
-            parseMaybe pStatement "x\n"
+            parseMaybe pStatement "x"
                 `shouldBe` Just (Execute (Variable (Identifier "x")))
-            parseMaybe pStatement "answer = 42\n"
+
+        it "considers a line with an '=' to be an Assignment" $ do
+            parseMaybe pStatement "answer = 42"
                 `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
 
+    describe "Parses blocks of statements" $ do
+        it "an empty block is a [] (special case)" $ do
+            parseMaybe pBlock "{}" `shouldBe` Just (Block [])
+
+        it "a block with a newline (only) is []" $ do
+            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [Blank, Blank])
+
+        it "a block with single statement surrounded by a newlines" $ do
+            parseMaybe pBlock "{\nx\n}"
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Execute (Variable (Identifier "x"))
+                    , Blank
+                    ])
+            parseMaybe pBlock "{\nanswer = 42\n}"
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Blank
+                    ])
+
+        it "a block with a blank line contains a Blank" $ do
+            parseMaybe pBlock "{\nx1\n\nx2\n}"
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Execute (Variable (Identifier "x1"))
+                    , Blank
+                    , Execute (Variable (Identifier "x2"))
+                    , Blank
+                    ])
+
+        it "a block with multiple statements separated by newlines" $ do
+            parseMaybe pBlock "{\nx\nanswer = 42\n}"
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Execute (Variable (Identifier "x"))
+                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Blank
+                    ])
+
+        it "a block with multiple statements separated by semicolons" $ do
+            parseMaybe pBlock "{x ; answer = 42}"
+                `shouldBe` Just (Block
+                    [ Execute (Variable (Identifier "x"))
+                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    ])

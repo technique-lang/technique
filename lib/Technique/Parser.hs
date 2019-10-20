@@ -38,13 +38,13 @@ Skip /zero/ or more actual space characters. The __megaparsec__ function
 which is very unhelpful.
 -}
 skipSpace :: Parser ()
-skipSpace = void (many (char ' '))
+skipSpace = void (hidden (many (char ' ')))
 
 {-|
 Skip at least /one/ actual space character.
 -}
 skipSpace1 :: Parser ()
-skipSpace1 = void (some (char ' '))
+skipSpace1 = void (hidden (some (char ' ')))
 
 pMagicLine :: Parser Int
 pMagicLine = do
@@ -110,7 +110,7 @@ pProcedureDeclaration = do
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
-identifierChar = lowerChar <|> digitChar <|> char '_'
+identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
 pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
@@ -119,10 +119,10 @@ pIdentifier = label "a valid identifier" $ do
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
-typeChar = upperChar <|> lowerChar <|> digitChar
+typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
 
 pType :: Parser Type
-pType = do
+pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
     return (Type (singletonRope first <> intoRope remainder))
@@ -177,12 +177,19 @@ pQuantity = do
 
 pExpression :: Parser Expression
 pExpression =
-    try pGrouping
-    <|> try pApplication
-    <|> try pLiteral
-    <|> try pVariable
-    <|> pNone
+    try pNone <|>
+    try pUndefined <|>
+    try pGrouping <|>
+    try pApplication <|>
+    try pLiteral <|>
+    try pVariable
   where
+    pNone = do
+        void (string "()")
+        return (Literal None)
+    pUndefined = do
+        void (char '?')
+        return (Literal Undefined)
     pGrouping = do
         between (char '(') (char ')') $ do
             subexpr <- pExpression
@@ -200,46 +207,50 @@ pExpression =
     pVariable = do
         name <- pIdentifier
         return (Variable name)
-    pNone = do
-        eof
-        return (Literal None)   -- this is almost certainly bad. None should be Unit "()"
 
 pStatement :: Parser Statement
 pStatement =
-    try pAssignment
-    <|> try pDeclaration
-    <|> try pExecute
-    <|> pBlank
+    try pAssignment <|>
+    try pDeclaration <|>
+    try pExecute <|>
+    try pBlank
   where
-    pAssignment = label "assignment" $ do
+    pAssignment = label "an assignment" $ do
         name <- pIdentifier
         skipSpace
         void (char '=')
         skipSpace
         expr <- pExpression
-        void newline
         return (Assignment name expr)
 
-    pDeclaration = label "declaration" $ do
+    pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
         proc <- pProcedureFunction
-        void newline
         return (Declaration proc)
 
-    pExecute = label "execute" $ do
+    pExecute = label "a value to execute" $ do
         expr <- pExpression
-        void newline
         return (Execute expr)
 
     pBlank = label "a blank line" $ do
-        void newline
         return Blank
 
+---------------------------------------------------------------------
 
--- FIXME documentation says `between (symbol "{") (symbol "}")` which implies lexing yeah?
 pBlock :: Parser Block
 pBlock = do
-    statements <- between (char '{' <* many space1) (many space1 *> char '}') (many pStatement)
+    statements <-
+        -- handle bare cases first
+        try (do
+            void (string "{}")
+            return []) <|>
+        between
+            (char '{')
+            (char '}')
+            (sepBy
+                (skipSpace *> pStatement <* skipSpace)
+                (newline <|> char ';'))
+
     return (Block statements)
 
 pProcedureFunction :: Parser Procedure
