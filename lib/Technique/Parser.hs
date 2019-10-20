@@ -239,10 +239,18 @@ pStatement =
 
 pBlock :: Parser Block
 pBlock = do
-    statements <- between
-        (char '{' <* skipSpace)
-        (skipSpace *> char '}')
-        (some (skipSpace *> pStatement <* newline))
+    statements <-
+        -- handle bare cases first
+        try (do
+            void (string "{}")
+            return []) <|>
+        between
+            (char '{')
+            (char '}')
+            (sepBy
+                (skipSpace *> pStatement <* skipSpace)
+                (newline <|> char ';'))
+
     return (Block statements)
 
 pProcedureFunction :: Parser Procedure

@@ -149,3 +149,10 @@ checkSkeletonParser = do
                     [ Execute (Variable (Identifier "x"))
                     , Assignment (Identifier "answer") (Literal (Number 42))
                     ])
+
+        it "a block with multiple statements separated by semicolons" $ do
+            parseMaybe pBlock "{x ; answer = 42}"
+                `shouldBe` Just (Block
+                    [ Execute (Variable (Identifier "x"))
+                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    ])
