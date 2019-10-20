@@ -123,31 +123,43 @@ checkSkeletonParser = do
                 `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
 
     describe "Parses blocks of statements" $ do
-        it "an empty block is a []" $ do
+        it "an empty block is a [] (special case)" $ do
             parseMaybe pBlock "{}" `shouldBe` Just (Block [])
 
         it "a block with a newline (only) is []" $ do
-            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [])
+            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [Blank, Blank])
 
-        it "a block with single statement terminated by a newline" $ do
+        it "a block with single statement surrounded by a newlines" $ do
             parseMaybe pBlock "{\nx\n}"
-                `shouldBe` Just (Block [Execute (Variable (Identifier "x"))])
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Execute (Variable (Identifier "x"))
+                    , Blank
+                    ])
             parseMaybe pBlock "{\nanswer = 42\n}"
-                `shouldBe` Just (Block [Assignment (Identifier "answer") (Literal (Number 42))])
+                `shouldBe` Just (Block
+                    [ Blank
+                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Blank
+                    ])
 
         it "a block with a blank line contains a Blank" $ do
             parseMaybe pBlock "{\nx1\n\nx2\n}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable (Identifier "x1"))
+                    [ Blank
+                    , Execute (Variable (Identifier "x1"))
                     , Blank
                     , Execute (Variable (Identifier "x2"))
+                    , Blank
                     ])
 
-        it "a block with multiple statements terminated by newlines" $ do
+        it "a block with multiple statements separated by newlines" $ do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable (Identifier "x"))
+                    [ Blank
+                    , Execute (Variable (Identifier "x"))
                     , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Blank
                     ])
 
         it "a block with multiple statements separated by semicolons" $ do
