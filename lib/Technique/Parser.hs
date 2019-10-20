@@ -201,45 +201,44 @@ pExpression =
         name <- pIdentifier
         return (Variable name)
     pNone = do
-        eof
+        hidden eof              -- FIXME get rid of this
         return (Literal None)   -- this is almost certainly bad. None should be Unit "()"
 
 pStatement :: Parser Statement
 pStatement =
-    try pAssignment
-    <|> try pDeclaration
-    <|> try pExecute
-    <|> pBlank
+    try pAssignment <|>
+    try pDeclaration <|>
+    try pExecute <|>
+    try pBlank
   where
-    pAssignment = label "assignment" $ do
+    pAssignment = label "an assignment" $ do
         name <- pIdentifier
         skipSpace
         void (char '=')
         skipSpace
         expr <- pExpression
-        void newline
         return (Assignment name expr)
 
-    pDeclaration = label "declaration" $ do
+    pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
         proc <- pProcedureFunction
-        void newline
         return (Declaration proc)
 
-    pExecute = label "execute" $ do
+    pExecute = label "a value to execute" $ do
         expr <- pExpression
-        void newline
         return (Execute expr)
 
     pBlank = label "a blank line" $ do
-        void newline
         return Blank
 
+---------------------------------------------------------------------
 
--- FIXME documentation says `between (symbol "{") (symbol "}")` which implies lexing yeah?
 pBlock :: Parser Block
 pBlock = do
-    statements <- between (char '{' <* many space1) (many space1 *> char '}') (many pStatement)
+    statements <- between
+        (char '{' <* skipSpace)
+        (skipSpace *> char '}')
+        (some (skipSpace *> pStatement <* newline))
     return (Block statements)
 
 pProcedureFunction :: Parser Procedure

@@ -104,13 +104,23 @@ checkSkeletonParser = do
         it "a bare number is a Literal Number" $ do
             parseMaybe pExpression "42" `shouldBe` Just (Literal (Number 42))
 
-    describe "Parses statements and expressions" $ do
+    describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
-            parseMaybe pStatement "\n" `shouldBe` Just Blank
+            parseMaybe pStatement "" `shouldBe` Just Blank
 
         it "considers a single identifier an Execute" $ do
-            parseMaybe pStatement "x\n"
+            parseMaybe pStatement "x"
                 `shouldBe` Just (Execute (Variable (Identifier "x")))
-            parseMaybe pStatement "answer = 42\n"
+            parseMaybe pStatement "answer = 42"
                 `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
 
+
+    describe "Parses blocks of statements" $ do
+        it "a blank line is a Blank" $ do
+            parseMaybe pStatement "" `shouldBe` Just Blank
+
+        it "considers a single identifier an Execute" $ do
+            parseMaybe pStatement "x"
+                `shouldBe` Just (Execute (Variable (Identifier "x")))
+            parseMaybe pStatement "answer = 42"
+                `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
