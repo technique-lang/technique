@@ -19,6 +19,7 @@ data Quantity
     | Number Int                -- FIXME not Int
     | Quantity Int Unit
     | Text Rope
+    | Undefined
     deriving (Show, Eq)
 
 type Symbol = Rope

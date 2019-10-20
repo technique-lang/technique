@@ -92,8 +92,11 @@ checkSkeletonParser = do
             parseMaybe numberLiteral "1a" `shouldBe` Nothing
 
     describe "Parses expressions" $ do
-        it "an empty input is None" $ do
-            parseMaybe pExpression "" `shouldBe` Just (Literal None)
+        it "an empty input an error" $ do
+            parseMaybe pExpression "" `shouldBe` Nothing
+
+        it "an pair of parentheses is None" $ do
+            parseMaybe pExpression "()" `shouldBe` Just (Literal None)
 
         it "a bare identifier is a Variable" $ do
             parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))

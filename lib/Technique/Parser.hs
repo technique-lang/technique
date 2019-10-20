@@ -177,12 +177,19 @@ pQuantity = do
 
 pExpression :: Parser Expression
 pExpression =
-    try pGrouping
-    <|> try pApplication
-    <|> try pLiteral
-    <|> try pVariable
-    <|> pNone
+    try pNone <|>
+    try pUndefined <|>
+    try pGrouping <|>
+    try pApplication <|>
+    try pLiteral <|>
+    try pVariable
   where
+    pNone = do
+        void (string "()")
+        return (Literal None)
+    pUndefined = do
+        void (char '?')
+        return (Literal Undefined)
     pGrouping = do
         between (char '(') (char ')') $ do
             subexpr <- pExpression
@@ -200,9 +207,6 @@ pExpression =
     pVariable = do
         name <- pIdentifier
         return (Variable name)
-    pNone = do
-        hidden eof              -- FIXME get rid of this
-        return (Literal None)   -- this is almost certainly bad. None should be Unit "()"
 
 pStatement :: Parser Statement
 pStatement =

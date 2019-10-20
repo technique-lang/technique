@@ -98,7 +98,7 @@ exampleRoastTurkey =
                     , Execute
                         (Variable (Identifier "preheat"))
                     , Execute
-                        (Literal None)
+                        (Literal Undefined)
                     , Blank
                     , Execute
                         (Operation (Operator "&")

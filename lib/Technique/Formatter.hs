@@ -153,6 +153,8 @@ instance Render Quantity where
     colourize = colourizeTechnique
     intoDocA qty = case qty of
         None ->
+            annotate SymbolToken ("()")
+        Undefined ->
             annotate ErrorToken "?"
         Number i ->
             annotate QuantityToken (pretty i)
