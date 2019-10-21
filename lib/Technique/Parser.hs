@@ -244,14 +244,14 @@ pStatement =
 -- { z\n }          Newline z
 -- {\n    z\n}      Newline Blank, Newline z
 
-pFlow :: Show a => Parser a -> Char -> Parser (Flow a)
+pFlow :: Parser a -> Char -> Parser (Flow a)
 pFlow parser separator = do
     void skipSpace
     result <- parser
     void skipSpace
-    (newline *> return (Newline result))
-        <|> (char separator *> return (Separator separator result))
-        <|> (char '}' *> return (Edge result))
+    (newline *> return (Flow result Newline))
+        <|> (char separator *> return (Flow result (Separator separator)))
+        <|> (char '}' *> return (Flow result Edge))
 
 pBlock :: Parser Block
 pBlock = do

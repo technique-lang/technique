@@ -49,10 +49,17 @@ data Procedure = Procedure
 data Block = Block [Flow Statement]
     deriving (Show, Eq)
 
-data Flow a
-    = Newline a
-    | Separator Char a
-    | Edge a
+{-|
+A "flow" is a line in Statements, or a binding in a Tablet, the distinction
+being the separator used.
+-}
+data Flow a = Flow a Ending
+    deriving (Show, Eq)
+
+data Ending
+    = Newline
+    | Separator Char
+    | Edge
     deriving (Show, Eq)
 
 data Statement

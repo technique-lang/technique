@@ -124,47 +124,51 @@ checkSkeletonParser = do
 
     describe "Parses blocks of statements" $ do
         it "an empty block is a [] (special case)" $ do
-            parseMaybe pBlock "{}" `shouldBe` Just (Block [])
+            parseMaybe pBlock "{}" `shouldBe` Just (Block [Flow Blank Edge])
 
-        it "a block with a newline (only) is []" $ do
-            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [Blank, Blank])
+        it "a block with a newline (only) is []" $ do -- FIXME
+            parseMaybe pBlock "{\n}"
+                `shouldBe` Just (Block
+                    [ Flow Blank Newline
+                    , Flow Blank Edge
+                    ])
 
         it "a block with single statement surrounded by a newlines" $ do
             parseMaybe pBlock "{\nx\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x"))
-                    , Blank
+                    [ Flow Blank Newline
+                    , Flow (Execute (Variable (Identifier "x"))) Newline
+                    , Flow Blank Edge
                     ])
             parseMaybe pBlock "{\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Assignment (Identifier "answer") (Literal (Number 42))
-                    , Blank
+                    [ Flow Blank Newline
+                    , Flow (Assignment (Identifier "answer") (Literal (Number 42))) Newline
+                    , Flow Blank Edge
                     ])
 
         it "a block with a blank line contains a Blank" $ do
             parseMaybe pBlock "{\nx1\n\nx2\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x1"))
-                    , Blank
-                    , Execute (Variable (Identifier "x2"))
-                    , Blank
+                    [ Flow Blank Newline
+                    , Flow (Execute (Variable (Identifier "x1"))) Newline
+                    , Flow Blank Newline
+                    , Flow (Execute (Variable (Identifier "x2"))) Newline
+                    , Flow Blank Edge
                     ])
 
         it "a block with multiple statements separated by newlines" $ do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x"))
-                    , Assignment (Identifier "answer") (Literal (Number 42))
-                    , Blank
+                    [ Flow Blank Newline
+                    , Flow (Execute (Variable (Identifier "x"))) Newline
+                    , Flow (Assignment (Identifier "answer") (Literal (Number 42))) Newline
+                    , Flow Blank Edge
                     ])
 
         it "a block with multiple statements separated by semicolons" $ do
             parseMaybe pBlock "{x ; answer = 42}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable (Identifier "x"))
-                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    [ Flow (Execute (Variable (Identifier "x"))) (Separator ';')
+                    , Flow (Assignment (Identifier "answer") (Literal (Number 42))) Edge
                     ])

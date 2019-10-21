@@ -44,7 +44,8 @@ exampleProcedureOven =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block
+            [ Flow (Execute (Literal (Text "builtinProcedure!"))) Edge ]
         }
 
 
@@ -61,7 +62,7 @@ builtinProcedureTask =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "A task")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Flow (Execute (Literal (Text "builtinProcedure!"))) Edge ]
         }
 
 builtinProcedureRecord :: Procedure
@@ -73,7 +74,7 @@ builtinProcedureRecord =
         , procedureOutput = Type "Text" -- ?
         , procedureLabel = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Record a quantity")
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Flow (Execute (Literal (Text "builtinProcedure!"))) Edge ]
         }
 
 
@@ -85,38 +86,39 @@ exampleRoastTurkey =
     celsius = fromJust (lookupKeyValue "°C" units)
     chef = Role "chef"
     block = Block
-                [ Attribute chef (Block
-                    [ Assignment
+                [ Flow (Attribute chef (Block
+                    [ Flow (Assignment
                         (Identifier "preheat")
                         (Application
                             (Identifier "oven")
-                            (Grouping (Literal (Quantity 180 celsius))))
-                    , Execute
+                            (Grouping (Literal (Quantity 180 celsius))))) Newline
+                    , Flow (Execute
                         (Application
                             (Identifier "task")
-                            (Literal (Text "Bacon strips onto bird")))
-                    , Execute
-                        (Variable (Identifier "preheat"))
-                    , Execute
-                        (Literal Undefined)
-                    , Blank
-                    , Execute
+                            (Literal (Text "Bacon strips onto bird")))) Newline
+                    , Flow (Execute
+                        (Variable (Identifier "preheat"))) Newline
+                    , Flow (Execute
+                        (Literal Undefined)) Newline
+                    , Flow Blank Newline
+                    , Flow (Execute
                         (Operation (Operator "&")
                             (Variable (Identifier "w1"))
                             (Grouping (Operation (Operator "|")
                                 (Variable (Identifier "w2"))
-                                (Variable (Identifier "w3")))))
-                    , Blank
-                    , Assignment
+                                (Variable (Identifier "w3")))))) Newline
+                    , Flow Blank Newline
+                    , Flow (Assignment
                         (Identifier "temp")
                         (Application
                             (Identifier "record")
-                            (Literal (Text "Probe bird temperature")))
-                    , Execute
+                            (Literal (Text "Probe bird temperature")))) Newline
+                    , Flow (Execute
                         (Table
                             (Tablet
-                                [ Binding "Final temperature" (Variable (Identifier "temp")) ]))
-                    ])
+                                [ Binding "Final temperature" (Variable (Identifier "temp")) ]))) Newline
+                    , Flow Blank Edge
+                    ])) Newline
                 ]
   in
     Procedure
