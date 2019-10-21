@@ -46,7 +46,13 @@ data Procedure = Procedure
     }
     deriving (Show, Eq)
 
-data Block = Block [Statement]
+data Block = Block [Flow Statement]
+    deriving (Show, Eq)
+
+data Flow a
+    = Newline a
+    | Separator Char a
+    | Edge a
     deriving (Show, Eq)
 
 data Statement

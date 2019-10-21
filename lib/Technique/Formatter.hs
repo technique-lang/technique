@@ -113,7 +113,6 @@ instance Render Statement where
             intoDocA role <>
             line <>
             intoDocA block        -- TODO some nesting?
-        Blank -> emptyDoc
 
 instance Render Role where
     type Token Role = TechniqueToken

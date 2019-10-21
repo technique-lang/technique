@@ -235,23 +235,29 @@ pStatement =
     pBlank = label "a blank line" $ do
         return Blank
 
+
 ---------------------------------------------------------------------
+
+-- trailing
+-- { x }            Edge x
+-- { ; y }          Separator Blank ; Edge y
+-- { z\n }          Newline z
+-- {\n    z\n}      Newline Blank, Newline z
+
+pFlow :: Show a => Parser a -> Char -> Parser (Flow a)
+pFlow parser separator = do
+    void skipSpace
+    result <- parser
+    void skipSpace
+    (newline *> return (Newline result))
+        <|> (char separator *> return (Separator separator result))
+        <|> (char '}' *> return (Edge result))
 
 pBlock :: Parser Block
 pBlock = do
-    statements <-
-        -- handle bare cases first
-        try (do
-            void (string "{}")
-            return []) <|>
-        between
-            (char '{')
-            (char '}')
-            (sepBy
-                (skipSpace *> pStatement <* skipSpace)
-                (newline <|> char ';'))
-
-    return (Block statements)
+    void (char '{')
+    flows <- many (pFlow pStatement ';')
+    return (Block flows)
 
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do
