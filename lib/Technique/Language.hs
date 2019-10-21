@@ -46,20 +46,7 @@ data Procedure = Procedure
     }
     deriving (Show, Eq)
 
-data Block = Block [Flow Statement]
-    deriving (Show, Eq)
-
-{-|
-A "flow" is a line in Statements, or a binding in a Tablet, the distinction
-being the separator used.
--}
-data Flow a = Flow a Ending
-    deriving (Show, Eq)
-
-data Ending
-    = Newline
-    | Separator Char
-    | Edge
+data Block = Block [Statement]
     deriving (Show, Eq)
 
 data Statement
@@ -69,6 +56,7 @@ data Statement
     | Declaration Procedure
     | Attribute Role Block     -- Role, Location, and ...?
     | Blank
+    | Horizontal [Statement]
     deriving (Show, Eq)
 
 data Expression

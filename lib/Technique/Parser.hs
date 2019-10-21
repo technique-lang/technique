@@ -238,26 +238,14 @@ pStatement =
 
 ---------------------------------------------------------------------
 
--- trailing
--- { x }            Edge x
--- { ; y }          Separator Blank ; Edge y
--- { z\n }          Newline z
--- {\n    z\n}      Newline Blank, Newline z
-
-pFlow :: Parser a -> Char -> Parser (Flow a)
-pFlow parser separator = do
-    void skipSpace
-    result <- parser
-    void skipSpace
-    (newline *> return (Flow result Newline))
-        <|> (char separator *> return (Flow result (Separator separator)))
-        <|> (char '}' *> return (Flow result Edge))
-
 pBlock :: Parser Block
 pBlock = do
-    void (char '{')
-    flows <- many (pFlow pStatement ';')
-    return (Block flows)
+    statements <- between
+        (char '{' *> skipSpace *> try newline)
+        (skipSpace <* char '}')
+        (many (skipSpace *> pStatement <* skipSpace <* try newline))
+
+    return (Block statements)
 
 pProcedureFunction :: Parser Procedure
 pProcedureFunction = do

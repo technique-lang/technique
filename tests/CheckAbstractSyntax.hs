@@ -60,3 +60,15 @@ checkAbstractSyntax = do
 ]
 |]
 
+    describe "Rendering of a Block" $ do
+        it "renders a normal block with indentation" $
+          let
+            b = Block
+                [ Execute (Variable (Identifier "x"))
+                ]
+          in do
+            renderTest b `shouldBe` [quote|
+{
+    x
+}
+|]
