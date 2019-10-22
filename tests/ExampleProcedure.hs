@@ -107,6 +107,9 @@ exampleRoastTurkey =
                                 (Variable (Identifier "w2"))
                                 (Variable (Identifier "w3")))))
                     , Blank
+                    , Execute (Variable (Identifier "v1"))
+                    , Series
+                    , Execute (Variable (Identifier "v2"))
                     , Assignment
                         (Identifier "temp")
                         (Application
