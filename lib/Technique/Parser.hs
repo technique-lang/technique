@@ -232,18 +232,20 @@ pStatement =
         expr <- pExpression
         return (Execute expr)
 
-    pBlank = label "a blank line" $ do
+    pBlank = hidden $ do -- label "a blank line"
+        void newline
         return Blank
-
 
 ---------------------------------------------------------------------
 
 pBlock :: Parser Block
 pBlock = do
-    statements <- between
-        (char '{' *> skipSpace *> try newline)
-        (skipSpace <* char '}')
-        (many (skipSpace *> pStatement <* skipSpace <* try newline))
+    void (char '{' <* skipSpace <* optional newline)
+
+    statements <- many
+         (skipSpace *> pStatement <* skipSpace <* optional newline)
+
+    void (skipSpace *> char '}')
 
     return (Block statements)
 
