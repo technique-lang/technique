@@ -110,6 +110,13 @@ checkSkeletonParser = do
         it "a nested expression is parsed as Grouped" $ do
             parseMaybe pExpression "(42)" `shouldBe` Just (Grouping (Literal (Number 42)))
 
+        it "an operator between two expressions is an Operation" $ do
+            parseMaybe pExpression "x & y"
+                `shouldBe` Just (Operation
+                    WaitBoth
+                    (Variable (Identifier "x"))
+                    (Variable (Identifier "y")))
+
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
             parseMaybe pStatement "\n" `shouldBe` Just Blank

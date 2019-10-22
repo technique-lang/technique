@@ -79,5 +79,7 @@ data Binding
     deriving (Show, Eq)
 
 data Operator
-    = Operator Rope
+    = WaitEither
+    | WaitBoth
+    | Combine
     deriving (Show, Eq)

@@ -201,5 +201,8 @@ instance Render Binding where
 instance Render Operator where
     type Token Operator = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Operator symbol) =
-        annotate OperatorToken (pretty symbol)
+    intoDocA operator =
+        annotate OperatorToken $ case operator of
+            WaitBoth ->     pretty '&'
+            WaitEither ->   pretty '|'
+            Combine ->      pretty '+'

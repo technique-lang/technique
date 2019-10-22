@@ -175,11 +175,18 @@ pQuantity = do
         num <- numberLiteral
         return (Number num))
 
+pOperator :: Parser Operator
+pOperator =
+    try (char '&' *> return WaitBoth) <|>
+    try (char '|' *> return WaitEither) <|>
+    try (char '+' *> return Combine)
+
 pExpression :: Parser Expression
 pExpression =
     try pNone <|>
     try pUndefined <|>
     try pGrouping <|>
+    try pOperation <|>
     try pApplication <|>
     try pLiteral <|>
     try pVariable
@@ -190,8 +197,15 @@ pExpression =
     pUndefined = do
         void (char '?')
         return (Literal Undefined)
+    pOperation = do
+        subexpr1 <- pVariable <|> pGrouping
+        skipSpace
+        operator <- pOperator
+        skipSpace
+        subexpr2 <- pVariable <|> pGrouping
+        return (Operation operator subexpr1 subexpr2)
     pGrouping = do
-        between (char '(') (char ')') $ do
+        between (char '(' <* skipSpace) (skipSpace *> char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
     pApplication = do
