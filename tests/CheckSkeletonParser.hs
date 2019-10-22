@@ -112,7 +112,7 @@ checkSkeletonParser = do
 
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
-            parseMaybe pStatement "" `shouldBe` Just Blank
+            parseMaybe pStatement "\n" `shouldBe` Just Blank
 
         it "considers a single identifier an Execute" $ do
             parseMaybe pStatement "x"
@@ -127,44 +127,38 @@ checkSkeletonParser = do
             parseMaybe pBlock "{}" `shouldBe` Just (Block [])
 
         it "a block with a newline (only) is []" $ do
-            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [Blank, Blank])
+            parseMaybe pBlock "{\n}" `shouldBe` Just (Block [])
 
         it "a block with single statement surrounded by a newlines" $ do
             parseMaybe pBlock "{\nx\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x"))
-                    , Blank
+                    [ Execute (Variable (Identifier "x"))
                     ])
             parseMaybe pBlock "{\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Assignment (Identifier "answer") (Literal (Number 42))
-                    , Blank
+                    [ Assignment (Identifier "answer") (Literal (Number 42))
                     ])
 
         it "a block with a blank line contains a Blank" $ do
             parseMaybe pBlock "{\nx1\n\nx2\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x1"))
+                    [ Execute (Variable (Identifier "x1"))
                     , Blank
                     , Execute (Variable (Identifier "x2"))
-                    , Blank
                     ])
 
         it "a block with multiple statements separated by newlines" $ do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Blank
-                    , Execute (Variable (Identifier "x"))
+                    [ Execute (Variable (Identifier "x"))
                     , Assignment (Identifier "answer") (Literal (Number 42))
-                    , Blank
                     ])
 
         it "a block with multiple statements separated by semicolons" $ do
             parseMaybe pBlock "{x ; answer = 42}"
                 `shouldBe` Just (Block
                     [ Execute (Variable (Identifier "x"))
+                    , Series
                     , Assignment (Identifier "answer") (Literal (Number 42))
                     ])
+

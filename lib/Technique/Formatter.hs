@@ -89,13 +89,15 @@ instance Render Block where
     intoDocA (Block statements) =
         nest 4 (
             annotate SymbolToken lbrace <>
-            foldl' f emptyDoc statements
+            go statements
         ) <>
         line <>
         annotate SymbolToken rbrace
       where
-        f :: Doc TechniqueToken -> Statement -> Doc TechniqueToken
-        f built statement = built <> line <> intoDocA statement
+        go :: [Statement] -> Doc TechniqueToken
+        go [] = emptyDoc
+        go (Series:x1:xs) = intoDocA Series <> intoDocA x1 <> go xs
+        go (x:xs) = line <> intoDocA x <> go xs
 
 instance Render Statement where
     type Token Statement = TechniqueToken
@@ -113,7 +115,10 @@ instance Render Statement where
             intoDocA role <>
             line <>
             intoDocA block        -- TODO some nesting?
-        Blank -> emptyDoc
+        Blank ->
+            emptyDoc
+        Series ->
+            annotate SymbolToken " ; "
 
 instance Render Role where
     type Token Role = TechniqueToken

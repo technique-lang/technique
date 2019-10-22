@@ -213,7 +213,8 @@ pStatement =
     try pAssignment <|>
     try pDeclaration <|>
     try pExecute <|>
-    try pBlank
+    try pBlank <|>
+    try pSeries
   where
     pAssignment = label "an assignment" $ do
         name <- pIdentifier
@@ -232,24 +233,26 @@ pStatement =
         expr <- pExpression
         return (Execute expr)
 
-    pBlank = label "a blank line" $ do
+    pBlank = hidden $ do -- label "a blank line"
+        void newline
         return Blank
+
+    pSeries = do
+        skipSpace
+        void (char ';')
+        skipSpace
+        return Series
 
 ---------------------------------------------------------------------
 
 pBlock :: Parser Block
 pBlock = do
-    statements <-
-        -- handle bare cases first
-        try (do
-            void (string "{}")
-            return []) <|>
-        between
-            (char '{')
-            (char '}')
-            (sepBy
-                (skipSpace *> pStatement <* skipSpace)
-                (newline <|> char ';'))
+    void (char '{' <* skipSpace <* optional newline)
+
+    statements <- many
+         (skipSpace *> pStatement <* skipSpace <* optional newline)
+
+    void (skipSpace *> char '}')
 
     return (Block statements)
 
