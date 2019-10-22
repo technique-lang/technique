@@ -213,7 +213,8 @@ pStatement =
     try pAssignment <|>
     try pDeclaration <|>
     try pExecute <|>
-    try pBlank
+    try pBlank <|>
+    try pSeries
   where
     pAssignment = label "an assignment" $ do
         name <- pIdentifier
@@ -235,6 +236,12 @@ pStatement =
     pBlank = hidden $ do -- label "a blank line"
         void newline
         return Blank
+
+    pSeries = do
+        skipSpace
+        void (char ';')
+        skipSpace
+        return Series
 
 ---------------------------------------------------------------------
 

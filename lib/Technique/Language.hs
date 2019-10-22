@@ -56,7 +56,7 @@ data Statement
     | Declaration Procedure
     | Attribute Role Block     -- Role, Location, and ...?
     | Blank
-    | Horizontal [Statement]
+    | Series
     deriving (Show, Eq)
 
 data Expression

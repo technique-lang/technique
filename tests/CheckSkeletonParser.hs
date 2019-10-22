@@ -158,6 +158,7 @@ checkSkeletonParser = do
             parseMaybe pBlock "{x ; answer = 42}"
                 `shouldBe` Just (Block
                     [ Execute (Variable (Identifier "x"))
+                    , Series
                     , Assignment (Identifier "answer") (Literal (Number 42))
                     ])
 
