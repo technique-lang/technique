@@ -177,9 +177,9 @@ pQuantity = do
 
 pOperator :: Parser Operator
 pOperator =
-    try (char '&' *> return WaitBoth) <|>
-    try (char '|' *> return WaitEither) <|>
-    try (char '+' *> return Combine)
+    (char '&' *> return WaitBoth) <|>
+    (char '|' *> return WaitEither) <|>
+    (char '+' *> return Combine)
 
 pExpression :: Parser Expression
 pExpression =
