@@ -117,6 +117,29 @@ checkSkeletonParser = do
                     (Variable (Identifier "x"))
                     (Variable (Identifier "y")))
 
+        it "handles tablet with one binding" $ do
+            parseMaybe pExpression "[ \"King\" ~ george ]"
+                `shouldBe` Just (Object (Tablet
+                    [ Binding "King" (Variable (Identifier "george"))
+                    ]))
+
+        it "handles tablet with multiple bindings" $ do
+            parseMaybe pExpression "[ \"first\" ~ \"George\" \n \"last\" ~ \"Windsor\" ]"
+                `shouldBe` Just (Object (Tablet
+                    [ Binding "first" (Literal (Text "George"))
+                    , Binding "last" (Literal (Text "Windsor"))
+                    ]))
+
+        it "handles tablet with alternate single-line syntax" $
+          let
+            expected = Just (Object (Tablet
+                [ Binding "name" (Variable (Identifier "n"))
+                , Binding "king" (Literal (Number 42))
+                ]))
+          in do
+            parseMaybe pExpression "[\"name\" ~ n,\"king\" ~ 42]" `shouldBe` expected
+            parseMaybe pExpression "[\"name\" ~ n , \"king\" ~ 42]" `shouldBe` expected
+
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
             parseMaybe pStatement "\n" `shouldBe` Just Blank
@@ -185,3 +208,36 @@ checkSkeletonParser = do
                     [ (Assignment (Identifier "answer") (Literal (Number 42)))
                     , Series
                     ])
+
+    describe "Parses a procedure declaration" $ do
+        it "simple declaration " $ do
+            parseMaybe pProcedureDeclaration "f x : X -> Y"
+                `shouldBe` Just (Identifier "f", [Identifier "x"], [Type "X"], Type "Y")
+
+        it "declaration with multiple variables and input types" $ do
+            parseMaybe pProcedureDeclaration "after_dinner i,s,w : IceCream,Strawberries,Waffles -> Dessert"
+                `shouldBe` Just
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , Type "Dessert"
+                    )
+
+        it "handles spurious whitespace" $ do
+            parseMaybe pProcedureDeclaration "after_dinner   i ,s ,w  :  IceCream ,Strawberries,  Waffles -> Dessert"
+                `shouldBe` Just
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , Type "Dessert"
+                    )
+
+    describe "Parses a complete procedure declaration" $ do
+        it "parses a declaration and block" $ do
+            parseMaybe pProcedure "f : X -> Y\n{ x }\n"
+                `shouldBe` Just (emptyProcedure
+                    { procedureName = Identifier "f"
+                    , procedureInput = [Type "X"]
+                    , procedureOutput = Type "Y"
+                    , procedureBlock = Block [Execute (Variable (Identifier "x"))]
+                    })

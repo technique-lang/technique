@@ -94,13 +94,13 @@ pProcedureDeclaration = do
     name <- pIdentifier
     skipSpace
     -- zero or more separated by comma
-    params <- sepBy pIdentifier (char ',')
+    params <- sepBy pIdentifier (char ',' <* skipSpace)
 
     skipSpace
     void (char ':')
     skipSpace
 
-    ins <- sepBy pType (char ',')
+    ins <- sepBy pType (char ',' <* skipSpace)
 
     skipSpace
     void (string "->")
@@ -116,6 +116,7 @@ pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
     first <- lowerChar
     remainder <- many identifierChar
+    skipSpace
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
@@ -125,6 +126,7 @@ pType :: Parser Type
 pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
+    skipSpace
     return (Type (singletonRope first <> intoRope remainder))
 
 
@@ -166,6 +168,7 @@ numberLiteral = label "a number literal" $ do
         Just _ -> negate number
         Nothing -> number)
 
+-- FIXME handle other constructors
 pQuantity :: Parser Quantity
 pQuantity = do
     try (do
@@ -181,6 +184,34 @@ pOperator =
     (char '|' *> return WaitEither) <|>
     (char '+' *> return Combine)
 
+{-|
+Parse a Tablet. This follows the same pattern as 'pBlock' below of
+consuming trailing space around delimiters but only single newlines (as
+separator) within.
+-}
+-- TODO this doesn't preserve alternate syntax if employed by user
+pTablet :: Parser Tablet
+pTablet = do
+    void (char '[' <* space)
+
+    bindings <- many
+        (pBinding <* skipSpace <* optional newline <* skipSpace)
+
+    void (char ']' <* space)
+
+    return (Tablet bindings)
+  where
+    pBinding = do
+        name <- stringLiteral
+        skipSpace
+        void (char '~')
+        skipSpace
+        subexpr <- pExpression
+
+        -- handle alternate syntax here
+        void (optional (char ','))
+        return (Binding (intoRope name) subexpr)
+
 
 pExpression :: Parser Expression
 pExpression = do
@@ -195,6 +226,7 @@ pExpression = do
         try pNone <|>
         try pUndefined <|>
         try pGrouping <|>
+        try pObject <|>
         try pApplication <|>
         try pLiteral <|>
         try pVariable
@@ -214,6 +246,9 @@ pExpression = do
         between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
+    pObject = do
+        tablet <- pTablet
+        return (Object tablet)
     pApplication = do
         name <- pIdentifier
         -- ie at least one space
@@ -246,7 +281,7 @@ pStatement =
 
     pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
-        proc <- pProcedureFunction
+        proc <- pProcedure
         return (Declaration proc)
 
     pExecute = label "a value to execute" $ do
@@ -266,17 +301,30 @@ pStatement =
 
 pBlock :: Parser Block
 pBlock = do
-    void (char '{' <* skipSpace <* optional newline <* skipSpace)
+    -- open block, absorb whitespace
+    void (char '{' <* space)
 
+    -- process statements, but only single newline at a time
     statements <- many
          (pStatement <* skipSpace <* optional newline <* skipSpace)
 
-    void (char '}')
+    -- close block, and wipe out any trailing whitespace
+    void (char '}' <* space)
 
     return (Block statements)
 
-pProcedureFunction :: Parser Procedure
-pProcedureFunction = do
-    (name,params,ins,out) <- pProcedureDeclaration
+pProcedure :: Parser Procedure
+pProcedure = do
+    (name,params,ins,out) <- pProcedureDeclaration <* space
 
-    fail (show (name,params,ins,out))
+    block <- pBlock
+
+    return (Procedure
+        { procedureName = name
+        , procedureParams = params
+        , procedureInput = ins
+        , procedureOutput = out
+        , procedureLabel = Nothing          -- FIXME
+        , procedureDescription = Nothing    -- FIXME
+        , procedureBlock = block
+        })
