@@ -266,12 +266,15 @@ pStatement =
 
 pBlock :: Parser Block
 pBlock = do
-    void (char '{' <* skipSpace <* optional newline <* skipSpace)
+    -- open block, absorb whitespace
+    void (char '{' <* space)
 
+    -- process statements, but only single newline at a time
     statements <- many
          (pStatement <* skipSpace <* optional newline <* skipSpace)
 
-    void (char '}')
+    -- close block, and wipe out any trailing whitespace
+    void (char '}' <* space)
 
     return (Block statements)
 
