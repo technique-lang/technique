@@ -94,13 +94,13 @@ pProcedureDeclaration = do
     name <- pIdentifier
     skipSpace
     -- zero or more separated by comma
-    params <- sepBy pIdentifier (char ',')
+    params <- sepBy pIdentifier (char ',' <* skipSpace)
 
     skipSpace
     void (char ':')
     skipSpace
 
-    ins <- sepBy pType (char ',')
+    ins <- sepBy pType (char ',' <* skipSpace)
 
     skipSpace
     void (string "->")
@@ -116,6 +116,7 @@ pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
     first <- lowerChar
     remainder <- many identifierChar
+    skipSpace
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
@@ -125,6 +126,7 @@ pType :: Parser Type
 pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
+    skipSpace
     return (Type (singletonRope first <> intoRope remainder))
 
 

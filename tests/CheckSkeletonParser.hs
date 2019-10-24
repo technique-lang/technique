@@ -185,3 +185,26 @@ checkSkeletonParser = do
                     [ (Assignment (Identifier "answer") (Literal (Number 42)))
                     , Series
                     ])
+
+    describe "Parses a procedure declaration" $ do
+        it "simple declaration " $ do
+            parseMaybe pProcedureDeclaration "f x : X -> Y"
+                `shouldBe` Just (Identifier "f", [Identifier "x"], [Type "X"], Type "Y")
+
+        it "declaration with multiple variables and input types" $ do
+            parseMaybe pProcedureDeclaration "after_dinner i,s,w : IceCream,Strawberries,Waffles -> Dessert"
+                `shouldBe` Just
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , Type "Dessert"
+                    )
+
+        it "handles spurious whitespace" $ do
+            parseMaybe pProcedureDeclaration "after_dinner   i ,s ,w  :  IceCream ,Strawberries,  Waffles -> Dessert"
+                `shouldBe` Just
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , Type "Dessert"
+                    )
