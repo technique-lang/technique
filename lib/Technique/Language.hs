@@ -78,7 +78,7 @@ data Statement
 data Expression
     = Application Identifier Expression     -- this had better turn out to be a procedure
     | Literal Quantity
-    | Table Tablet
+    | Object Tablet
     | Variable Identifier
     | Operation Operator Expression Expression
     | Grouping Expression

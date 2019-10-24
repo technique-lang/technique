@@ -117,6 +117,20 @@ checkSkeletonParser = do
                     (Variable (Identifier "x"))
                     (Variable (Identifier "y")))
 
+        it "handles a single line tablet" $ do
+            parseMaybe pExpression "[ \"King\" ~ george ]"
+                `shouldBe` Just (Object (Tablet
+                    [ Binding "King" (Variable (Identifier "george"))
+                    ]))
+
+        it "handles a tablet with multiple bindings" $ do
+            parseMaybe pExpression "[ \"first\" ~ \"George\" \n \"last\" ~ \"Windsor\" ]"
+                `shouldBe` Just (Object (Tablet
+                    [ Binding "first" (Literal (Text "George"))
+                    , Binding "last" (Literal (Text "Windsor"))
+                    ]))
+
+
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
             parseMaybe pStatement "\n" `shouldBe` Just Blank

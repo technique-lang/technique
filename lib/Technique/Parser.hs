@@ -168,6 +168,7 @@ numberLiteral = label "a number literal" $ do
         Just _ -> negate number
         Nothing -> number)
 
+-- FIXME handle other constructors
 pQuantity :: Parser Quantity
 pQuantity = do
     try (do
@@ -183,6 +184,25 @@ pOperator =
     (char '|' *> return WaitEither) <|>
     (char '+' *> return Combine)
 
+pTablet :: Parser Tablet
+pTablet = do
+    void (char '[' <* space)
+
+    bindings <- many
+        (pBinding <* skipSpace <* optional newline <* skipSpace)
+
+    void (char ']' <* space)
+
+    return (Tablet bindings)
+  where
+    pBinding = do
+        name <- stringLiteral
+        skipSpace
+        void (char '~')
+        skipSpace
+        subexpr <- pExpression
+        return (Binding (intoRope name) subexpr)
+
 
 pExpression :: Parser Expression
 pExpression = do
@@ -197,6 +217,7 @@ pExpression = do
         try pNone <|>
         try pUndefined <|>
         try pGrouping <|>
+        try pObject <|>
         try pApplication <|>
         try pLiteral <|>
         try pVariable
@@ -216,6 +237,9 @@ pExpression = do
         between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
+    pObject = do
+        tablet <- pTablet
+        return (Object tablet)
     pApplication = do
         name <- pIdentifier
         -- ie at least one space

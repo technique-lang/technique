@@ -116,7 +116,7 @@ exampleRoastTurkey =
                             (Identifier "record")
                             (Literal (Text "Probe bird temperature")))
                     , Execute
-                        (Table
+                        (Object
                             (Tablet
                                 [ Binding "Final temperature" (Variable (Identifier "temp")) ]))
                     ])

@@ -136,7 +136,7 @@ instance Render Expression where
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
         Literal qty ->
             intoDocA qty
-        Table tablet ->
+        Object tablet ->
             intoDocA tablet
         Variable var ->
             intoDocA var
