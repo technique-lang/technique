@@ -4,11 +4,12 @@
 
 import Core.Program
 import Core.Text
-import Technique.Procedure ()
+
+import TechniqueUser (commandCheckTechnique)
 
 program :: Program None ()
 program = do
-    write "Start"
+    commandCheckTechnique
 
 version :: Version
 version = $(fromPackage)
@@ -20,7 +21,7 @@ main = do
             [ Option "watch" Nothing Empty [quote|
                 Watch the given procedure file and recompile if changes are detected.
               |]
-            , Argument "file" [quote|
+            , Argument "filename" [quote|
                 The file containing the code for the procedure you want to type-check.
               |]
             ]
