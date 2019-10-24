@@ -16,12 +16,17 @@ version = $(fromPackage)
 main :: IO ()
 main = do
     context <- configure version None (complex
-        [ Command "check" "Syntax- and type-check the given procedure."
+        [ Command "check" "Syntax- and type-check the given procedure"
             [ Option "watch" Nothing Empty [quote|
                 Watch the given procedure file and recompile if changes are detected.
               |]
-            , Argument "procfile" [quote|
+            , Argument "file" [quote|
                 The file containing the code for the procedure you want to type-check.
+              |]
+            ]
+        , Command "format" "Format the given procedure"
+            [ Argument "file" [quote|
+                The file containing the code for the procedure you want to format.
               |]
             ]
         ])
