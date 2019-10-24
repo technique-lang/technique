@@ -169,3 +169,19 @@ checkSkeletonParser = do
                     , Assignment (Identifier "answer") (Literal (Number 42))
                     ])
 
+        it "consumes whitespace in inconvenient places" $ do
+            parseMaybe pBlock "{ \n }"
+                `shouldBe` Just (Block [])
+            parseMaybe pBlock "{ \n x \n }"
+                `shouldBe` Just (Block
+                    [ Execute (Variable (Identifier "x"))
+                    ])
+            parseMaybe pBlock "{ \n (42 )    \n}"
+                `shouldBe` Just (Block
+                    [ Execute (Grouping (Literal (Number 42)))
+                    ])
+            parseMaybe pBlock "{ answer = 42 ; }"
+                `shouldBe` Just (Block
+                    [ (Assignment (Identifier "answer") (Literal (Number 42)))
+                    , Series
+                    ])

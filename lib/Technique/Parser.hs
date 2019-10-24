@@ -191,7 +191,6 @@ pExpression = do
         Just (oper,expr2)   -> return (Operation oper expr1 expr2)
         Nothing             -> return expr1
   where
-    pTerm :: Parser Expression
     pTerm =
         try pNone <|>
         try pUndefined <|>
@@ -206,13 +205,13 @@ pExpression = do
     pUndefined = do
         void (char '?')
         return (Literal Undefined)
-    pOperation2 = do
+    pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
         skipSpace
         subexpr2 <- pExpression
         return (operator,subexpr2)
     pGrouping = do
-        between (char '(' <* skipSpace) (skipSpace *> char ')') $ do
+        between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
     pApplication = do
@@ -259,7 +258,6 @@ pStatement =
         return Blank
 
     pSeries = do
-        skipSpace
         void (char ';')
         skipSpace
         return Series
@@ -268,12 +266,12 @@ pStatement =
 
 pBlock :: Parser Block
 pBlock = do
-    void (char '{' <* skipSpace <* optional newline)
+    void (char '{' <* skipSpace <* optional newline <* skipSpace)
 
     statements <- many
-         (skipSpace *> pStatement <* skipSpace <* optional newline)
+         (pStatement <* skipSpace <* optional newline <* skipSpace)
 
-    void (skipSpace *> char '}')
+    void (char '}')
 
     return (Block statements)
 
