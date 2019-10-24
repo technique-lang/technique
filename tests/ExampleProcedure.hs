@@ -101,9 +101,9 @@ exampleRoastTurkey =
                         (Literal Undefined)
                     , Blank
                     , Execute
-                        (Operation (Operator "&")
+                        (Operation WaitBoth
                             (Variable (Identifier "w1"))
-                            (Grouping (Operation (Operator "|")
+                            (Grouping (Operation WaitEither
                                 (Variable (Identifier "w2"))
                                 (Variable (Identifier "w3")))))
                     , Blank

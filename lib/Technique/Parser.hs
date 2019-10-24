@@ -175,23 +175,43 @@ pQuantity = do
         num <- numberLiteral
         return (Number num))
 
+pOperator :: Parser Operator
+pOperator =
+    (char '&' *> return WaitBoth) <|>
+    (char '|' *> return WaitEither) <|>
+    (char '+' *> return Combine)
+
+
 pExpression :: Parser Expression
-pExpression =
-    try pNone <|>
-    try pUndefined <|>
-    try pGrouping <|>
-    try pApplication <|>
-    try pLiteral <|>
-    try pVariable
+pExpression = do
+    expr1 <- try pTerm
+    skipSpace
+    rest <- optional (pOperation2)
+    case rest of
+        Just (oper,expr2)   -> return (Operation oper expr1 expr2)
+        Nothing             -> return expr1
   where
+    pTerm =
+        try pNone <|>
+        try pUndefined <|>
+        try pGrouping <|>
+        try pApplication <|>
+        try pLiteral <|>
+        try pVariable
+
     pNone = do
         void (string "()")
         return (Literal None)
     pUndefined = do
         void (char '?')
         return (Literal Undefined)
+    pOperation2 = do                    -- 2 as in 2nd half
+        operator <- pOperator
+        skipSpace
+        subexpr2 <- pExpression
+        return (operator,subexpr2)
     pGrouping = do
-        between (char '(') (char ')') $ do
+        between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
     pApplication = do
@@ -238,7 +258,6 @@ pStatement =
         return Blank
 
     pSeries = do
-        skipSpace
         void (char ';')
         skipSpace
         return Series
@@ -247,12 +266,12 @@ pStatement =
 
 pBlock :: Parser Block
 pBlock = do
-    void (char '{' <* skipSpace <* optional newline)
+    void (char '{' <* skipSpace <* optional newline <* skipSpace)
 
     statements <- many
-         (skipSpace *> pStatement <* skipSpace <* optional newline)
+         (pStatement <* skipSpace <* optional newline <* skipSpace)
 
-    void (skipSpace *> char '}')
+    void (char '}')
 
     return (Block statements)
 
