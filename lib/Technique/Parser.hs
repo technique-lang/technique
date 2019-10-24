@@ -184,6 +184,12 @@ pOperator =
     (char '|' *> return WaitEither) <|>
     (char '+' *> return Combine)
 
+{-|
+Parse a Tablet. This follows the same pattern as 'pBlock' below of
+consuming trailing space around delimiters but only single newlines (as
+separator) within.
+-}
+-- TODO this doesn't preserve alternate syntax if employed by user
 pTablet :: Parser Tablet
 pTablet = do
     void (char '[' <* space)
@@ -201,6 +207,9 @@ pTablet = do
         void (char '~')
         skipSpace
         subexpr <- pExpression
+
+        -- handle alternate syntax here
+        void (optional (char ','))
         return (Binding (intoRope name) subexpr)
 
 

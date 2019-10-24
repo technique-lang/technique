@@ -117,19 +117,28 @@ checkSkeletonParser = do
                     (Variable (Identifier "x"))
                     (Variable (Identifier "y")))
 
-        it "handles a single line tablet" $ do
+        it "handles tablet with one binding" $ do
             parseMaybe pExpression "[ \"King\" ~ george ]"
                 `shouldBe` Just (Object (Tablet
                     [ Binding "King" (Variable (Identifier "george"))
                     ]))
 
-        it "handles a tablet with multiple bindings" $ do
+        it "handles tablet with multiple bindings" $ do
             parseMaybe pExpression "[ \"first\" ~ \"George\" \n \"last\" ~ \"Windsor\" ]"
                 `shouldBe` Just (Object (Tablet
                     [ Binding "first" (Literal (Text "George"))
                     , Binding "last" (Literal (Text "Windsor"))
                     ]))
 
+        it "handles tablet with alternate single-line syntax" $
+          let
+            expected = Just (Object (Tablet
+                [ Binding "name" (Variable (Identifier "n"))
+                , Binding "king" (Literal (Number 42))
+                ]))
+          in do
+            parseMaybe pExpression "[\"name\" ~ n,\"king\" ~ 42]" `shouldBe` expected
+            parseMaybe pExpression "[\"name\" ~ n , \"king\" ~ 42]" `shouldBe` expected
 
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
