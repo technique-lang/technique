@@ -20,3 +20,8 @@ commandCheckTechnique = do
             Just file -> file
 
     writeS procfile
+
+commandFormatTechnique :: Program None ()
+commandFormatTechnique = do
+    write "Not yet implemented, sorry"
+    terminate 42

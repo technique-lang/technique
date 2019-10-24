@@ -5,11 +5,10 @@
 import Core.Program
 import Core.Text
 
-import TechniqueUser (commandCheckTechnique)
-
-program :: Program None ()
-program = do
-    commandCheckTechnique
+import TechniqueUser
+    ( commandCheckTechnique
+    , commandFormatTechnique
+    )
 
 version :: Version
 version = $(fromPackage)
@@ -32,3 +31,17 @@ main = do
             ]
         ])
     executeWith context program
+
+program :: Program None ()
+program = do
+    params <- getCommandLine
+    case commandNameFrom params of
+        Nothing -> do
+            write "Illegal state?"
+            terminate 2
+        Just command -> case command of
+            "check"     -> commandCheckTechnique
+            "format"    -> commandFormatTechnique
+            _       -> do
+                write "Unknown command?"
+                terminate 3

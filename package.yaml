@@ -49,7 +49,8 @@ executables:
     ghc-options: -threaded -dynamic
     source-dirs: src
     main: TechniqueMain.hs
-    other-modules: []
+    other-modules:
+     - TechniqueUser
 
 tests:
   check:
