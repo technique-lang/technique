@@ -208,3 +208,14 @@ checkSkeletonParser = do
                     , [Type "IceCream", Type "Strawberries", Type "Waffles"]
                     , Type "Dessert"
                     )
+
+    describe "Parses a complete procedure declaration" $ do
+        it "parses a declaration and block" $ do
+            parseMaybe pProcedure "f : X -> Y\n{ x }\n"
+                `shouldBe` Just (emptyProcedure
+                    { procedureName = Identifier "f"
+                    , procedureInput = [Type "X"]
+                    , procedureOutput = Type "Y"
+                    , procedureBlock = Block [Execute (Variable (Identifier "x"))]
+                    })
+

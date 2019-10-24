@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Technique.Language where
 
 import Core.Text.Rope
@@ -35,6 +37,9 @@ data Type
     = Type Rope
     deriving (Show, Eq)
 
+unitType :: Type
+unitType = Type "()"
+
 data Procedure = Procedure
     { procedureName :: Identifier
     , procedureParams :: [Identifier]
@@ -45,6 +50,17 @@ data Procedure = Procedure
     , procedureBlock :: Block
     }
     deriving (Show, Eq)
+
+emptyProcedure :: Procedure
+emptyProcedure = Procedure
+    { procedureName = Identifier "none"
+    , procedureParams = []
+    , procedureInput = [unitType]
+    , procedureOutput = unitType
+    , procedureLabel = Nothing
+    , procedureDescription = Nothing
+    , procedureBlock = Block []
+    }
 
 data Block = Block [Statement]
     deriving (Show, Eq)

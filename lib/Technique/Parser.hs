@@ -248,7 +248,7 @@ pStatement =
 
     pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
-        proc <- pProcedureFunction
+        proc <- pProcedure
         return (Declaration proc)
 
     pExecute = label "a value to execute" $ do
@@ -280,8 +280,18 @@ pBlock = do
 
     return (Block statements)
 
-pProcedureFunction :: Parser Procedure
-pProcedureFunction = do
-    (name,params,ins,out) <- pProcedureDeclaration
+pProcedure :: Parser Procedure
+pProcedure = do
+    (name,params,ins,out) <- pProcedureDeclaration <* space
 
-    fail (show (name,params,ins,out))
+    block <- pBlock
+
+    return (Procedure
+        { procedureName = name
+        , procedureParams = params
+        , procedureInput = ins
+        , procedureOutput = out
+        , procedureLabel = Nothing          -- FIXME
+        , procedureDescription = Nothing    -- FIXME
+        , procedureBlock = block
+        })
