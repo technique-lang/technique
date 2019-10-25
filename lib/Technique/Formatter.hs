@@ -6,7 +6,7 @@
 
 module Technique.Formatter where
 
-import Core.Text.Rope ()
+import Core.Text.Rope
 import Core.Text.Utilities
 import Data.Foldable (foldl')
 import Data.Text.Prettyprint.Doc

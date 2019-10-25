@@ -11,7 +11,8 @@ import Control.Monad (forever, void)
 import Core.Program
 import Core.Text
 import Core.System
-import Technique.Procedure ()
+import Technique.Language
+import Technique.Formatter ()
 import Technique.Parser
 
 import Text.Megaparsec
@@ -41,6 +42,18 @@ commandCheckTechnique = do
 
 syntaxCheck :: FilePath -> Program None ()
 syntaxCheck procfile = do
+    result <- loadProcedure procfile
+    case result of
+        Right _ -> do
+            write "Ok"
+        Left err -> do
+            write err
+
+{-|
+Load an parse a procedure file
+-}
+loadProcedure :: FilePath -> Program None (Either Rope Procedure)
+loadProcedure procfile = do
     event "Read procedure file"
     contents <- liftIO $ withFile procfile ReadMode hInput
 
@@ -52,15 +65,25 @@ syntaxCheck procfile = do
     -- this better if/when we come up with an effecient Stream Rope
     -- instance so megaparsec can use Rope directly.
 
+    -- FIXME parse whole file not just a procedure FIXME
     let result = parse pProcedure procfile (fromRope (intoRope contents))
     case result of
-        Right _ -> do
-            write "Ok"
-        Left err -> do
-            write (intoRope (errorBundlePretty err))
+        Right procedure -> return (Right procedure)
+        Left err -> return (Left (intoRope (errorBundlePretty err)))
+
 
 
 commandFormatTechnique :: Program None ()
 commandFormatTechnique = do
-    write "Not yet implemented, sorry"
-    terminate 42
+    params <- getCommandLine
+
+    let procfile = case lookupArgument "filename" params of
+            Just file   -> file
+            _           -> error "Invalid State"
+
+    result <- loadProcedure procfile
+    case result of
+        Right procedure -> do
+            write (renderNoAnsi 80 procedure)
+        Left err -> do
+            write err

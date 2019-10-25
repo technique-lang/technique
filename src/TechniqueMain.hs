@@ -25,7 +25,7 @@ main = do
               |]
             ]
         , Command "format" "Format the given procedure"
-            [ Argument "file" [quote|
+            [ Argument "filename" [quote|
                 The file containing the code for the procedure you want to format.
               |]
             ]
