@@ -45,6 +45,7 @@ library:
 executables:
   technique:
     dependencies:
+     - megaparsec
      - technique
     ghc-options: -threaded -dynamic
     source-dirs: src
