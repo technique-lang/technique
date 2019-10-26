@@ -215,6 +215,20 @@ pTablet = do
         void (optional (char ','))
         return (Binding (intoRope name) subexpr)
 
+pRole :: Parser Role
+pRole =
+    (do
+        void (char '@')
+        (do
+            void (char '*')
+            return Any) <|> (do
+            role <- pIdentifier
+            return (Role role)))
+    <|>
+    (do
+        void (char '#')
+        place <- pIdentifier
+        return (Place place))
 
 pExpression :: Parser Expression
 pExpression = do

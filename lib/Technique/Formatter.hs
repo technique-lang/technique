@@ -153,6 +153,9 @@ instance Render Identifier where
     intoDocA (Identifier name) =
         annotate VariableToken (pretty name)
 
+instance Pretty Identifier where
+    pretty = unAnnotate . intoDocA
+
 instance Render Quantity where
     type Token Quantity = TechniqueToken
     colourize = colourizeTechnique
