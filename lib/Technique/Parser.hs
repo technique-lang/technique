@@ -147,6 +147,14 @@ stringLiteral = label "a string literal" $ do
     void (char '\"')
     return (T.pack str)
 
+unitChar :: Parser Char
+unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
+
+unitLiteral :: Parser Text
+unitLiteral = label "a unit literal" $ do
+    str <- some unitChar
+    return (T.pack str)
+
 -- FIXME change this to numbers with decimal points!
 -- FIXME read? Really?
 numberLiteral :: Parser Int
@@ -164,6 +172,11 @@ pQuantity = do
     try (do
         str <- stringLiteral
         return (Text (intoRope str)))
+    <|> try (do
+        num <- numberLiteral
+        skipSpace1
+        symbol <- unitLiteral
+        return (Quantity num (intoRope symbol)))
     <|> try (do
         num <- numberLiteral
         return (Number num))
@@ -204,10 +217,10 @@ pTablet = do
 
 
 pExpression :: Parser Expression
-pExpression = try $ do
+pExpression = do
     expr1 <- pTerm
     skipSpace
-    rest <- (optional (pOperation2))
+    rest <- (optional (try pOperation2))
     skipSpace
     case rest of
         Just (oper,expr2)   -> return (Operation oper expr1 expr2)
