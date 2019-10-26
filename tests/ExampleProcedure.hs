@@ -81,9 +81,9 @@ exampleRoastTurkey =
     i = Type "Ingredients"
     o = Type "Turkey"
     celsius = "°C"
-    chef = Role "chef"
+    chef = Role (Identifier "chef")
     block = Block
-                [ Attribute chef (Block
+                [ Execute (Restriction chef (Block
                     [ Assignment
                         (Identifier "preheat")
                         (Application
@@ -118,7 +118,7 @@ exampleRoastTurkey =
                             (Tablet
                                 [ Binding "Final temperature" (Variable (Identifier "temp")) ]))
                     ])
-                ]
+                )]
   in
     Procedure
         { procedureName = Identifier "roast_turkey"

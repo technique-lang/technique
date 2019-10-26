@@ -215,6 +215,21 @@ pTablet = do
         void (optional (char ','))
         return (Binding (intoRope name) subexpr)
 
+pAttribute :: Parser Attribute
+pAttribute =
+    (do
+        void (char '@')
+        role <- pIdentifier <|> pAny
+        return (Role role))
+    <|>
+    (do
+        void (char '#')
+        place <- pIdentifier <|> pAny
+        return (Place place))
+  where
+    pAny = do
+        void (char '*')
+        return (Identifier (singletonRope '*'))
 
 pExpression :: Parser Expression
 pExpression = do
@@ -229,6 +244,7 @@ pExpression = do
     pTerm =
         try pNone <|>
         try pUndefined <|>
+        try pRestriction <|>
         try pGrouping <|>
         try pObject <|>
         try pApplication <|>
@@ -248,6 +264,12 @@ pExpression = do
         skipSpace
         subexpr2 <- pExpression
         return (operator,subexpr2)
+
+    pRestriction = do
+        attr <- pAttribute
+        space
+        block <- pBlock
+        return (Restriction attr block)
 
     pGrouping = do
         between (char '(' <* skipSpace) (char ')') $ do
