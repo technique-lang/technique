@@ -243,6 +243,7 @@ pExpression = do
     pTerm =
         try pNone <|>
         try pUndefined <|>
+        try pAttribute <|>
         try pGrouping <|>
         try pObject <|>
         try pApplication <|>
@@ -262,6 +263,12 @@ pExpression = do
         skipSpace
         subexpr2 <- pExpression
         return (operator,subexpr2)
+
+    pAttribute = do
+        role <- pRole
+        space
+        block <- pBlock
+        return (Attribute role block)
 
     pGrouping = do
         between (char '(' <* skipSpace) (char ')') $ do

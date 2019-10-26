@@ -70,7 +70,6 @@ data Statement
     | Execute Expression
     | Comment Rope
     | Declaration Procedure
-    | Attribute Role Block     -- Role, Location, and ...?
     | Blank
     | Series
     deriving (Show, Eq)
@@ -82,6 +81,7 @@ data Expression
     | Variable Identifier
     | Operation Operator Expression Expression
     | Grouping Expression
+    | Attribute Role Block
     deriving (Show, Eq)
 
 data Tablet
