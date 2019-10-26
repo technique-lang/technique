@@ -3,12 +3,10 @@
 
 module ExampleProcedure where
 
-import Core.Data.Structures
 import Core.Text.Rope ()
 import Core.Text.Utilities ()
 import Core.Program.Execute hiding (None)
 import Core.Program.Logging
-import Data.Maybe (fromJust)
 
 import Technique.Language
 import Technique.Quantity
@@ -82,7 +80,7 @@ exampleRoastTurkey =
   let
     i = Type "Ingredients"
     o = Type "Turkey"
-    celsius = fromJust (lookupKeyValue "°C" units)
+    celsius = "°C"
     chef = Role "chef"
     block = Block
                 [ Attribute chef (Block

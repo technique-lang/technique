@@ -91,6 +91,19 @@ checkSkeletonParser = do
             parseMaybe numberLiteral "0" `shouldBe` Just 0
             parseMaybe numberLiteral "1a" `shouldBe` Nothing
 
+
+    describe "Parses quantities" $ do
+        it "quoted string is a Text" $ do
+            parseMaybe pQuantity "\"Hello world\"" `shouldBe` Just (Text "Hello world")
+            parseMaybe pQuantity "\"\"" `shouldBe` Just (Text "")
+
+        it "number is a Number" $ do
+            parseMaybe pQuantity "42" `shouldBe` Just (Number 42)
+            parseMaybe pQuantity "-42" `shouldBe` Just (Number (-42))
+
+        it "quantity with units is a Quantity" $ do
+            parseMaybe pQuantity "149 kg" `shouldBe` Just (Quantity 149 "kg")
+
     describe "Parses expressions" $ do
         it "an empty input an error" $ do
             parseMaybe pExpression "" `shouldBe` Nothing
@@ -100,6 +113,10 @@ checkSkeletonParser = do
 
         it "a bare identifier is a Variable" $ do
             parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))
+
+        it "an identifier, space, and then expression is an Application" $ do
+            parseMaybe pExpression "a x"
+                `shouldBe` Just (Application (Identifier "x") (Variable (Identifier "x")))
 
         it "a quoted string is a Literal Text" $ do
             parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Literal (Text "Hello world"))

@@ -132,16 +132,6 @@ pType = label "a valid type" $ do
 
 ---------------------------------------------------------------------
 
--- TODO What is special about L.charLiteral vs just using normal parsers?
-
-stringLiteral0 :: Parser Text
-stringLiteral0 = do
-    void (char '\"')
-    str <- takeWhileP Nothing (/= '"')
-    notFollowedBy eol
-    void (char '\"')
-    return str
-
 stringLiteral :: Parser Text
 stringLiteral = label "a string literal" $ do
     void (char '\"')

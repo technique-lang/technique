@@ -164,7 +164,7 @@ instance Render Quantity where
         Number i ->
             annotate QuantityToken (pretty i)
         Quantity i unit ->
-            annotate QuantityToken (pretty i <+> pretty (unitSymbol unit))
+            annotate QuantityToken (pretty i <+> pretty unit)
         Text text ->
             annotate SymbolToken dquote <>
             annotate StringToken (pretty text) <>
