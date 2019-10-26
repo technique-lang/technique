@@ -14,6 +14,7 @@ import Core.System
 import Technique.Language
 import Technique.Formatter ()
 import Technique.Parser
+import System.IO (hIsTerminalDevice)
 
 import Text.Megaparsec
 
@@ -84,6 +85,10 @@ commandFormatTechnique = do
     result <- loadProcedure procfile
     case result of
         Right procedure -> do
-            write (renderNoAnsi 80 procedure)
+            terminal <- liftIO $ hIsTerminalDevice stdout
+            case terminal of
+                True    -> writeR procedure
+                False   -> write (renderNoAnsi 80 procedure)
+
         Left err -> do
             write err

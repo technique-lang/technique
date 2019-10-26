@@ -45,3 +45,4 @@ program = do
             _       -> do
                 write "Unknown command?"
                 terminate 3
+    event "Done"
