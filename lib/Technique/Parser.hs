@@ -94,13 +94,13 @@ pProcedureDeclaration = do
     name <- pIdentifier
     skipSpace
     -- zero or more separated by comma
-    params <- sepBy pIdentifier (char ',' <* skipSpace)
+    params <- sepBy (pIdentifier <* skipSpace) (char ',' <* skipSpace)
 
     skipSpace
     void (char ':')
     skipSpace
 
-    ins <- sepBy pType (char ',' <* skipSpace)
+    ins <- sepBy (pType <* skipSpace) (char ',' <* skipSpace)
 
     skipSpace
     void (string "->")
@@ -112,11 +112,12 @@ pProcedureDeclaration = do
 identifierChar :: Parser Char
 identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
+
+-- these do NOT consume trailing space. That's for pExpression to do.
 pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
     first <- lowerChar
     remainder <- many identifierChar
-    skipSpace
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
@@ -126,7 +127,6 @@ pType :: Parser Type
 pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
-    skipSpace
     return (Type (singletonRope first <> intoRope remainder))
 
 
@@ -204,10 +204,11 @@ pTablet = do
 
 
 pExpression :: Parser Expression
-pExpression = do
-    expr1 <- try pTerm
+pExpression = try $ do
+    expr1 <- pTerm
     skipSpace
-    rest <- optional (pOperation2)
+    rest <- (optional (pOperation2))
+    skipSpace
     case rest of
         Just (oper,expr2)   -> return (Operation oper expr1 expr2)
         Nothing             -> return expr1
@@ -224,21 +225,26 @@ pExpression = do
     pNone = do
         void (string "()")
         return (Literal None)
+
     pUndefined = do
         void (char '?')
         return (Literal Undefined)
+
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
         skipSpace
         subexpr2 <- pExpression
         return (operator,subexpr2)
+
     pGrouping = do
         between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
+
     pObject = do
         tablet <- pTablet
         return (Object tablet)
+
     pApplication = do
         name <- pIdentifier
         -- ie at least one space
@@ -246,9 +252,11 @@ pExpression = do
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
         return (Application name subexpr)
+
     pLiteral = do
         qty <- pQuantity
         return (Literal qty)
+
     pVariable = do
         name <- pIdentifier
         return (Variable name)
