@@ -23,9 +23,8 @@ data Identifier
 -- newlines, perhaps.
 type Label = Rope
 
-data Role
-    = Any
-    | Role Identifier
+data Attribute
+    = Role Identifier
     | Place Identifier
     deriving (Show, Eq)
 
@@ -81,7 +80,7 @@ data Expression
     | Variable Identifier
     | Operation Operator Expression Expression
     | Grouping Expression
-    | Attribute Role Block
+    | Restriction Attribute Block
     deriving (Show, Eq)
 
 data Tablet

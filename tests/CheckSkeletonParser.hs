@@ -104,6 +104,15 @@ checkSkeletonParser = do
         it "a quantity with units is a Quantity" $ do
             parseMaybe pQuantity "149 kg" `shouldBe` Just (Quantity 149 "kg")
 
+    describe "Parses attributes" $ do
+        it "recognizes a role marker" $ do
+            parseMaybe pAttribute "@butler" `shouldBe` Just (Role (Identifier "butler"))
+        it "recognizes a place marker" $ do
+            parseMaybe pAttribute "#library" `shouldBe` Just (Place (Identifier "library"))
+        it "recognizes any" $ do
+            parseMaybe pAttribute "@*" `shouldBe` Just (Role (Identifier "*"))
+            parseMaybe pAttribute "#*" `shouldBe` Just (Place (Identifier "*"))
+
     describe "Parses expressions" $ do
         it "an empty input an error" $ do
             parseMaybe pExpression "" `shouldBe` Nothing

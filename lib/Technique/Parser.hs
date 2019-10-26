@@ -115,10 +115,14 @@ identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
 -- these do NOT consume trailing space. That's for pExpression to do.
 pIdentifier :: Parser Identifier
-pIdentifier = label "a valid identifier" $ do
-    first <- lowerChar
-    remainder <- many identifierChar
-    return (Identifier (singletonRope first <> intoRope remainder))
+pIdentifier = label "a valid identifier" $
+    (do
+        first <- lowerChar
+        remainder <- many identifierChar
+        return (Identifier (singletonRope first <> intoRope remainder))) <|>
+    (do
+        void (char '*')
+        return (Identifier (singletonRope '*')))
 
 typeChar :: Parser Char
 typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
@@ -215,15 +219,12 @@ pTablet = do
         void (optional (char ','))
         return (Binding (intoRope name) subexpr)
 
-pRole :: Parser Role
-pRole =
+pAttribute :: Parser Attribute
+pAttribute =
     (do
         void (char '@')
-        (do
-            void (char '*')
-            return Any) <|> (do
-            role <- pIdentifier
-            return (Role role)))
+        role <- pIdentifier
+        return (Role role))
     <|>
     (do
         void (char '#')
@@ -243,7 +244,7 @@ pExpression = do
     pTerm =
         try pNone <|>
         try pUndefined <|>
-        try pAttribute <|>
+        try pRestriction <|>
         try pGrouping <|>
         try pObject <|>
         try pApplication <|>
@@ -264,11 +265,11 @@ pExpression = do
         subexpr2 <- pExpression
         return (operator,subexpr2)
 
-    pAttribute = do
-        role <- pRole
+    pRestriction = do
+        attr <- pAttribute
         space
         block <- pBlock
-        return (Attribute role block)
+        return (Restriction attr block)
 
     pGrouping = do
         between (char '(' <* skipSpace) (char ')') $ do

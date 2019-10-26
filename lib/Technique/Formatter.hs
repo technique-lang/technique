@@ -111,20 +111,15 @@ instance Render Statement where
             "-- " <> pretty text  -- TODO what about multiple lines?
         Declaration proc ->
             intoDocA proc
-        Attribute role block ->
-            intoDocA role <>
-            line <>
-            intoDocA block        -- TODO some nesting?
         Blank ->
             emptyDoc
         Series ->
             annotate SymbolToken " ; "
 
-instance Render Role where
-    type Token Role = TechniqueToken
+instance Render Attribute where
+    type Token Attribute = TechniqueToken
     colourize = colourizeTechnique
     intoDocA role =  case role of
-        Any -> annotate RoleToken "@*"
         Role name -> annotate RoleToken ("@" <> pretty name)
         Place name -> annotate RoleToken ("#" <> pretty name)
 
@@ -146,6 +141,10 @@ instance Render Expression where
             annotate SymbolToken lparen <>
             intoDocA subexpr <>
             annotate SymbolToken rparen
+        Restriction attribute block ->
+            intoDocA attribute <>
+            line <>
+            intoDocA block        -- TODO some nesting?
 
 instance Render Identifier where
     type Token Identifier = TechniqueToken
