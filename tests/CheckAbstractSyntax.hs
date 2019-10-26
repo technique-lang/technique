@@ -6,10 +6,8 @@ module CheckAbstractSyntax
     )
 where
 
-import Core.Data.Structures
 import Core.Text.Rope ()
 import Core.Text.Utilities
-import Data.Maybe (fromJust)
 import Data.Text.Prettyprint.Doc (line)
 import Test.Hspec
 
@@ -47,10 +45,9 @@ checkAbstractSyntax = do
 
         it "renders a tablet as expected" $
           let
-            hours = fromJust (lookupKeyValue "hr" units)
             tablet = Tablet
                         [ Binding "Final temperature" (Variable (Identifier "temp"))
-                        , Binding "Cooking time" (Grouping (Literal (Quantity 3 hours)))
+                        , Binding "Cooking time" (Grouping (Literal (Quantity 3 "hr")))
                         ]
           in do
             renderTest tablet `shouldBe` [quote|

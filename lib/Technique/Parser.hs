@@ -94,13 +94,13 @@ pProcedureDeclaration = do
     name <- pIdentifier
     skipSpace
     -- zero or more separated by comma
-    params <- sepBy pIdentifier (char ',' <* skipSpace)
+    params <- sepBy (pIdentifier <* skipSpace) (char ',' <* skipSpace)
 
     skipSpace
     void (char ':')
     skipSpace
 
-    ins <- sepBy pType (char ',' <* skipSpace)
+    ins <- sepBy (pType <* skipSpace) (char ',' <* skipSpace)
 
     skipSpace
     void (string "->")
@@ -112,11 +112,12 @@ pProcedureDeclaration = do
 identifierChar :: Parser Char
 identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
+
+-- these do NOT consume trailing space. That's for pExpression to do.
 pIdentifier :: Parser Identifier
 pIdentifier = label "a valid identifier" $ do
     first <- lowerChar
     remainder <- many identifierChar
-    skipSpace
     return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
@@ -126,21 +127,10 @@ pType :: Parser Type
 pType = label "a valid type" $ do
     first <- upperChar
     remainder <- many typeChar
-    skipSpace
     return (Type (singletonRope first <> intoRope remainder))
 
 
 ---------------------------------------------------------------------
-
--- TODO What is special about L.charLiteral vs just using normal parsers?
-
-stringLiteral0 :: Parser Text
-stringLiteral0 = do
-    void (char '\"')
-    str <- takeWhileP Nothing (/= '"')
-    notFollowedBy eol
-    void (char '\"')
-    return str
 
 stringLiteral :: Parser Text
 stringLiteral = label "a string literal" $ do
@@ -155,6 +145,14 @@ stringLiteral = label "a string literal" $ do
             printChar)
         )
     void (char '\"')
+    return (T.pack str)
+
+unitChar :: Parser Char
+unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
+
+unitLiteral :: Parser Text
+unitLiteral = label "a unit literal" $ do
+    str <- some unitChar
     return (T.pack str)
 
 -- FIXME change this to numbers with decimal points!
@@ -174,6 +172,11 @@ pQuantity = do
     try (do
         str <- stringLiteral
         return (Text (intoRope str)))
+    <|> try (do
+        num <- numberLiteral
+        skipSpace1
+        symbol <- unitLiteral
+        return (Quantity num (intoRope symbol)))
     <|> try (do
         num <- numberLiteral
         return (Number num))
@@ -215,9 +218,10 @@ pTablet = do
 
 pExpression :: Parser Expression
 pExpression = do
-    expr1 <- try pTerm
+    expr1 <- pTerm
     skipSpace
-    rest <- optional (pOperation2)
+    rest <- (optional (try pOperation2))
+    skipSpace
     case rest of
         Just (oper,expr2)   -> return (Operation oper expr1 expr2)
         Nothing             -> return expr1
@@ -234,21 +238,26 @@ pExpression = do
     pNone = do
         void (string "()")
         return (Literal None)
+
     pUndefined = do
         void (char '?')
         return (Literal Undefined)
+
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
         skipSpace
         subexpr2 <- pExpression
         return (operator,subexpr2)
+
     pGrouping = do
         between (char '(' <* skipSpace) (char ')') $ do
             subexpr <- pExpression
             return (Grouping subexpr)
+
     pObject = do
         tablet <- pTablet
         return (Object tablet)
+
     pApplication = do
         name <- pIdentifier
         -- ie at least one space
@@ -256,9 +265,11 @@ pExpression = do
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
         return (Application name subexpr)
+
     pLiteral = do
         qty <- pQuantity
         return (Literal qty)
+
     pVariable = do
         name <- pIdentifier
         return (Variable name)
