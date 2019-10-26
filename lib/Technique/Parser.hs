@@ -115,14 +115,10 @@ identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
 
 -- these do NOT consume trailing space. That's for pExpression to do.
 pIdentifier :: Parser Identifier
-pIdentifier = label "a valid identifier" $
-    (do
-        first <- lowerChar
-        remainder <- many identifierChar
-        return (Identifier (singletonRope first <> intoRope remainder))) <|>
-    (do
-        void (char '*')
-        return (Identifier (singletonRope '*')))
+pIdentifier = label "a valid identifier" $ do
+    first <- lowerChar
+    remainder <- many identifierChar
+    return (Identifier (singletonRope first <> intoRope remainder))
 
 typeChar :: Parser Char
 typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
@@ -223,13 +219,17 @@ pAttribute :: Parser Attribute
 pAttribute =
     (do
         void (char '@')
-        role <- pIdentifier
+        role <- pIdentifier <|> pAny
         return (Role role))
     <|>
     (do
         void (char '#')
-        place <- pIdentifier
+        place <- pIdentifier <|> pAny
         return (Place place))
+  where
+    pAny = do
+        void (char '*')
+        return (Identifier (singletonRope '*'))
 
 pExpression :: Parser Expression
 pExpression = do
