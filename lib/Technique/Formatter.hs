@@ -76,7 +76,7 @@ instance Render Procedure where
 punctuate a list with commas annotated with Symbol highlighting.
 -}
 commaCat :: (Render a, Token a ~ TechniqueToken)  => [a] -> Doc (Token a)
-commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap intoDocA
+commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap (annotate VariableToken . intoDocA)
 
 instance Render Type where
     type Token Type = TechniqueToken
@@ -104,7 +104,7 @@ instance Render Statement where
     colourize = colourizeTechnique
     intoDocA statement = case statement of
         Assignment var expr ->
-            intoDocA var <+> annotate SymbolToken "=" <+> intoDocA expr
+            annotate VariableToken (intoDocA var) <+> annotate SymbolToken "=" <+> intoDocA expr
         Execute expr ->
             intoDocA expr
         Comment text ->
@@ -142,7 +142,7 @@ instance Render Expression where
         Object tablet ->
             intoDocA tablet
         Variable var ->
-            intoDocA var
+            annotate VariableToken (intoDocA var)
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
         Grouping subexpr ->
@@ -157,8 +157,7 @@ instance Render Expression where
 instance Render Identifier where
     type Token Identifier = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Identifier name) =
-        annotate VariableToken (pretty name)
+    intoDocA (Identifier name) = pretty name
 
 instance Pretty Identifier where
     pretty = unAnnotate . intoDocA
