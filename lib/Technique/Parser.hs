@@ -62,10 +62,10 @@ pSpdxLine = do
     void (char '!') <?> "second line to begin with ! character"
     void spaceChar <?> "a space character"
 
-    license <- takeWhile1P (Just "software license description (ie an SPDX-Licence-Header value)") (\c -> not (c == ',' || c == '\n'))
+    license <- takeWhile1P (Just "software license description (ie an SPDX-Licence-Header value)") (\c -> not (c == ';' || c == '\n'))
 
     copyright <- optional $ do
-        void (char ',') <?> "a comma"
+        void (char ';') <?> "a semicolon"
         hidden $ skipMany (spaceChar <?> "a space character")
         void (char '©') <|> void (string "(c)")
         void (spaceChar <?> "a space character")
@@ -73,19 +73,6 @@ pSpdxLine = do
 
     void newline
     return (license,copyright)
-
-pProcfileHeader :: Parser Technique
-pProcfileHeader = do
-    version <- pMagicLine
-    unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
-    (license,copyright) <- pSpdxLine
-
-    return $ Technique
-        { techniqueVersion = version
-        , techniqueLicense = intoRope license
-        , techniqueCopyright = fmap intoRope copyright
-        , techniqueBody = []
-        }
 
 ---------------------------------------------------------------------
 
@@ -361,3 +348,21 @@ pProcedure = do
         , procedureDescription = Nothing    -- FIXME
         , procedureBlock = block
         })
+
+---------------------------------------------------------------------
+
+pTechnique :: Parser Technique
+pTechnique = do
+    version <- pMagicLine
+    unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
+    (license,copyright) <- pSpdxLine
+    void space
+
+    body <- many (pProcedure <* space)
+
+    return $ Technique
+        { techniqueVersion = version
+        , techniqueLicense = intoRope license
+        , techniqueCopyright = fmap intoRope copyright
+        , techniqueBody = body
+        }

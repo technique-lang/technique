@@ -208,3 +208,19 @@ instance Render Operator where
             WaitBoth ->     pretty '&'
             WaitEither ->   pretty '|'
             Combine ->      pretty '+'
+
+instance Render Technique where
+    type Token Technique = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA technique =
+      let
+        version = pretty . techniqueVersion $ technique
+        license = pretty . techniqueLicense $ technique
+        copyright = case techniqueCopyright technique of
+            Just owner  -> "; ©" <+> pretty owner
+            Nothing     -> emptyDoc
+        body = fmap intoDocA . techniqueBody $ technique
+      in
+        annotate SymbolToken ("%" <+> "technique" <+> "v" <> version) <> line <>
+        annotate SymbolToken ("!" <+> license <> copyright) <> line <> line <>
+        vsep body

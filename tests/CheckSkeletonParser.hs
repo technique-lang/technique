@@ -42,7 +42,7 @@ checkSkeletonParser = do
             parseMaybe pSpdxLine "! Public-Domain, (c) \n" `shouldBe` Nothing
 
         it "correctly parses a complete technique program header" $ do
-            parseMaybe pProcfileHeader [quote|
+            parseMaybe pTechnique [quote|
 % technique v0
 ! BSD-3-Clause
             |] `shouldBe` Just (Technique
