@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 
 module Technique.Quantity
 (
@@ -13,13 +14,19 @@ module Technique.Quantity
 
 import Core.Text.Rope
 import Core.Data.Structures
+import Data.Int (Int8)
 
 data Quantity
-    = Number Int                -- FIXME not Int
-    | Quantity Int Symbol
+    = Number Int
+    | Quantity Decimal Symbol
+    | Measured Decimal Decimal Resolution Magnitude Symbol
     deriving (Show, Eq)
 
 type Symbol = Rope
+
+type Decimal = Int -- switch to Double?
+type Resolution = Int8
+type Magnitude = Int8
 
 units :: Map Symbol Unit
 units =
