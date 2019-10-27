@@ -168,11 +168,8 @@ numberLiteral = label "a number literal" $ do
 
 -- FIXME handle other constructors
 pQuantity :: Parser Quantity
-pQuantity = do
+pQuantity =
     try (do
-        str <- stringLiteral
-        return (Text (intoRope str)))
-    <|> try (do
         num <- numberLiteral
         skipSpace1
         symbol <- unitLiteral
@@ -253,11 +250,11 @@ pExpression = do
 
     pNone = do
         void (string "()")
-        return (Literal None)
+        return None
 
     pUndefined = do
         void (char '?')
-        return (Literal Undefined)
+        return Undefined
 
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
@@ -288,9 +285,13 @@ pExpression = do
         subexpr <- pExpression
         return (Application name subexpr)
 
-    pLiteral = do
-        qty <- pQuantity
-        return (Literal qty)
+    pLiteral =
+        (do
+            str <- stringLiteral
+            return (Text (intoRope str))) <|>
+        (do
+            qty <- pQuantity
+            return (Amount qty))
 
     pVariable = do
         name <- pIdentifier

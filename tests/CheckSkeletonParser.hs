@@ -93,10 +93,6 @@ checkSkeletonParser = do
 
 
     describe "Parses quantities" $ do
-        it "a quoted string is a Text" $ do
-            parseMaybe pQuantity "\"Hello world\"" `shouldBe` Just (Text "Hello world")
-            parseMaybe pQuantity "\"\"" `shouldBe` Just (Text "")
-
         it "a number is a Number" $ do
             parseMaybe pQuantity "42" `shouldBe` Just (Number 42)
             parseMaybe pQuantity "-42" `shouldBe` Just (Number (-42))
@@ -118,7 +114,11 @@ checkSkeletonParser = do
             parseMaybe pExpression "" `shouldBe` Nothing
 
         it "an pair of parentheses is None" $ do
-            parseMaybe pExpression "()" `shouldBe` Just (Literal None)
+            parseMaybe pExpression "()" `shouldBe` Just None
+
+        it "a quoted string is a Text" $ do
+            parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Text "Hello world")
+            parseMaybe pExpression "\"\"" `shouldBe` Just (Text "")
 
         it "a bare identifier is a Variable" $ do
             parseMaybe pExpression "x" `shouldBe` Just (Variable (Identifier "x"))
@@ -128,13 +128,13 @@ checkSkeletonParser = do
                 `shouldBe` Just (Application (Identifier "a") (Variable (Identifier "x")))
 
         it "a quoted string is a Literal Text" $ do
-            parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Literal (Text "Hello world"))
+            parseMaybe pExpression "\"Hello world\"" `shouldBe` Just (Text "Hello world")
 
         it "a bare number is a Literal Number" $ do
-            parseMaybe pExpression "42" `shouldBe` Just (Literal (Number 42))
+            parseMaybe pExpression "42" `shouldBe` Just (Amount (Number 42))
 
         it "a nested expression is parsed as Grouped" $ do
-            parseMaybe pExpression "(42)" `shouldBe` Just (Grouping (Literal (Number 42)))
+            parseMaybe pExpression "(42)" `shouldBe` Just (Grouping (Amount (Number 42)))
 
         it "an operator between two expressions is an Operation" $ do
             parseMaybe pExpression "x & y"
@@ -152,15 +152,15 @@ checkSkeletonParser = do
         it "handles tablet with multiple bindings" $ do
             parseMaybe pExpression "[ \"first\" ~ \"George\" \n \"last\" ~ \"Windsor\" ]"
                 `shouldBe` Just (Object (Tablet
-                    [ Binding "first" (Literal (Text "George"))
-                    , Binding "last" (Literal (Text "Windsor"))
+                    [ Binding "first" (Text "George")
+                    , Binding "last" (Text "Windsor")
                     ]))
 
         it "handles tablet with alternate single-line syntax" $
           let
             expected = Just (Object (Tablet
                 [ Binding "name" (Variable (Identifier "n"))
-                , Binding "king" (Literal (Number 42))
+                , Binding "king" (Amount (Number 42))
                 ]))
           in do
             parseMaybe pExpression "[\"name\" ~ n,\"king\" ~ 42]" `shouldBe` expected
@@ -176,7 +176,7 @@ checkSkeletonParser = do
 
         it "considers a line with an '=' to be an Assignment" $ do
             parseMaybe pStatement "answer = 42"
-                `shouldBe` Just (Assignment (Identifier "answer") (Literal (Number 42)))
+                `shouldBe` Just (Assignment (Identifier "answer") (Amount (Number 42)))
 
     describe "Parses blocks of statements" $ do
         it "an empty block is a [] (special case)" $ do
@@ -192,7 +192,7 @@ checkSkeletonParser = do
                     ])
             parseMaybe pBlock "{\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Assignment (Identifier "answer") (Literal (Number 42))
+                    [ Assignment (Identifier "answer") (Amount (Number 42))
                     ])
 
         it "a block with a blank line contains a Blank" $ do
@@ -207,7 +207,7 @@ checkSkeletonParser = do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just (Block
                     [ Execute (Variable (Identifier "x"))
-                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Assignment (Identifier "answer") (Amount (Number 42))
                     ])
 
         it "a block with multiple statements separated by semicolons" $ do
@@ -215,7 +215,7 @@ checkSkeletonParser = do
                 `shouldBe` Just (Block
                     [ Execute (Variable (Identifier "x"))
                     , Series
-                    , Assignment (Identifier "answer") (Literal (Number 42))
+                    , Assignment (Identifier "answer") (Amount (Number 42))
                     ])
 
         it "consumes whitespace in inconvenient places" $ do
@@ -227,11 +227,11 @@ checkSkeletonParser = do
                     ])
             parseMaybe pBlock "{ \n (42 )    \n}"
                 `shouldBe` Just (Block
-                    [ Execute (Grouping (Literal (Number 42)))
+                    [ Execute (Grouping (Amount (Number 42)))
                     ])
             parseMaybe pBlock "{ answer = 42 ; }"
                 `shouldBe` Just (Block
-                    [ (Assignment (Identifier "answer") (Literal (Number 42)))
+                    [ (Assignment (Identifier "answer") (Amount (Number 42)))
                     , Series
                     ])
 

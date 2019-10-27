@@ -129,8 +129,16 @@ instance Render Expression where
     intoDocA expr = case expr of
         Application name subexpr ->
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
-        Literal qty ->
+        None ->
+            annotate SymbolToken ("()")
+        Undefined ->
+            annotate ErrorToken "?"
+        Amount qty ->
             intoDocA qty
+        Text text ->
+            annotate SymbolToken dquote <>
+            annotate StringToken (pretty text) <>
+            annotate SymbolToken dquote
         Object tablet ->
             intoDocA tablet
         Variable var ->
@@ -159,19 +167,10 @@ instance Render Quantity where
     type Token Quantity = TechniqueToken
     colourize = colourizeTechnique
     intoDocA qty = case qty of
-        None ->
-            annotate SymbolToken ("()")
-        Undefined ->
-            annotate ErrorToken "?"
         Number i ->
             annotate QuantityToken (pretty i)
         Quantity i unit ->
             annotate QuantityToken (pretty i <+> pretty unit)
-        Text text ->
-            annotate SymbolToken dquote <>
-            annotate StringToken (pretty text) <>
-            annotate SymbolToken dquote
-
 
 instance Render Tablet where
     type Token Tablet = TechniqueToken

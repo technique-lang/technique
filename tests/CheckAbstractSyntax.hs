@@ -47,7 +47,7 @@ checkAbstractSyntax = do
           let
             tablet = Tablet
                         [ Binding "Final temperature" (Variable (Identifier "temp"))
-                        , Binding "Cooking time" (Grouping (Literal (Quantity 3 "hr")))
+                        , Binding "Cooking time" (Grouping (Amount (Quantity 3 "hr")))
                         ]
           in do
             renderTest tablet `shouldBe` [quote|
