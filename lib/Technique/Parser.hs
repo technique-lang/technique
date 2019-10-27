@@ -57,22 +57,25 @@ pMagicLine = do
     void newline
     return v
 
-pSpdxLine :: Parser (Text,Maybe Text)
+pSpdxLine :: Parser (Rope,Maybe Rope)
 pSpdxLine = do
     void (char '!') <?> "second line to begin with ! character"
-    void spaceChar <?> "a space character"
+    skipSpace
 
-    license <- takeWhile1P (Just "software license description (ie an SPDX-Licence-Header value)") (\c -> not (c == ';' || c == '\n'))
+    -- I know we're supposed to use takeWhile1P in cases like this, but aren't
+    -- we just duplicating the work of the parser combinators?
+    license <- takeWhile1P
+        (Just "software license description (ie an SPDX-Licence-Header value)")
+        (\c -> not (c == ';' || c == '\n'))
 
     copyright <- optional $ do
         void (char ';') <?> "a semicolon"
-        hidden $ skipMany (spaceChar <?> "a space character")
+        skipSpace
         void (char '©') <|> void (string "(c)")
-        void (spaceChar <?> "a space character")
+        skipSpace
         takeWhile1P (Just "a copyright declaration") (/= '\n')
-
     void newline
-    return (license,copyright)
+    return (intoRope license,fmap intoRope copyright)
 
 ---------------------------------------------------------------------
 
