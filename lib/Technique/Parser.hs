@@ -351,14 +351,20 @@ fourSpaces = -- label "a code block indented by four spaces" $
 
 pMarkdown :: Parser Markdown
 pMarkdown = do
+    -- gobble blank newlines before a heading
+    void (many (do
+        notFollowedBy fourSpaces
+        notFollowedBy pProcedureDeclaration
+        void (skipSpace *> hidden newline)))
+
     -- TODO heading
 
-    results <- many $ do
+    results <- some (do
         notFollowedBy fourSpaces
         notFollowedBy pProcedureDeclaration
         line <- takeWhileP (Just "another line of description text") (/= '\n')
         void (hidden newline)
-        return line
+        return line)
 
     let description = foldl' (\acc text -> appendRope text acc <> "\n") emptyRope results
     return (Markdown description)
@@ -378,7 +384,6 @@ pProcedureCode = do
         , procedureDescription = Nothing
         , procedureBlock = block
         })
-
 
 pProcedure :: Parser Procedure
 pProcedure = do
