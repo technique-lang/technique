@@ -305,7 +305,7 @@ pStatement =
 
     pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
-        proc <- pProcedure
+        proc <- pProcedureCode
         return (Declaration proc)
 
     pExecute = label "a value to execute" $ do
@@ -344,25 +344,30 @@ pBlock = do
 -- this would be better done scanning ahead to count characters until a
 -- declaration shows up, then explicitly taking that many?
 
+fourSpaces :: Parser ()
+fourSpaces = -- label "a code block indented by four spaces" $
+    void (char ' ' <* char ' ' <* char ' ' <* char ' ') <|>
+    fail "code blocks must be indented by four spaces"
+
 pMarkdown :: Parser Markdown
 pMarkdown = do
     -- TODO heading
 
-    results <- manyTill pLine (lookAhead (try pProcedureDeclaration))
+    results <- many $ do
+        notFollowedBy fourSpaces
+        notFollowedBy pProcedureDeclaration
+        line <- takeWhileP (Just "another line of description text") (/= '\n')
+        void (hidden newline)
+        return line
+
     let description = foldl' (\acc text -> appendRope text acc <> "\n") emptyRope results
     return (Markdown description)
-  where
-    pLine = do
-        result <- takeWhileP (Just "a line of description text") (/= '\n')
-        void newline
-        return result
 
-pProcedure :: Parser Procedure
-pProcedure = do
-    description <- optional pMarkdown
-    (name,params,ins,out) <- pProcedureDeclaration <* space
+pProcedureCode :: Parser Procedure
+pProcedureCode = do
+    (name,params,ins,out) <- pProcedureDeclaration <* skipSpace <* optional newline <* skipSpace
 
-    block <- pBlock
+    block <- pBlock <* skipSpace <* optional newline
 
     return (Procedure
         { procedureName = name
@@ -370,8 +375,20 @@ pProcedure = do
         , procedureInput = ins
         , procedureOutput = out
         , procedureLabel = Nothing          -- FIXME
-        , procedureDescription = description
+        , procedureDescription = Nothing
         , procedureBlock = block
+        })
+
+
+pProcedure :: Parser Procedure
+pProcedure = do
+    description <- optional pMarkdown
+    fourSpaces
+    proc <- pProcedureCode
+
+    return (proc
+        { procedureLabel = Nothing          -- FIXME
+        , procedureDescription = description
         })
 
 ---------------------------------------------------------------------
@@ -383,7 +400,7 @@ pTechnique = do
     (license,copyright) <- pSpdxLine
     void space
 
-    body <- many (pProcedure <* space)
+    body <- many pProcedure
 
     return $ Technique
         { techniqueVersion = version

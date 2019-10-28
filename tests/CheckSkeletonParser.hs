@@ -257,9 +257,9 @@ checkSkeletonParser = do
                     , Type "Dessert"
                     )
 
-    describe "Parses a complete procedure declaration" $ do
+    describe "Parses a the code for a complete procedure" $ do
         it "parses a declaration and block" $ do
-            parseMaybe pProcedure "f : X -> Y\n{ x }\n"
+            parseMaybe pProcedureCode "f : X -> Y\n{ x }\n"
                 `shouldBe` Just (emptyProcedure
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
