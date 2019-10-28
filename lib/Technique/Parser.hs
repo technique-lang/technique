@@ -326,14 +326,14 @@ pStatement =
 pBlock :: Parser Block
 pBlock = do
     -- open block, absorb whitespace
-    void (char '{' <* space)
+    void (char '{' <* hidden space)
 
     -- process statements, but only single newline at a time
     statements <- many
          (pStatement <* skipSpace <* optional newline <* skipSpace)
 
     -- close block, and wipe out any trailing whitespace
-    void (char '}' <* space)
+    void (char '}' <* skipSpace <* optional newline)
 
     return (Block statements)
 
@@ -398,7 +398,7 @@ pTechnique = do
     version <- pMagicLine
     unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
     (license,copyright) <- pSpdxLine
-    void space
+    void (many newline)
 
     body <- many pProcedure
 
