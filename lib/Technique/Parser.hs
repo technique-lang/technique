@@ -17,6 +17,7 @@ module Technique.Parser where
 import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
+import Data.Foldable (foldl')
 import Data.Void (Void)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -336,8 +337,29 @@ pBlock = do
 
     return (Block statements)
 
+-- Frankly, this parser looks ridiculous. Someone who knows what they are
+-- doing *please* help refactor this. It seems unavoidlable to run the
+-- pProcedureDeclaration parser twice, unless we can combine the successful
+-- parse and the consumtion of description lines into one function. Maybe
+-- this would be better done scanning ahead to count characters until a
+-- declaration shows up, then explicitly taking that many?
+
+pMarkdown :: Parser Markdown
+pMarkdown = do
+    -- TODO heading
+
+    results <- manyTill pLine (lookAhead (try pProcedureDeclaration))
+    let description = foldl' (\acc text -> appendRope text acc <> "\n") emptyRope results
+    return (Markdown description)
+  where
+    pLine = do
+        result <- takeWhileP (Just "a line of description text") (/= '\n')
+        void newline
+        return result
+
 pProcedure :: Parser Procedure
 pProcedure = do
+    description <- optional pMarkdown
     (name,params,ins,out) <- pProcedureDeclaration <* space
 
     block <- pBlock
@@ -348,7 +370,7 @@ pProcedure = do
         , procedureInput = ins
         , procedureOutput = out
         , procedureLabel = Nothing          -- FIXME
-        , procedureDescription = Nothing    -- FIXME
+        , procedureDescription = description
         , procedureBlock = block
         })
 
