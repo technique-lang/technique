@@ -63,14 +63,19 @@ instance Render Procedure where
         from = commaCat . procedureInput $ proc
         into = intoDocA . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
+        description = case procedureDescription proc of
+            Nothing     -> emptyDoc
+            Just text   -> intoDocA text
       in
-        annotate ProcedureToken name <+>
-        params <+>
-        annotate SymbolToken ":" <+>
-        annotate TypeToken from <+>
-        annotate SymbolToken "->" <+>
-        annotate TypeToken into <>
-        line <> block
+        description <>
+        (indent 4 (
+            annotate ProcedureToken name <+>
+            params <+>
+            annotate SymbolToken ":" <+>
+            annotate TypeToken from <+>
+            annotate SymbolToken "->" <+>
+            annotate TypeToken into <>
+            line <> block))
 
 {-|
 punctuate a list with commas annotated with Symbol highlighting.
@@ -82,6 +87,11 @@ instance Render Type where
     type Token Type = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Type name) = annotate TypeToken (pretty name)
+
+instance Render Markdown where
+    type Token Markdown = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Markdown text) = pretty text
 
 instance Render Block where
     type Token Block = TechniqueToken
@@ -223,4 +233,4 @@ instance Render Technique where
       in
         annotate SymbolToken ("%" <+> "technique" <+> "v" <> version) <> line <>
         annotate SymbolToken ("!" <+> license <> copyright) <> line <> line <>
-        vsep body
+        vsep (punctuate line body)
