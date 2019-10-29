@@ -4,8 +4,9 @@ import Test.Hspec (Spec, hspec)
 
 import Core.System
 
-import CheckSkeletonParser
 import CheckAbstractSyntax
+import CheckSkeletonParser
+import CheckQuantityBehaviour
 
 main :: IO ()
 main = do
@@ -13,5 +14,6 @@ main = do
 
 suite :: Spec
 suite = do
+    checkQuantityBehaviour
     checkAbstractSyntax
     checkSkeletonParser

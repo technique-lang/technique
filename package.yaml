@@ -1,5 +1,5 @@
 name: technique
-version:  0.2.2
+version:  0.2.3
 synopsis: Procedures and Sequences
 description: |
   A domain specific lanaguage for procedures.
@@ -62,9 +62,10 @@ tests:
     ghc-options: -threaded -dynamic
     source-dirs:
      - tests
-    main: TestProgram.hs
+    main: TestSuite.hs
     other-modules:
     - CheckAbstractSyntax
     - CheckSkeletonParser
+    - CheckQuantityBehaviour
     - ExampleProcedure
 

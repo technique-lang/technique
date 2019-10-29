@@ -184,6 +184,18 @@ instance Render Quantity where
             annotate QuantityToken (pretty i)
         Quantity i unit ->
             annotate QuantityToken (pretty i <+> pretty unit)
+        Measured i u r m unit ->
+          let
+            measurement =
+                pretty i <> " "
+            uncertainty = if u == 0
+                then emptyDoc
+                else "± " <> pretty u <> " "
+            magnitude = if m == 0
+                then emptyDoc
+                else "× 10^" <> pretty m <> " "
+          in
+            annotate QuantityToken (measurement <> uncertainty <> magnitude <> pretty unit)
 
 instance Render Tablet where
     type Token Tablet = TechniqueToken
