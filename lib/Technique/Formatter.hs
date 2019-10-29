@@ -23,7 +23,8 @@ import Technique.Language
 import Technique.Quantity
 
 data TechniqueToken
-    = ProcedureToken
+    = MagicToken
+    | ProcedureToken
     | TypeToken
     | SymbolToken
     | OperatorToken
@@ -41,6 +42,7 @@ instance Pretty Procedure where
 -- no use of white, suggesting colours
 colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
+    MagicToken -> color Black
     ProcedureToken -> colorDull Blue <> bold
     TypeToken -> colorDull Yellow
     SymbolToken -> colorDull Cyan <> bold
@@ -229,6 +231,6 @@ instance Render Technique where
             Nothing     -> emptyDoc
         body = fmap intoDocA . techniqueBody $ technique
       in
-        annotate SymbolToken ("%" <+> "technique" <+> "v" <> version) <> line <>
-        annotate SymbolToken ("!" <+> license <> copyright) <> line <> line <>
+        annotate MagicToken ("%" <+> "technique" <+> "v" <> version) <> line <>
+        annotate MagicToken ("!" <+> license <> copyright) <> line <> line <>
         vsep (punctuate line body)
