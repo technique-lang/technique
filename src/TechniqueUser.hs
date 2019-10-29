@@ -53,7 +53,7 @@ syntaxCheck procfile = do
 {-|
 Load an parse a procedure file
 -}
-loadProcedure :: FilePath -> Program None (Either Rope Procedure)
+loadProcedure :: FilePath -> Program None (Either Rope Technique)
 loadProcedure procfile = do
     event "Read procedure file"
     contents <- liftIO $ withFile procfile ReadMode hInput
@@ -67,9 +67,9 @@ loadProcedure procfile = do
     -- instance so megaparsec can use Rope directly.
 
     -- FIXME parse whole file not just a procedure FIXME
-    let result = parse pProcedure procfile (fromRope (intoRope contents))
+    let result = parse pTechnique procfile (fromRope (intoRope contents))
     case result of
-        Right procedure -> return (Right procedure)
+        Right technique -> return (Right technique)
         Left err -> return (Left (intoRope (errorBundlePretty err)))
 
 
@@ -84,11 +84,11 @@ commandFormatTechnique = do
 
     result <- loadProcedure procfile
     case result of
-        Right procedure -> do
+        Right technique -> do
             terminal <- liftIO $ hIsTerminalDevice stdout
             case terminal of
-                True    -> writeR procedure
-                False   -> write (renderNoAnsi 80 procedure)
+                True    -> writeR technique
+                False   -> write (renderNoAnsi 80 technique)
 
         Left err -> do
             write err

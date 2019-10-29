@@ -17,6 +17,7 @@ module Technique.Parser where
 import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
+import Data.Foldable (foldl')
 import Data.Void (Void)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -57,35 +58,25 @@ pMagicLine = do
     void newline
     return v
 
-pSpdxLine :: Parser (Text,Maybe Text)
+pSpdxLine :: Parser (Rope,Maybe Rope)
 pSpdxLine = do
     void (char '!') <?> "second line to begin with ! character"
-    void spaceChar <?> "a space character"
+    skipSpace
 
-    license <- takeWhile1P (Just "software license description (ie an SPDX-Licence-Header value)") (\c -> not (c == ',' || c == '\n'))
+    -- I know we're supposed to use takeWhile1P in cases like this, but aren't
+    -- we just duplicating the work of the parser combinators?
+    license <- takeWhile1P
+        (Just "software license description (ie an SPDX-Licence-Header value)")
+        (\c -> not (c == ';' || c == '\n'))
 
     copyright <- optional $ do
-        void (char ',') <?> "a comma"
-        hidden $ skipMany (spaceChar <?> "a space character")
+        void (char ';') <?> "a semicolon"
+        skipSpace
         void (char '©') <|> void (string "(c)")
-        void (spaceChar <?> "a space character")
+        skipSpace
         takeWhile1P (Just "a copyright declaration") (/= '\n')
-
     void newline
-    return (license,copyright)
-
-pProcfileHeader :: Parser Technique
-pProcfileHeader = do
-    version <- pMagicLine
-    unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
-    (license,copyright) <- pSpdxLine
-
-    return $ Technique
-        { techniqueVersion = version
-        , techniqueLicense = intoRope license
-        , techniqueCopyright = fmap intoRope copyright
-        , techniqueBody = []
-        }
+    return (intoRope license,fmap intoRope copyright)
 
 ---------------------------------------------------------------------
 
@@ -315,7 +306,7 @@ pStatement =
 
     pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here
-        proc <- pProcedure
+        proc <- pProcedureCode
         return (Declaration proc)
 
     pExecute = label "a value to execute" $ do
@@ -336,22 +327,54 @@ pStatement =
 pBlock :: Parser Block
 pBlock = do
     -- open block, absorb whitespace
-    void (char '{' <* space)
+    void (char '{' <* hidden space)
 
     -- process statements, but only single newline at a time
     statements <- many
          (pStatement <* skipSpace <* optional newline <* skipSpace)
 
     -- close block, and wipe out any trailing whitespace
-    void (char '}' <* space)
+    void (char '}' <* skipSpace <* optional newline)
 
     return (Block statements)
 
-pProcedure :: Parser Procedure
-pProcedure = do
-    (name,params,ins,out) <- pProcedureDeclaration <* space
+-- Frankly, this parser looks ridiculous. Someone who knows what they are
+-- doing *please* help refactor this. It seems unavoidlable to run the
+-- pProcedureDeclaration parser twice, unless we can combine the successful
+-- parse and the consumtion of description lines into one function. Maybe
+-- this would be better done scanning ahead to count characters until a
+-- declaration shows up, then explicitly taking that many?
 
-    block <- pBlock
+fourSpaces :: Parser ()
+fourSpaces = -- label "a code block indented by four spaces" $
+    void (char ' ' <* char ' ' <* char ' ' <* char ' ') <|>
+    fail "code blocks must be indented by four spaces"
+
+pMarkdown :: Parser Markdown
+pMarkdown = do
+    -- gobble blank newlines before a heading
+    void (many (do
+        notFollowedBy fourSpaces
+        notFollowedBy pProcedureDeclaration
+        void (skipSpace *> hidden newline)))
+
+    -- TODO heading
+
+    results <- some (do
+        notFollowedBy fourSpaces
+        notFollowedBy pProcedureDeclaration
+        line <- takeWhileP (Just "another line of description text") (/= '\n')
+        void (hidden newline)
+        return line)
+
+    let description = foldl' (\acc text -> appendRope text acc <> "\n") emptyRope results
+    return (Markdown description)
+
+pProcedureCode :: Parser Procedure
+pProcedureCode = do
+    (name,params,ins,out) <- pProcedureDeclaration <* skipSpace <* optional newline <* skipSpace
+
+    block <- pBlock <* skipSpace <* optional newline
 
     return (Procedure
         { procedureName = name
@@ -359,6 +382,35 @@ pProcedure = do
         , procedureInput = ins
         , procedureOutput = out
         , procedureLabel = Nothing          -- FIXME
-        , procedureDescription = Nothing    -- FIXME
+        , procedureDescription = Nothing
         , procedureBlock = block
         })
+
+pProcedure :: Parser Procedure
+pProcedure = do
+    description <- optional pMarkdown
+    fourSpaces
+    proc <- pProcedureCode
+
+    return (proc
+        { procedureLabel = Nothing          -- FIXME
+        , procedureDescription = description
+        })
+
+---------------------------------------------------------------------
+
+pTechnique :: Parser Technique
+pTechnique = do
+    version <- pMagicLine
+    unless (version == __VERSION__) (fail ("currently the only recognized language version is v" ++ show __VERSION__))
+    (license,copyright) <- pSpdxLine
+    void (many newline)
+
+    body <- many pProcedure
+
+    return $ Technique
+        { techniqueVersion = version
+        , techniqueLicense = intoRope license
+        , techniqueCopyright = fmap intoRope copyright
+        , techniqueBody = body
+        }

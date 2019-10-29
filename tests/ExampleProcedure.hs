@@ -130,6 +130,15 @@ exampleRoastTurkey =
         , procedureBlock = block
         }
 
+exampleTechnique :: Technique
+exampleTechnique =
+    Technique
+        { techniqueVersion = 0
+        , techniqueLicense = "BSD-3-Clause"
+        , techniqueCopyright = Just "2018 Allicin Wonderland"
+        , techniqueBody = [exampleRoastTurkey]
+        }
+
 main :: IO ()
 main = execute $ do
-    writeR exampleRoastTurkey
+    writeR exampleTechnique
