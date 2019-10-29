@@ -1,9 +1,9 @@
-resolver: lts-14.11
+resolver: lts-14.12
 
 extra-deps:
  - ivar-simple-0.3.2
  - git: http://github.com/oprdyn/unbeliever
-   commit: 43688701ba367ca9d74eacb5393fa62fb060d14d
+   commit: e2af2ae135960bb7a2c3a4d0e36721b095ff6333
    subdirs:
     - core-text
     - core-program
