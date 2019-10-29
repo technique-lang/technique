@@ -32,17 +32,16 @@ checkSkeletonParser = do
         it "correctly parses an SPDX header line" $ do
             parseMaybe pSpdxLine "! BSD-3-Clause\n" `shouldBe` Just ("BSD-3-Clause",Nothing)
         it "correctly parses an SPDX header line with Copyright" $ do
-            parseMaybe pSpdxLine "! BSD-3-Clause, (c) 2019 Kermit le Frog\n" `shouldBe` Just ("BSD-3-Clause",Just "2019 Kermit le Frog")
+            parseMaybe pSpdxLine "! BSD-3-Clause; (c) 2019 Kermit le Frog\n" `shouldBe` Just ("BSD-3-Clause",Just "2019 Kermit le Frog")
         it "errors if SPDX line has incorrect syntax" $ do
             parseMaybe pSpdxLine "!\n" `shouldBe` Nothing
-            parseMaybe pSpdxLine "!,\n" `shouldBe` Nothing
-            parseMaybe pSpdxLine "! Public-Domain,\n" `shouldBe` Nothing
-            parseMaybe pSpdxLine "! Public-Domain, (\n" `shouldBe` Nothing
-            parseMaybe pSpdxLine "! Public-Domain, (c)\n" `shouldBe` Nothing
-            parseMaybe pSpdxLine "! Public-Domain, (c) \n" `shouldBe` Nothing
+            parseMaybe pSpdxLine "! Public-Domain;\n" `shouldBe` Nothing
+            parseMaybe pSpdxLine "! Public-Domain; (\n" `shouldBe` Nothing
+            parseMaybe pSpdxLine "! Public-Domain; (c)\n" `shouldBe` Nothing
+            parseMaybe pSpdxLine "! Public-Domain; (c) \n" `shouldBe` Nothing
 
         it "correctly parses a complete technique program header" $ do
-            parseMaybe pProcfileHeader [quote|
+            parseMaybe pTechnique [quote|
 % technique v0
 ! BSD-3-Clause
             |] `shouldBe` Just (Technique
@@ -258,9 +257,9 @@ checkSkeletonParser = do
                     , Type "Dessert"
                     )
 
-    describe "Parses a complete procedure declaration" $ do
+    describe "Parses a the code for a complete procedure" $ do
         it "parses a declaration and block" $ do
-            parseMaybe pProcedure "f : X -> Y\n{ x }\n"
+            parseMaybe pProcedureCode "f : X -> Y\n{ x }\n"
                 `shouldBe` Just (emptyProcedure
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
