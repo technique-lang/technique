@@ -61,7 +61,9 @@ instance Render Procedure where
     intoDocA proc =
       let
         name = intoDocA . procedureName $ proc
-        params = commaCat . procedureParams $ proc
+        params = case procedureParams proc of
+            []  -> emptyDoc
+            xs  -> commaCat xs <> " "
         from = commaCat . procedureInput $ proc
         into = intoDocA . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
@@ -72,7 +74,7 @@ instance Render Procedure where
         description <>
         (indent 4 (
             annotate ProcedureToken name <+>
-            params <+>
+            params <>
             annotate SymbolToken ":" <+>
             annotate TypeToken from <+>
             annotate SymbolToken "->" <+>

@@ -42,6 +42,8 @@ checkAbstractSyntax = do
         it "renders a list as tuple" $ do
             show (commaCat [Identifier "one", Identifier "two", Identifier "three"])
                 `shouldBe` "one,two,three"
+            show (commaCat ([] :: [Identifier]))
+                `shouldBe` ""
 
         it "renders a tablet as expected" $
           let
@@ -68,4 +70,21 @@ checkAbstractSyntax = do
 {
     x
 }
+|]
+
+    describe "Rendering of a Procedure" $ do
+        it "renders a function signature correctly" $
+          let
+            p = emptyProcedure
+                    { procedureName = Identifier "f"
+                    , procedureInput = [Type "X"]
+                    , procedureOutput = Type "Y"
+                    , procedureBlock = Block [Execute (Variable (Identifier "z"))]
+                    }
+          in do
+            renderTest p `shouldBe` [quote|
+    f : X -> Y
+    {
+        z
+    }
 |]
