@@ -88,7 +88,7 @@ exampleRoastTurkey =
                         (Identifier "preheat")
                         (Application
                             (Identifier "oven")
-                            (Grouping (Amount (Quantity 180 celsius))))
+                            (Grouping (Amount (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius))))
                     , Execute
                         (Application
                             (Identifier "task")

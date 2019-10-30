@@ -18,8 +18,9 @@ import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
 import Data.Foldable (foldl')
-import Data.Void (Void)
+import Data.Int (Int8, Int64)
 import Data.Text (Text)
+import Data.Void (Void)
 import qualified Data.Text as T
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -141,14 +142,14 @@ stringLiteral = label "a string literal" $ do
 unitChar :: Parser Char
 unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
 
-unitLiteral :: Parser Text
+unitLiteral :: Parser Rope
 unitLiteral = label "a unit literal" $ do
     str <- some unitChar
-    return (T.pack str)
+    return (intoRope str)
 
 -- FIXME change this to numbers with decimal points!
 -- FIXME read? Really?
-numberLiteral :: Parser Int
+numberLiteral :: Parser Int64
 numberLiteral = label "a number literal" $ do
     sign <- optional (char '-')
     digits <- some digitChar
@@ -157,14 +158,49 @@ numberLiteral = label "a number literal" $ do
         Just _ -> negate number
         Nothing -> number)
 
--- FIXME handle other constructors
+decimalLiteral :: Parser Decimal
+decimalLiteral = label "a decimal literal" $ do
+    digits1 <- some digitChar
+    fraction <- optional (do
+        void (char '.')
+        some digitChar)
+
+    return (case fraction of
+        Nothing ->
+          let
+            number = read digits1
+          in
+            Decimal number 0
+        Just digits2 ->
+          let
+            e = fromIntegral (length fraction)
+            decimal = read digits1 * 10^e + read digits2
+          in
+            Decimal decimal e)
+
 pQuantity :: Parser Quantity
 pQuantity =
     try (do
-        num <- numberLiteral
+        n <- decimalLiteral
         skipSpace1
-        symbol <- unitLiteral
-        return (Quantity num (intoRope symbol)))
+
+        u <- (do
+            void (char '±') <|> void (string "+/-")
+            skipSpace1
+            decimalLiteral
+            ) <|> pure (Decimal 0 0)
+
+        m <- (do
+            skipSpace
+            void (char '×') <|> void (string "+/-")
+            skipSpace
+            void (string "10^")
+            number <- numberLiteral
+            return (fromIntegral number :: Int8)) <|> pure (0 :: Int8)
+
+        s <- unitLiteral
+
+        return (Quantity n u m s))
     <|> try (do
         num <- numberLiteral
         return (Number num))

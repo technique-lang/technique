@@ -97,7 +97,7 @@ checkSkeletonParser = do
             parseMaybe pQuantity "-42" `shouldBe` Just (Number (-42))
 
         it "a quantity with units is a Quantity" $ do
-            parseMaybe pQuantity "149 kg" `shouldBe` Just (Quantity 149 "kg")
+            parseMaybe pQuantity "149 kg" `shouldBe` Just (Quantity (Decimal 149 0) (Decimal 0 0) 0 "kg")
 
     describe "Parses attributes" $ do
         it "recognizes a role marker" $ do
