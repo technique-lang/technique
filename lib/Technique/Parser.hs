@@ -143,7 +143,7 @@ unitChar :: Parser Char
 unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
 
 unitLiteral :: Parser Rope
-unitLiteral = label "a unit literal" $ do
+unitLiteral = label "a units symbol" $ do
     str <- some unitChar
     return (intoRope str)
 
@@ -204,36 +204,55 @@ toNumbers c = case c of
 pQuantity :: Parser Quantity
 pQuantity =
     try (do
-        n <- decimalLiteral
-
-        u <- try (do
-            skipSpace
-            void (char '±') <|> void (string "+/-")
-            skipSpace
-            decimalLiteral
-            ) <|> pure (Decimal 0 0)
-
-        m <- try (do
-            skipSpace
-            void (char '×') <|> void (char 'x') <|> void (char '*')
-            skipSpace
-            void (string "10")
-            number <- (do
-                void (char '^')
-                num <- numberLiteral
-                pure (fromIntegral num))
-                <|>
-                superscriptLiteral
-            return (fromIntegral number :: Int8)) <|> pure (0 :: Int8)
-
-        s <- label "a units symbol" (do
-            skipSpace
-            unitLiteral)
-
-        return (Quantity n u m s))
-    <|> try (do
+        n <- pMantissa
+        u <- pUncertainty
+        m <- pMagnitude
+        s <- pSymbol
+        return (Quantity n u m s)) <|>
+    try (do
+        n <- pMantissa
+        m <- pMagnitude
+        s <- pSymbol
+        return (Quantity n (Decimal 0 0) m s)) <|>
+    try (do
+        n <- pMantissa
+        u <- pUncertainty
+        s <- pSymbol
+        return (Quantity n u 0 s)) <|>
+    try (do
+        n <- pMantissa
+        s <- pSymbol
+        return (Quantity n (Decimal 0 0) 0 s)) <|>
+    try (do
         num <- numberLiteral
         return (Number num))
+  where
+    pMantissa = do
+        decimalLiteral
+
+    pUncertainty = do
+        skipSpace1
+        void (char '±') <|> void (string "+/-")
+        skipSpace1
+        decimalLiteral
+
+    pMagnitude = do
+        skipSpace1
+        void (char '×') <|> void (char 'x') <|> void (char '*')
+        skipSpace1
+        void (string "10")
+        number <- (do
+            void (char '^')
+            num <- numberLiteral
+            pure (fromIntegral num))
+            <|>
+            superscriptLiteral
+        return (fromIntegral number :: Int8)
+
+    pSymbol = do
+        skipSpace1
+        unitLiteral
+
 
 pOperator :: Parser Operator
 pOperator =
