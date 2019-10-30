@@ -173,32 +173,62 @@ decimalLiteral = label "a decimal literal" $ do
             Decimal number 0
         Just digits2 ->
           let
-            e = fromIntegral (length fraction)
+            e = fromIntegral (length digits2)
             decimal = read digits1 * 10^e + read digits2
           in
             Decimal decimal e)
+
+superscriptLiteral :: Parser Int8
+superscriptLiteral = label "a superscript literal" $ do
+    sign <- optional (char '⁻' <|> char '¯')    -- honestly not sure what the second of those is
+    digits <- some (oneOf ['⁰','¹','²','³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'])
+    let number = read (map toNumbers digits)
+    return (case sign of
+        Just _ -> negate number
+        Nothing -> number)
+
+toNumbers :: Char -> Char
+toNumbers c = case c of
+    '⁰' -> '0'
+    '¹' -> '1'
+    '²' -> '2'
+    '³' -> '3'
+    '⁴' -> '4'
+    '⁵' -> '5'
+    '⁶' -> '6'
+    '⁷' -> '7'
+    '⁸' -> '8'
+    '⁹' -> '9'
+    _   -> error "Invalid, superscript expected"
 
 pQuantity :: Parser Quantity
 pQuantity =
     try (do
         n <- decimalLiteral
-        skipSpace1
 
-        u <- (do
+        u <- try (do
+            skipSpace
             void (char '±') <|> void (string "+/-")
-            skipSpace1
+            skipSpace
             decimalLiteral
             ) <|> pure (Decimal 0 0)
 
-        m <- (do
+        m <- try (do
             skipSpace
-            void (char '×') <|> void (string "+/-")
+            void (char '×') <|> void (char 'x') <|> void (char '*')
             skipSpace
-            void (string "10^")
-            number <- numberLiteral
+            void (string "10")
+            number <- (do
+                void (char '^')
+                num <- numberLiteral
+                pure (fromIntegral num))
+                <|>
+                superscriptLiteral
             return (fromIntegral number :: Int8)) <|> pure (0 :: Int8)
 
-        s <- unitLiteral
+        s <- label "a units symbol" (do
+            skipSpace
+            unitLiteral)
 
         return (Quantity n u m s))
     <|> try (do

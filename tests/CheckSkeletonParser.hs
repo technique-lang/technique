@@ -99,6 +99,20 @@ checkSkeletonParser = do
         it "a quantity with units is a Quantity" $ do
             parseMaybe pQuantity "149 kg" `shouldBe` Just (Quantity (Decimal 149 0) (Decimal 0 0) 0 "kg")
 
+        it "a quantity with mantissa, magnitude, and units is a Quantity" $ do
+            parseMaybe pQuantity "5.9722 × 10^24 kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 0 0) 24 "kg")
+
+        it "a quantity with mantissa, uncertainty, and units is a Quantity" $ do
+            parseMaybe pQuantity "5.9722 ± 0.0006 kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 0 "kg")
+
+
+        it "a quantity with mantissa, uncertainty, magnitude, and units is a Quantity" $ do
+            parseMaybe pQuantity "5.9722 ± 0.0006 × 10^24 kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 24 "kg")
+
+        it "same quantity, with superscripts, is a Quantity" $ do
+            parseMaybe pQuantity "5.9722 ± 0.0006 × 10²⁴ kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 24 "kg")
+
+
     describe "Parses attributes" $ do
         it "recognizes a role marker" $ do
             parseMaybe pAttribute "@butler" `shouldBe` Just (Role (Identifier "butler"))
