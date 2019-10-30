@@ -40,13 +40,13 @@ Skip /zero/ or more actual space characters. The __megaparsec__ function
 which is very unhelpful.
 -}
 skipSpace :: Parser ()
-skipSpace = void (hidden (many (char ' ')))
+skipSpace = void (hidden (many (char ' ' <|> char '\t')))
 
 {-|
 Skip at least /one/ actual space character.
 -}
 skipSpace1 :: Parser ()
-skipSpace1 = void (hidden (some (char ' ')))
+skipSpace1 = void (hidden (some (char ' ' <|> char '\t')))
 
 pMagicLine :: Parser Int
 pMagicLine = do

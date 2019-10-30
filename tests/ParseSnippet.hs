@@ -52,12 +52,26 @@ Aftermath
     }
 |]
 
+blob4 :: Text
+blob4 = [quote|
+% technique v0
+! Super Secret Squirrel Private Not License
+
+    f : X -> Y
+{
+    @chef {
+[
+       		     "mass" ~ 45.0x10^4 kg
+                    "diameter" ~ 5 m
+    ]
+}}
+|]
 
 main :: IO ()
 main = execute $ do
     blob3 <- liftIO $ T.readFile "tests/Stub.t"
     let result = parse pTechnique "" blob3
-    sleep 0.1
+    sleep 0.25
     case result of
         Left err    -> write (intoRope (errorBundlePretty err))
         Right x     -> writeR x
