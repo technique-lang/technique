@@ -9,6 +9,7 @@ module Technique.Formatter where
 import Core.Text.Rope
 import Core.Text.Utilities
 import Data.Foldable (foldl')
+import Data.Int (Int8)
 import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
     , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
@@ -196,9 +197,32 @@ instance Render Quantity where
                 else "± " <> intoDocA u <> " "
             magnitude = if m == 0
                 then emptyDoc
-                else "× 10^" <> pretty m <> " "
+                else "× 10" <> numberToSuperscript m <> " "
           in
             annotate QuantityToken (measurement <> uncertainty <> magnitude <> pretty unit)
+
+numberToSuperscript :: Int8 -> Doc ann
+numberToSuperscript number =
+  let
+    digits = show number
+    digits' = fmap toSuperscript digits
+  in
+    pretty digits'
+
+toSuperscript :: Char -> Char
+toSuperscript c = case c of
+    '0' -> '⁰' -- U+2070
+    '1' -> '¹' -- U+00B9
+    '2' -> '²' -- U+00B2
+    '3' -> '³' -- U+00B3
+    '4' -> '⁴' -- U+2074
+    '5' -> '⁵' -- U+2075
+    '6' -> '⁶' -- U+2076
+    '7' -> '⁷' -- U+2077
+    '8' -> '⁸' -- U+2078
+    '9' -> '⁹' -- U+2079
+    '-' -> '⁻' -- U+207B
+    _   -> error "Invalid, digit expected"
 
 instance Render Tablet where
     type Token Tablet = TechniqueToken

@@ -6,7 +6,7 @@ import Core.System
 
 import CheckAbstractSyntax
 import CheckSkeletonParser
-import CheckQuantityBehaviour
+import CheckQuantityBehaviour hiding (main)
 
 main :: IO ()
 main = do
