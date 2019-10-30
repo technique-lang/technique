@@ -261,9 +261,10 @@ pOperator =
     (char '+' *> return Combine)
 
 {-|
-Parse a Tablet. This follows the same pattern as 'pBlock' below of
-consuming trailing space around delimiters but only single newlines (as
-separator) within.
+Parse a Tablet. This consumes trailing space around initial delimiter and
+removes blank lines within the table (they're not syntactically meaningful)
+but only cosnsumes a single newline after trailing delimeter, leaving
+further consumption to pStatement.
 -}
 -- TODO this doesn't preserve alternate syntax if employed by user
 pTablet :: Parser Tablet
@@ -271,9 +272,9 @@ pTablet = do
     void (char '[' <* space)
 
     bindings <- many
-        (pBinding <* skipSpace <* optional newline <* skipSpace)
+        (pBinding <* space)
 
-    void (char ']' <* space)
+    void (char ']' <* skipSpace <* optional newline <* skipSpace)
 
     return (Tablet bindings)
   where
