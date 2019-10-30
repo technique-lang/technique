@@ -192,7 +192,7 @@ instance Render Quantity where
           let
             measurement =
                 intoDocA i <> " "
-            uncertainty = if isZero u
+            uncertainty = if isZeroDecimal u
                 then emptyDoc
                 else "± " <> intoDocA u <> " "
             magnitude = if m == 0

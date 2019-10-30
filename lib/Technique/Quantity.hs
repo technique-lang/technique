@@ -7,7 +7,8 @@ module Technique.Quantity
     , Decimal(..)
     , Magnitude
     , decimalToRope
-    , isZero
+    , isZeroDecimal
+    , negateDecimal
     , Symbol
     , Unit(..)
     , Group(..)
@@ -67,8 +68,12 @@ decimalToRope (Decimal number resolution)
                 then result
                 else "-" <> result
 
-isZero :: Decimal -> Bool
-isZero (Decimal number _) = if number == 0 then True else False
+isZeroDecimal :: Decimal -> Bool
+isZeroDecimal (Decimal number _) = if number == 0 then True else False
+
+negateDecimal :: Decimal -> Decimal
+negateDecimal (Decimal number resolution) = Decimal (negate number) resolution
+
 
 units :: Map Symbol Unit
 units =

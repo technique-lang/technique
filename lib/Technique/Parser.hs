@@ -25,6 +25,7 @@ import qualified Data.Text as T
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Read (readMaybe)
 
 import Technique.Language
 import Technique.Quantity
@@ -147,16 +148,13 @@ unitLiteral = label "a units symbol" $ do
     str <- some unitChar
     return (intoRope str)
 
--- FIXME change this to numbers with decimal points!
--- FIXME read? Really?
 numberLiteral :: Parser Int64
 numberLiteral = label "a number literal" $ do
-    sign <- optional (char '-')
     digits <- some digitChar
-    let number = read digits
-    return (case sign of
-        Just _ -> negate number
-        Nothing -> number)
+    let result = readMaybe digits
+    case result of
+        Just number -> return number
+        Nothing -> fail "expected a number but couldn't parse"
 
 decimalLiteral :: Parser Decimal
 decimalLiteral = label "a decimal literal" $ do
@@ -205,30 +203,27 @@ pQuantity :: Parser Quantity
 pQuantity =
     try (do
         n <- pMantissa
-        u <- pUncertainty
-        m <- pMagnitude
+        u <- try pUncertainty <|> pure (Decimal 0 0)
+        m <- try pMagnitude <|> pure 0
         s <- pSymbol
         return (Quantity n u m s)) <|>
     try (do
-        n <- pMantissa
-        m <- pMagnitude
-        s <- pSymbol
-        return (Quantity n (Decimal 0 0) m s)) <|>
-    try (do
-        n <- pMantissa
-        u <- pUncertainty
-        s <- pSymbol
-        return (Quantity n u 0 s)) <|>
-    try (do
-        n <- pMantissa
-        s <- pSymbol
-        return (Quantity n (Decimal 0 0) 0 s)) <|>
-    try (do
-        num <- numberLiteral
-        return (Number num))
+        n <- pNumber
+        return (Number n))
   where
+    pNumber = do
+        sign <- optional (char '-')
+        number <- numberLiteral
+        return (case sign of
+            Just _ -> negate number
+            Nothing -> number)
+
     pMantissa = do
-        decimalLiteral
+        sign <- optional (char '-')
+        decimal <- decimalLiteral
+        return (case sign of
+            Just _ -> negateDecimal decimal
+            Nothing -> decimal)
 
     pUncertainty = do
         skipSpace1

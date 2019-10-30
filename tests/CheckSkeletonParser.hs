@@ -84,9 +84,8 @@ checkSkeletonParser = do
             parseMaybe stringLiteral "\"Hello \\\"world\"" `shouldBe` Just "Hello \"world"
             parseMaybe stringLiteral "\"\"" `shouldBe` Just ""
 
-        it "positive and negative integers" $ do
+        it "positive integers" $ do
             parseMaybe numberLiteral "42" `shouldBe` Just 42
-            parseMaybe numberLiteral "-42" `shouldBe` Just (-42)
             parseMaybe numberLiteral "0" `shouldBe` Just 0
             parseMaybe numberLiteral "1a" `shouldBe` Nothing
 
@@ -105,13 +104,17 @@ checkSkeletonParser = do
         it "a quantity with mantissa, uncertainty, and units is a Quantity" $ do
             parseMaybe pQuantity "5.9722 ± 0.0006 kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 0 "kg")
 
-
         it "a quantity with mantissa, uncertainty, magnitude, and units is a Quantity" $ do
             parseMaybe pQuantity "5.9722 ± 0.0006 × 10^24 kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 24 "kg")
 
         it "same quantity, with superscripts, is a Quantity" $ do
             parseMaybe pQuantity "5.9722 ± 0.0006 × 10²⁴ kg" `shouldBe` Just (Quantity (Decimal 59722 4) (Decimal 6 4) 24 "kg")
 
+        it "negative Quantities also parse" $ do
+            parseMaybe pQuantity "1234567890" `shouldBe` Just (Number 1234567890)
+            parseMaybe pQuantity "-1234567890" `shouldBe` Just (Number (-1234567890))
+            parseMaybe pQuantity "3.14 ± 0.01 m" `shouldBe` Just (Quantity (Decimal 314 2) (Decimal 001 2) 0 "m")
+            parseMaybe pQuantity "-3.14 ± 0.01 m" `shouldBe` Just (Quantity (Decimal (-314) 2) (Decimal 001 2) 0 "m")
 
     describe "Parses attributes" $ do
         it "recognizes a role marker" $ do
