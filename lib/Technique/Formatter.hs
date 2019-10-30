@@ -176,21 +176,24 @@ instance Render Identifier where
 instance Pretty Identifier where
     pretty = unAnnotate . intoDocA
 
+instance Render Decimal where
+    type Token Decimal = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA = pretty . decimalToRope
+
 instance Render Quantity where
     type Token Quantity = TechniqueToken
     colourize = colourizeTechnique
     intoDocA qty = case qty of
         Number i ->
             annotate QuantityToken (pretty i)
-        Quantity i unit ->
-            annotate QuantityToken (pretty i <+> pretty unit)
-        Measured i u r m unit ->
+        Quantity i u m unit ->
           let
             measurement =
-                pretty i <> " "
-            uncertainty = if u == 0
+                intoDocA i <> " "
+            uncertainty = if isZero u
                 then emptyDoc
-                else "± " <> pretty u <> " "
+                else "± " <> intoDocA u <> " "
             magnitude = if m == 0
                 then emptyDoc
                 else "× 10^" <> pretty m <> " "

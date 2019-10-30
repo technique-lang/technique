@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module CheckQuantityBehaviour
     ( checkQuantityBehaviour
@@ -31,11 +32,8 @@ checkQuantityBehaviour = do
         it "Numbers serialze as integers" $ do
             renderTest (Number 42) `shouldBe` "42"
 
-        it "Simple number and unit" $ do
-            renderTest (Quantity 4 "kg") `shouldBe` "4 kg"
-
         it "Abbreviated measurement and unit" $ do
-            renderTest (Measured 4 0 0 0 "kg") `shouldBe` "4 kg"
+            renderTest (Quantity (Decimal 4 0) (Decimal 0 0) 0 "kg") `shouldBe` "4 kg"
 
         it "Full measurement with uncertainty, magnitude, and unit" $ do
-            renderTest (Measured 4 1 0 2 "kg") `shouldBe` "4 ± 1 × 10^2 kg"
+            renderTest (Quantity (Decimal 4 0) (Decimal 1 0) 2 "kg") `shouldBe` "4 ± 1 × 10^2 kg"
