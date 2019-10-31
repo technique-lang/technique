@@ -103,7 +103,7 @@ pProcedureDeclaration = do
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
-identifierChar = hidden (lowerChar <|> digitChar <|> char '_')
+identifierChar = hidden (lowerChar <|> digitChar <|> char '_' <|> char '\'')
 
 
 -- these do NOT consume trailing space. That's for pExpression to do.
@@ -398,7 +398,7 @@ pStatement =
         names <- pIdentifiers1
         skipSpace
         void (char '=')
-        skipSpace
+        space
         expr <- pExpression
         return (Assignment names expr)
 
@@ -417,7 +417,6 @@ pStatement =
 
     pSeries = do
         void (char ';')
-        skipSpace
         return Series
 
 ---------------------------------------------------------------------

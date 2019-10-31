@@ -118,8 +118,8 @@ instance Render Statement where
     type Token Statement = TechniqueToken
     colourize = colourizeTechnique
     intoDocA statement = case statement of
-        Assignment var expr ->
-            annotate VariableToken (intoDocA var) <+> annotate SymbolToken "=" <+> intoDocA expr
+        Assignment vars expr ->
+            commaCat vars <+> annotate SymbolToken "=" <+> intoDocA expr
         Execute expr ->
             intoDocA expr
         Comment text ->
@@ -156,8 +156,8 @@ instance Render Expression where
             annotate SymbolToken dquote
         Object tablet ->
             intoDocA tablet
-        Variable var ->
-            annotate VariableToken (intoDocA var)
+        Variable vars ->
+            commaCat vars
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
         Grouping subexpr ->
