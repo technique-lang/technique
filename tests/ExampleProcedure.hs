@@ -39,7 +39,7 @@ exampleProcedureOven =
         { procedureName = Identifier "oven"
         , procedureParams = []
         , procedureInput = [Type "Temperature"]
-        , procedureOutput = Type "()" -- ?
+        , procedureOutput = [Type "()"] -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
         , procedureDescription = Nothing
         , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
@@ -56,7 +56,7 @@ builtinProcedureTask =
         { procedureName = Identifier "task"
         , procedureParams = []
         , procedureInput = [Type "Text"]
-        , procedureOutput = Type "()" -- ?
+        , procedureOutput = [Type "()"] -- ?
         , procedureLabel = Just (Markdown "A task")
         , procedureDescription = Nothing
         , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
@@ -68,7 +68,7 @@ builtinProcedureRecord =
         { procedureName = Identifier "record"
         , procedureParams = []
         , procedureInput = [Type "Text"]
-        , procedureOutput = Type "Text" -- ?
+        , procedureOutput = [Type "Text"] -- ?
         , procedureLabel = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Record a quantity")
         , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
@@ -85,7 +85,7 @@ exampleRoastTurkey =
     block = Block
                 [ Execute (Restriction chef (Block
                     [ Assignment
-                        (Identifier "preheat")
+                        [Identifier "preheat"]
                         (Application
                             (Identifier "oven")
                             (Grouping (Amount (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius))))
@@ -94,29 +94,29 @@ exampleRoastTurkey =
                             (Identifier "task")
                             (Text "Bacon strips onto bird"))
                     , Execute
-                        (Variable (Identifier "preheat"))
+                        (Variable [Identifier "preheat"])
                     , Execute
                         (Undefined)
                     , Blank
                     , Execute
                         (Operation WaitBoth
-                            (Variable (Identifier "w1"))
+                            (Variable [Identifier "w1"])
                             (Grouping (Operation WaitEither
-                                (Variable (Identifier "w2"))
-                                (Variable (Identifier "w3")))))
+                                (Variable [Identifier "w2"])
+                                (Variable [Identifier "w3"]))))
                     , Blank
-                    , Execute (Variable (Identifier "v1"))
+                    , Execute (Variable [Identifier "v1"])
                     , Series
-                    , Execute (Variable (Identifier "v2"))
+                    , Execute (Variable [Identifier "v2"])
                     , Assignment
-                        (Identifier "temp")
+                        [Identifier "temp"]
                         (Application
                             (Identifier "record")
                             (Text "Probe bird temperature"))
                     , Execute
                         (Object
                             (Tablet
-                                [ Binding "Final temperature" (Variable (Identifier "temp")) ]))
+                                [ Binding "Final temperature" (Variable [Identifier "temp"]) ]))
                     ])
                 )]
   in
@@ -124,7 +124,7 @@ exampleRoastTurkey =
         { procedureName = Identifier "roast_turkey"
         , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
         , procedureInput = [i]
-        , procedureOutput = o
+        , procedureOutput = [o]
         , procedureLabel = Just (Markdown "Roast Turkey")
         , procedureDescription = Nothing
         , procedureBlock = block

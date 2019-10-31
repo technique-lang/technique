@@ -48,7 +48,7 @@ checkAbstractSyntax = do
         it "renders a tablet as expected" $
           let
             tablet = Tablet
-                        [ Binding "Final temperature" (Variable (Identifier "temp"))
+                        [ Binding "Final temperature" (Variable [Identifier "temp"])
                         , Binding "Cooking time" (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
                         ]
           in do
@@ -63,7 +63,7 @@ checkAbstractSyntax = do
         it "renders a normal block with indentation" $
           let
             b = Block
-                [ Execute (Variable (Identifier "x"))
+                [ Execute (Variable [Identifier "x"])
                 ]
           in do
             renderTest b `shouldBe` [quote|
@@ -78,8 +78,8 @@ checkAbstractSyntax = do
             p = emptyProcedure
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
-                    , procedureOutput = Type "Y"
-                    , procedureBlock = Block [Execute (Variable (Identifier "z"))]
+                    , procedureOutput = [Type "Y"]
+                    , procedureBlock = Block [Execute (Variable [Identifier "z"])]
                     }
           in do
             renderTest p `shouldBe` [quote|

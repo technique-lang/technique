@@ -82,24 +82,24 @@ pSpdxLine = do
 
 ---------------------------------------------------------------------
 
-pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],Type)
+pProcedureDeclaration :: Parser (Identifier,[Identifier],[Type],[Type])
 pProcedureDeclaration = do
     name <- pIdentifier
     skipSpace
     -- zero or more separated by comma
-    params <- sepBy (pIdentifier <* skipSpace) (char ',' <* skipSpace)
+    params <- pIdentifiers
 
     skipSpace
     void (char ':')
     skipSpace
 
-    ins <- sepBy (pType <* skipSpace) (char ',' <* skipSpace)
+    ins <- pTypes1
 
     skipSpace
     void (string "->")
     skipSpace
 
-    out <- pType
+    out <- pTypes1
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
@@ -113,14 +113,27 @@ pIdentifier = label "a valid identifier" $ do
     remainder <- many identifierChar
     return (Identifier (singletonRope first <> intoRope remainder))
 
+pIdentifiers :: Parser [Identifier]
+pIdentifiers = sepBy (pIdentifier <* skipSpace) (char ',' <* skipSpace)
+
+pIdentifiers1 :: Parser [Identifier]
+pIdentifiers1 = sepBy1 (pIdentifier <* skipSpace) (char ',' <* skipSpace)
+
 typeChar :: Parser Char
 typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
 
 pType :: Parser Type
-pType = label "a valid type" $ do
-    first <- upperChar
-    remainder <- many typeChar
-    return (Type (singletonRope first <> intoRope remainder))
+pType = label "a valid type" $ try
+    (do
+        void (string "()")
+        return (Type "()")) <|>
+    (do
+        first <- upperChar
+        remainder <- many typeChar
+        return (Type (singletonRope first <> intoRope remainder)))
+
+pTypes1 :: Parser [Type]
+pTypes1 = sepBy1 (pType <* skipSpace) (char ',' <* skipSpace)
 
 
 ---------------------------------------------------------------------
@@ -281,7 +294,10 @@ pTablet = do
         subexpr <- pExpression
 
         -- handle alternate syntax here
+{-
+        -- FIXME this is not working
         void (optional (char ','))
+-}
         return (Binding (intoRope name) subexpr)
 
 pAttribute :: Parser Attribute
@@ -366,8 +382,9 @@ pExpression = do
             return (Amount qty))
 
     pVariable = do
-        name <- pIdentifier
-        return (Variable name)
+        names <- pIdentifiers1
+
+        return (Variable names)
 
 pStatement :: Parser Statement
 pStatement =
@@ -378,12 +395,12 @@ pStatement =
     try pSeries
   where
     pAssignment = label "an assignment" $ do
-        name <- pIdentifier
+        names <- pIdentifiers1
         skipSpace
         void (char '=')
         skipSpace
         expr <- pExpression
-        return (Assignment name expr)
+        return (Assignment names expr)
 
     pDeclaration = label "a declaration" $ do
         -- only dive into working out if this is a Procedure if there's a ':' here

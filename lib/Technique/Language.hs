@@ -46,7 +46,7 @@ data Procedure = Procedure
     { procedureName :: Identifier
     , procedureParams :: [Identifier]
     , procedureInput :: [Type]
-    , procedureOutput :: Type
+    , procedureOutput :: [Type]
     , procedureLabel :: Maybe Markdown
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
@@ -58,7 +58,7 @@ emptyProcedure = Procedure
     { procedureName = Identifier "none"
     , procedureParams = []
     , procedureInput = [unitType]
-    , procedureOutput = unitType
+    , procedureOutput = [unitType]
     , procedureLabel = Nothing
     , procedureDescription = Nothing
     , procedureBlock = Block []
@@ -68,7 +68,7 @@ data Block = Block [Statement]
     deriving (Show, Eq)
 
 data Statement
-    = Assignment Identifier Expression
+    = Assignment [Identifier] Expression
     | Execute Expression
     | Comment Rope
     | Declaration Procedure
@@ -83,7 +83,7 @@ data Expression
     | Amount Quantity
     | Undefined
     | Object Tablet
-    | Variable Identifier
+    | Variable [Identifier]
     | Operation Operator Expression Expression
     | Grouping Expression
     | Restriction Attribute Block
