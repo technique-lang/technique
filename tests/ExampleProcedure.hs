@@ -42,7 +42,7 @@ exampleProcedureOven =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "Set oven temperature")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
         }
 
 
@@ -59,7 +59,7 @@ builtinProcedureTask =
         , procedureOutput = Type "()" -- ?
         , procedureLabel = Just (Markdown "A task")
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
         }
 
 builtinProcedureRecord :: Procedure
@@ -71,7 +71,7 @@ builtinProcedureRecord =
         , procedureOutput = Type "Text" -- ?
         , procedureLabel = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Record a quantity")
-        , procedureBlock = Block [ Execute (Literal (Text "builtinProcedure!")) ]
+        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
         }
 
 
@@ -88,15 +88,15 @@ exampleRoastTurkey =
                         (Identifier "preheat")
                         (Application
                             (Identifier "oven")
-                            (Grouping (Literal (Quantity 180 celsius))))
+                            (Grouping (Amount (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius))))
                     , Execute
                         (Application
                             (Identifier "task")
-                            (Literal (Text "Bacon strips onto bird")))
+                            (Text "Bacon strips onto bird"))
                     , Execute
                         (Variable (Identifier "preheat"))
                     , Execute
-                        (Literal Undefined)
+                        (Undefined)
                     , Blank
                     , Execute
                         (Operation WaitBoth
@@ -112,7 +112,7 @@ exampleRoastTurkey =
                         (Identifier "temp")
                         (Application
                             (Identifier "record")
-                            (Literal (Text "Probe bird temperature")))
+                            (Text "Probe bird temperature"))
                     , Execute
                         (Object
                             (Tablet

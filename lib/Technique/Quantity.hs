@@ -1,8 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 
 module Technique.Quantity
 (
       Quantity(..)
+    , Decimal(..)
+    , Magnitude
+    , decimalToRope
+    , isZeroDecimal
+    , negateDecimal
     , Symbol
     , Unit(..)
     , Group(..)
@@ -12,17 +18,62 @@ module Technique.Quantity
 ) where
 
 import Core.Text.Rope
+import Core.Text.Utilities
 import Core.Data.Structures
+import Data.Int (Int8, Int64)
 
 data Quantity
-    = None
-    | Number Int                -- FIXME not Int
-    | Quantity Int Symbol
-    | Text Rope
-    | Undefined
+    = Number Int64
+    | Quantity Decimal Decimal Magnitude Symbol
     deriving (Show, Eq)
 
 type Symbol = Rope
+
+type Magnitude = Int8
+
+{-|
+A decimal number with a fixed point resolution. The resolution (number of
+decimal places) is arbitrary within the available range. This isn't really
+for numerical analysis. It is for carrying information.
+
+/Implementation note/
+
+Internally this is a floating point where the mantissa is 19 characters
+wide (the width of a 64-bit int in base 10). Thus the biggest number
+representable is 9223372036854775807 and the smallest is
+0.0000000000000000001. We could change this to Integer and be arbitrary
+precision but meh.
+-}
+data Decimal = Decimal Int64 Int8
+    deriving Eq
+
+instance Show Decimal where
+    show = show . decimalToRope
+
+decimalToRope :: Decimal -> Rope
+decimalToRope (Decimal number resolution)
+    | resolution < 0  = error "resolution can't be negative"
+    | resolution == 0 = intoRope (show number)
+    | otherwise =
+        let
+            digits = intoRope (show (abs number))
+            len = widthRope digits
+            res = fromIntegral resolution
+            pos = len - res
+            result = if (pos <= 0)
+                then "0." <> leftPadWith '0' res digits
+                else let (whole,fraction) = splitRope pos digits in whole <> "." <> fraction
+        in
+            if number >= 0
+                then result
+                else "-" <> result
+
+isZeroDecimal :: Decimal -> Bool
+isZeroDecimal (Decimal number _) = if number == 0 then True else False
+
+negateDecimal :: Decimal -> Decimal
+negateDecimal (Decimal number resolution) = Decimal (negate number) resolution
+
 
 units :: Map Symbol Unit
 units =

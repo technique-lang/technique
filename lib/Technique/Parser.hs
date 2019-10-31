@@ -18,12 +18,14 @@ import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
 import Data.Foldable (foldl')
-import Data.Void (Void)
+import Data.Int (Int8, Int64)
 import Data.Text (Text)
+import Data.Void (Void)
 import qualified Data.Text as T
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Read (readMaybe)
 
 import Technique.Language
 import Technique.Quantity
@@ -39,13 +41,13 @@ Skip /zero/ or more actual space characters. The __megaparsec__ function
 which is very unhelpful.
 -}
 skipSpace :: Parser ()
-skipSpace = void (hidden (many (char ' ')))
+skipSpace = void (hidden (many (char ' ' <|> char '\t')))
 
 {-|
 Skip at least /one/ actual space character.
 -}
 skipSpace1 :: Parser ()
-skipSpace1 = void (hidden (some (char ' ')))
+skipSpace1 = void (hidden (some (char ' ' <|> char '\t')))
 
 pMagicLine :: Parser Int
 pMagicLine = do
@@ -141,36 +143,111 @@ stringLiteral = label "a string literal" $ do
 unitChar :: Parser Char
 unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
 
-unitLiteral :: Parser Text
-unitLiteral = label "a unit literal" $ do
+unitLiteral :: Parser Rope
+unitLiteral = label "a units symbol" $ do
     str <- some unitChar
-    return (T.pack str)
+    return (intoRope str)
 
--- FIXME change this to numbers with decimal points!
--- FIXME read? Really?
-numberLiteral :: Parser Int
+numberLiteral :: Parser Int64
 numberLiteral = label "a number literal" $ do
-    sign <- optional (char '-')
     digits <- some digitChar
-    let number = read digits
+    let result = readMaybe digits
+    case result of
+        Just number -> return number
+        Nothing -> fail "expected a number but couldn't parse"
+
+decimalLiteral :: Parser Decimal
+decimalLiteral = label "a decimal literal" $ do
+    digits1 <- some digitChar
+    fraction <- optional (do
+        void (char '.')
+        some digitChar)
+
+    return (case fraction of
+        Nothing ->
+          let
+            number = read digits1
+          in
+            Decimal number 0
+        Just digits2 ->
+          let
+            e = fromIntegral (length digits2)
+            decimal = read digits1 * 10^e + read digits2
+          in
+            Decimal decimal e)
+
+superscriptLiteral :: Parser Int8
+superscriptLiteral = label "a superscript literal" $ do
+    sign <- optional (char '⁻' <|> char '¯')    -- honestly not sure what the second of those is
+    digits <- some (oneOf ['⁰','¹','²','³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'])
+    let number = read (map toNumbers digits)
     return (case sign of
         Just _ -> negate number
         Nothing -> number)
 
--- FIXME handle other constructors
+toNumbers :: Char -> Char
+toNumbers c = case c of
+    '⁰' -> '0'
+    '¹' -> '1'
+    '²' -> '2'
+    '³' -> '3'
+    '⁴' -> '4'
+    '⁵' -> '5'
+    '⁶' -> '6'
+    '⁷' -> '7'
+    '⁸' -> '8'
+    '⁹' -> '9'
+    _   -> error "Invalid, superscript expected"
+
 pQuantity :: Parser Quantity
-pQuantity = do
+pQuantity =
     try (do
-        str <- stringLiteral
-        return (Text (intoRope str)))
-    <|> try (do
-        num <- numberLiteral
+        n <- pMantissa
+        u <- try pUncertainty <|> pure (Decimal 0 0)
+        m <- try pMagnitude <|> pure 0
+        s <- pSymbol
+        return (Quantity n u m s)) <|>
+    try (do
+        n <- pNumber
+        return (Number n))
+  where
+    pNumber = do
+        sign <- optional (char '-')
+        number <- numberLiteral
+        return (case sign of
+            Just _ -> negate number
+            Nothing -> number)
+
+    pMantissa = do
+        sign <- optional (char '-')
+        decimal <- decimalLiteral
+        return (case sign of
+            Just _ -> negateDecimal decimal
+            Nothing -> decimal)
+
+    pUncertainty = do
         skipSpace1
-        symbol <- unitLiteral
-        return (Quantity num (intoRope symbol)))
-    <|> try (do
-        num <- numberLiteral
-        return (Number num))
+        void (char '±') <|> void (string "+/-")
+        skipSpace1
+        decimalLiteral
+
+    pMagnitude = do
+        skipSpace1
+        void (char '×') <|> void (char 'x') <|> void (char '*')
+        skipSpace1
+        void (string "10")
+        number <- (do
+            void (char '^')
+            num <- numberLiteral
+            pure (fromIntegral num))
+            <|>
+            superscriptLiteral
+        return (fromIntegral number :: Int8)
+
+    pSymbol = do
+        skipSpace1
+        unitLiteral
+
 
 pOperator :: Parser Operator
 pOperator =
@@ -179,9 +256,10 @@ pOperator =
     (char '+' *> return Combine)
 
 {-|
-Parse a Tablet. This follows the same pattern as 'pBlock' below of
-consuming trailing space around delimiters but only single newlines (as
-separator) within.
+Parse a Tablet. This consumes trailing space around initial delimiter and
+removes blank lines within the table (they're not syntactically meaningful)
+but only cosnsumes a single newline after trailing delimeter, leaving
+further consumption to pStatement.
 -}
 -- TODO this doesn't preserve alternate syntax if employed by user
 pTablet :: Parser Tablet
@@ -189,9 +267,9 @@ pTablet = do
     void (char '[' <* space)
 
     bindings <- many
-        (pBinding <* skipSpace <* optional newline <* skipSpace)
+        (pBinding <* space)
 
-    void (char ']' <* space)
+    void (char ']' <* skipSpace <* optional newline <* skipSpace)
 
     return (Tablet bindings)
   where
@@ -244,11 +322,11 @@ pExpression = do
 
     pNone = do
         void (string "()")
-        return (Literal None)
+        return None
 
     pUndefined = do
         void (char '?')
-        return (Literal Undefined)
+        return Undefined
 
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
@@ -279,9 +357,13 @@ pExpression = do
         subexpr <- pExpression
         return (Application name subexpr)
 
-    pLiteral = do
-        qty <- pQuantity
-        return (Literal qty)
+    pLiteral =
+        (do
+            str <- stringLiteral
+            return (Text (intoRope str))) <|>
+        (do
+            qty <- pQuantity
+            return (Amount qty))
 
     pVariable = do
         name <- pIdentifier

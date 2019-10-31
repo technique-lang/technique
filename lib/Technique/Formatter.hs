@@ -9,6 +9,7 @@ module Technique.Formatter where
 import Core.Text.Rope
 import Core.Text.Utilities
 import Data.Foldable (foldl')
+import Data.Int (Int8)
 import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
     , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
@@ -23,7 +24,8 @@ import Technique.Language
 import Technique.Quantity
 
 data TechniqueToken
-    = ProcedureToken
+    = MagicToken
+    | ProcedureToken
     | TypeToken
     | SymbolToken
     | OperatorToken
@@ -41,6 +43,7 @@ instance Pretty Procedure where
 -- no use of white, suggesting colours
 colourizeTechnique :: TechniqueToken -> AnsiStyle
 colourizeTechnique token = case token of
+    MagicToken -> color Black
     ProcedureToken -> colorDull Blue <> bold
     TypeToken -> colorDull Yellow
     SymbolToken -> colorDull Cyan <> bold
@@ -59,7 +62,9 @@ instance Render Procedure where
     intoDocA proc =
       let
         name = intoDocA . procedureName $ proc
-        params = commaCat . procedureParams $ proc
+        params = case procedureParams proc of
+            []  -> emptyDoc
+            xs  -> commaCat xs <> " "
         from = commaCat . procedureInput $ proc
         into = intoDocA . procedureOutput $ proc
         block = intoDocA . procedureBlock $ proc
@@ -70,7 +75,7 @@ instance Render Procedure where
         description <>
         (indent 4 (
             annotate ProcedureToken name <+>
-            params <+>
+            params <>
             annotate SymbolToken ":" <+>
             annotate TypeToken from <+>
             annotate SymbolToken "->" <+>
@@ -81,7 +86,7 @@ instance Render Procedure where
 punctuate a list with commas annotated with Symbol highlighting.
 -}
 commaCat :: (Render a, Token a ~ TechniqueToken)  => [a] -> Doc (Token a)
-commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap intoDocA
+commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap (annotate VariableToken . intoDocA)
 
 instance Render Type where
     type Token Type = TechniqueToken
@@ -114,7 +119,7 @@ instance Render Statement where
     colourize = colourizeTechnique
     intoDocA statement = case statement of
         Assignment var expr ->
-            intoDocA var <+> annotate SymbolToken "=" <+> intoDocA expr
+            annotate VariableToken (intoDocA var) <+> annotate SymbolToken "=" <+> intoDocA expr
         Execute expr ->
             intoDocA expr
         Comment text ->
@@ -139,12 +144,20 @@ instance Render Expression where
     intoDocA expr = case expr of
         Application name subexpr ->
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
-        Literal qty ->
+        None ->
+            annotate SymbolToken ("()")
+        Undefined ->
+            annotate ErrorToken "?"
+        Amount qty ->
             intoDocA qty
+        Text text ->
+            annotate SymbolToken dquote <>
+            annotate StringToken (pretty text) <>
+            annotate SymbolToken dquote
         Object tablet ->
             intoDocA tablet
         Variable var ->
-            intoDocA var
+            annotate VariableToken (intoDocA var)
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
         Grouping subexpr ->
@@ -159,29 +172,57 @@ instance Render Expression where
 instance Render Identifier where
     type Token Identifier = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Identifier name) =
-        annotate VariableToken (pretty name)
+    intoDocA (Identifier name) = pretty name
 
 instance Pretty Identifier where
     pretty = unAnnotate . intoDocA
+
+instance Render Decimal where
+    type Token Decimal = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA = pretty . decimalToRope
 
 instance Render Quantity where
     type Token Quantity = TechniqueToken
     colourize = colourizeTechnique
     intoDocA qty = case qty of
-        None ->
-            annotate SymbolToken ("()")
-        Undefined ->
-            annotate ErrorToken "?"
         Number i ->
             annotate QuantityToken (pretty i)
-        Quantity i unit ->
-            annotate QuantityToken (pretty i <+> pretty unit)
-        Text text ->
-            annotate SymbolToken dquote <>
-            annotate StringToken (pretty text) <>
-            annotate SymbolToken dquote
+        Quantity i u m unit ->
+          let
+            measurement =
+                intoDocA i <> " "
+            uncertainty = if isZeroDecimal u
+                then emptyDoc
+                else "± " <> intoDocA u <> " "
+            magnitude = if m == 0
+                then emptyDoc
+                else "× 10" <> numberToSuperscript m <> " "
+          in
+            annotate QuantityToken (measurement <> uncertainty <> magnitude <> pretty unit)
 
+numberToSuperscript :: Int8 -> Doc ann
+numberToSuperscript number =
+  let
+    digits = show number
+    digits' = fmap toSuperscript digits
+  in
+    pretty digits'
+
+toSuperscript :: Char -> Char
+toSuperscript c = case c of
+    '0' -> '⁰' -- U+2070
+    '1' -> '¹' -- U+00B9
+    '2' -> '²' -- U+00B2
+    '3' -> '³' -- U+00B3
+    '4' -> '⁴' -- U+2074
+    '5' -> '⁵' -- U+2075
+    '6' -> '⁶' -- U+2076
+    '7' -> '⁷' -- U+2077
+    '8' -> '⁸' -- U+2078
+    '9' -> '⁹' -- U+2079
+    '-' -> '⁻' -- U+207B
+    _   -> error "Invalid, digit expected"
 
 instance Render Tablet where
     type Token Tablet = TechniqueToken
@@ -231,6 +272,6 @@ instance Render Technique where
             Nothing     -> emptyDoc
         body = fmap intoDocA . techniqueBody $ technique
       in
-        annotate SymbolToken ("%" <+> "technique" <+> "v" <> version) <> line <>
-        annotate SymbolToken ("!" <+> license <> copyright) <> line <> line <>
+        annotate MagicToken ("%" <+> "technique" <+> "v" <> version) <> line <>
+        annotate MagicToken ("!" <+> license <> copyright) <> line <> line <>
         vsep (punctuate line body)
