@@ -277,12 +277,12 @@ further consumption to pStatement.
 -- TODO this doesn't preserve alternate syntax if employed by user
 pTablet :: Parser Tablet
 pTablet = do
-    void (char '[' <* space)
+    void (char '[' <* hidden space)
 
     bindings <- many
-        (pBinding <* space)
+        (pBinding <* hidden space)
 
-    void (char ']' <* skipSpace <* optional newline <* skipSpace)
+    void (char ']' <* skipSpace)
 
     return (Tablet bindings)
   where
@@ -352,7 +352,7 @@ pExpression = do
 
     pRestriction = do
         attr <- pAttribute
-        space
+        hidden space
         block <- pBlock
         return (Restriction attr block)
 
@@ -398,7 +398,7 @@ pStatement =
         names <- pIdentifiers1
         skipSpace
         void (char '=')
-        space
+        hidden space
         expr <- pExpression
         return (Assignment names expr)
 
