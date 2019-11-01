@@ -216,11 +216,13 @@ toNumbers c = case c of
 pQuantity :: Parser Quantity
 pQuantity =
     (do
-        -- look ahead far enough to commit to this branch, skipping the
-        -- structural characters that indicate the end of a literal.
+        -- look ahead far enough to commit to this branch:  the pieces of a
+        -- decimal, a space, and then one of the characters that starts an
+        -- uncertainty, magnitude, or symbol.
         lookAhead (try (do
-            skipMany (noneOf [' ',')','}',']',';','\n'])
-            void (oneOf [' ', '±', '+', '×', 'x'] <|> unitChar)
+            skipMany (digitChar <|> char '.' <|> char '-')
+            skipSpace1
+            void (char '±' <|> char '+' <|> char '×' <|> char 'x' <|> unitChar)
             ))
 
         n <- pMantissa
