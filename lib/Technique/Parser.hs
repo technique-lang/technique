@@ -220,8 +220,7 @@ pQuantity =
         -- decimal, a space, and then one of the characters that starts an
         -- uncertainty, magnitude, or symbol.
         lookAhead (try (do
-            skipMany (digitChar <|> char '.' <|> char '-')
-            skipSpace1
+            skipMany (digitChar <|> char '.' <|> char '-' <|> char ' ')
             void (char '±' <|> char '+' <|> char '×' <|> char 'x' <|> unitChar)
             ))
 
@@ -388,6 +387,11 @@ pExpression = do
         return (Object tablet)
 
     pApplication = do
+        lookAhead (try (do
+            skipMany identifierChar
+            skipSpace1
+            void (identifierChar <|> digitChar <|> char '(')))
+
         name <- pIdentifier
         -- ie at least one space
         skipSpace1
@@ -410,13 +414,16 @@ pExpression = do
 
 pStatement :: Parser Statement
 pStatement =
-    try pAssignment <|>
-    try pDeclaration <|>
-    try pExecute <|>
-    try pBlank <|>
-    try pSeries
+    pAssignment <|>
+    pDeclaration <|>
+    pExecute <|>
+    pBlank <|>
+    pSeries
   where
     pAssignment = label "an assignment" $ do
+        lookAhead (try (do
+            skipMany (identifierChar <|> char ',' <|> char ' ')
+            void (char '=')))
         names <- pIdentifiers1
         skipSpace
         void (char '=')
@@ -425,7 +432,10 @@ pStatement =
         return (Assignment names expr)
 
     pDeclaration = label "a declaration" $ do
-        -- only dive into working out if this is a Procedure if there's a ':' here
+        lookAhead (try (do
+            skipMany (identifierChar <|> char ',' <|> char ' ')
+            void (char ':')))
+
         proc <- pProcedureCode
         return (Declaration proc)
 

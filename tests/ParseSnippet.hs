@@ -1,14 +1,36 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE BangPatterns #-}
 
 import Core.Program
 import Core.Text
 import Core.System
 import Data.Text (Text)
-import qualified Data.Text.IO as T
 import Text.Megaparsec
 
 import Technique.Parser
 import Technique.Formatter ()
+
+text :: Text
+text = "5.9722 × 10^24 kg"
+
+text1 = [quote|
+{ 
+    (42 )  
+}
+|]
+
+text2 = "{ answer = 42 kg }" -- ;
+
+text3 = "x"
+
+main :: IO ()
+main = execute $ do
+    let !result = parse pBlock "" text1
+    liftIO $ hFlush stdout
+    sleep 0.25
+    case result of
+        Left err    -> write (intoRope (errorBundlePretty err))
+        Right x     -> writeR x
 
 
 blob1 :: Text
@@ -66,13 +88,3 @@ blob4 = [quote|
     ]
 }}
 |]
-
-main :: IO ()
-main = execute $ do
-    blob3 <- liftIO $ T.readFile "tests/Stub.t"
-    let result = parse pTechnique "" blob3
-    sleep 0.25
-    case result of
-        Left err    -> write (intoRope (errorBundlePretty err))
-        Right x     -> writeR x
-        
