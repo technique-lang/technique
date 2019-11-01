@@ -389,7 +389,7 @@ pExpression = do
         lookAhead (try (do
             skipMany identifierChar
             skipSpace1
-            void (identifierChar <|> digitChar <|> char '(')))
+            void (identifierChar <|> digitChar <|> char '(' <|> char '\"')))
 
         name <- pIdentifier
         -- ie at least one space
