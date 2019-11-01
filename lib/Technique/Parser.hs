@@ -146,7 +146,7 @@ stringLiteral = label "a string literal" $ do
             void (char '\\')
             void (char '"')
             return '"')
-        <|> try (do
+        <|> (do
             notFollowedBy (char '\"')
             printChar)
         )
@@ -214,13 +214,14 @@ toNumbers c = case c of
 
 pQuantity :: Parser Quantity
 pQuantity =
-    try (do
+    (do
+        void (lookAhead (try (skipMany (anySingleBut ' ') *> char ' ')))
         n <- pMantissa
-        u <- try pUncertainty <|> pure (Decimal 0 0)
-        m <- try pMagnitude <|> pure 0
+        u <- pUncertainty <|> pure (Decimal 0 0)
+        m <- pMagnitude <|> pure 0
         s <- pSymbol
         return (Quantity n u m s)) <|>
-    try (do
+    (do
         n <- pNumber
         return (Number n))
   where
@@ -233,34 +234,35 @@ pQuantity =
 
     pMantissa = do
         sign <- optional (char '-')
-        decimal <- decimalLiteral
+        decimal <- try decimalLiteral
+        skipSpace
         return (case sign of
             Just _ -> negateDecimal decimal
             Nothing -> decimal)
 
     pUncertainty = do
-        skipSpace1
         void (char '±') <|> void (string "+/-")
-        skipSpace1
+        skipSpace
         decimalLiteral
 
     pMagnitude = do
-        skipSpace1
-        void (char '×') <|> void (char 'x') <|> void (char '*')
-        skipSpace1
+        void (char '×') <|> void (char 'x') <|> hidden (void (char '*'))
+        skipSpace
         void (string "10")
         number <- (do
             void (char '^')
-            num <- numberLiteral
-            pure (fromIntegral num))
+            sign <- optional (char '-')
+            e <- numberLiteral
+            pure (fromIntegral (case sign of
+                Just _ -> negate e
+                Nothing -> e))
             <|>
-            superscriptLiteral
-        return (fromIntegral number :: Int8)
+            superscriptLiteral)
+        skipSpace
+        return number
 
     pSymbol = do
-        skipSpace1
         unitLiteral
-
 
 pOperator :: Parser Operator
 pOperator =
