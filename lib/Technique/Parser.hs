@@ -17,7 +17,6 @@ module Technique.Parser where
 import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
-import Data.Char (GeneralCategory(..))
 import Data.Foldable (foldl')
 import Data.Int (Int8, Int64)
 import Data.Text (Text)
@@ -155,7 +154,7 @@ stringLiteral = label "a string literal" $ do
     return (T.pack str)
 
 unitChar :: Parser Char
-unitChar = hidden (upperChar <|> lowerChar <|> charCategory CurrencySymbol)
+unitChar = hidden (upperChar <|> lowerChar <|> char '°')
 
 unitLiteral :: Parser Rope
 unitLiteral = label "a units symbol" $ do
