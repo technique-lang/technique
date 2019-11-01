@@ -215,7 +215,9 @@ toNumbers c = case c of
 pQuantity :: Parser Quantity
 pQuantity =
     (do
+        -- look ahead far enough to commit to this branch
         void (lookAhead (try (skipMany (anySingleBut ' ') *> char ' ')))
+
         n <- pMantissa
         u <- pUncertainty <|> pure (Decimal 0 0)
         m <- pMagnitude <|> pure 0
@@ -243,7 +245,9 @@ pQuantity =
     pUncertainty = do
         void (char '±') <|> void (string "+/-")
         skipSpace
-        decimalLiteral
+        decimal <- decimalLiteral
+        skipSpace
+        return decimal
 
     pMagnitude = do
         void (char '×') <|> void (char 'x') <|> hidden (void (char '*'))
