@@ -242,6 +242,10 @@ checkSkeletonParser = do
                 `shouldBe` Just (Block
                     [ Execute (Variable [Identifier "x"])
                     ])
+            parseMaybe pBlock "{ \n (42)    \n}"
+                `shouldBe` Just (Block
+                    [ Execute (Grouping (Amount (Number 42)))
+                    ])
             parseMaybe pBlock "{ \n (42 )    \n}"
                 `shouldBe` Just (Block
                     [ Execute (Grouping (Amount (Number 42)))

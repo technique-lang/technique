@@ -146,7 +146,7 @@ stringLiteral = label "a string literal" $ do
             void (char '\\')
             void (char '"')
             return '"')
-        <|> try (do
+        <|> (do
             notFollowedBy (char '\"')
             printChar)
         )
@@ -154,7 +154,7 @@ stringLiteral = label "a string literal" $ do
     return (T.pack str)
 
 unitChar :: Parser Char
-unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
+unitChar = hidden (upperChar <|> lowerChar <|> char '°')
 
 unitLiteral :: Parser Rope
 unitLiteral = label "a units symbol" $ do
@@ -214,13 +214,21 @@ toNumbers c = case c of
 
 pQuantity :: Parser Quantity
 pQuantity =
-    try (do
+    (do
+        -- look ahead far enough to commit to this branch:  the pieces of a
+        -- decimal, a space, and then one of the characters that starts an
+        -- uncertainty, magnitude, or symbol.
+        lookAhead (try (do
+            skipMany (digitChar <|> char '.' <|> char '-' <|> char ' ')
+            void (char '±' <|> char '+' <|> char '×' <|> char 'x' <|> unitChar)
+            ))
+
         n <- pMantissa
-        u <- try pUncertainty <|> pure (Decimal 0 0)
-        m <- try pMagnitude <|> pure 0
+        u <- pUncertainty <|> pure (Decimal 0 0)
+        m <- pMagnitude <|> pure 0
         s <- pSymbol
         return (Quantity n u m s)) <|>
-    try (do
+    (do
         n <- pNumber
         return (Number n))
   where
@@ -233,33 +241,39 @@ pQuantity =
 
     pMantissa = do
         sign <- optional (char '-')
-        decimal <- decimalLiteral
+        decimal <- try decimalLiteral
+        skipSpace
         return (case sign of
             Just _ -> negateDecimal decimal
             Nothing -> decimal)
 
     pUncertainty = do
-        skipSpace1
         void (char '±') <|> void (string "+/-")
-        skipSpace1
-        decimalLiteral
+        skipSpace
+        decimal <- decimalLiteral
+        skipSpace
+        return decimal
 
     pMagnitude = do
-        skipSpace1
-        void (char '×') <|> void (char 'x') <|> void (char '*')
-        skipSpace1
+        void (char '×') <|> void (char 'x') <|> hidden (void (char '*'))
+        skipSpace
         void (string "10")
         number <- (do
             void (char '^')
-            num <- numberLiteral
-            pure (fromIntegral num))
+            sign <- optional (char '-')
+            e <- numberLiteral
+            pure (fromIntegral (case sign of
+                Just _ -> negate e
+                Nothing -> e))
             <|>
-            superscriptLiteral
-        return (fromIntegral number :: Int8)
+            superscriptLiteral)
+        skipSpace
+        return number
 
     pSymbol = do
-        skipSpace1
-        unitLiteral
+        symbol <- unitLiteral
+        skipSpace
+        return symbol
 
 
 pOperator :: Parser Operator
@@ -327,14 +341,14 @@ pExpression = do
         Nothing             -> return expr1
   where
     pTerm =
-        try pNone <|>
-        try pUndefined <|>
-        try pRestriction <|>
-        try pGrouping <|>
-        try pObject <|>
-        try pApplication <|>
-        try pLiteral <|>
-        try pVariable
+        pNone <|>
+        pUndefined <|>
+        pRestriction <|>
+        pGrouping <|>
+        pObject <|>
+        pApplication <|>
+        pLiteral <|>
+        pVariable
 
     pNone = do
         void (string "()")
@@ -357,15 +371,26 @@ pExpression = do
         return (Restriction attr block)
 
     pGrouping = do
-        between (char '(' <* skipSpace) (char ')') $ do
-            subexpr <- pExpression
-            return (Grouping subexpr)
+        void (char '(')
+        skipSpace
+
+        subexpr <- pExpression
+
+        void (char ')')
+        skipSpace
+
+        return (Grouping subexpr)
 
     pObject = do
         tablet <- pTablet
         return (Object tablet)
 
     pApplication = do
+        lookAhead (try (do
+            skipMany identifierChar
+            skipSpace1
+            void (identifierChar <|> digitChar <|> char '(')))
+
         name <- pIdentifier
         -- ie at least one space
         skipSpace1
@@ -388,13 +413,16 @@ pExpression = do
 
 pStatement :: Parser Statement
 pStatement =
-    try pAssignment <|>
-    try pDeclaration <|>
-    try pExecute <|>
-    try pBlank <|>
-    try pSeries
+    pAssignment <|>
+    pDeclaration <|>
+    pExecute <|>
+    pBlank <|>
+    pSeries
   where
     pAssignment = label "an assignment" $ do
+        lookAhead (try (do
+            skipMany (identifierChar <|> char ',' <|> char ' ')
+            void (char '=')))
         names <- pIdentifiers1
         skipSpace
         void (char '=')
@@ -403,7 +431,10 @@ pStatement =
         return (Assignment names expr)
 
     pDeclaration = label "a declaration" $ do
-        -- only dive into working out if this is a Procedure if there's a ':' here
+        lookAhead (try (do
+            skipMany (identifierChar <|> char ',' <|> char ' ')
+            void (char ':')))
+
         proc <- pProcedureCode
         return (Declaration proc)
 
