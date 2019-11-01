@@ -17,6 +17,7 @@ module Technique.Parser where
 import Control.Monad
 import Control.Monad.Combinators
 import Core.Text.Rope
+import Data.Char (GeneralCategory(..))
 import Data.Foldable (foldl')
 import Data.Int (Int8, Int64)
 import Data.Text (Text)
@@ -154,7 +155,7 @@ stringLiteral = label "a string literal" $ do
     return (T.pack str)
 
 unitChar :: Parser Char
-unitChar = hidden (upperChar <|> lowerChar <|> symbolChar)
+unitChar = hidden (upperChar <|> lowerChar <|> charCategory CurrencySymbol)
 
 unitLiteral :: Parser Rope
 unitLiteral = label "a units symbol" $ do
@@ -215,8 +216,12 @@ toNumbers c = case c of
 pQuantity :: Parser Quantity
 pQuantity =
     (do
-        -- look ahead far enough to commit to this branch
-        void (lookAhead (try (skipMany (anySingleBut ' ') *> char ' ')))
+        -- look ahead far enough to commit to this branch, skipping the
+        -- structural characters that indicate the end of a literal.
+        lookAhead (try (do
+            skipMany (noneOf [' ',')','}',']',';','\n'])
+            void (oneOf [' ', '±', '+', '×', 'x'] <|> unitChar)
+            ))
 
         n <- pMantissa
         u <- pUncertainty <|> pure (Decimal 0 0)
@@ -266,7 +271,10 @@ pQuantity =
         return number
 
     pSymbol = do
-        unitLiteral
+        symbol <- unitLiteral
+        skipSpace
+        return symbol
+
 
 pOperator :: Parser Operator
 pOperator =
@@ -333,14 +341,14 @@ pExpression = do
         Nothing             -> return expr1
   where
     pTerm =
-        try pNone <|>
-        try pUndefined <|>
-        try pRestriction <|>
-        try pGrouping <|>
-        try pObject <|>
-        try pApplication <|>
-        try pLiteral <|>
-        try pVariable
+        pNone <|>
+        pUndefined <|>
+        pRestriction <|>
+        pGrouping <|>
+        pObject <|>
+        pApplication <|>
+        pLiteral <|>
+        pVariable
 
     pNone = do
         void (string "()")
@@ -363,9 +371,15 @@ pExpression = do
         return (Restriction attr block)
 
     pGrouping = do
-        between (char '(' <* skipSpace) (char ')') $ do
-            subexpr <- pExpression
-            return (Grouping subexpr)
+        void (char '(')
+        skipSpace
+
+        subexpr <- pExpression
+
+        void (char ')')
+        skipSpace
+
+        return (Grouping subexpr)
 
     pObject = do
         tablet <- pTablet
