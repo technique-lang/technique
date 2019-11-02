@@ -25,7 +25,11 @@ main = do
               |]
             ]
         , Command "format" "Format the given procedure"
-            [ Argument "filename" [quote|
+            [ Option "raw-control-chars" (Just 'R') Empty [quote|
+                Emit ANSI escape codes for syntax highlighting even if output
+                is redirected to a pipe or file.
+              |]
+            , Argument "filename" [quote|
                 The file containing the code for the procedure you want to format.
               |]
             ]

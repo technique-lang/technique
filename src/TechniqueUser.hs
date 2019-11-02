@@ -78,6 +78,11 @@ commandFormatTechnique :: Program None ()
 commandFormatTechnique = do
     params <- getCommandLine
 
+    let raw = case lookupOptionFlag "raw-control-chars" params of
+            Nothing     -> False
+            Just True   -> True
+            _           -> error "Invalid State"
+
     let procfile = case lookupArgument "filename" params of
             Just file   -> file
             _           -> error "Invalid State"
@@ -86,7 +91,7 @@ commandFormatTechnique = do
     case result of
         Right technique -> do
             terminal <- liftIO $ hIsTerminalDevice stdout
-            case terminal of
+            case (terminal || raw) of
                 True    -> writeR technique
                 False   -> write (renderNoAnsi 80 technique)
 
