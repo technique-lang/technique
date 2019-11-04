@@ -2,26 +2,26 @@
 
 module Technique.Evaluator where
 
--- TODO *not* Maybe! If we have two option types here then there are four
--- possibilities we need to cater for [(Nothing,Nothing), ... (Just,Just)]
--- which means there are four semantics for a given table row. Hm.
+import Core.Text
+import Data.UUID.Types (UUID)
 
--- TODO there's an ambiguity here between the type of a table and the type
--- of an individual quantity. Which is "type"?
+import Technique.Language
 
-{-
-data Value = Value
-    { valueType :: Type 
-    , valueLabel :: Maybe Label
-    , valueData :: Maybe Quantity
+data Value a = Value
+    { valueKind :: Kind
+    , valueInternal :: a
     }
 
-data Type = Type
-     { typeName :: Rope
---   , typeInternal :: t
-     }
+{-|
+What "kind" of type is this thing?
 -}
-
+-- this is not really the type theory sense of the word "kind". If you want
+-- us to rename this to Type by all means, but please suggest a better name
+-- for Technique.Language.Type. Cheers!
+data Kind
+    = Unit
+    | Scalar
+    | Table
 
 {-
 data Expression b where
@@ -46,9 +46,17 @@ type Context = Map String Value -- ?
 
 
 evaluate = undefined
-
-evaluate :: Context -> Expression -> Value
-evaluate e = case e of
+-}
+evaluate :: Context -> Procedure -> Value
+evaluate c procedure = case procedure of
     Comment _ -> ()
     _ -> undefined
--}
+
+data Instance = Instance
+    { instanceProcedure :: Procedure
+    , instanceUniversal :: UUID
+    , instancePath :: Rope -- ?
+    }
+
+instantiate :: Context -> Procedure -> Instance
+instantiate context procedure = undefined
