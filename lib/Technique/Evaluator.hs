@@ -1,27 +1,31 @@
 {-# LANGUAGE GADTs #-}
 
+{-|
+Given a Technique Procedure, transform it into an Instance that can be executed.
+-}
 module Technique.Evaluator where
 
+import Core.Data
 import Core.Text
 import Data.UUID.Types (UUID)
 
 import Technique.Language
+import Technique.Quantity
 
-data Value a = Value
-    { valueKind :: Kind
-    , valueInternal :: a
-    }
+-- Need names? Science names newly discovered creatures in Latin. I don't
+-- speak Latin, but neither does anyone else so we can just make words up.
+-- Yeay! (The lengths some people will go to in order to avoid qualified
+-- imports is really impressive, isn't it?)
+data Value
+    = Unitus
+    | Literali Rope
+    | Quanticle Quantity
+    | Tabularum [(Rope,Value)]
 
-{-|
-What "kind" of type is this thing?
--}
--- this is not really the type theory sense of the word "kind". If you want
--- us to rename this to Type by all means, but please suggest a better name
--- for Technique.Language.Type. Cheers!
-data Kind
-    = Unit
-    | Scalar
-    | Table
+data Context = Context (Map Identifier Value)
+
+data Environment = Environment (Map Identifier Value)
+
 
 {-
 data Expression b where
