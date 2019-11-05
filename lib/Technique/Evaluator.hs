@@ -21,11 +21,11 @@ data Value
     | Literali Rope
     | Quanticle Quantity
     | Tabularum [(Rope,Value)]
+    | Parametri [Value]         -- TODO hmm
 
 data Context = Context (Map Identifier Value)
 
 data Environment = Environment (Map Identifier Value)
-
 
 {-
 data Expression b where
@@ -36,25 +36,43 @@ data Expression b where
     Attribute :: Role -> Expression a -> Expression a
 -}
 
+evaluate :: Environment -> Expression -> Value
+evaluate env expr' = case expr' of
+    Application i expr -> functionApplication (lookupProcedure env i) (evaluate env expr)    -- lookup needs to return a function?
+    None    -> Unitus
+    Text text -> Literali text
+    Amount qty -> Quanticle qty
+    Undefined -> error "?!?" -- not error but "hole, stop here"
+    Object (Tablet bindings) -> Tabularum (fmap (\(Binding label expr) -> (label,evaluate env expr)) bindings)
+    Variable is -> Parametri (fmap (lookupValue env) is)    -- TODO hmm
+    Operation op expr1 expr2 -> case op of
+        WaitEither  -> waitEither (evaluate env expr1) (evaluate env expr2)
+        WaitBoth    -> waitBoth (evaluate env expr1) (evaluate env expr2)
+        Combine     -> combineValues (evaluate env expr1) (evaluate env expr2)
+    Grouping expr -> evaluate env expr
+    Restriction attr block -> applyRestriction attr block
 
-{-
--- aka apply
-execute :: Procedure -> Value -> b
-execute proc value =
-  let
-    body = procedureBlock proc
-  in
-    evaluate body
 
-type Context = Map String Value -- ?
+functionApplication :: Procedure -> Value -> Value
+functionApplication = undefined
 
+lookupProcedure :: Environment -> Identifier -> Procedure
+lookupProcedure = undefined
 
-evaluate = undefined
--}
-evaluate :: Context -> Procedure -> Value
-evaluate c procedure = case procedure of
-    Comment _ -> ()
-    _ -> undefined
+lookupValue :: Environment -> Identifier -> Value
+lookupValue = undefined
+
+waitEither :: Value -> Value -> Value
+waitEither = undefined
+
+waitBoth :: Value -> Value -> Value
+waitBoth = undefined
+
+combineValues :: Value -> Value -> Value
+combineValues = undefined
+
+applyRestriction :: Attribute -> Block -> Value
+applyRestriction = undefined
 
 data Instance = Instance
     { instanceProcedure :: Procedure
@@ -63,4 +81,8 @@ data Instance = Instance
     }
 
 instantiate :: Context -> Procedure -> Instance
-instantiate context procedure = undefined
+instantiate context procedure = Instance
+    { instanceProcedure = procedure
+    , instanceUniversal = -- ** we need IO here now!!! **
+    , instancePath :: Rope -- ?
+    }
