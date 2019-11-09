@@ -80,6 +80,23 @@ data Instance = Instance
     , instancePath :: Rope -- ?
     }
 
+newtype Name = Name Rope -- ???
+
+{-|
+Names. Always needing names. These ones are taken from a suggestion by Oleg
+Kiselyov on page 23 of his course "Typed Tagless Final Interpreters" that
+the constructors of a simply typed lambda calculus in this style could be
+considered a "minimal intuitionistic logic" which is absolutely fabulous.
+-}
+data Step
+    = Axiom Value                       -- literals
+    | Hypothesis Name                   -- reference to a hypothesis denoted by a variable
+    | Introduction Step                 -- implication introduction, ie lambda, ie assignment?
+    | Elimination Instance Step         -- implication elimination, ie function application
+
+                                        -- assumption axiom?
+                                        -- weakening?
+
 instantiate :: Context -> Procedure -> Instance
 instantiate context procedure = Instance
     { instanceProcedure = procedure
