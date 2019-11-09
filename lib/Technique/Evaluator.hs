@@ -83,6 +83,6 @@ data Instance = Instance
 instantiate :: Context -> Procedure -> Instance
 instantiate context procedure = Instance
     { instanceProcedure = procedure
-    , instanceUniversal = -- ** we need IO here now!!! **
-    , instancePath :: Rope -- ?
+    , instanceUniversal = undefined -- ** we need IO here now!!! **
+    , instancePath = undefined
     }

@@ -67,6 +67,9 @@ emptyProcedure = Procedure
 data Block = Block [Statement]
     deriving (Show, Eq)
 
+blockStatements :: Block -> [Statement]
+blockStatements (Block statements) = statements
+
 data Statement
     = Assignment [Identifier] Expression
     | Execute Expression

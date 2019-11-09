@@ -21,17 +21,17 @@ dependencies:
  - core-text >= 0.2.2
  - core-program >= 0.2.2
  - free
+ - megaparsec
+ - text
+ - parser-combinators
+ - prettyprinter
+ - prettyprinter-ansi-terminal
 
-ghc-options: -Wall -Wwarn -fwarn-tabs
+ghc-options: -Wall -Wwarn -fwarn-tabs -dynamic
 
 library:
   dependencies:
    - async
-   - megaparsec
-   - parser-combinators
-   - prettyprinter
-   - prettyprinter-ansi-terminal
-   - text
    - uuid-types
   source-dirs: lib
   exposed-modules:
@@ -45,7 +45,6 @@ library:
 executables:
   technique:
     dependencies:
-     - megaparsec
      - technique
     ghc-options: -threaded -dynamic
     source-dirs: src
@@ -57,8 +56,6 @@ tests:
   check:
     dependencies:
      - hspec
-     - megaparsec
-     - prettyprinter
      - technique
     ghc-options: -threaded -dynamic
     source-dirs:
