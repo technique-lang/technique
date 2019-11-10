@@ -41,6 +41,7 @@ library:
    - Technique.Parser
   other-modules:
    - Technique.Evaluator
+   - Technique.Instantiate
 
 executables:
   technique:
