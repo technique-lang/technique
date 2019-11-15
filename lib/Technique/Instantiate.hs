@@ -12,6 +12,26 @@ import Data.UUID.Types (UUID)
 import Technique.Language
 import Technique.Quantity
 
+
+{-|
+In order to instantiate a Procedure into something that can in turn be
+interpreted and thus run, we need to supply a Context: an identifier for
+the event (collection of procedure calls) it is a part of, and the path
+history we took to get here.
+-}
+data Context = Context
+    { contextEvent :: UUID
+    , contextPath :: Rope -- or a  list or a fingertree or...
+    , contextVariables :: Map Name Promise
+    , contextFunctions :: Map Name Procedure
+    }
+
+{-|
+The resolved value of eiter a literal or function applicaiton, either as
+that literal, the expression, or as the result of waiting on the variable
+it was assigned to.
+
+-}
 -- Need names? Science names newly discovered creatures in Latin. I don't
 -- speak Latin, but neither does anyone else so we can just make words up.
 -- Yeay! (The lengths some people will go to in order to avoid qualified
@@ -54,17 +74,6 @@ data Step
                                         -- weakening?
 
 {-|
-In order to instantiate a Procedure into something that can in turn be
-interpreted and thus run, we need to supply a Context: an identifier for
-the event (collection of procedure calls) it is a part of, and the path
-history we took to get here.
--}
-data Context = Context
-    { contextEvent :: UUID
-    , contextPath :: Rope -- or a  list or a fingertree or...
-    }
-
-{-|
 Take a static Procedure definition and spin it up into an Instance suitable
 for interpretation. In other words, translate between the surface syntax types
 and the abstract syntax we can feed to an evaluator.
@@ -75,10 +84,12 @@ instantiate context procedure =
     block = procedureBlock procedure
     statements = blockStatements block
 
-    steps = foldr instantiateStatement [] statements
+    f :: [Step] -> Statement -> [Step]
+    f steps statement = steps <> instantiateStatement context statement
   in
     Instance
         { instanceContext = context
-        , instanceProcedure = procedure
+        , instanceSource = procedure
+        , instanceSteps = foldr f [] statements
         }
 
