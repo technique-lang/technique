@@ -3,7 +3,7 @@
 {-|
 Given a Technique Procedure, transform it into an Instance that can be executed.
 -}
-module Technique.Evaluator where
+module Technique.Instantiate where
 
 import Core.Data
 import Core.Text
@@ -21,7 +21,6 @@ data Value
     | Literali Rope
     | Quanticle Quantity
     | Tabularum [(Rope,Value)]
-    | Parametri [Value]         -- TODO hmm
 
 data Instance = Instance
     { instanceContext :: Context
@@ -42,15 +41,15 @@ Interpreters" that the constructors of a simply typed lambda calculus in
 this style could be considered a "minimal intuitionistic logic" which is
 absolutely fabulous.
 -}
+-- while it probably would work to put an Asynchronous into a Tuple list,
+-- it's not valid from the point of view of the surface language syntax.
 data Step
     = Known Value                       -- axioms, aka literals
-    | Blocking [Name]                   -- reference to a hypothesis denoted by a variable
+    | Depends Name                      -- reference to a hypothesis denoted by a variable
     | Asynchronous Name Step            -- implication introduction, ie lambda, ie assignment?
     | Invocation Instance Step          -- implication elimination, ie function application
+    | Tuple [Step]
 
---
--- or maybe   | Depends [Step]
---
                                         -- assumption axiom?
                                         -- weakening?
 
