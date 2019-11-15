@@ -1,17 +1,24 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
-Given a Technique Procedure, transform it into an Instance that can be executed.
+Given an instantiated Technique Procedure, evalutate it at runtime.
 -}
+-- At present this is a proof of concept. It might benefit from being
+-- converted to a typeclass in the tagless final style.
 module Technique.Evaluator where
 
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader.Class (MonadReader(..))
+import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
 import Core.Text
 import Data.UUID.Types (UUID)
 
+import Technique.Instantiate
 import Technique.Language
 import Technique.Quantity
 
+-- TODO this needs to evolve to IVars or equivalent
 data Environment = Environment (Map Identifier Value)
 
 {-
@@ -23,24 +30,33 @@ data Expression b where
     Attribute :: Role -> Expression a -> Expression a
 -}
 
-evaluate :: Environment -> Instance -> Value
-evaluate env inst = undefined
+-- Does this need to upgrade to a MonadEvaluate mtl style class in order to
+-- support different interpeters / backends? This seems so cumbersome
+-- compared to the elegent tagless final method.
 
+newtype Evaluate a = Evaluate (ReaderT Environment IO a)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Environment)
 
-functionApplication :: Procedure -> Value -> Value
-functionApplication = undefined
+unEvaluate :: Evaluate a -> ReaderT Environment IO a
+unEvaluate (Evaluate r) = r
 
-lookupProcedure :: Environment -> Identifier -> Procedure
-lookupProcedure = undefined
+{-|
+The heart of the evaluation loop. Translate from the abstract syntax tree 
+into a monadic sequence which results in a Result.
+-}
+evaluate :: Environment -> Step -> Evaluate Value
+evaluate env step = case step of
+    Known value -> do
+        return value
 
-lookupValue :: Environment -> Identifier -> Value
-lookupValue = undefined
+    Depends name -> do
+        blockUntilValue name
 
-waitEither :: Value -> Value -> Value
-waitEither = undefined
+    Asynchronous name step -> do
+        assignName name step
 
-waitBoth :: Value -> Value -> Value
-waitBoth = undefined
+    Invocation inst step -> do
+        functionApplication inst step
 
 combineValues :: Value -> Value -> Value
 combineValues = undefined
