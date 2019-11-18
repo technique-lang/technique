@@ -23,8 +23,12 @@ data Context = Context
     { contextEvent :: UUID
     , contextPath :: Rope -- or a  list or a fingertree or...
     , contextVariables :: Map Name Promise
-    , contextFunctions :: Map Name Procedure
+    , contextFunctions :: Map Identifier Procedure
     }
+
+
+-- FIXME ??? upgrade to named IVar
+newtype Promise = Promise Value
 
 {-|
 The resolved value of eiter a literal or function applicaiton, either as
@@ -44,13 +48,18 @@ data Value
 
 data Instance = Instance
     { instanceContext :: Context
-    , instanceTitle :: Either Identifier Markdown
-    , instanceSource :: Procedure -- necessary?
+    , instanceSource :: Procedure
     , instanceRole :: Attribute
     , instanceSteps :: [Step]
     }
 
-newtype Name = Name Rope -- ???
+data Primitive = Primitive
+    { primitiveContext :: Context   -- do we need this?
+    , primitiveName :: Identifier
+    , primitiveAction :: Step -> IO Value
+    }
+
+newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
 
 {-|
 Names. Always needing names. These ones are from original work when we
@@ -64,11 +73,12 @@ absolutely fabulous.
 -- while it probably would work to put an Asynchronous into a Tuple list,
 -- it's not valid from the point of view of the surface language syntax.
 data Step
-    = Known Value                       -- axioms, aka literals
-    | Depends Name                      -- reference to a hypothesis denoted by a variable
-    | Asynchronous Name Step            -- implication introduction, ie lambda, ie assignment?
-    | Invocation Instance Step          -- implication elimination, ie function application
-    | Tuple [Step]
+    = Known Value                       -- literals ("axioms")
+    | Depends Name                      -- block waiting on a value ("reference to a hypothesis denoted by a variable")
+    | Asynchronous Name Step            -- assignment (ie lambda, "implication introduction"
+    | Invocation Instance Step          -- function application ("implication elimination") on a [sub] Procedure
+    | External Primitive Step           -- same, but calling a primative builtin.
+    | Tuple (Step,Step)
 
                                         -- assumption axiom?
                                         -- weakening?
@@ -80,16 +90,108 @@ and the abstract syntax we can feed to an evaluator.
 -}
 instantiate :: Context -> Procedure -> Instance
 instantiate context procedure =
-  let
-    block = procedureBlock procedure
-    statements = blockStatements block
-
-    f :: [Step] -> Statement -> [Step]
-    f steps statement = steps <> instantiateStatement context statement
-  in
     Instance
         { instanceContext = context
         , instanceSource = procedure
         , instanceSteps = foldr f [] statements
         }
+  where
+    block = procedureBlock procedure
+    statements = blockStatements block
 
+    f :: [Step] -> Statement -> [Step]
+    f steps statement = steps <> instantiateStatement context statement
+
+
+instantiateStatement :: Context -> Statement -> [Step]
+instantiateStatement context statement = case statement of
+    Assignment vars expr -> Asynchronous
+
+    Execute expr -> instantiateExpression context expr
+
+    Declaration proc -> insertProcedure context proc
+
+    -- the remainder are functionally no-ops
+    Comment _ -> []
+    Blank -> []
+    Series -> []
+
+instantiateExpression :: Context -> Expression -> Step
+instantiateExpression context steps expr = case expr of
+    Application i expr ->
+        -- lookup returns a function that constructs a Step
+        (lookupProcedure context i) (instantiateExpression expr)
+    None ->
+        Known Unitus
+    Text text ->
+        Known (Literali text)
+    Amount qty ->
+        Known (Quanticle qty)
+    Undefined ->
+        error "?!?" -- TODO ERROR not error but "hole, stop here"
+    Object (Tablet bindings) ->
+        Known (Tabularum (fmap ( \(Binding label expr) -> (label,instantiateExpression  expr)) bindings))
+    Variable is ->
+        Tuple (fmap ? is)
+    Operation op subexpr1 subexpr2 ->
+      let
+        f = case op of
+                WaitEither  -> waitEither context
+                WaitBoth    -> waitBoth context
+                Combine     -> combineValues context
+      in
+        External f (Tuple [(instantiateExpression env subexpr1),(instantiateExpression env subexpr2)])
+    Grouping subexpr ->
+        instantiateExpression subexpr
+    Restriction attr block ->
+        applyRestriction attr (instantiateBlock block)
+
+
+{-|
+A given procedure call can either be to a user declared in-scope procedure
+or to a primative builtin. We have Invocation and External as the two Step
+constructors for these cases. This lookup function returns a function which
+is the appropriate constructor, partially applied.
+-}
+-- TODO ERROR this will be a hugely common spot for the compiler to
+-- discover an error, in this case calling an unknown procedure. We'll need
+-- *much* better error handling than this.
+lookupProcedure :: Context -> Identifier -> (Step -> Step)
+lookupProcedure context i =
+  let
+    declared = lookupKeyValue i (contextFunctions context)
+    known = lookupKeyValue i builtins
+  in
+    case declared of
+        Just proc -> Invocation i
+        Nothing -> case known of
+            Just p -> External p
+            Nothing -> error (fromRope ("call to unknown procedure '" <> unIdentifier i <> "'"))
+
+insertProcedure :: Context -> Procedure -> _
+insertProcedure context proc =
+    undefined
+
+waitEither :: Context -> Primitive
+waitEither context = Primitive
+    { primitiveContext = context
+    , primitiveName = Identifier "wait_either"
+    , primitiveAction = \step -> case step of
+        Tuple (step1,step2) -> undefined
+        _ -> undefined
+    }
+
+waitBoth :: Context -> Primitive
+waitBoth context = Primitive
+    { primitiveContext = context
+    , primitiveName = Identifier "wait_both"
+    }
+
+combineValues :: Context -> Primitive
+combineValues context = Primitive
+    { primitiveContext = context
+    , primitiveName = Identifier "combine_values"
+    }
+
+applyRestriction :: Attribute -> Block -> Context
+applyRestriction = undefined

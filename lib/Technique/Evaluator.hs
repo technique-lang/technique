@@ -58,8 +58,18 @@ evaluate env step = case step of
     Invocation inst step -> do
         functionApplication inst step
 
-combineValues :: Value -> Value -> Value
-combineValues = undefined
+functionApplication :: Instance -> Step -> Evaluate Value --  IO Promise ?
+functionApplication = undefined
 
-applyRestriction :: Attribute -> Block -> Value
-applyRestriction = undefined
+blockUntilValue :: Name -> Evaluate Value
+blockUntilValue = undefined
+
+{-|
+Take a step and lauch it asynchronously, binding its result to a name.
+Returns a promise of a value that can be in evaluated (block on) when
+needed.
+-}
+assignName :: Name -> Step -> Evaluate ()
+assignName = do
+    -- dunno
+    return (Parametri []) -- fixme not empty list

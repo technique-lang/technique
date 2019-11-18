@@ -19,6 +19,9 @@ data Identifier
     = Identifier Rope
     deriving (Show, Eq)
 
+unIdentifier :: Identifier -> Rope
+unIdentifier (Identifier text) = text
+
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
 type Label = Rope
