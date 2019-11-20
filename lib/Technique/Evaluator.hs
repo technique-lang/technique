@@ -18,8 +18,17 @@ import Technique.Instantiate
 import Technique.Language
 import Technique.Quantity
 
--- TODO this needs to evolve to IVars or equivalent
-data Environment = Environment (Map Identifier Value)
+{-|
+In order to execute a Procedure we need to supply a Context: an identifier
+for the event (collection of procedure calls) it is a part of, and the path
+history we took to get here.
+-}
+-- TODO values needs to be somewhere, but here?
+data Context = Context
+    { contextEvent :: UUID
+    , contextPath :: Rope -- or a  list or a fingertree or...
+    , contextValues :: Map Identifier Value -- TODO this needs to evolve to IVars or equivalent
+    }
 
 {-
 data Expression b where
@@ -37,7 +46,7 @@ data Expression b where
 newtype Evaluate a = Evaluate (ReaderT Environment IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Environment)
 
-unEvaluate :: Evaluate a -> ReaderT Environment IO a
+unEvaluate :: Evaluate a -> ReaderT Context IO a
 unEvaluate (Evaluate r) = r
 
 {-|
