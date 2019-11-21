@@ -8,6 +8,7 @@ import Core.Text.Utilities ()
 import Core.Program.Execute hiding (None)
 import Core.Program.Logging
 
+import Technique.Builtins
 import Technique.Language
 import Technique.Quantity
 import Technique.Formatter () -- Render instances for main function
@@ -44,36 +45,6 @@ exampleProcedureOven =
         , procedureDescription = Nothing
         , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
         }
-
-
--- TODO these two are actual builin standard library procedures, so a
--- future change to this test case will involve doing a lookup of these
--- names in some environment or context.
-
-builtinProcedureTask :: Procedure
-builtinProcedureTask =
-    Procedure
-        { procedureName = Identifier "task"
-        , procedureParams = []
-        , procedureInput = [Type "Text"]
-        , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Just (Markdown "A task")
-        , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
-        }
-
-builtinProcedureRecord :: Procedure
-builtinProcedureRecord =
-    Procedure
-        { procedureName = Identifier "record"
-        , procedureParams = []
-        , procedureInput = [Type "Text"]
-        , procedureOutput = [Type "Text"] -- ?
-        , procedureLabel = Just (Markdown "Record")
-        , procedureDescription = Just (Markdown "Record a quantity")
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
-        }
-
 
 exampleRoastTurkey :: Procedure
 exampleRoastTurkey =

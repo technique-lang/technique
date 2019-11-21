@@ -42,6 +42,7 @@ library:
    - Technique.Formatter
    - Technique.Parser
   other-modules:
+   - Technique.Builtins
    - Technique.Evaluator
    - Technique.Instantiate
 

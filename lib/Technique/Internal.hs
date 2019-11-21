@@ -185,7 +185,7 @@ insertProcedure proc =
 
 waitEither :: Primitive
 waitEither = Primitive
-    { primitiveName = Identifier "wait_either"
+    { primitiveSource = builtinProcedureWaithEither
     , primitiveAction = \step -> case step of
         Tuple (step1,step2) -> undefined
         _ -> undefined
@@ -193,13 +193,14 @@ waitEither = Primitive
 
 waitBoth :: Primitive
 waitBoth = Primitive
-    { primitiveName = Identifier "wait_both"
+    { primitiveSource = builtinProcedureWaithEither
+    , primitiveAction = undefined
     }
 
 combineValues :: Primitive
 combineValues context = Primitive
-    { primitiveName = Identifier "combine_values"
+    { primitiveSource = builtinProcedureCombineValues
     }
 
-applyRestriction :: Attribute -> Block -> Function
+applyRestriction :: Attribute -> Block -> _ -- ???
 applyRestriction = undefined
