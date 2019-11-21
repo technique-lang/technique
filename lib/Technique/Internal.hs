@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 
 {-|
-Given a Technique Procedure (surface syntax tree), transform it into an
+Given a Technique Procedure (concrete syntax tree), transform it into an
 internalized representation (abstract syntax tree) that can be subsequently
 executed (that is, interpreted; evaluated).
 -}
@@ -45,19 +45,29 @@ data Value
 {-|
 The internal representation of a Procedure, with ambiguities resolved.
 -}
--- I'm incredibly unhappy with this name because "function" means something
--- in functional programming and in programming language theory and this
--- isn't it. Alternatives considered include Instance (the original name,
+-- Don't want to call this "function" because that means something in
+-- functional programming and in programming language theory and this isn't
+-- it. Other alternatives considered include Instance (the original name,
 -- but we've reserved that to be used when instantiating a procedure at
--- runtime), Representation, Internal.
-data Function = Function
-    { functionSource :: Procedure
-    , functionRole :: Attribute
-    , functionSteps :: [Step]
+-- runtime), Representation, and Internal. Subroutine is ok.
+data Subroutine = Subroutine
+    { subroutineSource :: Procedure
+    , subroutineRole :: Attribute
+    , subroutineSteps :: [Step]
     }
 
+{-|
+Procedures which are actually fundamental [in the context of the domain
+specific language] represented by builtin IO actions.
+-}
+-- we use primativeSource :: Procedure so that we can duplicate the logic
+-- when we are doing diagnostics. Suggests a typeclass?
+{-
+class Function a where
+    functionSource :: a -> Procedure
+-}
 data Primitive = Primitive
-    { primitiveName :: Identifier
+    { primitiveSource :: Procedure
     , primitiveAction :: Step -> IO Value
     }
 
@@ -78,7 +88,7 @@ data Step
     = Known Value                       -- literals ("axioms")
     | Depends Name                      -- block waiting on a value ("reference to a hypothesis denoted by a variable")
     | Asynchronous Name Step            -- assignment (ie lambda, "implication introduction"
-    | Invocation Function Step          -- function application ("implication elimination") on a [sub] Procedure
+    | Invocation Subroutine Step        -- function application ("implication elimination") on a [sub] Procedure
     | External Primitive Step           -- same, but calling a primative builtin.
     | Tuple (Step,Step)
 
@@ -90,11 +100,11 @@ Take a static Procedure definition and spin it up into a "Function"
 suitable for interpretation. In other words, translate between the concrete
 syntax types and the abstract syntax we can feed to an evaluator.
 -}
-internalize :: Environment -> Procedure -> Function
+internalize :: Environment -> Procedure -> Subroutine
 internalize env procedure =
-    Function
-        { functionSource = procedure
-        , functionSteps = foldr f [] statements
+    Subroutine
+        { subroutineSource = procedure
+        , subroutineSteps = foldr f [] statements
         }
   where
     block = procedureBlock procedure
