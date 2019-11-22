@@ -1,8 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Technique.Language where
 
 import Core.Text.Rope
+import Core.Data.Structures (Key)
+import GHC.Generics (Generic)
+import Data.Hashable (Hashable)
 
 import Technique.Quantity
 
@@ -17,10 +22,12 @@ data Technique = Technique
 -- TODO
 data Identifier
     = Identifier Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord, Generic, Hashable)
 
 unIdentifier :: Identifier -> Rope
 unIdentifier (Identifier text) = text
+
+instance Key Identifier
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
