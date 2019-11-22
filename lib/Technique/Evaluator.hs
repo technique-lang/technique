@@ -14,7 +14,7 @@ import Core.Data
 import Core.Text
 import Data.UUID.Types (UUID)
 
-import Technique.Instantiate
+import Technique.Internal
 import Technique.Language
 import Technique.Quantity
 
@@ -64,10 +64,14 @@ evaluate env step = case step of
     Asynchronous name step -> do
         assignName name step
 
-    Invocation inst step -> do
+    Invocation func step -> do
+        functionApplication func step
+
+    External prim step -> do
         functionApplication inst step
 
-functionApplication :: Instance -> Step -> Evaluate Value --  IO Promise ?
+
+functionApplication :: Subroutine -> Step -> Evaluate Value --  IO Promise ?
 functionApplication = undefined
 
 blockUntilValue :: Name -> Evaluate Value

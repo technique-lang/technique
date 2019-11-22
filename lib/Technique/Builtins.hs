@@ -65,3 +65,16 @@ builtinProcedureWaitBoth =
         , procedureDescription = Just (Markdown "Wait for two values to both be ready.")
         , procedureBlock = Block []
         }
+
+-- the '+' operation
+builtinProcedureCombineValues :: Procedure
+builtinProcedureCombineValues =
+    Procedure
+        { procedureName = Identifier "combine_values"
+        , procedureParams = []
+        , procedureInput = [Type "*", Type "*"]
+        , procedureOutput = [Type "*"]
+        , procedureLabel = Just (Markdown "Combine Two Values")
+        , procedureDescription = Just (Markdown "Combine two values. This will involve coersion if the concrete types differ.")
+        , procedureBlock = Block []
+        }

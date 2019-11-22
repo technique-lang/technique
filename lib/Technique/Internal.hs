@@ -45,7 +45,7 @@ data Value
 {-|
 The internal representation of a Procedure, with ambiguities resolved.
 -}
--- Don't want to call this "function" because that means something in
+-- Didn't want to call this "function" because that means something in
 -- functional programming and in programming language theory and this isn't
 -- it. Other alternatives considered include Instance (the original name,
 -- but we've reserved that to be used when instantiating a procedure at
@@ -96,7 +96,7 @@ data Step
                                         -- weakening?
 
 {-|
-Take a static Procedure definition and spin it up into a "Function"
+Take a static Procedure definition and spin it up into a "Subroutine"
 suitable for interpretation. In other words, translate between the concrete
 syntax types and the abstract syntax we can feed to an evaluator.
 -}
@@ -113,14 +113,13 @@ internalize env procedure =
     f :: [Step] -> Statement -> [Step]
     f steps statement = steps <> internalizeStatement env statement
 
-
 internalizeStatement :: Environment -> Statement -> [Step]
-internalizeStatement context statement = case statement of
+internalizeStatement env statement = case statement of
     Assignment vars expr -> Asynchronous
 
-    Execute expr -> internalizeExpression context expr
+    Execute expr -> internalizeExpression env expr
 
-    Declaration proc -> insertProcedure context proc
+    Declaration proc -> insertProcedure env proc
 
     -- the remainder are functionally no-ops
     Comment _ -> []
@@ -128,10 +127,10 @@ internalizeStatement context statement = case statement of
     Series -> []
 
 internalizeExpression :: Environment -> Expression -> Step
-internalizeExpression context steps expr = case expr of
+internalizeExpression env steps expr = case expr of
     Application i expr ->
         -- lookup returns a function that constructs a Step
-        (lookupProcedure context i) (internalizeExpression expr)
+        (lookupProcedure env i) (internalizeExpression expr)
     None ->
         Known Unitus
     Text text ->
@@ -143,13 +142,13 @@ internalizeExpression context steps expr = case expr of
     Object (Tablet bindings) ->
         Known (Tabularum (fmap ( \(Binding label expr) -> (label,internalizeExpression  expr)) bindings))
     Variable is ->
-        Tuple (fmap ? is)
+        Tuple (fmap Depends is)
     Operation op subexpr1 subexpr2 ->
       let
         f = case op of
-                WaitEither  -> waitEither context
-                WaitBoth    -> waitBoth context
-                Combine     -> combineValues context
+                WaitEither  -> waitEither env
+                WaitBoth    -> waitBoth env
+                Combine     -> combineValues env
       in
         External f (Tuple [(internalizeExpression env subexpr1),(internalizeExpression env subexpr2)])
     Grouping subexpr ->
@@ -168,9 +167,9 @@ is the appropriate constructor, partially applied.
 -- discover an error, in this case calling an unknown procedure. We'll need
 -- *much* better error handling than this.
 lookupProcedure :: Environment -> Identifier -> (Step -> Step)
-lookupProcedure context i =
+lookupProcedure env i =
   let
-    declared = lookupKeyValue i (contextFunctions context)
+    declared = lookupKeyValue i (contextFunctions env)
     known = lookupKeyValue i builtins
   in
     case declared of
@@ -179,13 +178,13 @@ lookupProcedure context i =
             Just p -> External p
             Nothing -> error (fromRope ("call to unknown procedure '" <> unIdentifier i <> "'"))
 
-insertProcedure :: Procedure -> _
+insertProcedure :: Procedure -> ()
 insertProcedure proc =
     undefined
 
 waitEither :: Primitive
 waitEither = Primitive
-    { primitiveSource = builtinProcedureWaithEither
+    { primitiveSource = builtinProcedureWaitEither
     , primitiveAction = \step -> case step of
         Tuple (step1,step2) -> undefined
         _ -> undefined
@@ -193,7 +192,7 @@ waitEither = Primitive
 
 waitBoth :: Primitive
 waitBoth = Primitive
-    { primitiveSource = builtinProcedureWaithEither
+    { primitiveSource = builtinProcedureWaitBoth
     , primitiveAction = undefined
     }
 
@@ -202,5 +201,5 @@ combineValues context = Primitive
     { primitiveSource = builtinProcedureCombineValues
     }
 
-applyRestriction :: Attribute -> Block -> _ -- ???
+applyRestriction :: Attribute -> Block -> () -- ???
 applyRestriction = undefined
