@@ -27,7 +27,7 @@ history we took to get here.
 data Context = Context
     { contextEvent :: UUID
     , contextPath :: Rope -- or a  list or a fingertree or...
-    , contextValues :: Map Identifier Value -- TODO this needs to evolve to IVars or equivalent
+    , contextValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
     }
 
 {-
@@ -46,7 +46,7 @@ data Expression b where
 newtype Evaluate a = Evaluate (ReaderT Environment IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Environment)
 
-unEvaluate :: Evaluate a -> ReaderT Context IO a
+unEvaluate :: Evaluate a -> ReaderT Environment IO a
 unEvaluate (Evaluate r) = r
 
 {-|
@@ -61,18 +61,23 @@ evaluate env step = case step of
     Depends name -> do
         blockUntilValue name
 
-    Asynchronous name step -> do
-        assignName name step
+    Asynchronous names step -> do
+        promise <- assignNames names step
+        undefined -- TODO put primise into environment
 
     Invocation func step -> do
         functionApplication func step
 
     External prim step -> do
-        functionApplication inst step
+        executeAction prim step
 
 
 functionApplication :: Subroutine -> Step -> Evaluate Value --  IO Promise ?
 functionApplication = undefined
+
+executeAction :: Primitive -> Step -> Evaluate Value --  IO Promise ?
+executeAction = undefined
+
 
 blockUntilValue :: Name -> Evaluate Value
 blockUntilValue = undefined
@@ -82,7 +87,7 @@ Take a step and lauch it asynchronously, binding its result to a name.
 Returns a promise of a value that can be in evaluated (block on) when
 needed.
 -}
-assignName :: Name -> Step -> Evaluate ()
-assignName = do
+assignNames :: [Name] -> Step -> Evaluate Promise
+assignNames = do
     -- dunno
-    return (Parametri []) -- fixme not empty list
+    return (undefined) -- fixme not empty list

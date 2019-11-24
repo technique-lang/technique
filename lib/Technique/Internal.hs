@@ -9,7 +9,6 @@ module Technique.Internal where
 
 import Core.Data
 import Core.Text
-import Data.UUID.Types (UUID)
 
 import Technique.Language
 import Technique.Quantity
@@ -19,7 +18,7 @@ Environment in the type-theory sense of the word: the map(s) between names
 and their bindings.
 -}
 data Environment = Environment
-    { environmentVariables :: Map Name Promise
+    { environmentVariables :: Map Identifier Name
     , environmentFunctions :: Map Identifier Procedure
     }
 
@@ -87,10 +86,10 @@ absolutely fabulous.
 data Step
     = Known Value                       -- literals ("axioms")
     | Depends Name                      -- block waiting on a value ("reference to a hypothesis denoted by a variable")
-    | Asynchronous Name Step            -- assignment (ie lambda, "implication introduction"
+    | Asynchronous [Name] Step          -- assignment (ie lambda, "implication introduction"
     | Invocation Subroutine Step        -- function application ("implication elimination") on a [sub] Procedure
     | External Primitive Step           -- same, but calling a primative builtin.
-    | Tuple (Step,Step)
+    | Tuple [Step]
 
                                         -- assumption axiom?
                                         -- weakening?

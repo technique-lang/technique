@@ -32,6 +32,7 @@ ghc-options: -Wall -Wwarn -fwarn-tabs -dynamic
 library:
   dependencies:
    - async
+   - hashable
    - mtl
    - transformers
    - uuid-types

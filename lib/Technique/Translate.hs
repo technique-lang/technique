@@ -9,9 +9,11 @@ module Technique.Translate where
 
 import Core.Data
 import Core.Text
+import Data.Foldable (foldl')
 import Data.UUID.Types (UUID)
 
 import Technique.Builtins
+import Technique.Internal
 import Technique.Language
 import Technique.Quantity
 
@@ -24,22 +26,35 @@ translate :: Environment -> Procedure -> Subroutine
 translate env procedure =
     Subroutine
         { subroutineSource = procedure
-        , subroutineSteps = translateBlock (procedureBlock procedure)
+        , subroutineSteps = translateBlock env (procedureBlock procedure)
         }
 
+-- blocks are scoping mechanisms, so accumulated environment is discarded
+-- once we finish resolving names within it.
 translateBlock :: Environment -> Block -> [Step]
-translateBlock env (Block statements) = foldr f [] statements
+translateBlock env0 (Block statements) = snd (foldl' f (env0,[]) statements)
   where
-    f :: [Step] -> Statement -> [Step]
-    f steps statement = steps <> translateStatement env statement
+    f :: (Environment,[Step]) -> Statement -> (Environment,[Step])
+    f (env,steps) statement =
+      let
+        (env',steps') = translateStatement env statement
+      in
+        (env',steps <> steps')
 
-translateStatement :: Environment -> Statement -> [Step]
+translateStatement :: Environment -> Statement -> (Environment,[Step])
 translateStatement env statement = case statement of
-    Assignment vars expr -> Asynchronous
+    Assignment vars expr ->
+      let
+        env',names = fmap createVariable vars
+        step = Asynchronous names (translateExpression expr)
+      in
+        undefined
 
-    Execute expr -> translateExpression env expr
+    Execute expr ->
+        translateExpression env expr
 
-    Declaration proc -> insertProcedure env proc
+    Declaration proc ->
+        insertProcedure env proc
 
     -- the remainder are functionally no-ops
     Comment _ -> []
@@ -47,16 +62,16 @@ translateStatement env statement = case statement of
     Series -> []
 
 translateExpression :: Environment -> Expression -> [Step]
-translateExpression env steps expr = case expr of
+translateExpression env expr = case expr of
     Application i expr ->
         -- lookup returns a function that constructs a Step
         (lookupProcedure env i) (translateExpression env expr)
     None ->
-        Known Unitus:[]
+        [Known Unitus]
     Text text ->
-        Known (Literali text):[]
+        [Known (Literali text)]
     Amount qty ->
-        Known (Quanticle qty):[]
+        [Known (Quanticle qty)]
     Undefined ->
         error "?!?" -- TODO ERROR not error but "hole, stop here"
     Object (Tablet bindings) ->
@@ -66,9 +81,9 @@ translateExpression env steps expr = case expr of
     Operation op subexpr1 subexpr2 ->
       let
         f = case op of
-                WaitEither  -> waitEither env
-                WaitBoth    -> waitBoth env
-                Combine     -> combineValues env
+                WaitEither  -> builtinProcedureWaitEither
+                WaitBoth    -> builtinProcedureWaitBoth
+                Combine     -> builtinProcedureCombineValues
       in
         External f (Tuple [(translateExpression env subexpr1),(translateExpression env subexpr2)])
     Grouping subexpr ->
@@ -86,7 +101,7 @@ is the appropriate constructor, partially applied.
 -- TODO ERROR this will be a hugely common spot for the compiler to
 -- discover an error, in this case calling an unknown procedure. We'll need
 -- *much* better error handling than this.
-lookupProcedure :: Environment -> Identifier -> (Step -> Step)
+lookupProcedure :: Environment -> Identifier -> ([Step] -> Step)
 lookupProcedure env i =
   let
     declared = lookupKeyValue i (environmentFunctions env)
@@ -102,24 +117,21 @@ insertProcedure :: Procedure -> ()
 insertProcedure proc =
     undefined
 
-waitEither :: Primitive
-waitEither = Primitive
-    { primitiveSource = builtinProcedureWaitEither
-    , primitiveAction = \step -> case step of
-        Tuple (step1,step2) -> undefined
-        _ -> undefined
-    }
-
-waitBoth :: Primitive
-waitBoth = Primitive
-    { primitiveSource = builtinProcedureWaitBoth
-    , primitiveAction = undefined
-    }
-
-combineValues :: Primitive
-combineValues context = Primitive
-    { primitiveSource = builtinProcedureCombineValues
-    }
+{-|
+Identifiers are valid names but Names are unique, so that we can put
+them into the environment map. This is where we check for reuse of an
+already declared name (TODO) and given the local use of the identifier a
+locally unique name.
+-}
+createVariable :: Environment -> Identifier -> (Environment,Name)
+createVariable env i =
+  let
+    known = environmentVariables env
+    name = Name (singletonRope '!' <> unIdentifier i) -- FIXME
+    known' = insertKeyValue i name known
+    env' = env { environmentVariables = known' }
+  in
+    (env',name)
 
 applyRestriction :: Attribute -> Block -> () -- ???
 applyRestriction = undefined
