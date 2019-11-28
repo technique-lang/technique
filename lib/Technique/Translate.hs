@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
 Given a Technique Procedure (concrete syntax tree), translate it into an
@@ -7,9 +8,15 @@ executed (that is, interpreted; evaluated).
 -}
 module Technique.Translate where
 
+import Control.Monad (when)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Except (MonadError(..))
+import Control.Monad.State.Class (MonadState(..))
+import Control.Monad.Trans.State.Strict (StateT(..), evalStateT, execStateT, runStateT)
+import Control.Monad.Trans.Except (Except(..), runExcept)
 import Core.Data
 import Core.Text
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', traverse_)
 import Data.UUID.Types (UUID)
 
 import Technique.Builtins
@@ -17,17 +24,43 @@ import Technique.Internal
 import Technique.Language
 import Technique.Quantity
 
+
+{-|
+Environment in the type-theory sense of the word: the map(s) between names
+and their bindings.
+-}
+data Environment = Environment
+    { environmentVariables :: Map Identifier Name
+    , environmentFunctions :: Map Identifier Procedure
+    , environmentAccumulated :: [Step]
+    }
+
+newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
+    deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
+
+unTranslate :: Translate a -> StateT Environment (Except CompilerFailure) a
+unTranslate (Translate r) = r
+{-# INLINE unTranslate #-}
+
 {-|
 Take a static Procedure definition and spin it up into a "Subroutine"
 suitable for interpretation. In other words, translate between the concrete
 syntax types and the abstract syntax we can feed to an evaluator.
 -}
-translate :: Environment -> Procedure -> Subroutine
+translate :: Environment -> Procedure -> Either CompilerFailure Subroutine
 translate env procedure =
-    Subroutine
-        { subroutineSource = procedure
-        , subroutineSteps = translateBlock env (procedureBlock procedure)
-        }
+  let
+    block = procedureBlock procedure
+    result = runExcept (execStateT (unTranslate (translateBlock block)) env)
+  in
+    case result of
+        Left e -> Left e
+        Right env' -> Right $
+            Subroutine
+                { subroutineSource = procedure
+                , subroutineRole = undefined
+                , subroutineSteps = environmentAccumulated env'
+                }
 
 -- blocks are scoping mechanisms, so accumulated environment is discarded
 -- once we finish resolving names within it.
@@ -116,6 +149,12 @@ lookupProcedure env i =
 insertProcedure :: Procedure -> ()
 insertProcedure proc =
     undefined
+
+-- the overloading of throw between MonadError / ExceptT and the GHC
+-- exceptions mechansism is unfortunate. We're not throwing an exception,
+-- end it's definitely not pure `error`. Wrap it for clarity.
+failBecause :: CompilerFailure -> Translate ()
+failBecause e = throwError e
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put

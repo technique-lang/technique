@@ -45,7 +45,8 @@ library:
   other-modules:
    - Technique.Builtins
    - Technique.Evaluator
-   - Technique.Instantiate
+   - Technique.Internal
+   - Technique.Translate
 
 executables:
   technique:

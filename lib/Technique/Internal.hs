@@ -13,15 +13,6 @@ import Core.Text
 import Technique.Language
 import Technique.Quantity
 
-{-|
-Environment in the type-theory sense of the word: the map(s) between names
-and their bindings.
--}
-data Environment = Environment
-    { environmentVariables :: Map Identifier Name
-    , environmentFunctions :: Map Identifier Procedure
-    }
-
 -- FIXME ??? upgrade to named IVar
 newtype Promise = Promise Value
 
@@ -93,4 +84,12 @@ data Step
 
                                         -- assumption axiom?
                                         -- weakening?
+
+data CompilerFailure
+    = IdentifierAlreadyInUse Identifier
+
+renderFailure :: CompilerFailure -> Rope
+renderFailure e = case e of
+    IdentifierAlreadyInUse i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
+
 

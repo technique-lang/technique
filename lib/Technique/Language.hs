@@ -26,6 +26,7 @@ data Identifier
 
 unIdentifier :: Identifier -> Rope
 unIdentifier (Identifier text) = text
+{-# INLINE unIdentifier #-}
 
 instance Key Identifier
 
