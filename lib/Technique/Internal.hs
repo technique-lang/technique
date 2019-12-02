@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
 Builing blocks for the translation stage of the compiler.
@@ -42,9 +43,11 @@ The internal representation of a Procedure, with ambiguities resolved.
 -- runtime), Representation, and Internal. Subroutine is ok.
 data Subroutine = Subroutine
     { subroutineSource :: Procedure
-    , subroutineRole :: Attribute
-    , subroutineSteps :: [Step]
+    , subroutineSteps :: Sequence
     }
+
+newtype Sequence = Sequence [(Attribute,Step)]
+    deriving (Semigroup, Monoid)
 
 {-|
 Procedures which are actually fundamental [in the context of the domain

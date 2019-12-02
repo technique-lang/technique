@@ -32,7 +32,8 @@ and their bindings.
 data Environment = Environment
     { environmentVariables :: Map Identifier Name
     , environmentFunctions :: Map Identifier Procedure
-    , environmentAccumulated :: [Step]
+    , environmentRole :: Attribute
+    , environmentAccumulated :: Sequence
     }
 
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
@@ -51,43 +52,46 @@ translate :: Environment -> Procedure -> Either CompilerFailure Subroutine
 translate env procedure =
   let
     block = procedureBlock procedure
-    result = runExcept (execStateT (unTranslate (translateBlock block)) env)
+    result = runTranslate env (translateBlock block)
   in
     case result of
         Left e -> Left e
         Right env' -> Right $
             Subroutine
                 { subroutineSource = procedure
-                , subroutineRole = undefined
                 , subroutineSteps = environmentAccumulated env'
                 }
 
--- blocks are scoping mechanisms, so accumulated environment is discarded
--- once we finish resolving names within it.
-translateBlock :: Environment -> Block -> [Step]
-translateBlock env0 (Block statements) = snd (foldl' f (env0,[]) statements)
-  where
-    f :: (Environment,[Step]) -> Statement -> (Environment,[Step])
-    f (env,steps) statement =
-      let
-        (env',steps') = translateStatement env statement
-      in
-        (env',steps <> steps')
+runTranslate :: Environment -> Translate a -> Either CompilerFailure a
+runTranslate env action = runExcept (evalStateT (unTranslate action) env)
 
-translateStatement :: Environment -> Statement -> (Environment,[Step])
-translateStatement env statement = case statement of
-    Assignment vars expr ->
-      let
-        env',names = fmap createVariable vars
-        step = Asynchronous names (translateExpression expr)
-      in
-        undefined
+{-|
+Blocks are scoping mechanisms, so accumulated environment is discarded once
+we finish resolving names within it.
+-}
+-- traverse_ is "new", just mapM_ at Applicative? Lets see how we feel
+-- about that.
+translateBlock :: Block -> Translate Sequence
+translateBlock (Block statements) = do
+    traverse_ translateStatement statements
+    env' <- get
+    return (environmentAccumulated env')
+
+translateStatement :: Statement -> Translate ()
+translateStatement statement = case statement of
+    Assignment vars expr -> do
+        names <- traverse createVariable vars
+        step <- translateExpression expr
+
+        let step' = Asynchronous names step
+
+        appendStep step'
 
     Execute expr ->
-        translateExpression env expr
+        translateExpression expr
 
     Declaration proc ->
-        insertProcedure env proc
+        insertProcedure proc
 
     -- the remainder are functionally no-ops
     Comment _ -> []
@@ -134,17 +138,17 @@ is the appropriate constructor, partially applied.
 -- TODO ERROR this will be a hugely common spot for the compiler to
 -- discover an error, in this case calling an unknown procedure. We'll need
 -- *much* better error handling than this.
-lookupProcedure :: Environment -> Identifier -> ([Step] -> Step)
-lookupProcedure env i =
-  let
-    declared = lookupKeyValue i (environmentFunctions env)
-    known = lookupKeyValue i builtins
-  in
+lookupProcedure :: Identifier -> Translate (Step -> Step)
+lookupProcedure i = do
+    env <- get
+    let declared = lookupKeyValue i (environmentFunctions env)
+    let known = lookupKeyValue i builtins
+
     case declared of
-        Just proc -> Invocation i
+        Just s -> return (Invocation s)
         Nothing -> case known of
-            Just p -> External p
-            Nothing -> error (fromRope ("call to unknown procedure '" <> unIdentifier i <> "'"))
+            Just p -> return (External p)
+            Nothing -> failBecuase (CallToUnknownProcedure i)
 
 insertProcedure :: Procedure -> ()
 insertProcedure proc =
@@ -153,24 +157,57 @@ insertProcedure proc =
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
-failBecause :: CompilerFailure -> Translate ()
+failBecause :: CompilerFailure -> Translate a
 failBecause e = throwError e
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
 them into the environment map. This is where we check for reuse of an
 already declared name (TODO) and given the local use of the identifier a
-locally unique name.
+scope-local (or globally?) unique name.
 -}
-createVariable :: Environment -> Identifier -> (Environment,Name)
-createVariable env i =
-  let
-    known = environmentVariables env
-    name = Name (singletonRope '!' <> unIdentifier i) -- FIXME
-    known' = insertKeyValue i name known
-    env' = env { environmentVariables = known' }
-  in
-    (env',name)
+createVariable :: Identifier -> Translate Name
+createVariable i = do
+    env <- get
+    let known = environmentVariables env
+    when (containsKey i known) $ do
+        failBecause (IdentifierAlreadyInUse i)
 
-applyRestriction :: Attribute -> Block -> () -- ???
-applyRestriction = undefined
+    let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
+
+    let known' = insertKeyValue i n known
+    let env' = env { environmentVariables = known' }
+    put env'
+    return n
+
+{-|
+Accumulate a Step
+-}
+appendStep :: Step -> Translate ()
+appendStep step = do
+    env <- get
+    let steps = environmentAccumulated env
+    let role  = environmentRole env
+
+    let steps' = steps <> (role,step)
+
+    let env' = env { environmentAccumulated = steps' }
+    put env'
+
+{-|
+This begins a new (more refined) scope and does *not* add its declarations
+to the current environment.
+-}
+applyRestriction :: Attribute -> Block -> Translate Sequence
+applyRestriction attr block = do
+    env <- get
+
+    let subenv = env
+            { environmentRole = attr
+            }
+
+    let result = runTranslate subenv translateBlock
+
+    case result of
+        Left e -> failBecause e
+        Right steps -> return steps
