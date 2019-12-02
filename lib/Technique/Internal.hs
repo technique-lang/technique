@@ -81,18 +81,19 @@ data Step
     = Known Value                       -- literals ("axioms")
     | Depends Name                      -- block waiting on a value ("reference to a hypothesis denoted by a variable")
     | Asynchronous [Name] Step          -- assignment (ie lambda, "implication introduction"
-    | Invocation Subroutine Step        -- function application ("implication elimination") on a [sub] Procedure
-    | External Primitive Step           -- same, but calling a primative builtin.
-    | Tuple [Step]
+    | Invocation Subroutine [Step]      -- function application ("implication elimination") on a [sub] Procedure
+    | External Primitive [Step]         -- same, but calling a primative builtin.
 
                                         -- assumption axiom?
                                         -- weakening?
 
 data CompilerFailure
     = IdentifierAlreadyInUse Identifier
+    | CallToUnknownProcedure Identifier
+    | EncounteredUndefined
 
 renderFailure :: CompilerFailure -> Rope
 renderFailure e = case e of
     IdentifierAlreadyInUse i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
-
-
+    CallToUnknownProcedure i -> "Call to unknown procedure '" <> unIdentifier i <> "'"
+    EncounteredUndefined -> "Encountered 'undefined' marker"
