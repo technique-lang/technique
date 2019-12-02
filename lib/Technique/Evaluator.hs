@@ -43,17 +43,17 @@ data Expression b where
 -- support different interpeters / backends? This seems so cumbersome
 -- compared to the elegent tagless final method.
 
-newtype Evaluate a = Evaluate (ReaderT Environment IO a)
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Environment)
+newtype Evaluate a = Evaluate (ReaderT Context IO a)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Context)
 
-unEvaluate :: Evaluate a -> ReaderT Environment IO a
+unEvaluate :: Evaluate a -> ReaderT Context IO a
 unEvaluate (Evaluate r) = r
 
 {-|
 The heart of the evaluation loop. Translate from the abstract syntax tree 
 into a monadic sequence which results in a Result.
 -}
-evaluate :: Environment -> Step -> Evaluate Value
+evaluate :: Context -> Step -> Evaluate Value
 evaluate env step = case step of
     Known value -> do
         return value
