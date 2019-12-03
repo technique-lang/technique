@@ -79,11 +79,11 @@ absolutely fabulous.
 -- it's not valid from the point of view of the surface language syntax.
 data Step
     = Known Value                       -- literals ("axioms")
-    | Depends Name                      -- block waiting on a value ("reference to a hypothesis denoted by a variable")
+    | Bench [(Label,Step)]
+    | Depends [Name]                    -- block waiting on a value ("reference to a hypothesis denoted by a variable")
     | Asynchronous [Name] Step          -- assignment (ie lambda, "implication introduction"
     | Invocation Subroutine [Step]      -- function application ("implication elimination") on a [sub] Procedure
     | External Primitive [Step]         -- same, but calling a primative builtin.
-
                                         -- assumption axiom?
                                         -- weakening?
 

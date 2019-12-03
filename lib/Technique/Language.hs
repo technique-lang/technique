@@ -41,7 +41,7 @@ data Attribute
 
 data Markdown
     = Markdown Rope
-    deriving (Eq)
+        deriving (Eq)
 
 instance Show Markdown where
     show (Markdown text) = "[quote|\n" ++ fromRope text ++ "|]"

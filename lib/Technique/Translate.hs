@@ -8,7 +8,7 @@ executed (that is, interpreted; evaluated).
 -}
 module Technique.Translate where
 
-import Control.Monad (when)
+import Control.Monad (when, foldM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Class (MonadState(..))
