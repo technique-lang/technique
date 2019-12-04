@@ -23,13 +23,13 @@ main :: IO ()
 main = do
     finally (hspec checkTranslationStage) (putStrLn ".")
 
-stubProcedure :: Step
-stubProcedure = Sequence empty
+stubStep :: Step
+stubStep = Sequence empty
 
 testEnv :: Environment
 testEnv = Environment
     { environmentVariables = singletonMap (Identifier "x") (Name "!x")
-    , environmentFunctions = singletonMap (Identifier "oven") (Subroutine exampleProcedureOven stubProcedure)
+    , environmentFunctions = singletonMap (Identifier "oven") (Subroutine exampleProcedureOven stubStep)
     , environmentRole = Unspecified
     , environmentAccumulated = Sequence empty
     }
@@ -58,3 +58,15 @@ checkTranslationStage = do
           in do
             runTranslate testEnv (translateExpression expr2)
                 `shouldBe` Left (CallToUnknownProcedure (Identifier "f"))
+
+        it "encounters pre-existing procedure" $
+          let
+            proc = exampleProcedureOven -- already in testEnv
+            stmt = Declaration proc
+          in do
+            -- verify precondition that there is one already there
+            fmap (procedureName . subroutineSource) (lookupKeyValue (Identifier "oven") (environmentFunctions testEnv))
+                `shouldBe` Just (Identifier "oven")
+            -- attempt to declare a procedure by a name already in use
+            runTranslate testEnv (translateStatement stmt)
+                `shouldBe` Left (ProcedureAlreadyDeclared (Identifier "oven"))
