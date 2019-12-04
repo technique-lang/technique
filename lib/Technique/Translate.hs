@@ -193,16 +193,29 @@ lookupProcedure i = do
     env <- get
     let declared = lookupKeyValue i (environmentFunctions env)
     let known = lookupKeyValue i builtins
+    let attr = environmentRole env
 
     case declared of
-        Just s -> return (Invocation s)
+        Just subroutine -> return (Invocation attr subroutine)
         Nothing -> case known of
-            Just p -> return (External p)
-            Nothing -> failBecuase (CallToUnknownProcedure i)
+            Just primitive -> return (External attr primitive)
+            Nothing -> failBecause (CallToUnknownProcedure i)
 
-insertProcedure :: Procedure -> ()
-insertProcedure proc =
-    undefined
+insertProcedure :: Procedure -> Translate ()
+insertProcedure proc = do
+    env <- get
+    let known = environmentFunctions env
+        i = procedureName proc
+
+    when (containsKey i known) $ do
+        failBecause (ProcedureAlreadyDeclared i)
+
+    subroutine <- translateProcedure proc
+
+    let known' = insertKeyValue i subroutine known
+        env' = env { environmentFunctions = known' }
+
+    put env'
 
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
@@ -221,7 +234,7 @@ createVariable i = do
     env <- get
     let known = environmentVariables env
     when (containsKey i known) $ do
-        failBecause (IdentifierAlreadyInUse i)
+        failBecause (VariableAlreadyInUse i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -239,16 +252,17 @@ appendStep step = do
     let steps = environmentAccumulated env
     let role  = environmentRole env
 
-    let steps' = steps <> (role,step)
+    -- see the Monoid instance for Step for the clever here
+    let steps' = steps <> step
 
     let env' = env { environmentAccumulated = steps' }
     put env'
 
 {-|
 This begins a new (more refined) scope and does *not* add its declarations
-to the current environment.
+or variables to the current environment.
 -}
-applyRestriction :: Attribute -> Block -> Translate Sequence
+applyRestriction :: Attribute -> Block -> Translate Step
 applyRestriction attr block = do
     env <- get
 
@@ -256,7 +270,7 @@ applyRestriction attr block = do
             { environmentRole = attr
             }
 
-    let result = runTranslate subenv translateBlock
+    let result = runTranslate subenv (translateBlock block)
 
     case result of
         Left e -> failBecause e
