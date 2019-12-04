@@ -16,6 +16,7 @@ import Control.Monad.Trans.State.Strict (StateT(..), evalStateT, execStateT, run
 import Control.Monad.Trans.Except (Except(..), runExcept)
 import Core.Data
 import Core.Text
+import Data.DList (fromList, empty)
 import Data.Foldable (foldl', traverse_)
 import Data.UUID.Types (UUID)
 
@@ -29,19 +30,30 @@ import Technique.Quantity
 Environment in the type-theory sense of the word: the map(s) between names
 and their bindings.
 -}
+-- TODO perhaps the role should be Maybe Attribute? This will likely need
+-- work as there are three states: 1) as yet unspecified, 2) specified, and
+-- 3) explicitly reset to any. Are (1) and (3) the same?
 data Environment = Environment
     { environmentVariables :: Map Identifier Name
-    , environmentFunctions :: Map Identifier Procedure
+    , environmentFunctions :: Map Identifier Subroutine
     , environmentRole :: Attribute
-    , environmentAccumulated :: Sequence
+    , environmentAccumulated :: Step
+    }
+
+emptyEnvironment :: Environment
+emptyEnvironment = Environment
+    { environmentVariables = emptyMap
+    , environmentFunctions = emptyMap
+    , environmentRole = Unspecified
+    , environmentAccumulated = Sequence (empty)
     }
 
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
     deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
 
-unTranslate :: Translate a -> StateT Environment (Except CompilerFailure) a
-unTranslate (Translate r) = r
-{-# INLINE unTranslate #-}
+runTranslate :: Environment -> Translate a -> Either CompilerFailure a
+runTranslate env (Translate action) = runExcept (evalStateT action env)
+{-# INLINE runTranslate #-}
 
 {-|
 Take a static Procedure definition and spin it up into a "Subroutine"
@@ -49,21 +61,21 @@ suitable for interpretation. In other words, translate between the concrete
 syntax types and the abstract syntax we can feed to an evaluator.
 -}
 translate :: Environment -> Procedure -> Either CompilerFailure Subroutine
-translate env procedure =
+translate env procedure = runTranslate env (translateProcedure procedure)
+
+translateProcedure :: Procedure -> Translate Subroutine
+translateProcedure procedure =
   let
     block = procedureBlock procedure
-    result = runTranslate env (translateBlock block)
-  in
-    case result of
-        Left e -> Left e
-        Right env' -> Right $
-            Subroutine
-                { subroutineSource = procedure
-                , subroutineSteps = environmentAccumulated env'
-                }
-
-runTranslate :: Environment -> Translate a -> Either CompilerFailure a
-runTranslate env action = runExcept (evalStateT (unTranslate action) env)
+  in do
+    env <- get
+    step <- translateBlock block
+    return
+        (Subroutine
+            { subroutineSource = procedure
+            , subroutineSteps = step
+            }
+        )
 
 {-|
 Blocks are scoping mechanisms, so accumulated environment is discarded once
