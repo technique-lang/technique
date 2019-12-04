@@ -15,8 +15,6 @@ import Core.Text
 import Data.UUID.Types (UUID)
 
 import Technique.Internal
-import Technique.Language
-import Technique.Quantity
 
 {-|
 In order to execute a Procedure we need to supply a Context: an identifier
@@ -65,15 +63,15 @@ evaluateStep step = case step of
         values <- traverse evaluateStep steps
         return (Parametriq values)
 
-    Asynchronous names step -> do
-        promise <- assignNames names step
+    Asynchronous names substep -> do
+        promise <- assignNames names substep
         undefined -- TODO put primise into environment
 
-    Invocation attr func step -> do
-        functionApplication func step   -- TODO do something with role!
+    Invocation attr func substep -> do
+        functionApplication func substep   -- TODO do something with role!
 
-    External attr prim step -> do
-        executeAction prim step         -- TODO do something with role!
+    External attr prim substep -> do
+        executeAction prim substep         -- TODO do something with role!
 
 
 functionApplication :: Subroutine -> Step -> Evaluate Value --  IO Promise ?
