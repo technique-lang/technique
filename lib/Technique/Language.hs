@@ -37,6 +37,7 @@ type Label = Rope
 data Attribute
     = Role Identifier
     | Place Identifier
+    | Unspecified
     deriving (Show, Eq)
 
 data Markdown

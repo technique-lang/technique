@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-|
 Builing blocks for the translation stage of the compiler.
@@ -82,18 +83,46 @@ data Step
     | Bench [(Label,Step)]
     | Depends [Name]                    -- block waiting on a value ("reference to a hypothesis denoted by a variable")
     | Asynchronous [Name] Step          -- assignment (ie lambda, "implication introduction"
-    | Invocation Subroutine [Step]      -- function application ("implication elimination") on a [sub] Procedure
-    | External Primitive [Step]         -- same, but calling a primative builtin.
+    | Invocation Attribute Subroutine Step  -- function application ("implication elimination") on a [sub] Procedure
+    | External Attribute Primitive Step     -- same, but calling a primative builtin.
+    | Sequence (DList Step)
                                         -- assumption axiom?
                                         -- weakening?
+    deriving Show
+
+instance Semigroup Step where
+    (<>) = mappend
+
+instance Monoid Step where
+    mempty = Sequence empty
+    mappend (Sequence list1) (Sequence list2) = Sequence (append list1 list2)
+    mappend (Sequence list1) s2 = Sequence (snoc list1 s2)
+    mappend s1 (Sequence list2) = Sequence (cons s1 list2)
+    mappend s1 s2 = Sequence (cons s1 (singleton s2))
+
+{-
+instance Monoid Step where
+    mempty = Sequence empty
+    mappend s1 s2 = case s1 of
+        Sequence list1  -> case s2 of
+            Sequence list2  -> Sequence (append list1 list2)
+            _               -> Sequence (snoc list1 s2)
+        _               -> case s2 of
+            Sequence list2  -> Sequence (cons s1 list2)
+            _               -> Sequence (cons s1 (singleton s2))
+-}
 
 data CompilerFailure
-    = IdentifierAlreadyInUse Identifier
+    = VariableAlreadyInUse Identifier
+    | ProcedureAlreadyDeclared Identifier
     | CallToUnknownProcedure Identifier
+    | UseOfUnknownIdentifier Identifier
     | EncounteredUndefined
 
 renderFailure :: CompilerFailure -> Rope
 renderFailure e = case e of
-    IdentifierAlreadyInUse i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
-    CallToUnknownProcedure i -> "Call to unknown procedure '" <> unIdentifier i <> "'"
-    EncounteredUndefined -> "Encountered 'undefined' marker"
+    VariableAlreadyInUse i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
+    ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> unIdentifier i <> "' already declared."
+    CallToUnknownProcedure i -> "Call to unknown procedure '" <> unIdentifier i <> "'."
+    UseOfUnknownIdentifier i -> "Variable '" <> unIdentifier i <> "' not in scope."
+    EncounteredUndefined -> "Encountered 'undefined' marker."
