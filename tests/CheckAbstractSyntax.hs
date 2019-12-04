@@ -11,9 +11,12 @@ import Core.Text.Utilities
 import Data.Text.Prettyprint.Doc (line)
 import Test.Hspec
 
+import Technique.Builtins
+import Technique.Formatter
+import Technique.Internal
 import Technique.Language
 import Technique.Quantity
-import Technique.Formatter
+
 
 import ExampleProcedure hiding (main)
 

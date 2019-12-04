@@ -35,6 +35,7 @@ data Environment = Environment
     , environmentRole :: Attribute
     , environmentAccumulated :: Step
     }
+    deriving (Eq,Show)
 
 emptyEnvironment :: Environment
 emptyEnvironment = Environment

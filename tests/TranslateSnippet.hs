@@ -3,8 +3,6 @@
 
 import Core.Data
 import Core.Program
-import Core.Text
-import Core.System
 import Data.DList (empty)
 import Data.Text (Text)
 import Text.Megaparsec hiding (empty)

@@ -9,7 +9,6 @@ Builing blocks for the translation stage of the compiler.
 -- so the can be shared in both Technique.Translate and Technique.Builtins.
 module Technique.Internal where
 
-import Core.Data
 import Core.Text
 import Data.DList
 
@@ -34,7 +33,7 @@ data Value
     | Literali Rope
     | Quanticle Quantity
     | Tabularum [(Rope,Value)]
-    deriving Show
+    deriving (Eq,Show)
 
 {-|
 The internal representation of a Procedure, with ambiguities resolved.
@@ -48,7 +47,7 @@ data Subroutine = Subroutine
     { subroutineSource :: Procedure
     , subroutineSteps :: Step
     }
-    deriving Show
+    deriving (Eq,Show)
 
 {-|
 Procedures which are actually fundamental [in the context of the domain
@@ -72,9 +71,13 @@ instance Show Primitive where
         in
             show name
 
+-- this is weak, but we can't compare functions so if the Procedures are
+-- the same assume the Primitives are.
+instance Eq Primitive where
+    (==) p1 p2 = (primitiveSource p1) == (primitiveSource p2)
 
 newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
-    deriving Show
+    deriving (Eq,Show)
 
 {-|
 Names. Always needing names. These ones are from original work when we
@@ -97,7 +100,7 @@ data Step
     | Sequence (DList Step)
                                         -- assumption axiom?
                                         -- weakening?
-    deriving Show
+    deriving (Eq,Show)
 
 instance Semigroup Step where
     (<>) = mappend
@@ -127,6 +130,7 @@ data CompilerFailure
     | CallToUnknownProcedure Identifier
     | UseOfUnknownIdentifier Identifier
     | EncounteredUndefined
+    deriving (Eq,Show)
 
 renderFailure :: CompilerFailure -> Rope
 renderFailure e = case e of
