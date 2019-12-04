@@ -33,6 +33,7 @@ data Value
     | Literali Rope
     | Quanticle Quantity
     | Tabularum [(Rope,Value)]
+    | Parametriq [Value]
     deriving (Eq,Show)
 
 {-|
@@ -91,15 +92,16 @@ absolutely fabulous.
 -- while it probably would work to put an Asynchronous into a Tuple list,
 -- it's not valid from the point of view of the surface language syntax.
 data Step
-    = Known Value                       -- literals ("axioms")
+    = Known Value                           -- literals ("axioms")
     | Bench [(Label,Step)]
-    | Depends [Name]                    -- block waiting on a value ("reference to a hypothesis denoted by a variable")
-    | Asynchronous [Name] Step          -- assignment (ie lambda, "implication introduction"
+    | Depends Name                          -- block waiting on a value ("reference to a hypothesis denoted by a variable")
+    | Tuple [Step]
+    | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
     | Invocation Attribute Subroutine Step  -- function application ("implication elimination") on a [sub] Procedure
     | External Attribute Primitive Step     -- same, but calling a primative builtin.
     | Sequence (DList Step)
-                                        -- assumption axiom?
-                                        -- weakening?
+                                            -- assumption axiom?
+                                            -- weakening?
     deriving (Eq,Show)
 
 instance Semigroup Step where

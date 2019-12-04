@@ -53,23 +53,27 @@ unEvaluate (Evaluate r) = r
 The heart of the evaluation loop. Translate from the abstract syntax tree 
 into a monadic sequence which results in a Result.
 -}
-evaluate :: Context -> Step -> Evaluate Value
-evaluate env step = case step of
+evaluateStep :: Step -> Evaluate Value
+evaluateStep step = case step of
     Known value -> do
         return value
 
     Depends name -> do
         blockUntilValue name
 
+    Tuple steps -> do
+        values <- traverse evaluateStep steps
+        return (Parametriq values)
+
     Asynchronous names step -> do
         promise <- assignNames names step
         undefined -- TODO put primise into environment
 
-    Invocation func step -> do
-        functionApplication func step
+    Invocation attr func step -> do
+        functionApplication func step   -- TODO do something with role!
 
-    External prim step -> do
-        executeAction prim step
+    External attr prim step -> do
+        executeAction prim step         -- TODO do something with role!
 
 
 functionApplication :: Subroutine -> Step -> Evaluate Value --  IO Promise ?

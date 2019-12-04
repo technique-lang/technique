@@ -14,7 +14,7 @@ import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
-import Data.DList (fromList, empty)
+import Data.DList (empty)
 import Data.Foldable (traverse_)
 
 import Technique.Builtins
@@ -152,17 +152,17 @@ translateExpression expr = do
                 return (acc <> [(label,step)])
 
         Variable is -> do
-            names <- mapM g is
-            return (Depends names)
+            steps <- traverse g is
+            return (Tuple steps)
           where
-            g :: Identifier -> Translate Name
+            g :: Identifier -> Translate Step
             g i =
               let
                 known = environmentVariables env
                 result = lookupKeyValue i known
               in case result of
                 Nothing -> failBecause (UseOfUnknownIdentifier i)
-                Just name -> return name
+                Just name -> return (Depends name)
 
         Operation op subexpr1 subexpr2 ->
           let
@@ -173,7 +173,7 @@ translateExpression expr = do
           in do
             step1 <- translateExpression subexpr1
             step2 <- translateExpression subexpr2
-            let tuple = Sequence (fromList [step1,step2])   -- hm
+            let tuple = Tuple [step1,step2]
             return (External attr prim tuple)
 
         Grouping subexpr ->
