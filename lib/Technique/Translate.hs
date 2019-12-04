@@ -42,7 +42,7 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Unspecified
-    , environmentAccumulated = Sequence (empty)
+    , environmentAccumulated = Nested empty
     }
 
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
@@ -256,7 +256,7 @@ appendStep step = do
     let steps = environmentAccumulated env
 
     -- see the Monoid instance for Step for the clever here
-    let steps' = steps <> step
+    let steps' = mappend steps step
 
     let env' = env { environmentAccumulated = steps' }
     put env'

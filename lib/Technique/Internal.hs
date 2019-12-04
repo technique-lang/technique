@@ -99,7 +99,7 @@ data Step
     | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
     | Invocation Attribute Subroutine Step  -- function application ("implication elimination") on a [sub] Procedure
     | External Attribute Primitive Step     -- same, but calling a primative builtin.
-    | Sequence (DList Step)
+    | Nested (DList Step)
                                             -- assumption axiom?
                                             -- weakening?
     deriving (Eq,Show)
@@ -108,11 +108,11 @@ instance Semigroup Step where
     (<>) = mappend
 
 instance Monoid Step where
-    mempty = Sequence empty
-    mappend (Sequence list1) (Sequence list2) = Sequence (append list1 list2)
-    mappend (Sequence list1) s2 = Sequence (snoc list1 s2)
-    mappend s1 (Sequence list2) = Sequence (cons s1 list2)
-    mappend s1 s2 = Sequence (cons s1 (singleton s2))
+    mempty = Nested empty
+    mappend (Nested list1) (Nested list2) = Nested (append list1 list2)
+    mappend (Nested list1) s2 = Nested (snoc list1 s2)
+    mappend s1 (Nested list2) = Nested (cons s1 list2)
+    mappend s1 s2 = Nested (cons s1 (singleton s2))
 
 {-
 instance Monoid Step where
