@@ -1,4 +1,3 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
@@ -9,21 +8,18 @@ executed (that is, interpreted; evaluated).
 module Technique.Translate where
 
 import Control.Monad (when, foldM)
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Class (MonadState(..))
 import Control.Monad.Trans.State.Strict (StateT(..), evalStateT, execStateT, runStateT)
-import Control.Monad.Trans.Except (Except(..), runExcept)
+import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
 import Data.DList (fromList, empty)
-import Data.Foldable (foldl', traverse_)
-import Data.UUID.Types (UUID)
+import Data.Foldable (traverse_)
 
 import Technique.Builtins
 import Technique.Internal
 import Technique.Language
-import Technique.Quantity
 
 
 {-|
@@ -68,7 +64,6 @@ translateProcedure procedure =
   let
     block = procedureBlock procedure
   in do
-    env <- get
     step <- translateBlock block
     return
         (Subroutine
@@ -120,10 +115,10 @@ translateExpression expr = do
     let attr = environmentRole env
 
     case expr of
-        Application i expr -> do
+        Application i subexpr -> do
             -- lookup returns a function that constructs a Step
             func <- lookupProcedure i
-            step <- translateExpression expr
+            step <- translateExpression subexpr
             return (func step)
 
         None ->
@@ -175,8 +170,8 @@ translateExpression expr = do
         Grouping subexpr ->
             translateExpression subexpr
 
-        Restriction attr block ->
-            applyRestriction attr block
+        Restriction subattr block ->
+            applyRestriction subattr block
 
 
 {-|
@@ -250,7 +245,6 @@ appendStep :: Step -> Translate ()
 appendStep step = do
     env <- get
     let steps = environmentAccumulated env
-    let role  = environmentRole env
 
     -- see the Monoid instance for Step for the clever here
     let steps' = steps <> step
