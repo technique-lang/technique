@@ -83,7 +83,7 @@ we finish resolving names within it.
 -}
 -- traverse_ is "new", just mapM_ at Applicative? Lets see how we feel
 -- about that.
-translateBlock :: Block -> Translate Sequence
+translateBlock :: Block -> Translate Step
 translateBlock (Block statements) = do
     traverse_ translateStatement statements
     env' <- get
@@ -99,46 +99,84 @@ translateStatement statement = case statement of
 
         appendStep step'
 
-    Execute expr ->
-        translateExpression expr
+    Execute expr -> do
+        step <- translateExpression expr
+        appendStep step
 
-    Declaration proc ->
+
+    Declaration proc -> do
         insertProcedure proc
 
     -- the remainder are functionally no-ops
-    Comment _ -> []
-    Blank -> []
-    Series -> []
+    Comment _ -> return ()
+    Blank -> return ()
+    Series -> return ()
 
-translateExpression :: Environment -> Expression -> [Step]
-translateExpression env expr = case expr of
-    Application i expr ->
-        -- lookup returns a function that constructs a Step
-        (lookupProcedure env i) (translateExpression env expr)
-    None ->
-        [Known Unitus]
-    Text text ->
-        [Known (Literali text)]
-    Amount qty ->
-        [Known (Quanticle qty)]
-    Undefined ->
-        error "?!?" -- TODO ERROR not error but "hole, stop here"
-    Object (Tablet bindings) ->
-        Known (Tabularum (fmap ( \(Binding label expr) -> (label,translateExpression env expr)) bindings)):[]
-    Variable is ->
-        Tuple (fmap Depends is)
-    Operation op subexpr1 subexpr2 ->
-      let
-        f = case op of
-                WaitEither  -> builtinProcedureWaitEither
-                WaitBoth    -> builtinProcedureWaitBoth
-                Combine     -> builtinProcedureCombineValues
-      in
-        External f (Tuple [(translateExpression env subexpr1),(translateExpression env subexpr2)])
-    Grouping subexpr ->
-        translateExpression env subexpr
-    Restriction attr block ->
-        applyRestriction attr (translateBlock env block)
+-- TODO HERE this does NOT add the steps to the Environment
+
+translateExpression :: Expression -> Translate Step
+translateExpression expr = do
+    env <- get
+    let attr = environmentRole env
+
+    case expr of
+        Application i expr -> do
+            -- lookup returns a function that constructs a Step
+            func <- lookupProcedure i
+            step <- translateExpression expr
+            return (func step)
+
+        None ->
+            return (Known Unitus)
+
+        Text text ->
+            return (Known (Literali text))
+
+        Amount qty ->
+            return (Known (Quanticle qty))
+
+        Undefined ->
+            failBecause EncounteredUndefined
+
+        Object (Tablet bindings) -> do
+            pairs <- foldM f [] bindings
+            return (Bench pairs)
+          where
+            f :: [(Label,Step)] -> Binding -> Translate [(Label,Step)]
+            f acc (Binding label subexpr) = do
+                step <- translateExpression subexpr
+                return (acc <> [(label,step)])
+
+        Variable is -> do
+            names <- mapM g is
+            return (Depends names)
+          where
+            g :: Identifier -> Translate Name
+            g i =
+              let
+                known = environmentVariables env
+                result = lookupKeyValue i known
+              in case result of
+                Nothing -> failBecause (UseOfUnknownIdentifier i)
+                Just name -> return name
+
+        Operation op subexpr1 subexpr2 ->
+          let
+            prim = case op of
+                    WaitEither  -> builtinProcedureWaitEither
+                    WaitBoth    -> builtinProcedureWaitBoth
+                    Combine     -> builtinProcedureCombineValues
+          in do
+            step1 <- translateExpression subexpr1
+            step2 <- translateExpression subexpr2
+            let tuple = Sequence (fromList [step1,step2])   -- hm
+            return (External attr prim tuple)
+
+        Grouping subexpr ->
+            translateExpression subexpr
+
+        Restriction attr block ->
+            applyRestriction attr block
 
 
 {-|
