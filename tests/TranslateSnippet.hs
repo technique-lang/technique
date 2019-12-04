@@ -3,9 +3,7 @@
 
 import Core.Data
 import Core.Program
-import Data.DList (empty)
-import Data.Text (Text)
-import Text.Megaparsec hiding (empty)
+import Data.DList
 
 import Technique.Internal
 import Technique.Translate

@@ -8,7 +8,6 @@ import Core.Text.Utilities ()
 import Core.Program.Execute hiding (None)
 import Core.Program.Logging
 
-import Technique.Builtins
 import Technique.Language
 import Technique.Quantity
 import Technique.Formatter () -- Render instances for main function
@@ -41,9 +40,9 @@ exampleProcedureOven =
         , procedureParams = []
         , procedureInput = [Type "Temperature"]
         , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Just (Markdown "Set oven temperature")
+        , procedureLabel = Nothing
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
+        , procedureBlock = Block [ Execute (Application (Identifier "task") (Text "Set oven temperature!")) ]
         }
 
 exampleRoastTurkey :: Procedure
