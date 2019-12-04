@@ -28,7 +28,7 @@ stubProcedure = Sequence empty
 
 testEnv :: Environment
 testEnv = Environment
-    { environmentVariables = emptyMap
+    { environmentVariables = singletonMap (Identifier "x") (Name "!x")
     , environmentFunctions = singletonMap (Identifier "oven") (Subroutine exampleProcedureOven stubProcedure)
     , environmentRole = Unspecified
     , environmentAccumulated = Sequence empty
@@ -41,4 +41,20 @@ checkTranslationStage = do
           let
             expr = Undefined
           in do
-            runTranslate testEnv (translateExpression expr) `shouldBe` Left EncounteredUndefined
+            runTranslate testEnv (translateExpression expr)
+                `shouldBe` Left EncounteredUndefined
+
+        it "encountering unknown variable" $
+          let
+            expr = Variable [Identifier "y"]
+          in do
+            runTranslate testEnv (translateExpression expr)
+                `shouldBe` Left (UseOfUnknownIdentifier (Identifier "y"))
+
+        it "encountering unknown procedure" $
+          let
+            expr1 = Variable [Identifier "x"]
+            expr2 = Application (Identifier "f") expr1
+          in do
+            runTranslate testEnv (translateExpression expr2)
+                `shouldBe` Left (CallToUnknownProcedure (Identifier "f"))
