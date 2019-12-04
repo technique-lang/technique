@@ -40,6 +40,11 @@ data Attribute
     | Unspecified
     deriving (Show, Eq)
 
+{-
+    | Anyone
+    | Anywhere
+-}
+
 data Markdown
     = Markdown Rope
         deriving (Eq)

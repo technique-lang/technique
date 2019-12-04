@@ -10,7 +10,7 @@ module Technique.Translate where
 import Control.Monad (when, foldM)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Class (MonadState(..))
-import Control.Monad.Trans.State.Strict (StateT(..), evalStateT, execStateT, runStateT)
+import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
@@ -47,8 +47,10 @@ emptyEnvironment = Environment
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
     deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
 
-runTranslate :: Environment -> Translate a -> Either CompilerFailure a
-runTranslate env (Translate action) = runExcept (evalStateT action env)
+-- we use runStateT rather than evalStateT as we did previously so we can
+-- access the final state in test cases.
+runTranslate :: Environment -> Translate a -> Either CompilerFailure (a,Environment)
+runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
 {-|
@@ -57,7 +59,13 @@ suitable for interpretation. In other words, translate between the concrete
 syntax types and the abstract syntax we can feed to an evaluator.
 -}
 translate :: Environment -> Procedure -> Either CompilerFailure Subroutine
-translate env procedure = runTranslate env (translateProcedure procedure)
+translate env procedure =
+  let
+    result = runTranslate env (translateProcedure procedure)
+  in
+    case result of
+        Left e -> Left e
+        Right (subroutine,_) -> Right subroutine
 
 translateProcedure :: Procedure -> Translate Subroutine
 translateProcedure procedure =
@@ -268,4 +276,4 @@ applyRestriction attr block = do
 
     case result of
         Left e -> failBecause e
-        Right steps -> return steps
+        Right (steps,_) -> return steps
