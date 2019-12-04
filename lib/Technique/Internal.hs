@@ -11,6 +11,7 @@ module Technique.Internal where
 
 import Core.Data
 import Core.Text
+import Data.DList
 
 import Technique.Language
 import Technique.Quantity
@@ -33,6 +34,7 @@ data Value
     | Literali Rope
     | Quanticle Quantity
     | Tabularum [(Rope,Value)]
+    deriving Show
 
 {-|
 The internal representation of a Procedure, with ambiguities resolved.
@@ -44,11 +46,9 @@ The internal representation of a Procedure, with ambiguities resolved.
 -- runtime), Representation, and Internal. Subroutine is ok.
 data Subroutine = Subroutine
     { subroutineSource :: Procedure
-    , subroutineSteps :: Sequence
+    , subroutineSteps :: Step
     }
-
-newtype Sequence = Sequence [(Attribute,Step)]
-    deriving (Semigroup, Monoid)
+    deriving Show
 
 {-|
 Procedures which are actually fundamental [in the context of the domain
@@ -65,7 +65,16 @@ data Primitive = Primitive
     , primitiveAction :: Step -> IO Value
     }
 
+instance Show Primitive where
+    show prim =
+        let
+            name = procedureName (primitiveSource prim)
+        in
+            show name
+
+
 newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
+    deriving Show
 
 {-|
 Names. Always needing names. These ones are from original work when we
