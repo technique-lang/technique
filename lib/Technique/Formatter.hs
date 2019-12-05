@@ -36,6 +36,7 @@ data TechniqueToken
     | QuantityToken
     | RoleToken
     | ErrorToken
+    | StepToken
 
 instance Pretty Procedure where
     pretty = unAnnotate . intoDocA
@@ -55,6 +56,8 @@ colourizeTechnique token = case token of
     QuantityToken -> color Magenta <> bold
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red <> bold
+    StepToken -> color White <> bold       -- for diagnostics in evalutator
+
 
 instance Render Procedure where
     type Token Procedure = TechniqueToken

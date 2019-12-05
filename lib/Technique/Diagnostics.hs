@@ -23,66 +23,42 @@ import Technique.Language
 import Technique.Formatter  -- already have lots of useful definitions
 import Technique.Internal
 
-data DiagnosticToken
-    = StepToken
-    | PunctuationToken
-    | NameToken
-    | SubroutineToken
-    | PrimitiveToken
-    | ValueToken
-
-colourizeDiagnostic :: DiagnosticToken -> AnsiStyle
-colourizeDiagnostic token = case token of
-    StepToken -> colorDull Yellow
-    PunctuationToken -> colorDull White
-    NameToken -> colourizeTechnique VariableToken
-    SubroutineToken -> colourizeTechnique ProcedureToken
-    PrimitiveToken  -> color White <> bold
-    ValueToken  -> colourizeTechnique QuantityToken
-
 instance Render Subroutine where
-    type Token Subroutine = DiagnosticToken
-    colourize = colourizeDiagnostic
+    type Token Subroutine = TechniqueToken
+    colourize = colourizeTechnique
     intoDocA func =
       let
         proc = subroutineSource func
         step = subroutineSteps func
       in
-        annotate SubroutineToken (pretty (procedureName proc))
+        annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc))
 
 instance Render Step where
-    type Token Step = DiagnosticToken
-    colourize = colourizeDiagnostic
+    type Token Step = TechniqueToken
+    colourize = colourizeTechnique
     intoDocA step = case step of
         Known value ->
             annotate StepToken "Known" <+> intoDocA value
         Depends (Name name) ->
-            annotate StepToken "Depends" <+> annotate NameToken (pretty name)
+            annotate StepToken "Depends" <+> annotate VariableToken (pretty name)
         Tuple steps ->
-            annotate StepToken "Tuple" <+> commaCat2 steps
+            annotate StepToken "Tuple" <+> commaCat steps
         _ ->
             undefined
 
 instance Render Value where
-    type Token Value = DiagnosticToken
-    colourize = colourizeDiagnostic
+    type Token Value = TechniqueToken
+    colourize = colourizeTechnique
     intoDocA value = case value of
         Unitus ->
-            annotate ValueToken "()"
+            annotate QuantityToken "()"
         Literali text ->
-            annotate PunctuationToken dquote <>
-            annotate ValueToken (pretty text) <>
-            annotate PunctuationToken dquote
+            annotate SymbolToken dquote <>
+            annotate StringToken (pretty text) <>
+            annotate SymbolToken dquote
         Quanticle qty ->
-            annotate ValueToken (pretty qty)
+            intoDocA qty
         _ ->
             undefined
         
-
-{-|
-punctuate a list with commas annotated with Symbol highlighting.
--}
--- shame we can't share this code with the original one in Technique.Formatter
-commaCat2 :: (Render a, Token a ~ DiagnosticToken)  => [a] -> Doc (Token a)
-commaCat2 = hcat . punctuate (annotate PunctuationToken comma) . fmap (annotate NameToken . intoDocA)
 
