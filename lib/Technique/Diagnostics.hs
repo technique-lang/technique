@@ -8,11 +8,12 @@ module Technique.Diagnostics where
 import Core.Text.Rope
 import Core.Text.Utilities
 import Data.Foldable (foldl')
+import Data.DList (toList)
 import Data.Int (Int8)
 import Data.Text.Prettyprint.Doc
     ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
     , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
-    , line, sep, hcat, annotate
+    , line, sep, hcat, vcat, annotate
     , unAnnotate, line', group, nest, concatWith, surround
     )
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -31,7 +32,8 @@ instance Render Subroutine where
         proc = subroutineSource func
         step = subroutineSteps func
       in
-        annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc))
+        annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
+            line <> indent 4 (intoDocA step)
 
 instance Render Step where
     type Token Step = TechniqueToken
@@ -39,12 +41,32 @@ instance Render Step where
     intoDocA step = case step of
         Known value ->
             annotate StepToken "Known" <+> intoDocA value
-        Depends (Name name) ->
-            annotate StepToken "Depends" <+> annotate VariableToken (pretty name)
+        Depends name ->
+            annotate StepToken "Depends" <+> intoDocA name
         Tuple steps ->
             annotate StepToken "Tuple" <+> commaCat steps
-        _ ->
-            undefined
+        Nested steps ->
+            vcat (toList (fmap intoDocA steps))
+        Asynchronous names substep ->
+            annotate StepToken "Asynchronous" <+> commaCat names <+> "=" <+> intoDocA substep
+        Invocation attr func substep ->
+          let
+            i = procedureName (subroutineSource func)
+          in
+            annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+        External attr prim substep ->
+          let
+            i = procedureName (primitiveSource prim)
+          in
+            annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+        Bench _ ->
+            annotate ErrorToken "TODO Bench"
+
+instance Render Name where
+    type Token Name = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Name name) = annotate VariableToken (pretty name)
+
 
 instance Render Value where
     type Token Value = TechniqueToken
