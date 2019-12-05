@@ -225,6 +225,9 @@ toSuperscript c = case c of
     '-' -> '⁻' -- U+207B
     _   -> error "Invalid, digit expected"
 
+instance Pretty Quantity where
+    pretty = unAnnotate . intoDocA
+
 instance Render Tablet where
     type Token Tablet = TechniqueToken
     colourize = colourizeTechnique

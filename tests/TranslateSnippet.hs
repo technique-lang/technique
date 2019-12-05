@@ -8,23 +8,28 @@ import Data.DList
 import Technique.Internal
 import Technique.Translate
 import Technique.Language
+import Technique.Quantity ()
+import Technique.Diagnostics ()
 import ExampleProcedure hiding (main)
 
 stubProcedure :: Step
-stubProcedure = Sequence empty
+stubProcedure = Nested empty
 
 testEnv :: Environment
 testEnv = Environment
     { environmentVariables = emptyMap
-    , environmentFunctions = singletonMap (Identifier "oven") (Subroutine exampleProcedureOven stubProcedure)
+    , environmentFunctions = emptyMap
     , environmentRole = Unspecified
-    , environmentAccumulated = Sequence empty
+    , environmentAccumulated = Nested empty
     }
 
 main :: IO ()
 main = execute $ do
-    let !result = translate testEnv exampleRoastTurkey
+    let result = runTranslate testEnv $ do
+            insertProcedure exampleProcedureOven
+            translateProcedure exampleRoastTurkey
+            -- translateExpression (Amount (Number 42))
     case result of
         Left err    -> write (renderFailure err)
-        Right x     -> writeS x
+        Right (x,_) -> writeR x
 

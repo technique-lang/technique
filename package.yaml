@@ -45,6 +45,7 @@ library:
    - Technique.Parser
   other-modules:
    - Technique.Builtins
+   - Technique.Diagnostics
    - Technique.Evaluator
    - Technique.Internal
    - Technique.Translate
