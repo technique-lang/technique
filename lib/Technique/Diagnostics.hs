@@ -5,20 +5,12 @@
 
 module Technique.Diagnostics where
 
+import Core.System.Pretty
 import Core.Text.Rope
 import Core.Text.Utilities
 import Data.Foldable (foldl')
 import Data.DList (toList)
 import Data.Int (Int8)
-import Data.Text.Prettyprint.Doc
-    ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
-    , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
-    , line, sep, hcat, vcat, annotate
-    , unAnnotate, line', group, nest, concatWith, surround
-    )
-import Data.Text.Prettyprint.Doc.Render.Terminal
-    ( color, colorDull, Color(..), AnsiStyle, bold
-    )
 
 import Technique.Language
 import Technique.Formatter  -- already have lots of useful definitions

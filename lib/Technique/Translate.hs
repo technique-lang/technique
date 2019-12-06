@@ -192,9 +192,6 @@ or to a primative builtin. We have Invocation and External as the two Step
 constructors for these cases. This lookup function returns a function which
 is the appropriate constructor, partially applied.
 -}
--- TODO ERROR this will be a hugely common spot for the compiler to
--- discover an error, in this case calling an unknown procedure. We'll need
--- *much* better error handling than this.
 lookupProcedure :: Identifier -> Translate (Step -> Step)
 lookupProcedure i = do
     env <- get

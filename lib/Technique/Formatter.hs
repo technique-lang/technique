@@ -8,17 +8,9 @@ module Technique.Formatter where
 
 import Core.Text.Rope
 import Core.Text.Utilities
+import Core.System.Pretty
 import Data.Foldable (foldl')
 import Data.Int (Int8)
-import Data.Text.Prettyprint.Doc
-    ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
-    , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
-    , line, sep, hcat, annotate
-    , unAnnotate, line', group, nest, concatWith, surround
-    )
-import Data.Text.Prettyprint.Doc.Render.Terminal
-    ( color, colorDull, Color(..), AnsiStyle, bold
-    )
 
 import Technique.Language
 import Technique.Quantity
