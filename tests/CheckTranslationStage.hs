@@ -24,14 +24,14 @@ main = do
     finally (hspec checkTranslationStage) (putStrLn ".")
 
 stubStep :: Step
-stubStep = Sequence empty
+stubStep = NoOp
 
 testEnv :: Environment
 testEnv = Environment
     { environmentVariables = singletonMap (Identifier "x") (Name "!x")
     , environmentFunctions = singletonMap (Identifier "oven") (Subroutine exampleProcedureOven stubStep)
     , environmentRole = Unspecified
-    , environmentAccumulated = Sequence empty
+    , environmentAccumulated = NoOp
     }
 
 checkTranslationStage :: Spec

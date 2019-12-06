@@ -1,6 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE BangPatterns #-}
 
+import Control.Monad
 import Core.Data
 import Core.Program
 import Data.DList
@@ -8,9 +9,10 @@ import Data.DList
 import Technique.Internal
 import Technique.Translate
 import Technique.Language
-import Technique.Quantity ()
+import Technique.Quantity
 import Technique.Diagnostics ()
 import ExampleProcedure hiding (main)
+import TechniqueUser
 
 stubProcedure :: Step
 stubProcedure = Nested empty
@@ -30,6 +32,10 @@ main = execute $ do
             translateProcedure exampleRoastTurkey
             -- translateExpression (Amount (Number 42))
     case result of
-        Left err    -> write (renderFailure err)
-        Right (x,_) -> writeR x
-
+        Left err -> writeS err
+        Right technique -> forM_ (techniqueBody technique) $ \procedure -> do
+            let result = runTranslate testEnv $ do
+                    translateProcedure procedure
+            case result of
+                Left err    -> write (renderFailure err)
+                Right (x,_) -> writeR x

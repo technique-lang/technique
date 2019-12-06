@@ -55,10 +55,10 @@ Load an parse a procedure file
 -}
 loadProcedure :: FilePath -> Program None (Either Rope Technique)
 loadProcedure procfile = do
-    event "Read procedure file"
+    event "Read technique file"
     contents <- liftIO $ withFile procfile ReadMode hInput
 
-    event "Parse procedure file into Procedure"
+    event "Parse technique file into Procedure(s)"
 
     -- This is somewhat horrible; reading into Bytes, then going through
     -- Rope to get to Text is a bit silly... except that interop was kinda
