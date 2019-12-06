@@ -15,63 +15,62 @@ tested-with: GHC == 8.6
 github: oprdyn/technique
 
 dependencies:
- - base >= 4.11 && < 5
- - ivar-simple
- - core-data >= 0.2.1
- - core-text >= 0.2.2
- - core-program >= 0.2.2
- - free
- - megaparsec
- - text
- - parser-combinators
- - prettyprinter
- - prettyprinter-ansi-terminal
+  - base >= 4.11 && < 5
+  - ivar-simple
+  - core-data >= 0.2.1
+  - core-text >= 0.2.2
+  - core-program >= 0.2.2
+  - dlist
+  - free
+  - megaparsec
+  - text
+  - parser-combinators
+  - prettyprinter
+  - prettyprinter-ansi-terminal
 
 ghc-options: -Wall -Wwarn -fwarn-tabs -dynamic
 
 library:
   dependencies:
-   - async
-   - dlist
-   - hashable
-   - mtl
-   - transformers
-   - uuid-types
+    - async
+    - hashable
+    - mtl
+    - transformers
+    - uuid-types
   source-dirs: lib
   exposed-modules:
-   - Technique.Language
-   - Technique.Quantity
-   - Technique.Formatter
-   - Technique.Parser
-  other-modules:
-   - Technique.Builtins
-   - Technique.Diagnostics
-   - Technique.Evaluator
-   - Technique.Internal
-   - Technique.Translate
+    - Technique.Language
+    - Technique.Quantity
+    - Technique.Formatter
+    - Technique.Parser
+    - Technique.Builtins
+    - Technique.Diagnostics
+    - Technique.Evaluator
+    - Technique.Internal
+    - Technique.Translate
+  other-modules: []
 
 executables:
   technique:
     dependencies:
-     - technique
+      - technique
     ghc-options: -threaded -dynamic
     source-dirs: src
     main: TechniqueMain.hs
     other-modules:
-     - TechniqueUser
+      - TechniqueUser
 
 tests:
   check:
     dependencies:
-     - hspec
-     - technique
+      - hspec
+      - technique
     ghc-options: -threaded -dynamic
     source-dirs:
-     - tests
+      - tests
     main: TestSuite.hs
     other-modules:
-    - CheckAbstractSyntax
-    - CheckSkeletonParser
-    - CheckQuantityBehaviour
-    - ExampleProcedure
-
+      - CheckAbstractSyntax
+      - CheckSkeletonParser
+      - CheckQuantityBehaviour
+      - ExampleProcedure
