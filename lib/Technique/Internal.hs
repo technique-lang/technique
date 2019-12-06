@@ -95,6 +95,7 @@ data Step
     = Known Value                           -- literals ("axioms")
     | Bench [(Label,Step)]
     | Depends Name                          -- block waiting on a value ("reference to a hypothesis denoted by a variable")
+    | NoOp
     | Tuple [Step]
     | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
     | Invocation Attribute Subroutine Step  -- function application ("implication elimination") on a [sub] Procedure
@@ -108,23 +109,13 @@ instance Semigroup Step where
     (<>) = mappend
 
 instance Monoid Step where
-    mempty = Nested empty
+    mempty = NoOp
+    mappend NoOp s2 = s2
+    mappend s1 NoOp = s1
     mappend (Nested list1) (Nested list2) = Nested (append list1 list2)
     mappend (Nested list1) s2 = Nested (snoc list1 s2)
     mappend s1 (Nested list2) = Nested (cons s1 list2)
     mappend s1 s2 = Nested (cons s1 (singleton s2))
-
-{-
-instance Monoid Step where
-    mempty = Sequence empty
-    mappend s1 s2 = case s1 of
-        Sequence list1  -> case s2 of
-            Sequence list2  -> Sequence (append list1 list2)
-            _               -> Sequence (snoc list1 s2)
-        _               -> case s2 of
-            Sequence list2  -> Sequence (cons s1 list2)
-            _               -> Sequence (cons s1 (singleton s2))
--}
 
 data CompilerFailure
     = VariableAlreadyInUse Identifier

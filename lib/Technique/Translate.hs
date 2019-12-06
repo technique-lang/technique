@@ -42,7 +42,7 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Unspecified
-    , environmentAccumulated = Nested empty
+    , environmentAccumulated = NoOp
     }
 
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
@@ -153,7 +153,10 @@ translateExpression expr = do
 
         Variable is -> do
             steps <- traverse g is
-            return (Tuple steps)
+            case steps of
+                [] -> return (Nested empty)
+                [step] -> return step
+                _ -> return (Tuple steps)
           where
             g :: Identifier -> Translate Step
             g i =

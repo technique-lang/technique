@@ -43,6 +43,10 @@ instance Render Step where
             annotate StepToken "Known" <+> intoDocA value
         Depends name ->
             annotate StepToken "Depends" <+> intoDocA name
+
+        NoOp ->
+            annotate ErrorToken "NoOp"
+
         Tuple steps ->
             annotate StepToken "Tuple" <+> commaCat steps
         Nested steps ->
