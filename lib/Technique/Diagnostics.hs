@@ -41,6 +41,7 @@ instance Render Step where
     intoDocA step = case step of
         Known value ->
             annotate StepToken "Known" <+> intoDocA value
+
         Depends name ->
             annotate StepToken "Depends" <+> intoDocA name
 
@@ -48,23 +49,40 @@ instance Render Step where
             annotate ErrorToken "NoOp"
 
         Tuple steps ->
-            annotate StepToken "Tuple" <+> commaCat steps
+            annotate StepToken "Tuple" <+>
+                lparen <+>
+                commaCat steps <+>
+                rparen
+
         Nested steps ->
             vcat (toList (fmap intoDocA steps))
+
         Asynchronous names substep ->
-            annotate StepToken "Asynchronous" <+> commaCat names <+> "=" <+> intoDocA substep
+            annotate StepToken "Asynchronous" <+> commaCat names <+> "<-" <+> intoDocA substep
+
         Invocation attr func substep ->
           let
             i = procedureName (subroutineSource func)
           in
             annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+
         External attr prim substep ->
           let
             i = procedureName (primitiveSource prim)
           in
-            annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
-        Bench _ ->
-            annotate ErrorToken "TODO Bench"
+            annotate StepToken "External" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+
+        Bench pairs ->      -- [(Label,Step)]
+            annotate StepToken "Bench" <+>
+                lbracket <+>
+                foldl' f emptyDoc pairs <+>
+                rbracket
+          where
+            f :: Doc TechniqueToken -> (Label,Step) -> Doc TechniqueToken
+            f built (label,substep) =
+                built <>
+                dquote <> annotate LabelToken (pretty label) <> dquote <+>
+                "<-" <+> intoDocA substep
 
 instance Render Name where
     type Token Name = TechniqueToken

@@ -123,14 +123,19 @@ instance Render Statement where
     intoDocA statement = case statement of
         Assignment vars expr ->
             commaCat vars <+> annotate SymbolToken "=" <+> intoDocA expr
+
         Execute expr ->
             intoDocA expr
+
         Comment text ->
             "-- " <> pretty text  -- TODO what about multiple lines?
+
         Declaration proc ->
             intoDocA proc
+
         Blank ->
             emptyDoc
+
         Series ->
             annotate SymbolToken " ; "
 
@@ -148,26 +153,35 @@ instance Render Expression where
     intoDocA expr = case expr of
         Application name subexpr ->
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
+
         None ->
             annotate SymbolToken ("()")
+
         Undefined ->
             annotate ErrorToken "?"
+
         Amount qty ->
             intoDocA qty
+
         Text text ->
             annotate SymbolToken dquote <>
             annotate StringToken (pretty text) <>
             annotate SymbolToken dquote
+
         Object tablet ->
             intoDocA tablet
+
         Variable vars ->
             commaCat vars
+
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
+
         Grouping subexpr ->
             annotate SymbolToken lparen <>
             intoDocA subexpr <>
             annotate SymbolToken rparen
+
         Restriction attribute block ->
             intoDocA attribute <>
             line <>
