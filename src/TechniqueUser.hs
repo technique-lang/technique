@@ -14,6 +14,7 @@ import Core.System
 import System.IO (hIsTerminalDevice)
 import Text.Megaparsec (parse, errorBundlePretty)
 
+import Technique.Diagnostics ()
 import Technique.Failure
 import Technique.Formatter ()
 import Technique.Internal
@@ -52,11 +53,11 @@ syntaxCheck procfile =
             surface <- loadTechnique procfile
             concrete <- parsingPhase procfile surface
             abstract <- translationPhase concrete
-            _ <- return abstract
+            debugR "abstract" abstract
             write "ok"
             return 0)
         (\e -> do
-            write ("fail: " <> renderFailure e)
+            write ("failed: " <> renderFailure e)
             return (fromEnum e))
 
 {-|
@@ -131,5 +132,5 @@ commandFormatTechnique = do
                 True    -> writeR technique
                 False   -> write (renderNoAnsi 80 technique))
         (\e -> do
-            write ("fail: " <> renderFailure e)
+            write ("failed: " <> renderFailure e)
             terminate (fromEnum e))

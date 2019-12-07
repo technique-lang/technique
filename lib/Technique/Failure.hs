@@ -10,10 +10,8 @@ module Technique.Failure where
 
 import Core.System.Base
 import Core.Text.Rope
-import Data.DList
 
 import Technique.Language
-import Technique.Quantity
 
 data CompilerFailure
     = ParsingFailed String              -- FIXME change to ParseErrorSomethingErOther
@@ -32,6 +30,7 @@ instance Enum CompilerFailure where
         CallToUnknownProcedure _ -> 4
         UseOfUnknownIdentifier _ -> 5
         EncounteredUndefined -> 6
+    toEnum = undefined
 
 instance Exception CompilerFailure where
     displayException = fromRope . renderFailure
