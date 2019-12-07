@@ -39,29 +39,32 @@ commandCheckTechnique = do
     case mode of
         Once -> do
             -- normal operation, single pass
-            void (syntaxCheck procfile)
+            code <- syntaxCheck procfile
+            terminate code
         Cycle -> do
             -- use inotify to rebuild on changes
             forever (syntaxCheck procfile >> waitForChange [procfile])
 
-syntaxCheck :: FilePath -> Program None ()
-syntaxCheck procfile = do
-    result <- loadProcedure procfile
-    case result of
-        Right _ -> do
-            write "Ok"
-        Left err -> do
-            write err
+syntaxCheck :: FilePath -> Program None Int
+syntaxCheck procfile =
+    catch
+        (do
+            surface <- loadTechnique procfile
+            concrete <- parsingPhase procfile surface
+            abstract <- translationPhase concrete
+            _ <- return abstract
+            write "ok"
+            return 0)
+        (\e -> do
+            write ("fail: " <> renderFailure e)
+            return (fromEnum e))
 
 {-|
-Load an parse a procedure file
+Load a technique file hopefully containing a procedure.
 -}
-loadProcedure :: FilePath -> Program None (Either Rope Technique)
-loadProcedure procfile = do
+loadTechnique :: FilePath -> Program None Bytes
+loadTechnique filename = do
     event "Read technique file"
-    contents <- liftIO $ withFile procfile ReadMode hInput
-
-    event "Parse technique file into Procedure(s)"
 
     -- This is somewhat horrible; reading into Bytes, then going through
     -- Rope to get to Text is a bit silly... except that interop was kinda
@@ -69,11 +72,39 @@ loadProcedure procfile = do
     -- this better if/when we come up with an effecient Stream Rope
     -- instance so megaparsec can use Rope directly.
 
-    -- FIXME parse whole file not just a procedure FIXME
-    let result = parse pTechnique procfile (fromRope (intoRope contents))
+    contents <- liftIO $ withFile filename ReadMode hInput
+    return (intoBytes contents)
+
+{-|
+Parse technique content into a concrete syntax object.
+-}
+parsingPhase :: FilePath -> Bytes -> Program None Technique
+parsingPhase filename bytes = do
+    event "Parse into Procedure(s)"
+
+    let result = parse pTechnique filename (fromRope (intoRope bytes))
     case result of
-        Right technique -> return (Right technique)
-        Left err -> return (Left (intoRope (errorBundlePretty err)))
+        Right technique -> return technique
+        Left err -> throw (ParsingFailed (errorBundlePretty err))
+
+{-|
+Take a static Procedure definition and spin it up into a sequence of
+"Subroutine" suitable for interpretation. In other words, translate between
+the concrete syntax types and the abstract syntax we can feed to an
+evaluator.
+-}
+-- FIXME better return type
+translationPhase :: Technique -> Program None [Subroutine]
+translationPhase technique =
+  let
+    env = emptyEnvironment
+    result = runTranslate env (translateTechnique technique)
+  in
+    case result of
+        Left failure -> do
+            throw failure
+        Right (xs,_) -> do
+            return xs
 
 
 
@@ -90,13 +121,15 @@ commandFormatTechnique = do
             Just file   -> file
             _           -> error "Invalid State"
 
-    result <- loadProcedure procfile
-    case result of
-        Right technique -> do
+    catch
+        (do
+            surface <- loadTechnique procfile
+            technique <- parsingPhase procfile surface
+
             terminal <- liftIO $ hIsTerminalDevice stdout
             case (terminal || raw) of
                 True    -> writeR technique
-                False   -> write (renderNoAnsi 80 technique)
-
-        Left err -> do
-            write err
+                False   -> write (renderNoAnsi 80 technique))
+        (\e -> do
+            write ("fail: " <> renderFailure e)
+            terminate (fromEnum e))
