@@ -65,7 +65,7 @@ Load a technique file hopefully containing a procedure.
 -}
 loadTechnique :: FilePath -> Program None Bytes
 loadTechnique filename = do
-    event "Read technique file"
+    event "Read source from technique file"
 
     -- This is somewhat horrible; reading into Bytes, then going through
     -- Rope to get to Text is a bit silly... except that interop was kinda
@@ -81,7 +81,7 @@ Parse technique content into a concrete syntax object.
 -}
 parsingPhase :: FilePath -> Bytes -> Program None Technique
 parsingPhase filename bytes = do
-    event "Parse into Procedure(s)"
+    event "Parse surface language into concrete Procedures"
 
     let result = parse pTechnique filename (fromRope (intoRope bytes))
     case result of
@@ -100,7 +100,8 @@ translationPhase technique =
   let
     env = emptyEnvironment
     result = runTranslate env (translateTechnique technique)
-  in
+  in do
+    event "Translate Procedures into abstract Subroutines"
     case result of
         Left failure -> do
             throw failure
