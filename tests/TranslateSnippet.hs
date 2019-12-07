@@ -33,9 +33,8 @@ main = execute $ do
             -- translateExpression (Amount (Number 42))
     case result of
         Left err -> writeS err
-        Right technique -> forM_ (techniqueBody technique) $ \procedure -> do
-            let result = runTranslate testEnv $ do
-                    translateProcedure procedure
+        Right technique -> do
+            let result = runTranslate testEnv (translateTechnique technique)
             case result of
                 Left err    -> write (renderFailure err)
                 Right (x,_) -> writeR x

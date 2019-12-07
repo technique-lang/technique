@@ -68,6 +68,13 @@ translate env procedure =
         Left e -> Left e
         Right (subroutine,_) -> Right subroutine
 
+translateTechnique :: Technique -> Translate [Subroutine]
+translateTechnique technique =
+  let
+    procedures = techniqueBody technique
+  in do
+    mapM translateProcedure procedures
+
 translateProcedure :: Procedure -> Translate Subroutine
 translateProcedure procedure =
   let
