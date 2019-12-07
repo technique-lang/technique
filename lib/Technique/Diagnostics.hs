@@ -25,7 +25,7 @@ instance Render Subroutine where
         step = subroutineSteps func
       in
         annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-            line <> indent 4 (intoDocA step)
+            line <> indent 4 (intoDocA step) <> line
 
 instance Render Step where
     type Token Step = TechniqueToken
@@ -65,14 +65,15 @@ instance Render Step where
             annotate StepToken "External" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
 
         Bench pairs ->      -- [(Label,Step)]
-            annotate StepToken "Bench" <+>
-                lbracket <+>
-                foldl' f emptyDoc pairs <+>
-                rbracket
+            annotate StepToken "Bench" <>
+                line <>
+                indent 4 (
+                    hang 2 (lbracket <+>
+                        vsep (punctuate comma bindings)) <+> rbracket)
           where
-            f :: Doc TechniqueToken -> (Label,Step) -> Doc TechniqueToken
-            f built (label,substep) =
-                built <>
+            bindings = fmap f pairs
+            f :: (Label,Step) -> Doc TechniqueToken
+            f (label,substep) =
                 dquote <> annotate LabelToken (pretty label) <> dquote <+>
                 "<-" <+> intoDocA substep
 
