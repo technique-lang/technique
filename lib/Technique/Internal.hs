@@ -12,6 +12,7 @@ module Technique.Internal where
 import Core.Text
 import Data.DList
 
+import Technique.Failure
 import Technique.Language
 import Technique.Quantity
 
@@ -116,19 +117,3 @@ instance Monoid Step where
     mappend (Nested list1) s2 = Nested (snoc list1 s2)
     mappend s1 (Nested list2) = Nested (cons s1 list2)
     mappend s1 s2 = Nested (cons s1 (singleton s2))
-
-data CompilerFailure
-    = VariableAlreadyInUse Identifier
-    | ProcedureAlreadyDeclared Identifier
-    | CallToUnknownProcedure Identifier
-    | UseOfUnknownIdentifier Identifier
-    | EncounteredUndefined
-    deriving (Eq,Show)
-
-renderFailure :: CompilerFailure -> Rope
-renderFailure e = case e of
-    VariableAlreadyInUse i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
-    ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> unIdentifier i <> "' already declared."
-    CallToUnknownProcedure i -> "Call to unknown procedure '" <> unIdentifier i <> "'."
-    UseOfUnknownIdentifier i -> "Variable '" <> unIdentifier i <> "' not in scope."
-    EncounteredUndefined -> "Encountered 'undefined' marker."

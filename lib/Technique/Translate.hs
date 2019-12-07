@@ -18,6 +18,7 @@ import Data.DList (empty)
 import Data.Foldable (traverse_)
 
 import Technique.Builtins
+import Technique.Failure
 import Technique.Internal
 import Technique.Language
 

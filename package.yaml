@@ -39,14 +39,15 @@ library:
     - uuid-types
   source-dirs: lib
   exposed-modules:
-    - Technique.Language
-    - Technique.Quantity
-    - Technique.Formatter
-    - Technique.Parser
     - Technique.Builtins
     - Technique.Diagnostics
     - Technique.Evaluator
+    - Technique.Failure
+    - Technique.Formatter
+    - Technique.Language
     - Technique.Internal
+    - Technique.Parser
+    - Technique.Quantity
     - Technique.Translate
   other-modules: []
 

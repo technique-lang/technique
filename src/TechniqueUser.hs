@@ -7,16 +7,19 @@ Programs implementing front-end commands for users: check, format
 
 module TechniqueUser where
 
-import Control.Monad (forever, void)
+import Control.Monad (forever)
 import Core.Program
 import Core.Text
 import Core.System
-import Technique.Language
-import Technique.Formatter ()
-import Technique.Parser
 import System.IO (hIsTerminalDevice)
+import Text.Megaparsec (parse, errorBundlePretty)
 
-import Text.Megaparsec
+import Technique.Failure
+import Technique.Formatter ()
+import Technique.Internal
+import Technique.Language
+import Technique.Parser
+import Technique.Translate
 
 data Mode = Cycle | Once
 

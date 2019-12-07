@@ -13,6 +13,7 @@ import Core.System
 import Data.DList
 import Test.Hspec
 
+import Technique.Failure
 import Technique.Internal
 import Technique.Language
 import Technique.Translate
