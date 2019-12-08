@@ -49,25 +49,18 @@ emptyEnvironment = Environment
 newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
     deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
 
+{-|
+Take a translator action and an environment and spin it up into a Step or
+nest of Steps ("Subroutine") suitable for interpretation. In other words,
+translate between the concrete syntax types and the abstract syntax we can
+feed to an evaluator.
+-}
 -- we use runStateT rather than evalStateT as we did previously so we can
 -- access the final state in test cases.
 runTranslate :: Environment -> Translate a -> Either CompilerFailure (a,Environment)
 runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
-{-|
-Take a static Procedure definition and spin it up into a "Subroutine"
-suitable for interpretation. In other words, translate between the concrete
-syntax types and the abstract syntax we can feed to an evaluator.
--}
-translate :: Environment -> Procedure -> Either CompilerFailure Subroutine
-translate env procedure =
-  let
-    result = runTranslate env (translateProcedure procedure)
-  in
-    case result of
-        Left e -> Left e
-        Right (subroutine,_) -> Right subroutine
 
 translateTechnique :: Technique -> Translate [Subroutine]
 translateTechnique technique =
@@ -81,13 +74,19 @@ translateProcedure procedure =
   let
     block = procedureBlock procedure
   in do
-    step <- translateBlock block
-    return
-        (Subroutine
-            { subroutineSource = procedure
-            , subroutineSteps = step
-            }
-        )
+    env <- get
+
+    let subenv = env    -- placeholder in case we need to refine
+    let result = runTranslate subenv (translateBlock block)
+
+    case result of
+        Left e -> failBecause e
+        Right (step,_) -> return
+            (Subroutine
+                { subroutineSource = procedure
+                , subroutineSteps = step
+                }
+            )
 
 {-|
 Blocks are scoping mechanisms, so accumulated environment is discarded once
