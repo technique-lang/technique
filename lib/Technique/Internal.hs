@@ -38,44 +38,44 @@ data Value
 
 {-|
 The internal representation of a Procedure, with ambiguities resolved.
+
+We landed on Subroutine as the name of translated user-defined Procedure.
+
+Procedures which are actually fundamental [in the context of the domain
+specific language] represented by builtin IO actions which we call
+Primatives.
+
+The first constructor, Unresolved, is for the first stage pass through the
+translate phase when we are still accumulating definitions, thereby
+allowing for the forward use of not-yet-defiend procedures that will be
+encountered in the same scope.
 -}
 -- Didn't want to call this "function" because that means something in
 -- functional programming and in programming language theory and this isn't
 -- it. Other alternatives considered include Instance (the original name,
 -- but we've reserved that to be used when instantiating a procedure at
 -- runtime), Representation, and Internal. Subroutine is ok.
-data Subroutine = Subroutine
-    { subroutineSource :: Procedure
-    , subroutineSteps :: Step
-    }
-    deriving (Eq,Show)
+data Function
+    = Unresolved
+        { functionSource :: Procedure
+        }
+    | Subroutine
+        { functionSource :: Procedure
+        , subroutineSteps :: Step   -- should this be a function?
+        }
+    | Primitive
+        { functionSource :: Procedure
+        , primitiveAction :: Step -> IO Value
+        }
 
-{-|
-Procedures which are actually fundamental [in the context of the domain
-specific language] represented by builtin IO actions.
--}
--- we use primativeSource :: Procedure so that we can duplicate the logic
--- when we are doing diagnostics. Suggests a typeclass?
-{-
-class Function a where
-    functionSource :: a -> Procedure
--}
-data Primitive = Primitive
-    { primitiveSource :: Procedure
-    , primitiveAction :: Step -> IO Value
-    }
-
-instance Show Primitive where
-    show prim =
-        let
-            name = procedureName (primitiveSource prim)
-        in
-            show name
+instance Show Function where
+    show = show . procedureName . functionSource
 
 -- this is weak, but we can't compare functions so if the Procedures are
 -- the same assume the Primitives are.
-instance Eq Primitive where
-    (==) p1 p2 = (primitiveSource p1) == (primitiveSource p2)
+instance Eq Function where
+    (==) f1 f2 = (functionSource f1) == (functionSource f2)
+
 
 newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
     deriving (Eq,Show)
@@ -98,8 +98,8 @@ data Step
     | NoOp
     | Tuple [Step]
     | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
-    | Invocation Attribute Subroutine Step  -- function application ("implication elimination") on a [sub] Procedure
-    | External Attribute Primitive Step     -- same, but calling a primative builtin.
+    | Invocation Attribute Function Step  -- function application ("implication elimination") on a [sub] Procedure
+    | External Attribute Function Step     -- same, but calling a primative builtin.
     | Nested (DList Step)
                                             -- assumption axiom?
                                             -- weakening?
