@@ -96,14 +96,31 @@ we finish resolving names within it.
 -- about that.
 translateBlock :: Block -> Translate Step
 translateBlock (Block statements) = do
+    -- Stage 1: identify declarations
+    traverse_ identifyDeclarations statements
+
+    -- Stage 2: conduct translation
     traverse_ translateStatement statements
     env' <- get
     return (environmentAccumulated env')
 
+
+identifyDeclarations :: Statement -> Translate ()
+identifyDeclarations statement = case statement of
+    Assignment vars _ -> do
+        traverse_ insertVariable vars
+
+    Declaration proc -> do
+        insertProcedure proc
+
+    -- the remainder are not relevant at this stage
+    _ -> return ()
+
+
 translateStatement :: Statement -> Translate ()
 translateStatement statement = case statement of
     Assignment vars expr -> do
-        names <- traverse createVariable vars
+        names <- traverse lookupVariable vars
         step <- translateExpression expr
 
         let step' = Asynchronous names step
@@ -123,8 +140,9 @@ translateStatement statement = case statement of
     Blank -> return ()
     Series -> return ()
 
--- TODO HERE this does NOT add the steps to the Environment
-
+{-|
+Note that this does NOT add the steps to the Environment.
+-}
 translateExpression :: Expression -> Translate Step
 translateExpression expr = do
     env <- get
@@ -166,13 +184,9 @@ translateExpression expr = do
                 _ -> return (Tuple steps)
           where
             g :: Identifier -> Translate Step
-            g i =
-              let
-                known = environmentVariables env
-                result = lookupKeyValue i known
-              in case result of
-                Nothing -> failBecause (UseOfUnknownIdentifier i)
-                Just name -> return (Depends name)
+            g i = do
+                name <- lookupVariable i
+                return (Depends name)
 
         Operation op subexpr1 subexpr2 ->
           let
@@ -234,14 +248,23 @@ insertProcedure proc = do
 failBecause :: CompilerFailure -> Translate a
 failBecause e = throwError e
 
+lookupVariable :: Identifier -> Translate Name
+lookupVariable i = do
+    env <- get
+    let known = lookupKeyValue i (environmentVariables env)
+
+    case known of
+        Just name -> return name
+        Nothing -> failBecause (UseOfUnknownIdentifier i)
+
 {-|
 Identifiers are valid names but Names are unique, so that we can put
 them into the environment map. This is where we check for reuse of an
 already declared name (TODO) and given the local use of the identifier a
 scope-local (or globally?) unique name.
 -}
-createVariable :: Identifier -> Translate Name
-createVariable i = do
+insertVariable :: Identifier -> Translate ()
+insertVariable i = do
     env <- get
     let known = environmentVariables env
     when (containsKey i known) $ do
@@ -252,7 +275,6 @@ createVariable i = do
     let known' = insertKeyValue i n known
     let env' = env { environmentVariables = known' }
     put env'
-    return n
 
 {-|
 Accumulate a Step
