@@ -32,7 +32,7 @@ and their bindings.
 -- 3) explicitly reset to any. Are (1) and (3) the same?
 data Environment = Environment
     { environmentVariables :: Map Identifier Name
-    , environmentFunctions :: Map Identifier Subroutine
+    , environmentFunctions :: Map Identifier Function
     , environmentRole :: Attribute
     , environmentAccumulated :: Step
     }
@@ -62,14 +62,14 @@ runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
 
-translateTechnique :: Technique -> Translate [Subroutine]
+translateTechnique :: Technique -> Translate [Function]
 translateTechnique technique =
   let
     procedures = techniqueBody technique
   in do
     mapM translateProcedure procedures
 
-translateProcedure :: Procedure -> Translate Subroutine
+translateProcedure :: Procedure -> Translate Function
 translateProcedure procedure =
   let
     block = procedureBlock procedure
@@ -81,12 +81,10 @@ translateProcedure procedure =
 
     case result of
         Left e -> failBecause e
-        Right (step,_) -> return
-            (Subroutine
-                { subroutineSource = procedure
-                , subroutineSteps = step
-                }
-            )
+        Right (step,_) -> do
+            let func = Subroutine procedure step
+            registerProcedure func
+            return func
 
 {-|
 Blocks are scoping mechanisms, so accumulated environment is discarded once

@@ -56,26 +56,39 @@ encountered in the same scope.
 -- but we've reserved that to be used when instantiating a procedure at
 -- runtime), Representation, and Internal. Subroutine is ok.
 data Function
-    = Unresolved
-        { functionSource :: Procedure
-        }
-    | Subroutine
-        { functionSource :: Procedure
-        , subroutineSteps :: Step   -- should this be a function?
-        }
-    | Primitive
-        { functionSource :: Procedure
-        , primitiveAction :: Step -> IO Value
-        }
+    = Unresolved Identifier
+    | Subroutine Procedure Step
+    | Primitive Procedure (Step -> IO Value)
+
+functionName :: Function -> Identifier
+functionName func = case func of
+    Unresolved name -> name
+    Subroutine proc _ -> procedureName proc
+    Primitive prim _ -> procedureName prim
+
 
 instance Show Function where
-    show = show . procedureName . functionSource
+    show func =
+      let
+        name = fromRope (unIdentifier (functionName func))
+      in case func of
+        Unresolved _ -> "Unresolved" ++ name 
+        Subroutine _ _ -> "Subroutine " ++ name
+        Primitive _ _ -> "Primitive " ++ name
 
--- this is weak, but we can't compare functions so if the Procedures are
--- the same assume the Primitives are.
+-- this is weak, but we can't compare Haskell functions for equality so if
+-- the Procedures are the same then we assume the Primitives are.
 instance Eq Function where
-    (==) f1 f2 = (functionSource f1) == (functionSource f2)
-
+    (==) f1 f2 = case f1 of
+        Unresolved i1 -> case f2 of
+            Unresolved i2 -> i1 == i2
+            _ -> False
+        Subroutine proc1 _ -> case f2 of
+            Subroutine proc2 _ -> proc1 == proc2
+            _ -> False
+        Primitive proc1 _ -> case f2 of
+            Primitive proc2 _ -> proc1 == proc2
+            _ -> False
 
 newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
     deriving (Eq,Show)
@@ -98,8 +111,7 @@ data Step
     | NoOp
     | Tuple [Step]
     | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
-    | Invocation Attribute Function Step  -- function application ("implication elimination") on a [sub] Procedure
-    | External Attribute Function Step     -- same, but calling a primative builtin.
+    | Invocation Attribute Function Step    -- function application ("implication elimination") on a [sub] Procedure
     | Nested (DList Step)
                                             -- assumption axiom?
                                             -- weakening?

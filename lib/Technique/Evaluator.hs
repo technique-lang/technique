@@ -70,14 +70,10 @@ evaluateStep step = case step of
     Invocation attr func substep -> do
         functionApplication func substep   -- TODO do something with role!
 
-    External attr prim substep -> do
-        executeAction prim substep         -- TODO do something with role!
-
-
-functionApplication :: Subroutine -> Step -> Evaluate Value --  IO Promise ?
+functionApplication :: Function -> Step -> Evaluate Value --  IO Promise ?
 functionApplication = undefined
 
-executeAction :: Primitive -> Step -> Evaluate Value --  IO Promise ?
+executeAction :: Function -> Step -> Evaluate Value --  IO Promise ?
 executeAction = undefined
 
 

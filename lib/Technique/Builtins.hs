@@ -15,8 +15,8 @@ import Core.Text.Rope ()
 import Technique.Internal
 import Technique.Language
 
-builtins :: Map Identifier Primitive
-builtins = intoMap (fmap (\p -> (procedureName (primitiveSource p), p))
+builtinProcedures :: Map Identifier Function
+builtinProcedures = intoMap (fmap (\p -> (functionName p, p))
     [ builtinProcedureWaitEither
     , builtinProcedureWaitBoth
     , builtinProcedureCombineValues
@@ -24,9 +24,9 @@ builtins = intoMap (fmap (\p -> (procedureName (primitiveSource p), p))
     , builtinProcedureRecord
     ])
 
-builtinProcedureTask :: Primitive
+builtinProcedureTask :: Function
 builtinProcedureTask = Primitive
-    { primitiveSource = Procedure
+    Procedure
         { procedureName = Identifier "task"
         , procedureParams = []
         , procedureInput = [Type "Text"]
@@ -35,12 +35,11 @@ builtinProcedureTask = Primitive
         , procedureDescription = Just (Markdown "A task to be executed by the person carrying out this role.")
         , procedureBlock = Block []
         }
-    , primitiveAction = undefined
-    }
+    undefined
 
-builtinProcedureRecord :: Primitive
+builtinProcedureRecord :: Function
 builtinProcedureRecord = Primitive
-    { primitiveSource = Procedure
+    Procedure
         { procedureName = Identifier "record"
         , procedureParams = []
         , procedureInput = [Type "Text"]
@@ -49,13 +48,12 @@ builtinProcedureRecord = Primitive
         , procedureDescription = Just (Markdown "Input from the user to be parsed as a quantity.")
         , procedureBlock = Block []
         }
-    , primitiveAction = undefined
-    }
+    undefined
 
 -- the '|' operation
-builtinProcedureWaitEither :: Primitive
+builtinProcedureWaitEither :: Function
 builtinProcedureWaitEither = Primitive
-    { primitiveSource = Procedure
+    Procedure
         { procedureName = Identifier "wait_either"
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
@@ -64,13 +62,12 @@ builtinProcedureWaitEither = Primitive
         , procedureDescription = Just (Markdown "Wait for either of two values to be ready.")
         , procedureBlock = Block []
         }
-    , primitiveAction = undefined
-    }
+    undefined
 
 -- the '&' operation
-builtinProcedureWaitBoth :: Primitive
+builtinProcedureWaitBoth :: Function
 builtinProcedureWaitBoth = Primitive
-    { primitiveSource = Procedure
+    Procedure
         { procedureName = Identifier "wait_both"
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
@@ -79,13 +76,12 @@ builtinProcedureWaitBoth = Primitive
         , procedureDescription = Just (Markdown "Wait for two values to both be ready.")
         , procedureBlock = Block []
         }
-    , primitiveAction = undefined
-    }
+    undefined
 
 -- the '+' operation
-builtinProcedureCombineValues :: Primitive
+builtinProcedureCombineValues :: Function
 builtinProcedureCombineValues = Primitive
-    { primitiveSource = Procedure
+    Procedure
         { procedureName = Identifier "combine_values"
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
@@ -94,5 +90,4 @@ builtinProcedureCombineValues = Primitive
         , procedureDescription = Just (Markdown "Combine two values. This will involve coersion if the concrete types differ.")
         , procedureBlock = Block []
         }
-    , primitiveAction = undefined
-    }
+    undefined

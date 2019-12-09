@@ -54,15 +54,9 @@ instance Render Step where
 
         Invocation attr func substep ->
           let
-            i = procedureName (subroutineSource func)
+            i = functionName func
           in
             annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
-
-        External attr prim substep ->
-          let
-            i = procedureName (primitiveSource prim)
-          in
-            annotate StepToken "External" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
 
         Bench pairs ->      -- [(Label,Step)]
             annotate StepToken "Bench" <>
