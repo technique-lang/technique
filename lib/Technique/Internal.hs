@@ -72,9 +72,9 @@ instance Show Function where
       let
         name = fromRope (unIdentifier (functionName func))
       in case func of
-        Unresolved _ -> "Unresolved" ++ name
-        Subroutine _ _ -> "Subroutine " ++ name
-        Primitive _ _ -> "Primitive " ++ name
+        Unresolved _ -> "Unresolved \"" ++ name ++ "\""
+        Subroutine _ _ -> "Subroutine \"" ++ name ++ "\""
+        Primitive _ _ -> "Primitive \"" ++ name ++ "\""
 
 -- this is weak, but we can't compare Haskell functions for equality so if
 -- the Procedures are the same then we assume the Primitives are.
