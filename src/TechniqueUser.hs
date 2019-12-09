@@ -14,6 +14,7 @@ import Core.System
 import System.IO (hIsTerminalDevice)
 import Text.Megaparsec (parse, errorBundlePretty)
 
+import Technique.Builtins
 import Technique.Diagnostics ()
 import Technique.Failure
 import Technique.Formatter ()
@@ -95,11 +96,12 @@ the concrete syntax types and the abstract syntax we can feed to an
 evaluator.
 -}
 -- FIXME better return type
-translationPhase :: Technique -> Program None [Subroutine]
+translationPhase :: Technique -> Program None [Function]
 translationPhase technique =
   let
-    env = emptyEnvironment
-    result = runTranslate env (translateTechnique technique)
+    env0 = emptyEnvironment
+    env1 = env0 { environmentFunctions = builtinProcedures }
+    result = runTranslate env1 (translateTechnique technique)
   in do
     event "Translate Procedures into abstract Subroutines"
     case result of

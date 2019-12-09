@@ -36,7 +36,7 @@ checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
         it "key builtin procedures are available" $ do
-            procedureName (primitiveSource builtinProcedureTask) `shouldBe` Identifier "task"
+            functionName builtinProcedureTask `shouldBe` Identifier "task"
 
         it "procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` Identifier "roast_turkey"

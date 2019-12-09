@@ -66,7 +66,7 @@ checkTranslationStage = do
             stmt = Declaration proc
           in do
             -- verify precondition that there is one already there
-            fmap (procedureName . subroutineSource) (lookupKeyValue (Identifier "oven") (environmentFunctions testEnv))
+            fmap functionName (lookupKeyValue (Identifier "oven") (environmentFunctions testEnv))
                 `shouldBe` Just (Identifier "oven")
             -- attempt to declare a procedure by a name already in use
             runTranslate testEnv (translateStatement stmt)

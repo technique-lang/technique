@@ -16,16 +16,18 @@ import Technique.Language
 import Technique.Formatter  -- already have lots of useful definitions
 import Technique.Internal
 
-instance Render Subroutine where
-    type Token Subroutine = TechniqueToken
+instance Render Function where
+    type Token Function = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA func =
-      let
-        proc = subroutineSource func
-        step = subroutineSteps func
-      in
-        annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-            line <> indent 4 (intoDocA step) <> line
+    intoDocA func = case func of
+        Unresolved proc ->
+            annotate ErrorToken "Unresolved" <> line
+        Subroutine proc step ->
+            annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
+                line <> indent 4 (intoDocA step) <> line
+        Primitive proc step ->
+            annotate StepToken "Primitive" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
+                line
 
 instance Render Step where
     type Token Step = TechniqueToken

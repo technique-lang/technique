@@ -72,7 +72,7 @@ instance Show Function where
       let
         name = fromRope (unIdentifier (functionName func))
       in case func of
-        Unresolved _ -> "Unresolved" ++ name 
+        Unresolved _ -> "Unresolved" ++ name
         Subroutine _ _ -> "Subroutine " ++ name
         Primitive _ _ -> "Primitive " ++ name
 

@@ -14,7 +14,7 @@ import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
-import Data.DList (empty)
+import Data.DList (empty, toList, fromList)
 import Data.Foldable (traverse_)
 
 import Technique.Builtins
@@ -94,31 +94,20 @@ we finish resolving names within it.
 -- about that.
 translateBlock :: Block -> Translate Step
 translateBlock (Block statements) = do
-    -- Stage 1: identify declarations
-    traverse_ identifyDeclarations statements
-
-    -- Stage 2: conduct translation
+    -- Stage 1: conduct translation
     traverse_ translateStatement statements
+
+    -- Stage 2: resolve functions
     env' <- get
-    return (environmentAccumulated env')
-
-
-identifyDeclarations :: Statement -> Translate ()
-identifyDeclarations statement = case statement of
-    Assignment vars _ -> do
-        traverse_ insertVariable vars
-
-    Declaration proc -> do
-        insertProcedure proc
-
-    -- the remainder are not relevant at this stage
-    _ -> return ()
+    let step = environmentAccumulated env'
+    step' <- resolveFunctions step
+    return step'
 
 
 translateStatement :: Statement -> Translate ()
 translateStatement statement = case statement of
     Assignment vars expr -> do
-        names <- traverse lookupVariable vars
+        names <- traverse insertVariable vars
         step <- translateExpression expr
 
         let step' = Asynchronous names step
@@ -131,12 +120,51 @@ translateStatement statement = case statement of
 
 
     Declaration proc -> do
-        insertProcedure proc
+        _ <- translateProcedure proc
+        return ()
 
     -- the remainder are functionally no-ops
     Comment _ -> return ()
     Blank -> return ()
     Series -> return ()
+
+{-|
+The second stage of translation phase: iterate through the Steps and where
+a function call is made, look up to see if we actually know what it is.
+-}
+resolveFunctions :: Step -> Translate Step
+resolveFunctions step = case step of
+    Invocation attr func substep -> do
+        func' <- lookupFunction func
+        substep' <- resolveFunctions substep
+        return (Invocation attr func' substep')
+
+    Tuple substeps -> do
+        substeps' <- traverse resolveFunctions substeps
+        return (Tuple substeps')
+
+    Asynchronous names substep -> do
+        substep' <- resolveFunctions substep
+        return (Asynchronous names substep')
+
+    Nested sublist -> do
+        let actual = toList sublist
+        actual' <- traverse resolveFunctions actual
+        let sublist' = fromList actual'
+        return (Nested sublist')
+
+    Bench pairs -> do
+        pairs' <- traverse f pairs
+        return (Bench pairs')
+      where
+        f :: (Label,Step) -> Translate (Label,Step)
+        f (label,substep) = do
+            substep' <- resolveFunctions substep
+            return (label, substep')
+
+    Known _ -> return step
+    Depends _ -> return step
+    NoOp -> return step
 
 {-|
 Note that this does NOT add the steps to the Environment.
@@ -148,10 +176,9 @@ translateExpression expr = do
 
     case expr of
         Application i subexpr -> do
-            -- lookup returns a function that constructs a Step
-            func <- lookupProcedure i
+            let func = Unresolved i
             step <- translateExpression subexpr
-            return (func step)
+            return (Invocation attr func step)
 
         None ->
             return (Known Unitus)
@@ -196,7 +223,7 @@ translateExpression expr = do
             step1 <- translateExpression subexpr1
             step2 <- translateExpression subexpr2
             let tuple = Tuple [step1,step2]
-            return (External attr prim tuple)
+            return (Invocation attr prim tuple)
 
         Grouping subexpr ->
             translateExpression subexpr
@@ -211,34 +238,32 @@ or to a primative builtin. We have Invocation and External as the two Step
 constructors for these cases. This lookup function returns a function which
 is the appropriate constructor, partially applied.
 -}
-lookupProcedure :: Identifier -> Translate (Step -> Step)
-lookupProcedure i = do
+registerProcedure :: Function -> Translate ()
+registerProcedure func = do
     env <- get
-    let declared = lookupKeyValue i (environmentFunctions env)
-    let known = lookupKeyValue i builtins
-    let attr = environmentRole env
 
-    case declared of
-        Just subroutine -> return (Invocation attr subroutine)
-        Nothing -> case known of
-            Just primitive -> return (External attr primitive)
-            Nothing -> failBecause (CallToUnknownProcedure i)
-
-insertProcedure :: Procedure -> Translate ()
-insertProcedure proc = do
-    env <- get
+    let i = functionName func
     let known = environmentFunctions env
-        i = procedureName proc
+    let defined = containsKey i known
 
-    when (containsKey i known) $ do
+    when defined $ do
         failBecause (ProcedureAlreadyDeclared i)
 
-    subroutine <- translateProcedure proc
-
-    let known' = insertKeyValue i subroutine known
-        env' = env { environmentFunctions = known' }
+    let known' = insertKeyValue i func known
+    let env' = env { environmentFunctions = known' }
 
     put env'
+
+lookupFunction :: Function -> Translate Function
+lookupFunction func = do
+    env <- get
+
+    let i = functionName func
+        result = lookupKeyValue i (environmentFunctions env)
+
+    case result of
+        Nothing -> failBecause (CallToUnknownProcedure i)
+        Just actual -> return actual
 
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
@@ -261,7 +286,7 @@ them into the environment map. This is where we check for reuse of an
 already declared name (TODO) and given the local use of the identifier a
 scope-local (or globally?) unique name.
 -}
-insertVariable :: Identifier -> Translate ()
+insertVariable :: Identifier -> Translate Name
 insertVariable i = do
     env <- get
     let known = environmentVariables env
@@ -273,6 +298,7 @@ insertVariable i = do
     let known' = insertKeyValue i n known
     let env' = env { environmentVariables = known' }
     put env'
+    return n
 
 {-|
 Accumulate a Step
