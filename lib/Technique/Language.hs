@@ -19,6 +19,14 @@ data Technique = Technique
     }
     deriving (Show, Eq)
 
+emptyTechnique :: Technique
+emptyTechnique = Technique
+    { techniqueVersion = 0
+    , techniqueLicense = emptyRope
+    , techniqueCopyright = Nothing
+    , techniqueBody = []
+    }
+
 -- TODO
 data Identifier
     = Identifier Rope

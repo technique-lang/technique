@@ -10,7 +10,6 @@ where
 import Core.Data.Structures
 import Core.Text.Rope ()
 import Core.System
-import Data.DList
 import Test.Hspec
 
 import Technique.Builtins
@@ -56,8 +55,9 @@ checkTranslationStage = do
             expr2 = Application (Identifier "f") expr1
             stmt = Execute expr2
             block = Block [stmt]
+            technique = emptyTechnique { techniqueBody = [ emptyProcedure { procedureBlock = block } ] }
           in do
-            runTranslate testEnv (translateBlock block)
+            runTranslate testEnv (translateTechnique technique)
                 `shouldBe` Left (CallToUnknownProcedure (Identifier "f"))
 
         it "encounters pre-existing procedure" $

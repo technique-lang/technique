@@ -67,7 +67,20 @@ translateTechnique technique =
   let
     procedures = techniqueBody technique
   in do
-    mapM translateProcedure procedures
+    -- Stage 1: conduct translation
+    funcs1 <- traverse translateProcedure procedures
+
+    -- Stage 2: resolve functions
+    funcs2 <- traverse resolver funcs1
+    return funcs2
+  where
+    resolver :: Function -> Translate Function
+    resolver func = case func of
+        Subroutine proc step -> do
+            step' <- resolveFunctions step
+            return (Subroutine proc step')
+
+        _ -> error ("Illegal state: How did you get a top level " ++ (show func) ++ "?")
 
 translateProcedure :: Procedure -> Translate Function
 translateProcedure procedure =
@@ -90,19 +103,13 @@ translateProcedure procedure =
 Blocks are scoping mechanisms, so accumulated environment is discarded once
 we finish resolving names within it.
 -}
--- traverse_ is "new", just mapM_ at Applicative? Lets see how we feel
--- about that.
 translateBlock :: Block -> Translate Step
 translateBlock (Block statements) = do
-    -- Stage 1: conduct translation
     traverse_ translateStatement statements
 
-    -- Stage 2: resolve functions
     env' <- get
     let step = environmentAccumulated env'
-    step' <- resolveFunctions step
-    return step'
-
+    return step
 
 translateStatement :: Statement -> Translate ()
 translateStatement statement = case statement of
