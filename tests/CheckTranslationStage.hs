@@ -60,7 +60,26 @@ checkTranslationStage = do
             runTranslate testEnv (translateTechnique technique)
                 `shouldBe` Left (CallToUnknownProcedure (Identifier "f"))
 
-        it "encounters pre-existing procedure" $
+        it "expected builtin procedures are defined" $ do
+            fmap functionName (lookupKeyValue (Identifier "task") (environmentFunctions testEnv))
+                `shouldBe` Just (Identifier "task")
+
+        it "encountering builtin procedure" $
+          let
+            expr = Application (Identifier "task") (Text "Say Hello")
+            stmt = Execute expr
+            block = Block [stmt]
+            proc = emptyProcedure { procedureName = Identifier "hypothetical", procedureBlock = block }
+            tech = emptyTechnique { techniqueBody = [ proc ]}
+
+            extract (Right ([(Subroutine _ (Invocation _ (Primitive proc1 _) _))], _)) = Right (procedureName proc1)
+            extract (Left err) = Left err
+            extract x = error (show x)
+          in do
+            let result = runTranslate testEnv (translateTechnique tech)
+            extract result `shouldBe` Right (Identifier "task")
+
+        it "encounters a declaration for an already existing procedure name" $
           let
             proc = exampleProcedureOven -- already in testEnv
             stmt = Declaration proc

@@ -111,7 +111,6 @@ translationPhase technique =
             return xs
 
 
-
 commandFormatTechnique :: Program None ()
 commandFormatTechnique = do
     params <- getCommandLine

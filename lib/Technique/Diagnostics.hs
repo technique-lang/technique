@@ -20,8 +20,8 @@ instance Render Function where
     type Token Function = TechniqueToken
     colourize = colourizeTechnique
     intoDocA func = case func of
-        Unresolved proc ->
-            annotate ErrorToken "Unresolved" <> line
+        Unresolved i ->
+            annotate ErrorToken "Unresolved" <+> annotate ProcedureToken (pretty (unIdentifier i)) <> line
         Subroutine proc step ->
             annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
                 line <> indent 4 (intoDocA step) <> line

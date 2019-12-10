@@ -63,12 +63,9 @@ runTranslate env (Translate action) = runExcept (runStateT action env)
 
 
 translateTechnique :: Technique -> Translate [Function]
-translateTechnique technique =
-  let
-    procedures = techniqueBody technique
-  in do
+translateTechnique technique = do
     -- Stage 1: conduct translation
-    funcs1 <- traverse translateProcedure procedures
+    funcs1 <- traverse translateProcedure (techniqueBody technique)
 
     -- Stage 2: resolve functions
     funcs2 <- traverse resolver funcs1
@@ -241,9 +238,8 @@ translateExpression expr = do
 
 {-|
 A given procedure call can either be to a user declared in-scope procedure
-or to a primative builtin. We have Invocation and External as the two Step
-constructors for these cases. This lookup function returns a function which
-is the appropriate constructor, partially applied.
+or to a primative builtin. We have Invocation as the Step constructors for
+these cases.
 -}
 registerProcedure :: Function -> Translate ()
 registerProcedure func = do
@@ -266,7 +262,8 @@ lookupFunction func = do
     env <- get
 
     let i = functionName func
-        result = lookupKeyValue i (environmentFunctions env)
+        known = environmentFunctions env
+        result = lookupKeyValue i known
 
     case result of
         Nothing -> failBecause (CallToUnknownProcedure i)
