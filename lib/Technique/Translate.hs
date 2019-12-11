@@ -133,44 +133,6 @@ translateStatement statement = case statement of
     Series -> return ()
 
 {-|
-The second stage of translation phase: iterate through the Steps and where
-a function call is made, look up to see if we actually know what it is.
--}
-resolveFunctions :: Step -> Translate Step
-resolveFunctions step = case step of
-    Invocation attr func substep -> do
-        func' <- lookupFunction func
-        substep' <- resolveFunctions substep
-        return (Invocation attr func' substep')
-
-    Tuple substeps -> do
-        substeps' <- traverse resolveFunctions substeps
-        return (Tuple substeps')
-
-    Asynchronous names substep -> do
-        substep' <- resolveFunctions substep
-        return (Asynchronous names substep')
-
-    Nested sublist -> do
-        let actual = toList sublist
-        actual' <- traverse resolveFunctions actual
-        let sublist' = fromList actual'
-        return (Nested sublist')
-
-    Bench pairs -> do
-        pairs' <- traverse f pairs
-        return (Bench pairs')
-      where
-        f :: (Label,Step) -> Translate (Label,Step)
-        f (label,substep) = do
-            substep' <- resolveFunctions substep
-            return (label, substep')
-
-    Known _ -> return step
-    Depends _ -> return step
-    NoOp -> return step
-
-{-|
 Note that this does NOT add the steps to the Environment.
 -}
 translateExpression :: Expression -> Translate Step
@@ -257,18 +219,6 @@ registerProcedure func = do
 
     put env'
 
-lookupFunction :: Function -> Translate Function
-lookupFunction func = do
-    env <- get
-
-    let i = functionName func
-        known = environmentFunctions env
-        result = lookupKeyValue i known
-
-    case result of
-        Nothing -> failBecause (CallToUnknownProcedure i)
-        Just actual -> return actual
-
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
@@ -335,3 +285,57 @@ applyRestriction attr block = do
     case result of
         Left e -> failBecause e
         Right (steps,_) -> return steps
+
+
+-----------------------------------------------------------------------------
+
+{-|
+The second stage of translation phase: iterate through the Steps and where
+a function call is made, look up to see if we actually know what it is.
+-}
+resolveFunctions :: Step -> Translate Step
+resolveFunctions step = case step of
+    Invocation attr func substep -> do
+        func' <- lookupFunction func
+        substep' <- resolveFunctions substep
+        return (Invocation attr func' substep')
+
+    Tuple substeps -> do
+        substeps' <- traverse resolveFunctions substeps
+        return (Tuple substeps')
+
+    Asynchronous names substep -> do
+        substep' <- resolveFunctions substep
+        return (Asynchronous names substep')
+
+    Nested sublist -> do
+        let actual = toList sublist
+        actual' <- traverse resolveFunctions actual
+        let sublist' = fromList actual'
+        return (Nested sublist')
+
+    Bench pairs -> do
+        pairs' <- traverse f pairs
+        return (Bench pairs')
+      where
+        f :: (Label,Step) -> Translate (Label,Step)
+        f (label,substep) = do
+            substep' <- resolveFunctions substep
+            return (label, substep')
+
+    Known _ -> return step
+    Depends _ -> return step
+    NoOp -> return step
+
+
+lookupFunction :: Function -> Translate Function
+lookupFunction func = do
+    env <- get
+
+    let i = functionName func
+        known = environmentFunctions env
+        result = lookupKeyValue i known
+
+    case result of
+        Nothing -> failBecause (CallToUnknownProcedure i)
+        Just actual -> return actual
