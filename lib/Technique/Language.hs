@@ -45,7 +45,7 @@ type Label = Rope
 data Attribute
     = Role Identifier
     | Place Identifier
-    | Unspecified
+    | Inherited
     deriving (Show, Eq)
 
 {-

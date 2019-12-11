@@ -137,7 +137,7 @@ instance Render Attribute where
     intoDocA role =  case role of
         Role name -> annotate RoleToken ("@" <> pretty name)
         Place name -> annotate RoleToken ("#" <> pretty name)
-        Unspecified -> annotate ErrorToken "Unspecified"
+        Inherited -> annotate ErrorToken "Inherited"
 
 instance Render Expression where
     type Token Expression = TechniqueToken

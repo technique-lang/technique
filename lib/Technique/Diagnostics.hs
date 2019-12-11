@@ -93,5 +93,3 @@ instance Render Value where
             intoDocA qty
         _ ->
             undefined
-        
-

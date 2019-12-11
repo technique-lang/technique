@@ -28,7 +28,7 @@ testEnv :: Environment
 testEnv = Environment
     { environmentVariables = singletonMap (Identifier "x") (Name "!x")
     , environmentFunctions = insertKeyValue (Identifier "oven") (Subroutine exampleProcedureOven NoOp) builtinProcedures
-    , environmentRole = Unspecified
+    , environmentRole = Inherited
     , environmentAccumulated = NoOp
     }
 

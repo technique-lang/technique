@@ -66,7 +66,6 @@ functionName func = case func of
     Subroutine proc _ -> procedureName proc
     Primitive prim _ -> procedureName prim
 
-
 instance Show Function where
     show func =
       let
