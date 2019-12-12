@@ -1,11 +1,11 @@
-resolver: lts-14.12
+resolver: lts-14.16
+
+packages:
+ - /home/andrew/src/oprdyn/unbeliever/core-text
+ - /home/andrew/src/oprdyn/unbeliever/core-program
+ - /home/andrew/src/oprdyn/unbeliever/core-data
+ - .
 
 extra-deps:
  - ivar-simple-0.3.2
- - git: http://github.com/oprdyn/unbeliever
-   commit: e2af2ae135960bb7a2c3a4d0e36721b095ff6333
-   subdirs:
-    - core-text
-    - core-program
-    - core-data
 

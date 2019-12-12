@@ -9,7 +9,7 @@ where
 
 import Core.Text
 import Test.Hspec
-import Text.Megaparsec
+import Text.Megaparsec hiding (Label)
 
 import Technique.Language
 import Technique.Parser
@@ -162,14 +162,14 @@ checkSkeletonParser = do
         it "handles tablet with one binding" $ do
             parseMaybe pExpression "[ \"King\" ~ george ]"
                 `shouldBe` Just (Object (Tablet
-                    [ Binding "King" (Variable [Identifier "george"])
+                    [ Binding (Label "King") (Variable [Identifier "george"])
                     ]))
 
         it "handles tablet with multiple bindings" $ do
             parseMaybe pExpression "[ \"first\" ~ \"George\" \n \"last\" ~ \"Windsor\" ]"
                 `shouldBe` Just (Object (Tablet
-                    [ Binding "first" (Text "George")
-                    , Binding "last" (Text "Windsor")
+                    [ Binding (Label "first") (Text "George")
+                    , Binding (Label "last") (Text "Windsor")
                     ]))
 {-
         it "handles tablet with alternate single-line syntax" $

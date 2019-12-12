@@ -11,9 +11,12 @@ import Core.Text.Utilities
 import Data.Text.Prettyprint.Doc (line)
 import Test.Hspec
 
+import Technique.Builtins
+import Technique.Formatter
+import Technique.Internal
 import Technique.Language
 import Technique.Quantity
-import Technique.Formatter
+
 
 import ExampleProcedure hiding (main)
 
@@ -33,7 +36,7 @@ checkAbstractSyntax :: Spec
 checkAbstractSyntax = do
     describe "Constructions matching intended language design" $ do
         it "key builtin procedures are available" $ do
-            procedureName builtinProcedureTask `shouldBe` Identifier "task"
+            functionName builtinProcedureTask `shouldBe` Identifier "task"
 
         it "procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` Identifier "roast_turkey"
@@ -48,8 +51,8 @@ checkAbstractSyntax = do
         it "renders a tablet as expected" $
           let
             tablet = Tablet
-                        [ Binding "Final temperature" (Variable [Identifier "temp"])
-                        , Binding "Cooking time" (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
+                        [ Binding (Label "Final temperature") (Variable [Identifier "temp"])
+                        , Binding (Label "Cooking time") (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
                         ]
           in do
             renderTest tablet `shouldBe` [quote|

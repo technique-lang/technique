@@ -8,17 +8,9 @@ module Technique.Formatter where
 
 import Core.Text.Rope
 import Core.Text.Utilities
+import Core.System.Pretty
 import Data.Foldable (foldl')
 import Data.Int (Int8)
-import Data.Text.Prettyprint.Doc
-    ( Doc, Pretty(pretty), viaShow, dquote, comma, punctuate, lbracket
-    , rbracket, vsep, (<+>), indent, lbrace, rbrace, lparen, rparen, emptyDoc
-    , line, sep, hcat, annotate
-    , unAnnotate, line', group, nest, concatWith, surround
-    )
-import Data.Text.Prettyprint.Doc.Render.Terminal
-    ( color, colorDull, Color(..), AnsiStyle, bold
-    )
 
 import Technique.Language
 import Technique.Quantity
@@ -36,6 +28,7 @@ data TechniqueToken
     | QuantityToken
     | RoleToken
     | ErrorToken
+    | StepToken
 
 instance Pretty Procedure where
     pretty = unAnnotate . intoDocA
@@ -55,6 +48,8 @@ colourizeTechnique token = case token of
     QuantityToken -> color Magenta <> bold
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red <> bold
+    StepToken -> color White <> bold       -- for diagnostics in evalutator
+
 
 instance Render Procedure where
     type Token Procedure = TechniqueToken
@@ -120,14 +115,19 @@ instance Render Statement where
     intoDocA statement = case statement of
         Assignment vars expr ->
             commaCat vars <+> annotate SymbolToken "=" <+> intoDocA expr
+
         Execute expr ->
             intoDocA expr
+
         Comment text ->
             "-- " <> pretty text  -- TODO what about multiple lines?
+
         Declaration proc ->
             intoDocA proc
+
         Blank ->
             emptyDoc
+
         Series ->
             annotate SymbolToken " ; "
 
@@ -137,6 +137,7 @@ instance Render Attribute where
     intoDocA role =  case role of
         Role name -> annotate RoleToken ("@" <> pretty name)
         Place name -> annotate RoleToken ("#" <> pretty name)
+        Inherited -> annotate ErrorToken "Inherited"
 
 instance Render Expression where
     type Token Expression = TechniqueToken
@@ -144,26 +145,35 @@ instance Render Expression where
     intoDocA expr = case expr of
         Application name subexpr ->
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
+
         None ->
             annotate SymbolToken ("()")
+
         Undefined ->
             annotate ErrorToken "?"
+
         Amount qty ->
             intoDocA qty
+
         Text text ->
             annotate SymbolToken dquote <>
             annotate StringToken (pretty text) <>
             annotate SymbolToken dquote
+
         Object tablet ->
             intoDocA tablet
+
         Variable vars ->
             commaCat vars
+
         Operation operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
+
         Grouping subexpr ->
             annotate SymbolToken lparen <>
             intoDocA subexpr <>
             annotate SymbolToken rparen
+
         Restriction attribute block ->
             intoDocA attribute <>
             line <>
@@ -224,6 +234,9 @@ toSuperscript c = case c of
     '-' -> '⁻' -- U+207B
     _   -> error "Invalid, digit expected"
 
+instance Pretty Quantity where
+    pretty = unAnnotate . intoDocA
+
 instance Render Tablet where
     type Token Tablet = TechniqueToken
     colourize = colourizeTechnique
@@ -238,6 +251,17 @@ instance Render Tablet where
         g :: Doc TechniqueToken -> Binding -> Doc TechniqueToken
         g built binding = built <> line <> intoDocA binding
 
+instance Render Label where
+    type Token Label = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Label text) =
+        annotate SymbolToken dquote <>
+        annotate LabelToken (pretty text) <>
+        annotate SymbolToken dquote
+
+instance Pretty Label where
+    pretty = unAnnotate . intoDocA
+
 -- the annotation for the label duplicates the code Quantity's Text
 -- constructor, but for the LabelToken token. This distinction may not be
 -- necessary (at present we have the same colouring for both).
@@ -245,9 +269,7 @@ instance Render Binding where
     type Token Binding = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Binding label subexpr) =
-            annotate SymbolToken dquote <>
-            annotate LabelToken (pretty label) <>
-            annotate SymbolToken dquote <+>
+            intoDocA label <+>
             annotate SymbolToken "~" <+>
             intoDocA subexpr
 

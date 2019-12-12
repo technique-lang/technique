@@ -22,7 +22,7 @@ import Data.Int (Int8, Int64)
 import Data.Text (Text)
 import Data.Void (Void)
 import qualified Data.Text as T
-import Text.Megaparsec
+import Text.Megaparsec hiding (Label)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Read (readMaybe)
@@ -312,7 +312,7 @@ pTablet = do
         -- FIXME this is not working
         void (optional (char ','))
 -}
-        return (Binding (intoRope name) subexpr)
+        return (Binding (Label (intoRope name)) subexpr)
 
 pAttribute :: Parser Attribute
 pAttribute =
@@ -509,7 +509,7 @@ pProcedureCode = do
         , procedureParams = params
         , procedureInput = ins
         , procedureOutput = out
-        , procedureLabel = Nothing          -- FIXME
+        , procedureTitle = Nothing          -- FIXME
         , procedureDescription = Nothing
         , procedureBlock = block
         })
@@ -521,7 +521,7 @@ pProcedure = do
     proc <- pProcedureCode
 
     return (proc
-        { procedureLabel = Nothing          -- FIXME
+        { procedureTitle = Nothing          -- FIXME
         , procedureDescription = description
         })
 

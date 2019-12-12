@@ -40,40 +40,10 @@ exampleProcedureOven =
         , procedureParams = []
         , procedureInput = [Type "Temperature"]
         , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Just (Markdown "Set oven temperature")
+        , procedureTitle = Nothing
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
+        , procedureBlock = Block [ Execute (Application (Identifier "task") (Text "Set oven temperature!")) ]
         }
-
-
--- TODO these two are actual builin standard library procedures, so a
--- future change to this test case will involve doing a lookup of these
--- names in some environment or context.
-
-builtinProcedureTask :: Procedure
-builtinProcedureTask =
-    Procedure
-        { procedureName = Identifier "task"
-        , procedureParams = []
-        , procedureInput = [Type "Text"]
-        , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Just (Markdown "A task")
-        , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
-        }
-
-builtinProcedureRecord :: Procedure
-builtinProcedureRecord =
-    Procedure
-        { procedureName = Identifier "record"
-        , procedureParams = []
-        , procedureInput = [Type "Text"]
-        , procedureOutput = [Type "Text"] -- ?
-        , procedureLabel = Just (Markdown "Record")
-        , procedureDescription = Just (Markdown "Record a quantity")
-        , procedureBlock = Block [ Execute (Text "builtinProcedure!") ]
-        }
-
 
 exampleRoastTurkey :: Procedure
 exampleRoastTurkey =
@@ -116,7 +86,7 @@ exampleRoastTurkey =
                     , Execute
                         (Object
                             (Tablet
-                                [ Binding "Final temperature" (Variable [Identifier "temp"]) ]))
+                                [ Binding (Label "Final temperature") (Variable [Identifier "temp"]) ]))
                     ])
                 )]
   in
@@ -125,7 +95,7 @@ exampleRoastTurkey =
         , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
         , procedureInput = [i]
         , procedureOutput = [o]
-        , procedureLabel = Just (Markdown "Roast Turkey")
+        , procedureTitle = Just (Markdown "Roast Turkey")
         , procedureDescription = Nothing
         , procedureBlock = block
         }

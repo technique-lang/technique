@@ -1,8 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Technique.Language where
 
 import Core.Text.Rope
+import Core.Data.Structures (Key)
+import GHC.Generics (Generic)
+import Data.Hashable (Hashable)
 
 import Technique.Quantity
 
@@ -14,19 +19,40 @@ data Technique = Technique
     }
     deriving (Show, Eq)
 
+emptyTechnique :: Technique
+emptyTechnique = Technique
+    { techniqueVersion = 0
+    , techniqueLicense = emptyRope
+    , techniqueCopyright = Nothing
+    , techniqueBody = []
+    }
+
 -- TODO
 data Identifier
     = Identifier Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord, Generic, Hashable)
+
+unIdentifier :: Identifier -> Rope
+unIdentifier (Identifier text) = text
+{-# INLINE unIdentifier #-}
+
+instance Key Identifier
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
-type Label = Rope
+newtype Label = Label Rope
+    deriving (Show, Eq)
 
 data Attribute
     = Role Identifier
     | Place Identifier
+    | Inherited
     deriving (Show, Eq)
+
+{-
+    | Anyone
+    | Anywhere
+-}
 
 data Markdown
     = Markdown Rope
@@ -47,7 +73,7 @@ data Procedure = Procedure
     , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: [Type]
-    , procedureLabel :: Maybe Markdown
+    , procedureTitle :: Maybe Markdown
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
@@ -59,13 +85,16 @@ emptyProcedure = Procedure
     , procedureParams = []
     , procedureInput = [unitType]
     , procedureOutput = [unitType]
-    , procedureLabel = Nothing
+    , procedureTitle = Nothing
     , procedureDescription = Nothing
     , procedureBlock = Block []
     }
 
 data Block = Block [Statement]
     deriving (Show, Eq)
+
+blockStatements :: Block -> [Statement]
+blockStatements (Block statements) = statements
 
 data Statement
     = Assignment [Identifier] Expression
