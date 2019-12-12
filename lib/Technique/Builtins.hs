@@ -31,7 +31,7 @@ builtinProcedureTask = Primitive
         , procedureParams = []
         , procedureInput = [Type "Text"]
         , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Just (Markdown "Task")
+        , procedureTitle = Just (Markdown "Task")
         , procedureDescription = Just (Markdown "A task to be executed by the person carrying out this role.")
         , procedureBlock = Block []
         }
@@ -44,7 +44,7 @@ builtinProcedureRecord = Primitive
         , procedureParams = []
         , procedureInput = [Type "Text"]
         , procedureOutput = [Type "Text"] -- ?
-        , procedureLabel = Just (Markdown "Record")
+        , procedureTitle = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Input from the user to be parsed as a quantity.")
         , procedureBlock = Block []
         }
@@ -58,7 +58,7 @@ builtinProcedureWaitEither = Primitive
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
         , procedureOutput = [Type "()"]
-        , procedureLabel = Just (Markdown "Wait Either")
+        , procedureTitle = Just (Markdown "Wait Either")
         , procedureDescription = Just (Markdown "Wait for either of two values to be ready.")
         , procedureBlock = Block []
         }
@@ -72,7 +72,7 @@ builtinProcedureWaitBoth = Primitive
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
         , procedureOutput = [Type "()"]
-        , procedureLabel = Just (Markdown "Wait Both")
+        , procedureTitle = Just (Markdown "Wait Both")
         , procedureDescription = Just (Markdown "Wait for two values to both be ready.")
         , procedureBlock = Block []
         }
@@ -86,7 +86,7 @@ builtinProcedureCombineValues = Primitive
         , procedureParams = []
         , procedureInput = [Type "*", Type "*"]
         , procedureOutput = [Type "*"]
-        , procedureLabel = Just (Markdown "Combine Two Values")
+        , procedureTitle = Just (Markdown "Combine Two Values")
         , procedureDescription = Just (Markdown "Combine two values. This will involve coersion if the concrete types differ.")
         , procedureBlock = Block []
         }

@@ -72,7 +72,7 @@ data Procedure = Procedure
     , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: [Type]
-    , procedureLabel :: Maybe Markdown
+    , procedureTitle :: Maybe Markdown
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
@@ -84,7 +84,7 @@ emptyProcedure = Procedure
     , procedureParams = []
     , procedureInput = [unitType]
     , procedureOutput = [unitType]
-    , procedureLabel = Nothing
+    , procedureTitle = Nothing
     , procedureDescription = Nothing
     , procedureBlock = Block []
     }

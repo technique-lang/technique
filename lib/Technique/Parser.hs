@@ -509,7 +509,7 @@ pProcedureCode = do
         , procedureParams = params
         , procedureInput = ins
         , procedureOutput = out
-        , procedureLabel = Nothing          -- FIXME
+        , procedureTitle = Nothing          -- FIXME
         , procedureDescription = Nothing
         , procedureBlock = block
         })
@@ -521,7 +521,7 @@ pProcedure = do
     proc <- pProcedureCode
 
     return (proc
-        { procedureLabel = Nothing          -- FIXME
+        { procedureTitle = Nothing          -- FIXME
         , procedureDescription = description
         })
 

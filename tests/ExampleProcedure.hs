@@ -40,7 +40,7 @@ exampleProcedureOven =
         , procedureParams = []
         , procedureInput = [Type "Temperature"]
         , procedureOutput = [Type "()"] -- ?
-        , procedureLabel = Nothing
+        , procedureTitle = Nothing
         , procedureDescription = Nothing
         , procedureBlock = Block [ Execute (Application (Identifier "task") (Text "Set oven temperature!")) ]
         }
@@ -95,7 +95,7 @@ exampleRoastTurkey =
         , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
         , procedureInput = [i]
         , procedureOutput = [o]
-        , procedureLabel = Just (Markdown "Roast Turkey")
+        , procedureTitle = Just (Markdown "Roast Turkey")
         , procedureDescription = Nothing
         , procedureBlock = block
         }
