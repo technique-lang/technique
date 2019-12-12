@@ -25,9 +25,10 @@ instance Render Function where
         Subroutine proc step ->
             annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
                 line <> indent 4 (intoDocA step) <> line
-        Primitive proc step ->
+        Primitive proc action ->
             annotate StepToken "Primitive" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-                line
+                line <> indent 4 ("<primitive>") <> line
+
 
 instance Render Step where
     type Token Step = TechniqueToken
@@ -45,7 +46,7 @@ instance Render Step where
         Tuple steps ->
             annotate StepToken "Tuple" <+>
                 lparen <+>
-                commaCat steps <+>
+                hsep (punctuate comma (fmap intoDocA steps)) <+>
                 rparen
 
         Nested steps ->
@@ -58,7 +59,9 @@ instance Render Step where
           let
             i = functionName func
           in
-            annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+            annotate StepToken "Invocation" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i) <>
+                line <> indent 4 (intoDocA substep)
+
 
         Bench pairs ->      -- [(Label,Step)]
             annotate StepToken "Bench" <>
