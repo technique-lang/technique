@@ -86,7 +86,7 @@ exampleRoastTurkey =
                     , Execute
                         (Object
                             (Tablet
-                                [ Binding "Final temperature" (Variable [Identifier "temp"]) ]))
+                                [ Binding (Label "Final temperature") (Variable [Identifier "temp"]) ]))
                     ])
                 )]
   in

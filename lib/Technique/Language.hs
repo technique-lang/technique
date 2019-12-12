@@ -40,7 +40,8 @@ instance Key Identifier
 
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
-type Label = Rope
+newtype Label = Label Rope
+    deriving (Show, Eq)
 
 data Attribute
     = Role Identifier
@@ -55,7 +56,7 @@ data Attribute
 
 data Markdown
     = Markdown Rope
-        deriving (Eq)
+    deriving (Eq)
 
 instance Show Markdown where
     show (Markdown text) = "[quote|\n" ++ fromRope text ++ "|]"

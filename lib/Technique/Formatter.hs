@@ -251,6 +251,17 @@ instance Render Tablet where
         g :: Doc TechniqueToken -> Binding -> Doc TechniqueToken
         g built binding = built <> line <> intoDocA binding
 
+instance Render Label where
+    type Token Label = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Label text) =
+        annotate SymbolToken dquote <>
+        annotate LabelToken (pretty text) <>
+        annotate SymbolToken dquote
+
+instance Pretty Label where
+    pretty = unAnnotate . intoDocA
+
 -- the annotation for the label duplicates the code Quantity's Text
 -- constructor, but for the LabelToken token. This distinction may not be
 -- necessary (at present we have the same colouring for both).
@@ -258,9 +269,7 @@ instance Render Binding where
     type Token Binding = TechniqueToken
     colourize = colourizeTechnique
     intoDocA (Binding label subexpr) =
-            annotate SymbolToken dquote <>
-            annotate LabelToken (pretty label) <>
-            annotate SymbolToken dquote <+>
+            intoDocA label <+>
             annotate SymbolToken "~" <+>
             intoDocA subexpr
 

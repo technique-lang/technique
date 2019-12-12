@@ -51,8 +51,8 @@ checkAbstractSyntax = do
         it "renders a tablet as expected" $
           let
             tablet = Tablet
-                        [ Binding "Final temperature" (Variable [Identifier "temp"])
-                        , Binding "Cooking time" (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
+                        [ Binding (Label "Final temperature") (Variable [Identifier "temp"])
+                        , Binding (Label "Cooking time") (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
                         ]
           in do
             renderTest tablet `shouldBe` [quote|

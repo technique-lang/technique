@@ -73,8 +73,7 @@ instance Render Step where
             bindings = fmap f pairs
             f :: (Label,Step) -> Doc TechniqueToken
             f (label,substep) =
-                dquote <> annotate LabelToken (pretty label) <> dquote <+>
-                "<-" <+> intoDocA substep
+                intoDocA label <+> "<-" <+> intoDocA substep
 
 instance Render Name where
     type Token Name = TechniqueToken
