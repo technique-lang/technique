@@ -12,20 +12,61 @@ messages" which is tough and subjective anyway. Not having multiline
 anything, for example, might be a good choice, except that we also want to
 be whitepsace insensitive.
 -}
-module Technique.Parser where
+module Technique.Parser
+(
+    -- parser for technique procedure files.
+      pTechnique
+
+    -- everthing else is only exposed for testing purposes.
+    , pMagicLine
+    , pSpdxLine
+    , pIdentifier
+    , pType
+    , stringLiteral
+    , numberLiteral
+    , pQuantity
+    , pAttribute
+    , pExpression
+    , pStatement
+    , pBlock
+    , pProcedureDeclaration
+    , pProcedureCode
+)
+where
 
 import Control.Monad
+    ( void, unless
+    )
 import Control.Monad.Combinators
+    ( many, some, (<|>), optional, sepBy, sepBy1
+    )
 import Core.Text.Rope
-import Data.Foldable (foldl')
-import Data.Int (Int8, Int64)
-import Data.Text (Text)
-import Data.Void (Void)
-import qualified Data.Text as T
-import Text.Megaparsec hiding (Label)
+    ( Rope, intoRope, appendRope, emptyRope, singletonRope
+    )
+import Data.Foldable
+    ( foldl'
+    )
+import Data.Int
+    ( Int8, Int64
+    )
+import Data.Text
+    ( Text
+    )
+import Data.Void
+    ( Void
+    )
+import qualified Data.Text as T (pack)
+import Text.Megaparsec
+    ( Parsec, try, takeWhileP, takeWhile1P, hidden, (<?>), label
+    , notFollowedBy, oneOf, lookAhead, skipMany
+    )
 import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Read (readMaybe)
+    ( char, spaceChar, string, newline, lowerChar, upperChar, digitChar
+    , printChar, space
+    )
+import Text.Read
+    ( readMaybe
+    )
 
 import Technique.Language
 import Technique.Quantity
@@ -56,9 +97,9 @@ pMagicLine = do
     void (string "technique")
     void spaceChar <?> "a space character"
     void (char 'v') <?> "the character v and then a number"
-    v <- L.decimal <?> "the language version"
+    v <- numberLiteral <?> "the language version"
     void newline
-    return v
+    return (fromIntegral v)
 
 pSpdxLine :: Parser (Rope,Maybe Rope)
 pSpdxLine = do
@@ -274,7 +315,6 @@ pQuantity =
         symbol <- unitLiteral
         skipSpace
         return symbol
-
 
 pOperator :: Parser Operator
 pOperator =
