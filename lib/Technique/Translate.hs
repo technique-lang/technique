@@ -108,8 +108,8 @@ translateBlock (Block statements) = do
     let step = environmentAccumulated env'
     return step
 
-translateStatement :: Statement -> Translate ()
-translateStatement statement = case statement of
+translateStatement :: (Offset,Statement) -> Translate ()
+translateStatement (_,statement) = case statement of
     Assignment vars expr -> do
         names <- traverse insertVariable vars
         step <- translateExpression expr

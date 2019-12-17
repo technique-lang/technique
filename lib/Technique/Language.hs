@@ -90,11 +90,10 @@ emptyProcedure = Procedure
     , procedureBlock = Block []
     }
 
-data Block = Block [Statement]
+data Block = Block [(Offset,Statement)]
     deriving (Show, Eq)
 
-blockStatements :: Block -> [Statement]
-blockStatements (Block statements) = statements
+type Offset = Int
 
 data Statement
     = Assignment [Identifier] Expression

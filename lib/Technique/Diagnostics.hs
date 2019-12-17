@@ -80,7 +80,6 @@ instance Render Name where
     colourize = colourizeTechnique
     intoDocA (Name name) = annotate VariableToken (pretty name)
 
-
 instance Render Value where
     type Token Value = TechniqueToken
     colourize = colourizeTechnique

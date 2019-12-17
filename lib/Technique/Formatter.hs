@@ -96,18 +96,18 @@ instance Render Markdown where
 instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Block statements) =
+    intoDocA (Block pairs) =
         nest 4 (
             annotate SymbolToken lbrace <>
-            go statements
+            go pairs
         ) <>
         line <>
         annotate SymbolToken rbrace
       where
-        go :: [Statement] -> Doc TechniqueToken
+        go :: [(Offset,Statement)] -> Doc TechniqueToken
         go [] = emptyDoc
-        go (Series:x1:xs) = intoDocA Series <> intoDocA x1 <> go xs
-        go (x:xs) = line <> intoDocA x <> go xs
+        go ((_,Series):(_,x1):xs) = intoDocA Series <> intoDocA x1 <> go xs
+        go ((_,x):xs) = line <> intoDocA x <> go xs
 
 instance Render Statement where
     type Token Statement = TechniqueToken

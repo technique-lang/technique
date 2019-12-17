@@ -58,7 +58,7 @@ import Data.Void
 import qualified Data.Text as T (pack)
 import Text.Megaparsec
     ( Parsec, try, takeWhileP, takeWhile1P, hidden, (<?>), label
-    , notFollowedBy, oneOf, lookAhead, skipMany
+    , notFollowedBy, oneOf, lookAhead, skipMany, getOffset
     )
 import Text.Megaparsec.Char
     ( char, spaceChar, string, newline, lowerChar, upperChar, digitChar
@@ -451,13 +451,15 @@ pExpression = do
 
         return (Variable names)
 
-pStatement :: Parser Statement
-pStatement =
-    pAssignment <|>
-    pDeclaration <|>
-    pExecute <|>
-    pBlank <|>
-    pSeries
+pStatement :: Parser (Offset,Statement)
+pStatement = do
+    offset <- getOffset
+    statement <- pAssignment <|>
+        pDeclaration <|>
+        pExecute <|>
+        pBlank <|>
+        pSeries
+    return (offset,statement)
   where
     pAssignment = label "an assignment" $ do
         lookAhead (try (do
