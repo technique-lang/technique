@@ -5,7 +5,7 @@ import Test.Hspec (Spec, hspec)
 import Core.System
 
 import CheckAbstractSyntax
-import CheckSkeletonParser
+import CheckSkeletonParser hiding (main)
 import CheckQuantityBehaviour hiding (main)
 import CheckTranslationStage hiding (main)
 

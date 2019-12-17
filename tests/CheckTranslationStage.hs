@@ -53,7 +53,7 @@ checkTranslationStage = do
           let
             expr1 = Variable [Identifier "x"]
             expr2 = Application (Identifier "f") expr1
-            stmt = Execute expr2
+            stmt = (0, Execute expr2)
             block = Block [stmt]
             technique = emptyTechnique { techniqueBody = [ emptyProcedure { procedureBlock = block } ] }
           in do
@@ -67,7 +67,7 @@ checkTranslationStage = do
         it "encountering builtin procedure" $
           let
             expr = Application (Identifier "task") (Text "Say Hello")
-            stmt = Execute expr
+            stmt = (0, Execute expr)
             block = Block [stmt]
             proc = emptyProcedure { procedureName = Identifier "hypothetical", procedureBlock = block }
             tech = emptyTechnique { techniqueBody = [ proc ]}
@@ -82,7 +82,7 @@ checkTranslationStage = do
         it "encounters a declaration for an already existing procedure name" $
           let
             proc = exampleProcedureOven -- already in testEnv
-            stmt = Declaration proc
+            stmt = (0, Declaration proc)
             block = Block [stmt]
           in do
             -- verify precondition that there is one already there

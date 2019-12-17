@@ -66,7 +66,7 @@ checkAbstractSyntax = do
         it "renders a normal block with indentation" $
           let
             b = Block
-                [ Execute (Variable [Identifier "x"])
+                [ (0, Execute (Variable [Identifier "x"]))
                 ]
           in do
             renderTest b `shouldBe` [quote|
@@ -82,7 +82,7 @@ checkAbstractSyntax = do
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
                     , procedureOutput = [Type "Y"]
-                    , procedureBlock = Block [Execute (Variable [Identifier "z"])]
+                    , procedureBlock = Block [(0, Execute (Variable [Identifier "z"]))]
                     }
           in do
             renderTest p `shouldBe` [quote|

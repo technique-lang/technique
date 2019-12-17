@@ -4,9 +4,11 @@
 
 module CheckSkeletonParser
     ( checkSkeletonParser
+    , main
     )
 where
 
+import Core.System
 import Core.Text
 import Test.Hspec
 import Text.Megaparsec hiding (Label)
@@ -14,6 +16,10 @@ import Text.Megaparsec hiding (Label)
 import Technique.Language
 import Technique.Parser
 import Technique.Quantity
+
+main :: IO ()
+main = do
+    finally (hspec checkSkeletonParser) (putStrLn ".")
 
 checkSkeletonParser :: Spec
 checkSkeletonParser = do
@@ -185,15 +191,15 @@ checkSkeletonParser = do
 
     describe "Parses statements containing expressions" $ do
         it "a blank line is a Blank" $ do
-            parseMaybe pStatement "\n" `shouldBe` Just Blank
+            parseMaybe pStatement "\n" `shouldBe` Just (0, Blank)
 
         it "considers a single identifier an Execute" $ do
             parseMaybe pStatement "x"
-                `shouldBe` Just (Execute (Variable [Identifier "x"]))
+                `shouldBe` Just (0, Execute (Variable [Identifier "x"]))
 
         it "considers a line with an '=' to be an Assignment" $ do
             parseMaybe pStatement "answer = 42"
-                `shouldBe` Just (Assignment [Identifier "answer"] (Amount (Number 42)))
+                `shouldBe` Just (0, Assignment [Identifier "answer"] (Amount (Number 42)))
 
     describe "Parses blocks of statements" $ do
         it "an empty block is a [] (special case)" $ do
@@ -205,34 +211,34 @@ checkSkeletonParser = do
         it "a block with single statement surrounded by a newlines" $ do
             parseMaybe pBlock "{\nx\n}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable [Identifier "x"])
+                    [ (2, Execute (Variable [Identifier "x"]))
                     ])
             parseMaybe pBlock "{\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Assignment [Identifier "answer"] (Amount (Number 42))
+                    [ (2, Assignment [Identifier "answer"] (Amount (Number 42)))
                     ])
 
         it "a block with a blank line contains a Blank" $ do
             parseMaybe pBlock "{\nx1\n\nx2\n}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable [Identifier "x1"])
-                    , Blank
-                    , Execute (Variable [Identifier "x2"])
+                    [ (2, Execute (Variable [Identifier "x1"]))
+                    , (5, Blank)
+                    , (6, Execute (Variable [Identifier "x2"]))
                     ])
 
         it "a block with multiple statements separated by newlines" $ do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable [Identifier "x"])
-                    , Assignment [Identifier "answer"] (Amount (Number 42))
+                    [ (2, Execute (Variable [Identifier "x"]))
+                    , (4, Assignment [Identifier "answer"] (Amount (Number 42)))
                     ])
 
         it "a block with multiple statements separated by semicolons" $ do
             parseMaybe pBlock "{x ; answer = 42}"
                 `shouldBe` Just (Block
-                    [ Execute (Variable [Identifier "x"])
-                    , Series
-                    , Assignment [Identifier "answer"] (Amount (Number 42))
+                    [ (1, Execute (Variable [Identifier "x"]))
+                    , (3, Series)
+                    , (5, Assignment [Identifier "answer"] (Amount (Number 42)))
                     ])
 
         it "consumes whitespace in inconvenient places" $ do
@@ -240,20 +246,20 @@ checkSkeletonParser = do
                 `shouldBe` Just (Block [])
             parseMaybe pBlock "{ \n x \n }"
                 `shouldBe` Just (Block
-                    [ Execute (Variable [Identifier "x"])
+                    [ (4, Execute (Variable [Identifier "x"]))
                     ])
             parseMaybe pBlock "{ \n (42)    \n}"
                 `shouldBe` Just (Block
-                    [ Execute (Grouping (Amount (Number 42)))
+                    [ (4, Execute (Grouping (Amount (Number 42))))
                     ])
             parseMaybe pBlock "{ \n (42 )    \n}"
                 `shouldBe` Just (Block
-                    [ Execute (Grouping (Amount (Number 42)))
+                    [ (4, Execute (Grouping (Amount (Number 42))))
                     ])
             parseMaybe pBlock "{ answer = 42 ; }"
                 `shouldBe` Just (Block
-                    [ (Assignment [Identifier "answer"] (Amount (Number 42)))
-                    , Series
+                    [ (2, Assignment [Identifier "answer"] (Amount (Number 42)))
+                    , (14, Series)
                     ])
 
     describe "Parses a procedure declaration" $ do
@@ -286,5 +292,5 @@ checkSkeletonParser = do
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
                     , procedureOutput = [Type "Y"]
-                    , procedureBlock = Block [Execute (Variable [Identifier "x"])]
+                    , procedureBlock = Block [(13, Execute (Variable [Identifier "x"]))]
                     })
