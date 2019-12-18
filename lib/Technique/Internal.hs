@@ -112,6 +112,7 @@ data Step
     | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
     | Invocation Attribute Function Step    -- function application ("implication elimination") on a [sub] Procedure
     | Nested (DList Step)
+    | Located (Offset,Statement) Step
                                             -- assumption axiom?
                                             -- weakening?
     deriving (Eq,Show)

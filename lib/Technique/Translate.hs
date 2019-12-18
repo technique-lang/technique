@@ -14,7 +14,7 @@ import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
-import Data.DList (empty, toList, fromList)
+import Data.DList (toList, fromList)
 import Data.Foldable (traverse_)
 
 import Technique.Builtins
@@ -34,6 +34,7 @@ data Environment = Environment
     { environmentVariables :: Map Identifier Name
     , environmentFunctions :: Map Identifier Function
     , environmentRole :: Attribute
+    , environmentCurrent :: (Offset, Statement)
     , environmentAccumulated :: Step
     }
     deriving (Eq,Show)
@@ -43,6 +44,7 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Inherited
+    , environmentCurrent = (-1,Blank)
     , environmentAccumulated = NoOp
     }
 
@@ -109,28 +111,30 @@ translateBlock (Block statements) = do
     return step
 
 translateStatement :: (Offset,Statement) -> Translate ()
-translateStatement (_,statement) = case statement of
-    Assignment vars expr -> do
-        names <- traverse insertVariable vars
-        step <- translateExpression expr
+translateStatement (offset,statement) = do
+    setLocation (offset,statement)
+    case statement of
+        Assignment vars expr -> do
+            names <- traverse insertVariable vars
+            step <- translateExpression expr
 
-        let step' = Asynchronous names step
+            let step' = Asynchronous names step
 
-        appendStep step'
+            appendStep (offset,statement) step'
 
-    Execute expr -> do
-        step <- translateExpression expr
-        appendStep step
+        Execute expr -> do
+            step <- translateExpression expr
+            appendStep (offset,statement) step
 
 
-    Declaration proc -> do
-        _ <- translateProcedure proc
-        return ()
+        Declaration proc -> do
+            _ <- translateProcedure proc
+            return ()
 
-    -- the remainder are functionally no-ops
-    Comment _ -> return ()
-    Blank -> return ()
-    Series -> return ()
+        -- the remainder are functionally no-ops
+        Comment _ -> return ()
+        Blank -> return ()
+        Series -> return ()
 
 {-|
 Note that this does NOT add the steps to the Environment.
@@ -155,8 +159,9 @@ translateExpression expr = do
         Amount qty ->
             return (Known (Quanticle qty))
 
-        Undefined ->
-            failBecause EncounteredUndefined
+        Undefined -> do
+            let (offset,statement) = environmentCurrent env
+            failBecause (EncounteredUndefined (offset,statement))
 
         Object (Tablet bindings) -> do
             pairs <- foldM f [] bindings
@@ -170,7 +175,7 @@ translateExpression expr = do
         Variable is -> do
             steps <- traverse g is
             case steps of
-                [] -> return (Nested empty)
+                [] -> return NoOp
                 [step] -> return step
                 _ -> return (Tuple steps)
           where
@@ -212,7 +217,8 @@ registerProcedure func = do
     let defined = containsKey i known
 
     when defined $ do
-        failBecause (ProcedureAlreadyDeclared i)
+        let (offset,statement) = environmentCurrent env
+        failBecause (ProcedureAlreadyDeclared (offset,statement) i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -229,10 +235,11 @@ lookupVariable :: Identifier -> Translate Name
 lookupVariable i = do
     env <- get
     let known = lookupKeyValue i (environmentVariables env)
+    let (offset,statement) = environmentCurrent env
 
     case known of
         Just name -> return name
-        Nothing -> failBecause (UseOfUnknownIdentifier i)
+        Nothing -> failBecause (UseOfUnknownIdentifier (offset,statement) i)
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
@@ -243,9 +250,11 @@ scope-local (or globally?) unique name.
 insertVariable :: Identifier -> Translate Name
 insertVariable i = do
     env <- get
+    let (offset,statement) = environmentCurrent env
     let known = environmentVariables env
+
     when (containsKey i known) $ do
-        failBecause (VariableAlreadyInUse i)
+        failBecause (VariableAlreadyInUse (offset,statement) i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -257,13 +266,13 @@ insertVariable i = do
 {-|
 Accumulate a Step
 -}
-appendStep :: Step -> Translate ()
-appendStep step = do
+appendStep :: (Offset,Statement) -> Step -> Translate ()
+appendStep (offset,statement) step = do
     env <- get
     let steps = environmentAccumulated env
 
     -- see the Monoid instance for Step for the clever here
-    let steps' = mappend steps step
+    let steps' = mappend steps (Located (offset,statement) step)
 
     let env' = env { environmentAccumulated = steps' }
     put env'
@@ -327,6 +336,11 @@ resolveFunctions step = case step of
     Depends _ -> return step
     NoOp -> return step
 
+    -- descend, setting location context
+    Located (offset,statement) substep -> do
+        setLocation (offset,statement)
+        resolveFunctions substep
+
 
 lookupFunction :: Function -> Translate Function
 lookupFunction func = do
@@ -335,7 +349,19 @@ lookupFunction func = do
     let i = functionName func
         known = environmentFunctions env
         result = lookupKeyValue i known
+        (offset,statement) = environmentCurrent env
 
     case result of
-        Nothing -> failBecause (CallToUnknownProcedure i)
+        Nothing -> failBecause (CallToUnknownProcedure (offset,statement) i)
         Just actual -> return actual
+
+{-|
+Update the environment's idea of where in the source we are, so that if we
+need to generate an error message we can offer one with position
+information.
+-}
+setLocation :: (Offset,Statement) -> Translate ()
+setLocation (offset,statement) = do
+    env <- get
+    let env' = env { environmentCurrent = (offset,statement) }
+    put env'

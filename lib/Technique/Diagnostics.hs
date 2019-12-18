@@ -75,6 +75,10 @@ instance Render Step where
             f (label,substep) =
                 intoDocA label <+> "<-" <+> intoDocA substep
 
+        Located _ substep ->
+            intoDocA substep
+
+
 instance Render Name where
     type Token Name = TechniqueToken
     colourize = colourizeTechnique
