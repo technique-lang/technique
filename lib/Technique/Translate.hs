@@ -43,7 +43,7 @@ emptyEnvironment :: Environment
 emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
-    , environmentRole = Inherited
+    , environmentRole = Inherit
     , environmentCurrent = (-1,Blank)
     , environmentAccumulated = NoOp
     }

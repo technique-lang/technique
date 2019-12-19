@@ -46,7 +46,7 @@ newtype Label = Label Rope
 data Attribute
     = Role Identifier
     | Place Identifier
-    | Inherited
+    | Inherit
     deriving (Show, Eq)
 
 {-
