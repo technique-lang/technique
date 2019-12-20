@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {-|
@@ -57,8 +58,8 @@ syntaxCheck procfile =
             debugR "abstract" abstract
             write "ok"
             return 0)
-        (\e -> do
-            write ("failed: " <> renderFailure e)
+        (\(e :: CompilerFailure) -> do
+            write ("failed: " <> render 78 e)
             return (fromEnum e))
 
 {-|
@@ -133,6 +134,6 @@ commandFormatTechnique = do
             case (terminal || raw) of
                 True    -> writeR technique
                 False   -> write (renderNoAnsi 80 technique))
-        (\e -> do
-            write ("failed: " <> renderFailure e)
+        (\(e :: CompilerFailure) -> do
+            write ("failed: " <> render 78 e)
             terminate (fromEnum e))

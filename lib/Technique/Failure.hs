@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {-|
 Error messages from compiling.
@@ -9,11 +10,12 @@ Error messages from compiling.
 module Technique.Failure where
 
 import Core.System.Base
+import Core.System.Pretty
 import Core.Text.Rope
-import Core.Text.Utilities (render)
+import Core.Text.Utilities
 
 import Technique.Language
-import Technique.Formatter ()
+import Technique.Formatter
 
 data CompilerFailure
     = ParsingFailed String              -- FIXME change to ParseErrorSomethingErOther
@@ -35,16 +37,18 @@ instance Enum CompilerFailure where
     toEnum = undefined
 
 instance Exception CompilerFailure where
-    displayException = fromRope . renderFailure
+    displayException = fromRope . render 78 
 
 -- TODO upgrade this to (Doc ann) so we can get prettier error messages.
 
-renderFailure :: CompilerFailure -> Rope
-renderFailure e = case e of
-    ParsingFailed err -> intoRope err
-    VariableAlreadyInUse _ i -> "Variable by the name of '" <> unIdentifier i <> "' already defined."
-    ProcedureAlreadyDeclared _ i -> "Procedure by the name of '" <> unIdentifier i <> "' already declared."
-    CallToUnknownProcedure _ i -> "Call to unknown procedure '" <> unIdentifier i <> "'."
-    UseOfUnknownIdentifier (offset,statement) i ->
-        intoRope (show offset) <> ": " <> render 78 statement <> "\nVariable '" <> unIdentifier i <> "' not in scope."
-    EncounteredUndefined _ -> "Encountered 'undefined' marker."
+instance Render CompilerFailure where
+    type Token CompilerFailure = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA failure = case failure of
+        ParsingFailed err -> pretty err
+        VariableAlreadyInUse _ i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
+        ProcedureAlreadyDeclared _ i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
+        CallToUnknownProcedure _ i -> "Call to unknown procedure '" <> intoDocA i <> "'."
+        UseOfUnknownIdentifier (offset,statement) i ->
+            pretty offset <> ": " <> intoDocA statement <> line <> "Variable '" <> intoDocA i <> "' not in scope."
+        EncounteredUndefined _ -> "Encountered 'undefined' marker."
