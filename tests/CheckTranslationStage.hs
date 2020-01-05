@@ -25,12 +25,9 @@ main = do
     finally (hspec checkTranslationStage) (putStrLn ".")
 
 testEnv :: Environment
-testEnv = Environment
+testEnv = emptyEnvironment
     { environmentVariables = singletonMap (Identifier "x") (Name "!x")
     , environmentFunctions = insertKeyValue (Identifier "oven") (Subroutine exampleProcedureOven NoOp) builtinProcedures
-    , environmentRole = Inherit
-    , environmentCurrent = (0,Blank)
-    , environmentAccumulated = NoOp
     }
 
 checkTranslationStage :: Spec

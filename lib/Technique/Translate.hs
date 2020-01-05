@@ -16,12 +16,12 @@ import Core.Data
 import Core.Text
 import Data.DList (toList, fromList)
 import Data.Foldable (traverse_)
+import qualified Data.Text as T
 
 import Technique.Builtins
 import Technique.Failure
 import Technique.Internal
 import Technique.Language
-
 
 {-|
 Environment in the type-theory sense of the word: the map(s) between names
@@ -34,7 +34,11 @@ data Environment = Environment
     { environmentVariables :: Map Identifier Name
     , environmentFunctions :: Map Identifier Function
     , environmentRole :: Attribute
-    , environmentCurrent :: (Offset, Statement)
+
+    -- for reporting compiler errors
+    , environmentCurrent :: Source
+    
+    -- the accumulator for the fold that the Translate monad represents
     , environmentAccumulated :: Step
     }
     deriving (Eq,Show)
@@ -44,7 +48,12 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Inherit
-    , environmentCurrent = (-1,Blank)
+    , environmentCurrent = Source
+        { sourceContents = T.empty
+        , sourceFilename = "<undefined>"
+        , sourceStatement = Blank
+        , sourceOffset = -1
+        }
     , environmentAccumulated = NoOp
     }
 
@@ -160,8 +169,8 @@ translateExpression expr = do
             return (Known (Quanticle qty))
 
         Undefined -> do
-            let (offset,statement) = environmentCurrent env
-            failBecause (EncounteredUndefined (offset,statement))
+            let source = environmentCurrent env
+            failBecause (EncounteredUndefined source)
 
         Object (Tablet bindings) -> do
             pairs <- foldM f [] bindings
@@ -217,8 +226,8 @@ registerProcedure func = do
     let defined = containsKey i known
 
     when defined $ do
-        let (offset,statement) = environmentCurrent env
-        failBecause (ProcedureAlreadyDeclared (offset,statement) i)
+        let source = environmentCurrent env
+        failBecause (ProcedureAlreadyDeclared source i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -235,11 +244,10 @@ lookupVariable :: Identifier -> Translate Name
 lookupVariable i = do
     env <- get
     let known = lookupKeyValue i (environmentVariables env)
-    let (offset,statement) = environmentCurrent env
 
     case known of
         Just name -> return name
-        Nothing -> failBecause (UseOfUnknownIdentifier (offset,statement) i)
+        Nothing -> failBecause (UseOfUnknownIdentifier i)
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
@@ -250,11 +258,11 @@ scope-local (or globally?) unique name.
 insertVariable :: Identifier -> Translate Name
 insertVariable i = do
     env <- get
-    let (offset,statement) = environmentCurrent env
+    let source = environmentCurrent env
     let known = environmentVariables env
 
     when (containsKey i known) $ do
-        failBecause (VariableAlreadyInUse (offset,statement) i)
+        failBecause (VariableAlreadyInUse source i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -267,12 +275,12 @@ insertVariable i = do
 Accumulate a Step
 -}
 appendStep :: (Offset,Statement) -> Step -> Translate ()
-appendStep (offset,statement) step = do
+appendStep loc step = do
     env <- get
     let steps = environmentAccumulated env
 
     -- see the Monoid instance for Step for the clever here
-    let steps' = mappend steps (Located (offset,statement) step)
+    let steps' = mappend steps (Located loc step)
 
     let env' = env { environmentAccumulated = steps' }
     put env'
@@ -349,10 +357,10 @@ lookupFunction func = do
     let i = functionName func
         known = environmentFunctions env
         result = lookupKeyValue i known
-        (offset,statement) = environmentCurrent env
+        source = environmentCurrent env
 
     case result of
-        Nothing -> failBecause (CallToUnknownProcedure (offset,statement) i)
+        Nothing -> failBecause (CallToUnknownProcedure source i)
         Just actual -> return actual
 
 {-|
@@ -363,5 +371,8 @@ information.
 setLocation :: (Offset,Statement) -> Translate ()
 setLocation (offset,statement) = do
     env <- get
-    let env' = env { environmentCurrent = (offset,statement) }
+    let source = environmentCurrent env
+    let source' = source { sourceOffset = offset, sourceStatement = statement }
+    let env' = env { environmentCurrent = source' }
     put env'
+
