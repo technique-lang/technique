@@ -41,13 +41,13 @@ instance Key Identifier
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
 newtype Label = Label Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Attribute
     = Role Identifier
     | Place Identifier
     | Inherit
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 {-
     | Anyone
@@ -56,14 +56,14 @@ data Attribute
 
 data Markdown
     = Markdown Rope
-    deriving (Eq)
+    deriving (Eq, Ord)
 
 instance Show Markdown where
     show (Markdown text) = "[quote|\n" ++ fromRope text ++ "|]"
 
 data Type
     = Type Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 unitType :: Type
 unitType = Type "()"
@@ -77,7 +77,7 @@ data Procedure = Procedure
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 emptyProcedure :: Procedure
 emptyProcedure = Procedure
@@ -91,7 +91,7 @@ emptyProcedure = Procedure
     }
 
 data Block = Block [(Offset,Statement)]
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 type Offset = Int
 
@@ -102,7 +102,7 @@ data Statement
     | Declaration Procedure
     | Blank
     | Series
-    deriving (Show, Eq)
+    deriving (Show, Ord, Eq)
 
 data Expression
     = Application Identifier Expression     -- this had better turn out to be a procedure
@@ -115,20 +115,20 @@ data Expression
     | Operation Operator Expression Expression
     | Grouping Expression
     | Restriction Attribute Block
-    deriving (Show, Eq)
+    deriving (Show, Ord, Eq)
 
 data Tablet
     = Tablet [Binding]
-    deriving (Show, Eq)
+    deriving (Show, Ord, Eq)
 
 -- only valid Expressions are Literal and Variable. Should we enforce that
 -- somewhere?
 data Binding
     = Binding Label Expression
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Operator
     = WaitEither
     | WaitBoth
     | Combine
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)

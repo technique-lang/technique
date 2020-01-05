@@ -25,7 +25,7 @@ import Data.Int (Int8, Int64)
 data Quantity
     = Number Int64
     | Quantity Decimal Decimal Magnitude Symbol
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 type Symbol = Rope
 
@@ -45,7 +45,7 @@ representable is 9223372036854775807 and the smallest is
 precision but meh.
 -}
 data Decimal = Decimal Int64 Int8
-    deriving Eq
+    deriving (Eq, Ord)
 
 instance Show Decimal where
     show = show . decimalToRope
