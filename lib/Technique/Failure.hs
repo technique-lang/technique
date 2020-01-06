@@ -37,7 +37,15 @@ data Source = Source
     }
     deriving (Eq,Ord,Show)
 
-data CompilerFailure
+emptySource :: Source
+emptySource = Source
+    { sourceContents = T.empty
+    , sourceFilename = "<undefined>"
+    , sourceStatement = Blank
+    , sourceOffset = -1
+    }
+
+data FailureReason
     = ParsingFailed String              -- FIXME change to ParseErrorSomethingErOther
     | VariableAlreadyInUse Identifier
     | ProcedureAlreadyDeclared Identifier
@@ -46,7 +54,7 @@ data CompilerFailure
     | EncounteredUndefined
     deriving (Eq,Ord,Show)
 
-instance Enum CompilerFailure where
+instance Enum FailureReason where
     fromEnum x = case x of
         ParsingFailed _ -> 1
         VariableAlreadyInUse _ -> 2
@@ -56,13 +64,19 @@ instance Enum CompilerFailure where
         EncounteredUndefined -> 6
     toEnum = undefined
 
-instance Exception CompilerFailure where
+instance Exception CompilationError where
     displayException = fromRope . render 78 
+
+data CompilationError = CompilationError Source FailureReason
+    deriving Show
+
+exitCodeFor :: CompilationError -> Int
+exitCodeFor (CompilationError _ reason) = fromEnum reason
 
 -- TODO upgrade this to (Doc ann) so we can get prettier error messages.
 
-instance Render CompilerFailure where
-    type Token CompilerFailure = TechniqueToken
+instance Render FailureReason where
+    type Token FailureReason = TechniqueToken
     colourize = colourizeTechnique
     intoDocA failure = case failure of
         ParsingFailed err -> pretty err
@@ -70,7 +84,7 @@ instance Render CompilerFailure where
         ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
         CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
         UseOfUnknownIdentifier i -> "Variable '" <> intoDocA i <> "' not in scope."
-        EncounteredUndefined _ -> "Encountered 'undefined' marker."
+        EncounteredUndefined -> "Encountered 'undefined' marker."
 
 {-
             let
@@ -80,22 +94,28 @@ instance Render CompilerFailure where
                 pretty offset <> ": " <> intoDocA statement <> line <>
 -}
 
-instance ShowErrorComponent CompilerFailure where
+instance Render CompilationError where
+    type Token CompilationError = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (CompilationError source reason) = intoDocA reason
+
+
+instance ShowErrorComponent FailureReason where
     showErrorComponent = fromRope . render 78
 
 {-|
 In order to have consistently formatted "compiler" failure messages, we
 jump through the hoops to use megaparsec's parse error message machinery.
 -}
-makeErrorBundle :: (FilePath,T.Text,Offset,CompilerFailure) -> ParseErrorBundle T.Text CompilerFailure
-makeErrorBundle (filename,source,offset,failure) =
+makeErrorBundle :: (FilePath,T.Text,Offset,FailureReason) -> ParseErrorBundle T.Text FailureReason
+makeErrorBundle (filename,input,offset,failure) =
   let
     fancy = ErrorCustom failure
     errors = FancyError offset (OrdSet.singleton fancy) :| []
     bundle = ParseErrorBundle
         { bundleErrors = errors
         , bundlePosState = PosState
-            { pstateInput = source
+            { pstateInput = input
             , pstateOffset = 0
             , pstateSourcePos = SourcePos
                 { sourceName = filename

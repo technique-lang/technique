@@ -37,7 +37,7 @@ data Environment = Environment
 
     -- for reporting compiler errors
     , environmentCurrent :: Source
-    
+
     -- the accumulator for the fold that the Translate monad represents
     , environmentAccumulated :: Step
     }
@@ -48,17 +48,12 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Inherit
-    , environmentCurrent = Source
-        { sourceContents = T.empty
-        , sourceFilename = "<undefined>"
-        , sourceStatement = Blank
-        , sourceOffset = -1
-        }
+    , environmentCurrent = emptySource
     , environmentAccumulated = NoOp
     }
 
-newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
-    deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
+newtype Translate a = Translate (StateT Environment (Except CompilationError) a)
+    deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilationError)
 
 {-|
 Take a translator action and an environment and spin it up into a Step or
@@ -68,7 +63,7 @@ feed to an evaluator.
 -}
 -- we use runStateT rather than evalStateT as we did previously so we can
 -- access the final state in test cases.
-runTranslate :: Environment -> Translate a -> Either CompilerFailure (a,Environment)
+runTranslate :: Environment -> Translate a -> Either CompilationError (a,Environment)
 runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
@@ -101,7 +96,7 @@ translateProcedure procedure =
     let result = runTranslate subenv (translateBlock block)
 
     case result of
-        Left e -> failBecause e
+        Left e -> throwError e
         Right (step,_) -> do
             let func = Subroutine procedure step
             registerProcedure func
@@ -169,8 +164,7 @@ translateExpression expr = do
             return (Known (Quanticle qty))
 
         Undefined -> do
-            let source = environmentCurrent env
-            failBecause (EncounteredUndefined source)
+            failBecause EncounteredUndefined
 
         Object (Tablet bindings) -> do
             pairs <- foldM f [] bindings
@@ -226,8 +220,7 @@ registerProcedure func = do
     let defined = containsKey i known
 
     when defined $ do
-        let source = environmentCurrent env
-        failBecause (ProcedureAlreadyDeclared source i)
+        failBecause (ProcedureAlreadyDeclared i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -237,8 +230,14 @@ registerProcedure func = do
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
-failBecause :: CompilerFailure -> Translate a
-failBecause e = throwError e
+failBecause :: FailureReason -> Translate a
+failBecause e = do
+    env <- get
+    let source = environmentCurrent env
+    let failure = CompilationError source e
+    throwError failure
+-- TODO HERE wrap CompilationError into a CompilerFailure, which annotates source location
+
 
 lookupVariable :: Identifier -> Translate Name
 lookupVariable i = do
@@ -258,11 +257,10 @@ scope-local (or globally?) unique name.
 insertVariable :: Identifier -> Translate Name
 insertVariable i = do
     env <- get
-    let source = environmentCurrent env
     let known = environmentVariables env
 
     when (containsKey i known) $ do
-        failBecause (VariableAlreadyInUse source i)
+        failBecause (VariableAlreadyInUse i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -300,7 +298,7 @@ applyRestriction attr block = do
     let result = runTranslate subenv (translateBlock block)
 
     case result of
-        Left e -> failBecause e
+        Left e -> throwError e
         Right (steps,_) -> return steps
 
 
@@ -357,10 +355,9 @@ lookupFunction func = do
     let i = functionName func
         known = environmentFunctions env
         result = lookupKeyValue i known
-        source = environmentCurrent env
 
     case result of
-        Nothing -> failBecause (CallToUnknownProcedure source i)
+        Nothing -> failBecause (CallToUnknownProcedure i)
         Just actual -> return actual
 
 {-|

@@ -58,9 +58,9 @@ syntaxCheck procfile =
             debugR "abstract" abstract
             write "ok"
             return 0)
-        (\(e :: CompilerFailure) -> do
+        (\(e :: CompilationError) -> do
             write ("failed: " <> render 78 e)
-            return (fromEnum e))
+            return (exitCodeFor e))
 
 {-|
 Load a technique file hopefully containing a procedure.
@@ -88,7 +88,7 @@ parsingPhase filename bytes = do
     let result = parse pTechnique filename (fromRope (intoRope bytes))
     case result of
         Right technique -> return technique
-        Left err -> throw (ParsingFailed (errorBundlePretty err))
+        Left err -> throw (CompilationError emptySource (ParsingFailed (errorBundlePretty err)))
 
 {-|
 Take a static Procedure definition and spin it up into a sequence of
@@ -134,6 +134,6 @@ commandFormatTechnique = do
             case (terminal || raw) of
                 True    -> writeR technique
                 False   -> write (renderNoAnsi 80 technique))
-        (\(e :: CompilerFailure) -> do
+        (\(e :: CompilationError) -> do
             write ("failed: " <> render 78 e)
-            terminate (fromEnum e))
+            terminate (exitCodeFor e))
