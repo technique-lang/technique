@@ -68,10 +68,11 @@ import Text.Read
     ( readMaybe
     )
 
+import Technique.Failure
 import Technique.Language
 import Technique.Quantity
 
-type Parser = Parsec Void Text
+type Parser = Parsec FailureReason Text
 
 __VERSION__ :: Int
 __VERSION__ = 0

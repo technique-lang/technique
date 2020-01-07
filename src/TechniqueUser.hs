@@ -13,7 +13,7 @@ import Core.Program
 import Core.Text
 import Core.System
 import System.IO (hIsTerminalDevice)
-import Text.Megaparsec (parse, errorBundlePretty)
+import Text.Megaparsec (parse, errorBundlePretty, ParseErrorBundle, bundleErrors, bundlePosState)
 
 import Technique.Builtins
 import Technique.Diagnostics ()
@@ -88,7 +88,7 @@ parsingPhase filename bytes = do
     let result = parse pTechnique filename (fromRope (intoRope bytes))
     case result of
         Right technique -> return technique
-        Left err -> throw (CompilationError emptySource (ParsingFailed (errorBundlePretty err)))
+        Left bundle -> throw (CompilationError bundle)
 
 {-|
 Take a static Procedure definition and spin it up into a sequence of

@@ -16,7 +16,6 @@ import Core.Data
 import Core.Text
 import Data.DList (toList, fromList)
 import Data.Foldable (traverse_)
-import qualified Data.Text as T
 
 import Technique.Builtins
 import Technique.Failure
@@ -130,7 +129,6 @@ translateStatement (offset,statement) = do
             step <- translateExpression expr
             appendStep (offset,statement) step
 
-
         Declaration proc -> do
             _ <- translateProcedure proc
             return ()
@@ -231,12 +229,11 @@ registerProcedure func = do
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
 failBecause :: FailureReason -> Translate a
-failBecause e = do
+failBecause reason = do
     env <- get
     let source = environmentCurrent env
-    let failure = CompilationError source e
+    let failure = CompilationError (makeErrorBundle source reason)
     throwError failure
--- TODO HERE wrap CompilationError into a CompilerFailure, which annotates source location
 
 
 lookupVariable :: Identifier -> Translate Name

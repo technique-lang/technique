@@ -13,10 +13,12 @@ import Core.System.Base
 import Core.System.Pretty
 import Core.Text.Rope
 import Core.Text.Utilities
-import Data.List.NonEmpty
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as OrdSet
 import qualified Data.Text as T
-import Text.Megaparsec (PosState(..), SourcePos(..))
+import Data.Void
+import Text.Megaparsec (PosState(..), SourcePos(..), Stream)
 import Text.Megaparsec.Error
     ( ParseError(..)
     , ErrorFancy(..)
@@ -46,7 +48,8 @@ emptySource = Source
     }
 
 data FailureReason
-    = ParsingFailed String              -- FIXME change to ParseErrorSomethingErOther
+    = InvalidSetup                         -- TODO placeholder
+    | ParsingFailed                        -- FIXME change to ParseErrorSomethingErOther
     | VariableAlreadyInUse Identifier
     | ProcedureAlreadyDeclared Identifier
     | CallToUnknownProcedure Identifier
@@ -56,22 +59,35 @@ data FailureReason
 
 instance Enum FailureReason where
     fromEnum x = case x of
-        ParsingFailed _ -> 1
-        VariableAlreadyInUse _ -> 2
-        ProcedureAlreadyDeclared _ -> 3
-        CallToUnknownProcedure _ -> 4
-        UseOfUnknownIdentifier _ -> 5
-        EncounteredUndefined -> 6
+        InvalidSetup -> 1
+        ParsingFailed -> 2
+        VariableAlreadyInUse _ -> 3
+        ProcedureAlreadyDeclared _ -> 4
+        CallToUnknownProcedure _ -> 5
+        UseOfUnknownIdentifier _ -> 6
+        EncounteredUndefined -> 7
     toEnum = undefined
 
-instance Exception CompilationError where
-    displayException = fromRope . render 78 
+instance ShowErrorComponent FailureReason where
+    showErrorComponent = fromRope . render 78
 
-data CompilationError = CompilationError Source FailureReason
+data CompilationError = CompilationError (ParseErrorBundle T.Text FailureReason)
     deriving Show
 
+instance Exception CompilationError
+
 exitCodeFor :: CompilationError -> Int
-exitCodeFor (CompilationError _ reason) = fromEnum reason
+exitCodeFor (CompilationError bundle) =
+  let
+    first = NonEmpty.head (bundleErrors bundle)
+  in
+    case first of
+        TrivialError _ _ _ -> fromEnum ParsingFailed
+        FancyError _ set -> case OrdSet.lookupMin set of
+            Nothing -> 99
+            Just fancy -> case fancy of
+                ErrorCustom reason -> fromEnum reason
+                _ -> 98
 
 -- TODO upgrade this to (Doc ann) so we can get prettier error messages.
 
@@ -79,7 +95,8 @@ instance Render FailureReason where
     type Token FailureReason = TechniqueToken
     colourize = colourizeTechnique
     intoDocA failure = case failure of
-        ParsingFailed err -> pretty err
+        InvalidSetup -> "Invalid setup"
+        ParsingFailed -> "FIXME" -- FIXME
         VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
         ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
         CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
@@ -97,30 +114,41 @@ instance Render FailureReason where
 instance Render CompilationError where
     type Token CompilationError = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (CompilationError source reason) = intoDocA reason
+    intoDocA (CompilationError bundle) = 
+      let
+        first = NonEmpty.head (bundleErrors bundle)
+      in
+        case first of
+            TrivialError _ _ _ -> pretty (errorBundlePretty bundle)
+            FancyError _ _ -> pretty (errorBundlePretty bundle)
 
-
-instance ShowErrorComponent FailureReason where
-    showErrorComponent = fromRope . render 78
-
+{-
+            case first of
+            TrivialError _ _ _ -> pretty (errorBundlePretty bundle)
+            FancyError _ set -> case OrdSet.lookupMin set of
+                Nothing -> "WTF Why is this empty?"
+                Just fancy -> case fancy of
+                    ErrorCustom reason -> intoDocA reason
+                    _ -> "WTF How did we get here?"
+-}
 {-|
 In order to have consistently formatted "compiler" failure messages, we
 jump through the hoops to use megaparsec's parse error message machinery.
 -}
-makeErrorBundle :: (FilePath,T.Text,Offset,FailureReason) -> ParseErrorBundle T.Text FailureReason
-makeErrorBundle (filename,input,offset,failure) =
+makeErrorBundle :: Source -> FailureReason -> ParseErrorBundle T.Text FailureReason
+makeErrorBundle source failure =
   let
     fancy = ErrorCustom failure
-    errors = FancyError offset (OrdSet.singleton fancy) :| []
+    errors = FancyError (sourceOffset source) (OrdSet.singleton fancy) NonEmpty.:| []
     bundle = ParseErrorBundle
         { bundleErrors = errors
         , bundlePosState = PosState
-            { pstateInput = input
-            , pstateOffset = 0
+            { pstateInput = sourceContents source
+            , pstateOffset = 7
             , pstateSourcePos = SourcePos
-                { sourceName = filename
-                , sourceLine = mkPos 1
-                , sourceColumn = mkPos 1
+                { sourceName = sourceFilename source
+                , sourceLine = mkPos 3
+                , sourceColumn = mkPos 2
                 }
             , pstateTabWidth = mkPos 4
             , pstateLinePrefix = ""
