@@ -9,7 +9,7 @@ license: MIT
 license-file: LICENSE
 author: Andrew Cowie <andrew@operationaldynamics.com>
 maintainer: Andrew Cowie <andrew@operationaldynamics.com>
-copyright: © 2002-2019 Operational Dynamics and Others
+copyright: © 2002-2020 Operational Dynamics and Others
 category: Tools
 tested-with: GHC == 8.6
 github: oprdyn/technique
