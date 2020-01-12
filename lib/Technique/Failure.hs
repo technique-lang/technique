@@ -11,6 +11,7 @@ module Technique.Failure where
 
 import Core.System.Base
 import Core.System.Pretty
+
 import Core.Text.Rope
 import Core.Text.Utilities
 import Data.List.NonEmpty (NonEmpty)
@@ -81,7 +82,19 @@ instance Render FailureReason where
     colourize = colourizeTechnique
     intoDocA failure = case failure of
         InvalidSetup -> "Invalid setup!"
-        ParsingFailed unexpected expected -> "Parsing failed." <> "!TODO!"
+
+        ParsingFailed unexpected expected ->
+          let
+            un = case unexpected of
+                [token] -> "unexpected '" <> pretty token <> "'"
+                _ -> emptyDoc
+
+            ex = case expected of
+                xs -> "expected " <> hsep (punctuate comma (fmap (enclose squote squote . pretty) xs))
+                _ -> emptyDoc
+          in
+            un <+> ex
+
         VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
         ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
         CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
@@ -99,7 +112,25 @@ instance Render FailureReason where
 instance Render CompilationError where
     type Token CompilationError = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (CompilationError source reason) = undefined
+    intoDocA (CompilationError source reason) =
+      let
+        filename = pretty (sourceFilename source)
+        contents = intoRope (sourceContents source)
+        offset = sourceOffset source
+        (before,after) = splitRope offset contents
+        (offending,_) = splitRope 50 after          -- we really need `take` and `span` functions
+
+        (l,c) = calculatePositionEnd before
+        linenum = pretty l
+        colunum = pretty c
+      in
+        filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
+        hardline <>
+        pretty offending <> hardline <>
+        hardline <>
+        intoDocA reason
+
+
 
 {-|
 When we get a failure in the parsing stage **megaparsec** returns a
