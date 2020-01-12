@@ -21,14 +21,12 @@ import Data.Void
 import Text.Megaparsec (PosState(..), SourcePos(..), Stream)
 import Text.Megaparsec.Error
     ( ParseError(..)
-    , ErrorFancy(..)
+    , ErrorItem(..)
     , ParseErrorBundle(..)
-    , errorBundlePretty
-    , ShowErrorComponent(..)
     )
-import Text.Megaparsec.Pos (Pos, mkPos)
+import Text.Megaparsec.Pos (Pos, mkPos, unPos)
 
-import Technique.Language
+import Technique.Language hiding (Label)
 import Technique.Formatter
 
 data Source = Source
@@ -49,7 +47,7 @@ emptySource = Source
 
 data FailureReason
     = InvalidSetup                         -- TODO placeholder
-    | ParsingFailed                        -- FIXME change to ParseErrorSomethingErOther
+    | ParsingFailed [Rope] [Rope]
     | VariableAlreadyInUse Identifier
     | ProcedureAlreadyDeclared Identifier
     | CallToUnknownProcedure Identifier
@@ -60,7 +58,7 @@ data FailureReason
 instance Enum FailureReason where
     fromEnum x = case x of
         InvalidSetup -> 1
-        ParsingFailed -> 2
+        ParsingFailed _ _ -> 2
         VariableAlreadyInUse _ -> 3
         ProcedureAlreadyDeclared _ -> 4
         CallToUnknownProcedure _ -> 5
@@ -68,26 +66,13 @@ instance Enum FailureReason where
         EncounteredUndefined -> 7
     toEnum = undefined
 
-instance ShowErrorComponent FailureReason where
-    showErrorComponent = fromRope . render 78
-
-data CompilationError = CompilationError (ParseErrorBundle T.Text FailureReason)
+data CompilationError = CompilationError Source FailureReason
     deriving Show
 
 instance Exception CompilationError
 
 exitCodeFor :: CompilationError -> Int
-exitCodeFor (CompilationError bundle) =
-  let
-    first = NonEmpty.head (bundleErrors bundle)
-  in
-    case first of
-        TrivialError _ _ _ -> fromEnum ParsingFailed
-        FancyError _ set -> case OrdSet.lookupMin set of
-            Nothing -> 99
-            Just fancy -> case fancy of
-                ErrorCustom reason -> fromEnum reason
-                _ -> 98
+exitCodeFor (CompilationError _ reason) = fromEnum reason
 
 -- TODO upgrade this to (Doc ann) so we can get prettier error messages.
 
@@ -95,8 +80,8 @@ instance Render FailureReason where
     type Token FailureReason = TechniqueToken
     colourize = colourizeTechnique
     intoDocA failure = case failure of
-        InvalidSetup -> "Invalid setup"
-        ParsingFailed -> "FIXME" -- FIXME
+        InvalidSetup -> "Invalid setup!"
+        ParsingFailed unexpected expected -> "Parsing failed." <> "!TODO!"
         VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
         ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
         CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
@@ -114,45 +99,87 @@ instance Render FailureReason where
 instance Render CompilationError where
     type Token CompilationError = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (CompilationError bundle) = 
-      let
-        first = NonEmpty.head (bundleErrors bundle)
-      in
-        case first of
-            TrivialError _ _ _ -> pretty (errorBundlePretty bundle)
-            FancyError _ _ -> pretty (errorBundlePretty bundle)
+    intoDocA (CompilationError source reason) = undefined
 
-{-
-            case first of
-            TrivialError _ _ _ -> pretty (errorBundlePretty bundle)
-            FancyError _ set -> case OrdSet.lookupMin set of
-                Nothing -> "WTF Why is this empty?"
-                Just fancy -> case fancy of
-                    ErrorCustom reason -> intoDocA reason
-                    _ -> "WTF How did we get here?"
--}
 {-|
-In order to have consistently formatted "compiler" failure messages, we
-jump through the hoops to use megaparsec's parse error message machinery.
+When we get a failure in the parsing stage **megaparsec** returns a
+ParseErrorBundle. Extract the first error message therein (later handle
+more? Yeah nah), and convert it into something we can use.
 -}
-makeErrorBundle :: Source -> FailureReason -> ParseErrorBundle T.Text FailureReason
-makeErrorBundle source failure =
+extractErrorBundle :: ParseErrorBundle T.Text Void -> CompilationError
+extractErrorBundle bundle =
   let
-    fancy = ErrorCustom failure
-    errors = FancyError (sourceOffset source) (OrdSet.singleton fancy) NonEmpty.:| []
-    bundle = ParseErrorBundle
-        { bundleErrors = errors
-        , bundlePosState = PosState
-            { pstateInput = sourceContents source
-            , pstateOffset = 7
-            , pstateSourcePos = SourcePos
-                { sourceName = sourceFilename source
-                , sourceLine = mkPos 3
-                , sourceColumn = mkPos 2
-                }
-            , pstateTabWidth = mkPos 4
-            , pstateLinePrefix = ""
-            }
+    errors = bundleErrors bundle
+    first = NonEmpty.head errors
+    (offset,unexpected,expected) = extractParseError first
+    pstate = bundlePosState bundle
+    contents = pstateInput pstate
+    srcpos = pstateSourcePos pstate
+    filename = sourceName srcpos
+
+-- Do we need these? For all the examples we have seen the values of l0 and c0
+-- are `1`. **megaparsec** delays calculation of line and column until
+-- error rendering time. Perhaps we need to record this.
+
+    l0 = unPos . sourceLine $ srcpos
+    c0 = unPos . sourceColumn $ srcpos
+
+    l = if l0 > 1 then error "Unexpected line balance" else 0
+    c = if c0 > 1 then error "Unexpected columns balance" else 0
+
+    reason = ParsingFailed unexpected expected
+
+    source = Source
+        { sourceContents = contents
+        , sourceFilename = filename
+        , sourceStatement = Blank
+        , sourceOffset = offset + l + c
         }
   in
-    bundle
+    CompilationError source reason
+
+extractParseError :: ParseError T.Text Void -> (Int,[Rope],[Rope])
+extractParseError e = case e of
+    TrivialError offset unexpected0 expected0 ->
+      let
+        unexpected = case unexpected0 of
+            Just item -> itemToRope item : []
+            Nothing -> []
+        expected = fmap itemToRope (OrdSet.toList expected0)
+      in
+        (offset,unexpected,expected)
+    FancyError _ _ -> error "Unexpected parser error"
+
+  where
+    itemToRope :: ErrorItem Char -> Rope
+    itemToRope item = case item of
+        Tokens tokens -> intoRope (NonEmpty.toList tokens)     -- tokens ~ chars
+        Label chars -> intoRope (NonEmpty.toList chars)        -- wow. "Non-empty string"
+        EndOfInput -> "end of input"
+
+{-|
+This is a wrapper to put the line,column calculation into **megaparsec** terms.
+-}
+reachOffset2 :: Int -> PosState Rope -> (SourcePos, Rope, PosState Rope)
+reachOffset2 target pstate =
+  let
+    input = pstateInput pstate
+    (before,after) = splitRope target input
+    src = pstateSourcePos pstate
+    l = unPos (sourceLine src)
+    c = unPos (sourceColumn src)
+
+    (l1,c1) = calculatePositionEnd before
+    l' = l + l1
+    c' = c + c1
+
+    src' = src
+        { sourceLine = mkPos l'
+        , sourceColumn = mkPos c'
+        }
+    pstate' = pstate
+        { pstateSourcePos = src'
+        }
+  in
+    (src',after,pstate')
+

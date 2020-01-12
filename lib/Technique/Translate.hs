@@ -232,7 +232,7 @@ failBecause :: FailureReason -> Translate a
 failBecause reason = do
     env <- get
     let source = environmentCurrent env
-    let failure = CompilationError (makeErrorBundle source reason)
+    let failure = CompilationError source reason
     throwError failure
 
 
