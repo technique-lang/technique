@@ -14,12 +14,11 @@ import Core.System.Pretty
 
 import Core.Text.Rope
 import Core.Text.Utilities
-import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as OrdSet
 import qualified Data.Text as T
 import Data.Void
-import Text.Megaparsec (PosState(..), SourcePos(..), Stream)
+import Text.Megaparsec (PosState(..), SourcePos(..))
 import Text.Megaparsec.Error
     ( ParseError(..)
     , ErrorItem(..)
@@ -86,20 +85,34 @@ instance Render FailureReason where
         ParsingFailed unexpected expected ->
           let
             un = case unexpected of
-                [token] -> "unexpected '" <> pretty token <> "'"
+                [token] -> "unexpected " <> formatErrorToken token <> hardline
                 _ -> emptyDoc
 
             ex = case expected of
-                xs -> "expected " <> hsep (punctuate comma (fmap (enclose squote squote . pretty) xs))
-                _ -> emptyDoc
+                [] -> emptyDoc
+                xs -> "expected " <> hsep (punctuate comma (fmap formatErrorToken xs)) <> "."
           in
-            un <+> ex
+            un <> ex
 
         VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
         ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
         CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
         UseOfUnknownIdentifier i -> "Variable '" <> intoDocA i <> "' not in scope."
         EncounteredUndefined -> "Encountered 'undefined' marker."
+
+formatErrorToken :: Rope -> Doc ann
+formatErrorToken text = if widthRope text == 1
+    then formatErrorChar text
+    else pretty text
+
+formatErrorChar :: Rope -> Doc ann
+formatErrorChar text =
+  let
+    ch = head (fromRope text) :: Char
+  in
+    case ch of
+        '\n' -> "newline"
+        _ ->  pretty ch
 
 {-
             let
@@ -123,10 +136,16 @@ instance Render CompilationError where
         (l,c) = calculatePositionEnd before
         linenum = pretty l
         colunum = pretty c
+
+        cutpoint = case findIndexRope isNewline offending of
+            Just i -> if i > 70 then 70 else i
+            Nothing -> 70
+        (trimmed,_) = splitRope cutpoint offending
+
       in
         filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
         hardline <>
-        pretty offending <> hardline <>
+        pretty trimmed <> hardline <>
         hardline <>
         intoDocA reason
 
@@ -184,8 +203,17 @@ extractParseError e = case e of
   where
     itemToRope :: ErrorItem Char -> Rope
     itemToRope item = case item of
-        Tokens tokens -> intoRope (NonEmpty.toList tokens)     -- tokens ~ chars
-        Label chars -> intoRope (NonEmpty.toList chars)        -- wow. "Non-empty string"
+        Tokens tokens ->                    -- tokens ~ chars
+          let
+            text = intoRope (NonEmpty.toList tokens)
+          in case widthRope text of
+            1 -> "'" <> text <> "'"
+            _ -> "\"" <> text <> "\""
+        Label chars ->                      -- wow. "Non-empty string"
+          let
+            text = intoRope (NonEmpty.toList chars)
+          in
+            text
         EndOfInput -> "end of input"
 
 {-|
