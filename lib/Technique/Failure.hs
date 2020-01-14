@@ -9,9 +9,10 @@ Error messages from compiling.
 -- so the can be shared in both Technique.Translate and Technique.Builtins.
 module Technique.Failure where
 
+import Prelude hiding (lines)
+
 import Core.System.Base
 import Core.System.Pretty
-
 import Core.Text.Rope
 import Core.Text.Utilities
 import qualified Data.List.NonEmpty as NonEmpty
@@ -122,6 +123,19 @@ formatErrorChar text =
                 pretty offset <> ": " <> intoDocA statement <> line <>
 -}
 
+numberOfCarots :: FailureReason -> Int
+numberOfCarots reason = case reason of
+    InvalidSetup -> 0
+    ParsingFailed unexpected _ ->
+        case unexpected of
+            [token] -> widthRope token - 2
+            _ -> 1
+    VariableAlreadyInUse i -> widthRope (unIdentifier i)
+    ProcedureAlreadyDeclared i -> widthRope (unIdentifier i)
+    CallToUnknownProcedure i -> widthRope (unIdentifier i)
+    UseOfUnknownIdentifier i -> widthRope (unIdentifier i)
+    EncounteredUndefined -> 1
+
 instance Render CompilationError where
     type Token CompilationError = TechniqueToken
     colourize = colourizeTechnique
@@ -130,22 +144,41 @@ instance Render CompilationError where
         filename = pretty (sourceFilename source)
         contents = intoRope (sourceContents source)
         offset = sourceOffset source
-        (before,after) = splitRope offset contents
-        (offending,_) = splitRope 50 after          -- we really need `take` and `span` functions
 
+-- Given an offset point where the error occured, split the input at that
+-- point.
+
+        (before,_) = splitRope offset contents
         (l,c) = calculatePositionEnd before
+
+-- Isolate the line on which the error occured. l and c are 1-origin here,
+-- so if there's only a single line (or empty file) we take that one single
+-- line and then last one is also that line.
+
+        lines = breakLines contents
+        lines' = take l lines
+        offending = if nullRope contents
+            then emptyRope
+            else last lines'
+
+-- Now prepare for rendering. If the offending line is long trim it. Then
+-- create a line with some carets which show where the problem is.
+
         linenum = pretty l
         colunum = pretty c
+        (truncated,_) = splitRope 77 offending
+        trimmed = if widthRope offending > 77 && c < 77
+            then truncated <> "..."
+            else offending
 
-        cutpoint = case findIndexRope isNewline offending of
-            Just i -> if i > 70 then 70 else i
-            Nothing -> 70
-        (trimmed,_) = splitRope cutpoint offending
+        padding = replicateChar (c - 1) ' '
+        caroted = replicateChar (numberOfCarots reason) '^'
 
       in
         filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
+        pretty padding <> pretty caroted <> hardline <>
         hardline <>
         intoDocA reason
 
