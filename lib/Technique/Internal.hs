@@ -14,7 +14,6 @@ import Data.DList
 
 import Technique.Language
 import Technique.Quantity
-import Technique.Failure
 
 -- FIXME ??? upgrade to named IVar
 newtype Promise = Promise Value

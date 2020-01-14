@@ -25,13 +25,13 @@ import Text.Megaparsec.Error
     , ErrorItem(..)
     , ParseErrorBundle(..)
     )
-import Text.Megaparsec.Pos (Pos, mkPos, unPos)
+import Text.Megaparsec.Pos (mkPos, unPos)
 
 import Technique.Language hiding (Label)
 import Technique.Formatter
 
 data Source = Source
-    { sourceContents :: T.Text                   -- whatever parser is expecting
+    { sourceContents :: Rope
     , sourceFilename :: FilePath
     , sourceStatement :: Statement
     , sourceOffset :: Offset
@@ -40,7 +40,7 @@ data Source = Source
 
 emptySource :: Source
 emptySource = Source
-    { sourceContents = T.empty
+    { sourceContents = emptyRope
     , sourceFilename = "<undefined>"
     , sourceStatement = Blank
     , sourceOffset = -1
@@ -189,16 +189,14 @@ When we get a failure in the parsing stage **megaparsec** returns a
 ParseErrorBundle. Extract the first error message therein (later handle
 more? Yeah nah), and convert it into something we can use.
 -}
-extractErrorBundle :: ParseErrorBundle T.Text Void -> CompilationError
-extractErrorBundle bundle =
+extractErrorBundle :: Source -> ParseErrorBundle T.Text Void -> CompilationError
+extractErrorBundle source bundle =
   let
     errors = bundleErrors bundle
     first = NonEmpty.head errors
     (offset,unexpected,expected) = extractParseError first
     pstate = bundlePosState bundle
-    contents = pstateInput pstate
     srcpos = pstateSourcePos pstate
-    filename = sourceName srcpos
 
 -- Do we need these? For all the examples we have seen the values of l0 and c0
 -- are `1`. **megaparsec** delays calculation of line and column until
@@ -212,14 +210,11 @@ extractErrorBundle bundle =
 
     reason = ParsingFailed unexpected expected
 
-    source = Source
-        { sourceContents = contents
-        , sourceFilename = filename
-        , sourceStatement = Blank
-        , sourceOffset = offset + l + c
+    source' = source
+        { sourceOffset = offset + l + c
         }
   in
-    CompilationError source reason
+    CompilationError source' reason
 
 extractParseError :: ParseError T.Text Void -> (Int,[Rope],[Rope])
 extractParseError e = case e of
