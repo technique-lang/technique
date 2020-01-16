@@ -75,7 +75,7 @@ instance Render Step where
             f (label,substep) =
                 intoDocA label <+> "<-" <+> intoDocA substep
 
-        Located _ substep ->
+        Location _ substep ->
             intoDocA substep
 
 

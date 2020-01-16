@@ -372,31 +372,33 @@ pAttribute =
 
 pExpression :: Parser Expression
 pExpression = do
-    expr1 <- pTerm
+    offset <- getOffset
+    expr1 <- pTerm offset
     skipSpace
     rest <- (optional (try pOperation2))
     skipSpace
     case rest of
-        Just (oper,expr2)   -> return (Operation oper expr1 expr2)
+        Just (oper,expr2)   -> return (Operation offset oper expr1 expr2)
         Nothing             -> return expr1
   where
-    pTerm =
-        pNone <|>
-        pUndefined <|>
-        pRestriction <|>
-        pGrouping <|>
-        pObject <|>
-        pApplication <|>
-        pLiteral <|>
-        pVariable
+    pTerm offset =
+        pNone offset <|>
+        pUndefined offset <|>
+        pRestriction offset <|>
+        pGrouping offset <|>
+        pObject offset <|>
+        pApplication offset <|>
+        pLiteral offset <|>
+        pVariable offset
 
-    pNone = do
+    pNone :: Offset -> Parser Expression
+    pNone offset = do
         void (string "()")
-        return None
+        return (None offset)
 
-    pUndefined = do
+    pUndefined offset = do
         void (char '?')
-        return Undefined
+        return (Undefined offset)
 
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
@@ -404,13 +406,13 @@ pExpression = do
         subexpr2 <- pExpression
         return (operator,subexpr2)
 
-    pRestriction = do
+    pRestriction offset = do
         attr <- pAttribute
         hidden space
         block <- pBlock
-        return (Restriction attr block)
+        return (Restriction offset attr block)
 
-    pGrouping = do
+    pGrouping offset = do
         void (char '(')
         skipSpace
 
@@ -419,13 +421,13 @@ pExpression = do
         void (char ')')
         skipSpace
 
-        return (Grouping subexpr)
+        return (Grouping offset subexpr)
 
-    pObject = do
+    pObject offset = do
         tablet <- pTablet
-        return (Object tablet)
+        return (Object offset tablet)
 
-    pApplication = do
+    pApplication offset = do
         lookAhead (try (do
             skipMany identifierChar
             skipSpace1
@@ -436,32 +438,32 @@ pExpression = do
         skipSpace1
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
-        return (Application name subexpr)
+        return (Application offset name subexpr)
 
-    pLiteral =
+    pLiteral offset =
         (do
             str <- stringLiteral
-            return (Text (intoRope str))) <|>
+            return (Text offset (intoRope str))) <|>
         (do
             qty <- pQuantity
-            return (Amount qty))
+            return (Amount offset qty))
 
-    pVariable = do
+    pVariable offset = do
         names <- pIdentifiers1
 
-        return (Variable names)
+        return (Variable offset names)
 
-pStatement :: Parser (Offset,Statement)
+pStatement :: Parser Statement
 pStatement = do
     offset <- getOffset
-    statement <- pAssignment <|>
-        pDeclaration <|>
-        pExecute <|>
-        pBlank <|>
-        pSeries
-    return (offset,statement)
+    statement <- pAssignment offset <|>
+        pDeclaration offset <|>
+        pExecute offset <|>
+        pBlank offset <|>
+        pSeries offset
+    return statement
   where
-    pAssignment = label "an assignment" $ do
+    pAssignment offset = label "an assignment" $ do
         lookAhead (try (do
             skipMany (identifierChar <|> char ',' <|> char ' ')
             void (char '=')))
@@ -470,27 +472,27 @@ pStatement = do
         void (char '=')
         hidden space
         expr <- pExpression
-        return (Assignment names expr)
+        return (Assignment offset names expr)
 
-    pDeclaration = label "a declaration" $ do
+    pDeclaration offset = label "a declaration" $ do
         lookAhead (try (do
             skipMany (identifierChar <|> char ',' <|> char ' ')
             void (char ':')))
 
         proc <- pProcedureCode
-        return (Declaration proc)
+        return (Declaration offset proc)
 
-    pExecute = label "a value to execute" $ do
+    pExecute offset = label "a value to execute" $ do
         expr <- pExpression
-        return (Execute expr)
+        return (Execute offset expr)
 
-    pBlank = hidden $ do -- label "a blank line"
+    pBlank offset = hidden $ do -- label "a blank line"
         void newline
-        return Blank
+        return (Blank offset)
 
-    pSeries = do
+    pSeries offset = do
         void (char ';')
-        return Series
+        return (Series offset)
 
 ---------------------------------------------------------------------
 

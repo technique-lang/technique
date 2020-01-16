@@ -113,30 +113,31 @@ translateBlock (Block statements) = do
     let step = environmentAccumulated env'
     return step
 
-translateStatement :: (Offset,Statement) -> Translate ()
-translateStatement (offset,statement) = do
-    setLocation (offset,statement)
+translateStatement :: Statement -> Translate ()
+translateStatement statement = do
+
     case statement of
-        Assignment vars expr -> do
+        Assignment o vars expr -> do
+            env <- get
+
             names <- traverse insertVariable vars
             step <- translateExpression expr
 
-            let step' = Asynchronous names step
+            let step' = Asynchronous o names step
+            appendStep step'
 
-            appendStep (offset,statement) step'
-
-        Execute expr -> do
+        Execute _ expr -> do
             step <- translateExpression expr
-            appendStep (offset,statement) step
+            appendStep step
 
-        Declaration proc -> do
+        Declaration _ proc -> do
             _ <- translateProcedure proc
             return ()
 
         -- the remainder are functionally no-ops
-        Comment _ -> return ()
-        Blank -> return ()
-        Series -> return ()
+        Comment _ _ -> return ()
+        Blank _ -> return ()
+        Series _ -> return ()
 
 {-|
 Note that this does NOT add the steps to the Environment.
@@ -145,47 +146,47 @@ translateExpression :: Expression -> Translate Step
 translateExpression expr = do
     env <- get
     let attr = environmentRole env
-
+    
     case expr of
-        Application i subexpr -> do
+        Application o i subexpr -> do
             let func = Unresolved i
             step <- translateExpression subexpr
-            return (Invocation attr func step)
+            return (Invocation o attr func step)
 
-        None ->
-            return (Known Unitus)
+        None o ->
+            return (Known o Unitus)
 
-        Text text ->
-            return (Known (Literali text))
+        Text o text ->
+            return (Known o (Literali text))
 
-        Amount qty ->
-            return (Known (Quanticle qty))
+        Amount o qty ->
+            return (Known o (Quanticle qty))
 
-        Undefined -> do
-            failBecause EncounteredUndefined
+        Undefined o -> do
+            failBecause o EncounteredUndefined
 
-        Object (Tablet bindings) -> do
+        Object o (Tablet bindings) -> do
             pairs <- foldM f [] bindings
-            return (Bench pairs)
+            return (Bench o pairs)
           where
             f :: [(Label,Step)] -> Binding -> Translate [(Label,Step)]
             f acc (Binding label subexpr) = do
                 step <- translateExpression subexpr
                 return (acc <> [(label,step)])
 
-        Variable is -> do
+        Variable o is -> do
             steps <- traverse g is
             case steps of
                 [] -> return NoOp
                 [step] -> return step
-                _ -> return (Tuple steps)
+                _ -> return (Tuple o steps)
           where
             g :: Identifier -> Translate Step
             g i = do
                 name <- lookupVariable i
-                return (Depends name)
+                return (Depends o name)
 
-        Operation op subexpr1 subexpr2 ->
+        Operation _ op subexpr1 subexpr2 ->
           let
             prim = case op of
                     WaitEither  -> builtinProcedureWaitEither
@@ -197,10 +198,10 @@ translateExpression expr = do
             let tuple = Tuple [step1,step2]
             return (Invocation attr prim tuple)
 
-        Grouping subexpr ->
+        Grouping _ subexpr ->
             translateExpression subexpr
 
-        Restriction subattr block ->
+        Restriction _ subattr block ->
             applyRestriction subattr block
 
 
@@ -228,11 +229,13 @@ registerProcedure func = do
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
-failBecause :: FailureReason -> Translate a
-failBecause reason = do
+failBecause :: Offset -> FailureReason -> Translate a
+failBecause o reason = do
     env <- get
-    let source = environmentCurrent env
-    let failure = CompilationError source reason
+    let source = environmentSource env
+    let source' = source { sourceOffset = o }
+
+    let failure = CompilationError source' reason
     throwError failure
 
 
@@ -267,15 +270,16 @@ insertVariable i = do
     return n
 
 {-|
-Accumulate a Step
+Accumulate a Step.
 -}
-appendStep :: (Offset,Statement) -> Step -> Translate ()
-appendStep loc step = do
+appendStep :: Step -> Translate ()
+appendStep step = do
     env <- get
     let steps = environmentAccumulated env
+    let source = environmentCurrent env
 
     -- see the Monoid instance for Step for the clever here
-    let steps' = mappend steps (Located loc step)
+    let steps' = mappend steps (Location source step)
 
     let env' = env { environmentAccumulated = steps' }
     put env'
@@ -362,11 +366,12 @@ Update the environment's idea of where in the source we are, so that if we
 need to generate an error message we can offer one with position
 information.
 -}
-setLocation :: (Offset,Statement) -> Translate ()
-setLocation (offset,statement) = do
+setLocationFrom :: (Render a, Located a) => a -> Translate ()
+setLocationFrom thing = do
     env <- get
     let source = environmentCurrent env
-    let source' = source { sourceOffset = offset, sourceStatement = statement }
+    let offset = locationOf thing
+    let source' = source { sourceOffset = offset }
     let env' = env { environmentCurrent = source' }
     put env'
 
