@@ -41,13 +41,13 @@ instance Key Identifier
 -- TODO construction needs to validate internal rules for labels. No
 -- newlines, perhaps.
 newtype Label = Label Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Attribute
     = Role Identifier
     | Place Identifier
-    | Inherited
-    deriving (Show, Eq)
+    | Inherit
+    deriving (Show, Eq, Ord)
 
 {-
     | Anyone
@@ -56,14 +56,14 @@ data Attribute
 
 data Markdown
     = Markdown Rope
-    deriving (Eq)
+    deriving (Eq, Ord)
 
 instance Show Markdown where
     show (Markdown text) = "[quote|\n" ++ fromRope text ++ "|]"
 
 data Type
     = Type Rope
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 unitType :: Type
 unitType = Type "()"
@@ -77,7 +77,7 @@ data Procedure = Procedure
     , procedureDescription :: Maybe Markdown
     , procedureBlock :: Block
     }
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 emptyProcedure :: Procedure
 emptyProcedure = Procedure
@@ -91,45 +91,69 @@ emptyProcedure = Procedure
     }
 
 data Block = Block [Statement]
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
-blockStatements :: Block -> [Statement]
-blockStatements (Block statements) = statements
+type Offset = Int
+
+class Located a where
+    locationOf :: a -> Offset
 
 data Statement
-    = Assignment [Identifier] Expression
-    | Execute Expression
-    | Comment Rope
-    | Declaration Procedure
-    | Blank
-    | Series
-    deriving (Show, Eq)
+    = Assignment Offset [Identifier] Expression
+    | Execute Offset Expression
+    | Comment Offset Rope
+    | Declaration Offset Procedure
+    | Blank Offset
+    | Series Offset
+    deriving (Show, Ord, Eq)
+
+instance Located Statement where
+    locationOf statement = case statement of
+        Assignment offset _ _ -> offset
+        Execute offset _ -> offset
+        Comment offset _ -> offset
+        Declaration offset _ -> offset
+        Blank offset -> offset
+        Series offset -> offset
 
 data Expression
-    = Application Identifier Expression     -- this had better turn out to be a procedure
-    | None
-    | Text Rope
-    | Amount Quantity
-    | Undefined
-    | Object Tablet
-    | Variable [Identifier]
-    | Operation Operator Expression Expression
-    | Grouping Expression
-    | Restriction Attribute Block
-    deriving (Show, Eq)
+    = Application Offset Identifier Expression     -- this had better turn out to be a procedure
+    | None Offset
+    | Text Offset Rope
+    | Amount Offset Quantity
+    | Undefined Offset
+    | Object Offset Tablet
+    | Variable Offset [Identifier]
+    | Operation Offset Operator Expression Expression
+    | Grouping Offset Expression
+    | Restriction Offset Attribute Block
+    deriving (Show, Ord, Eq)
+
+instance Located Expression where
+    locationOf expr = case expr of
+        Application offset _ _ -> offset
+        None offset -> offset
+        Text offset _ -> offset
+        Amount offset _ -> offset
+        Undefined offset -> offset
+        Object offset _ -> offset
+        Variable offset _ -> offset
+        Operation offset _ _ _ -> offset
+        Grouping offset _ -> offset
+        Restriction offset _ _ -> offset
 
 data Tablet
     = Tablet [Binding]
-    deriving (Show, Eq)
+    deriving (Show, Ord, Eq)
 
 -- only valid Expressions are Literal and Variable. Should we enforce that
 -- somewhere?
 data Binding
     = Binding Label Expression
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Operator
     = WaitEither
     | WaitBoth
     | Combine
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)

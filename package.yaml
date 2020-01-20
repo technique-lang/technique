@@ -1,5 +1,5 @@
 name: technique
-version:  0.2.4
+version:  0.2.5
 synopsis: Procedures and Sequences
 description: |
   A domain specific lanaguage for procedures.
@@ -17,8 +17,9 @@ github: oprdyn/technique
 dependencies:
   - base >= 4.11 && < 5
   - ivar-simple
+  - containers
   - core-data >= 0.2.1
-  - core-text >= 0.2.2.6
+  - core-text >= 0.2.3.1
   - core-program >= 0.2.3
   - dlist
   - free
@@ -28,7 +29,7 @@ dependencies:
   - prettyprinter
   - prettyprinter-ansi-terminal
 
-ghc-options: -Wall -Wwarn -fwarn-tabs -dynamic
+ghc-options: -Wall -Wwarn -fwarn-tabs
 
 library:
   dependencies:
@@ -71,7 +72,7 @@ tests:
       - tests
     main: TestSuite.hs
     other-modules:
-      - CheckAbstractSyntax
+      - CheckConcreteSyntax
       - CheckSkeletonParser
       - CheckQuantityBehaviour
       - CheckTranslationStage

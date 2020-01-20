@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {-|
@@ -12,7 +13,7 @@ import Core.Program
 import Core.Text
 import Core.System
 import System.IO (hIsTerminalDevice)
-import Text.Megaparsec (parse, errorBundlePretty)
+import Text.Megaparsec (parse)
 
 import Technique.Builtins
 import Technique.Diagnostics ()
@@ -52,19 +53,24 @@ syntaxCheck procfile =
     catch
         (do
             surface <- loadTechnique procfile
-            concrete <- parsingPhase procfile surface
-            abstract <- translationPhase concrete
+            let source = emptySource
+                    { sourceFilename = procfile
+                    , sourceContents = surface
+                    }
+            concrete <- parsingPhase source
+            abstract <- translationPhase source concrete
             debugR "abstract" abstract
+            -- TODO extractionPhase
             write "ok"
             return 0)
-        (\e -> do
-            write ("failed: " <> renderFailure e)
-            return (fromEnum e))
+        (\(e :: CompilationError) -> do
+            write ("failed: " <> render 78 e)
+            return (exitCodeFor e))
 
 {-|
 Load a technique file hopefully containing a procedure.
 -}
-loadTechnique :: FilePath -> Program None Bytes
+loadTechnique :: FilePath -> Program None Rope
 loadTechnique filename = do
     event "Read source from technique file"
 
@@ -74,20 +80,23 @@ loadTechnique filename = do
     -- this better if/when we come up with an effecient Stream Rope
     -- instance so megaparsec can use Rope directly.
 
-    contents <- liftIO $ withFile filename ReadMode hInput
-    return (intoBytes contents)
+    bytes <- liftIO $ withFile filename ReadMode hInput
+    let contents = intoRope bytes
+    return contents
 
 {-|
 Parse technique content into a concrete syntax object.
 -}
-parsingPhase :: FilePath -> Bytes -> Program None Technique
-parsingPhase filename bytes = do
+parsingPhase :: Source -> Program None Technique
+parsingPhase source = do
     event "Parse surface language into concrete Procedures"
+    let contents = sourceContents source
 
-    let result = parse pTechnique filename (fromRope (intoRope bytes))
+    let result = parse pTechnique "" (fromRope contents)
+
     case result of
         Right technique -> return technique
-        Left err -> throw (ParsingFailed (errorBundlePretty err))
+        Left bundle -> throw (extractErrorBundle source bundle)
 
 {-|
 Take a static Procedure definition and spin it up into a sequence of
@@ -96,12 +105,14 @@ the concrete syntax types and the abstract syntax we can feed to an
 evaluator.
 -}
 -- FIXME better return type
-translationPhase :: Technique -> Program None [Function]
-translationPhase technique =
+translationPhase :: Source -> Technique -> Program None [Function]
+translationPhase source technique =
   let
     env0 = emptyEnvironment
-    env1 = env0 { environmentFunctions = builtinProcedures }
-    result = runTranslate env1 (translateTechnique technique)
+        { environmentFunctions = builtinProcedures
+        , environmentSource = source
+        }
+    result = runTranslate env0 (translateTechnique technique)
   in do
     event "Translate Procedures into abstract Subroutines"
     case result of
@@ -127,12 +138,17 @@ commandFormatTechnique = do
     catch
         (do
             surface <- loadTechnique procfile
-            technique <- parsingPhase procfile surface
+            let source = emptySource
+                    { sourceFilename = procfile
+                    , sourceContents = surface
+                    }
+
+            technique <- parsingPhase source
 
             terminal <- liftIO $ hIsTerminalDevice stdout
             case (terminal || raw) of
                 True    -> writeR technique
                 False   -> write (renderNoAnsi 80 technique))
-        (\e -> do
-            write ("failed: " <> renderFailure e)
-            terminate (fromEnum e))
+        (\(e :: CompilationError) -> do
+            write ("failed: " <> render 78 e)
+            terminate (exitCodeFor e))

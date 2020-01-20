@@ -4,8 +4,8 @@ import Test.Hspec (Spec, hspec)
 
 import Core.System
 
-import CheckAbstractSyntax
-import CheckSkeletonParser
+import CheckConcreteSyntax hiding (main)
+import CheckSkeletonParser hiding (main)
 import CheckQuantityBehaviour hiding (main)
 import CheckTranslationStage hiding (main)
 
@@ -16,6 +16,6 @@ main = do
 suite :: Spec
 suite = do
     checkQuantityBehaviour
-    checkAbstractSyntax
+    checkConcreteSyntax
     checkSkeletonParser
     checkTranslationStage

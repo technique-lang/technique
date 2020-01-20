@@ -1,11 +1,11 @@
-resolver: lts-14.16
+resolver: lts-14.20
 
 packages:
- - /home/andrew/src/oprdyn/unbeliever/core-text
- - /home/andrew/src/oprdyn/unbeliever/core-program
- - /home/andrew/src/oprdyn/unbeliever/core-data
  - .
 
 extra-deps:
+ - core-text-0.2.2.6
+ - core-program-0.2.3.0
+ - core-data-0.2.1.4
  - ivar-simple-0.3.2
 

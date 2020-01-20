@@ -42,7 +42,7 @@ exampleProcedureOven =
         , procedureOutput = [Type "()"] -- ?
         , procedureTitle = Nothing
         , procedureDescription = Nothing
-        , procedureBlock = Block [ Execute (Application (Identifier "task") (Text "Set oven temperature!")) ]
+        , procedureBlock = Block [ Execute 0 (Application 0 (Identifier "task") (Text 0 "Set oven temperature!")) ]
         }
 
 exampleRoastTurkey :: Procedure
@@ -53,42 +53,42 @@ exampleRoastTurkey =
     celsius = "°C"
     chef = Role (Identifier "chef")
     block = Block
-                [ Execute (Restriction chef (Block
-                    [ Assignment
+                [ Execute 0 (Restriction 0 chef (Block
+                    [ Assignment 0
                         [Identifier "preheat"]
-                        (Application
+                        (Application 0
                             (Identifier "oven")
-                            (Grouping (Amount (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius))))
-                    , Execute
-                        (Application
+                            (Grouping 0 (Amount 0 (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius))))
+                    , Execute 0
+                        (Application 0
                             (Identifier "task")
-                            (Text "Bacon strips onto bird"))
-                    , Execute
-                        (Variable [Identifier "preheat"])
-                    , Execute
-                        (Undefined)
-                    , Blank
-                    , Execute
-                        (Operation WaitBoth
-                            (Variable [Identifier "w1"])
-                            (Grouping (Operation WaitEither
-                                (Variable [Identifier "w2"])
-                                (Variable [Identifier "w3"]))))
-                    , Blank
-                    , Execute (Variable [Identifier "v1"])
-                    , Series
-                    , Execute (Variable [Identifier "v2"])
-                    , Assignment
+                            (Text 0 "Bacon strips onto bird"))
+                    , Execute 0
+                        (Variable 0 [Identifier "preheat"])
+                    , Execute 0
+                        (Undefined 0)
+                    , Blank 0
+                    , Execute 0
+                        (Operation 0 WaitBoth
+                            (Variable 0 [Identifier "w1"])
+                            (Grouping 0 (Operation 0 WaitEither
+                                (Variable 0 [Identifier "w2"])
+                                (Variable 0 [Identifier "w3"]))))
+                    , Blank 0
+                    , Execute 0 (Variable 0 [Identifier "v1"])
+                    , Series 0
+                    , Execute 0 (Variable 0 [Identifier "v2"])
+                    , Assignment 0
                         [Identifier "temp"]
-                        (Application
+                        (Application 0
                             (Identifier "record")
-                            (Text "Probe bird temperature"))
-                    , Execute
-                        (Object
+                            (Text 0 "Probe bird temperature"))
+                    , Execute 0
+                        (Object 0
                             (Tablet
-                                [ Binding (Label "Final temperature") (Variable [Identifier "temp"]) ]))
-                    ])
-                )]
+                                [ Binding (Label "Final temperature") (Variable 0 [Identifier "temp"]) ]))
+                    ]))
+                ]
   in
     Procedure
         { procedureName = Identifier "roast_turkey"

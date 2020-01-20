@@ -14,14 +14,13 @@ import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Control.Monad.Trans.Except (Except(), runExcept)
 import Core.Data
 import Core.Text
-import Data.DList (empty, toList, fromList)
+import Data.DList (toList, fromList)
 import Data.Foldable (traverse_)
 
 import Technique.Builtins
 import Technique.Failure
 import Technique.Internal
 import Technique.Language
-
 
 {-|
 Environment in the type-theory sense of the word: the map(s) between names
@@ -34,6 +33,11 @@ data Environment = Environment
     { environmentVariables :: Map Identifier Name
     , environmentFunctions :: Map Identifier Function
     , environmentRole :: Attribute
+
+    -- for reporting compiler errors
+    , environmentSource :: Source
+
+    -- the accumulator for the fold that the Translate monad represents
     , environmentAccumulated :: Step
     }
     deriving (Eq,Show)
@@ -42,12 +46,13 @@ emptyEnvironment :: Environment
 emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
-    , environmentRole = Inherited
+    , environmentRole = Inherit
+    , environmentSource = emptySource
     , environmentAccumulated = NoOp
     }
 
-newtype Translate a = Translate (StateT Environment (Except CompilerFailure) a)
-    deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilerFailure)
+newtype Translate a = Translate (StateT Environment (Except CompilationError) a)
+    deriving (Functor, Applicative, Monad, MonadState Environment, MonadError CompilationError)
 
 {-|
 Take a translator action and an environment and spin it up into a Step or
@@ -57,7 +62,7 @@ feed to an evaluator.
 -}
 -- we use runStateT rather than evalStateT as we did previously so we can
 -- access the final state in test cases.
-runTranslate :: Environment -> Translate a -> Either CompilerFailure (a,Environment)
+runTranslate :: Environment -> Translate a -> Either CompilationError (a,Environment)
 runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
@@ -90,10 +95,10 @@ translateProcedure procedure =
     let result = runTranslate subenv (translateBlock block)
 
     case result of
-        Left e -> failBecause e
+        Left e -> throwError e
         Right (step,_) -> do
             let func = Subroutine procedure step
-            registerProcedure func
+            registerProcedure (locationOf step) func
             return func
 
 {-|
@@ -109,28 +114,29 @@ translateBlock (Block statements) = do
     return step
 
 translateStatement :: Statement -> Translate ()
-translateStatement statement = case statement of
-    Assignment vars expr -> do
-        names <- traverse insertVariable vars
-        step <- translateExpression expr
+translateStatement statement = do
 
-        let step' = Asynchronous names step
+    case statement of
+        Assignment o vars expr -> do
+            -- FIXME this offset will be incorrect if > 1 variable.
+            names <- traverse (insertVariable o) vars
+            step <- translateExpression expr
 
-        appendStep step'
+            let step' = Asynchronous o names step
+            appendStep step'
 
-    Execute expr -> do
-        step <- translateExpression expr
-        appendStep step
+        Execute _ expr -> do
+            step <- translateExpression expr
+            appendStep step
 
+        Declaration _ proc -> do
+            _ <- translateProcedure proc
+            return ()
 
-    Declaration proc -> do
-        _ <- translateProcedure proc
-        return ()
-
-    -- the remainder are functionally no-ops
-    Comment _ -> return ()
-    Blank -> return ()
-    Series -> return ()
+        -- the remainder are functionally no-ops
+        Comment _ _ -> return ()
+        Blank _ -> return ()
+        Series _ -> return ()
 
 {-|
 Note that this does NOT add the steps to the Environment.
@@ -141,45 +147,45 @@ translateExpression expr = do
     let attr = environmentRole env
 
     case expr of
-        Application i subexpr -> do
+        Application o i subexpr -> do
             let func = Unresolved i
             step <- translateExpression subexpr
-            return (Invocation attr func step)
+            return (Invocation o attr func step)
 
-        None ->
-            return (Known Unitus)
+        None o ->
+            return (Known o Unitus)
 
-        Text text ->
-            return (Known (Literali text))
+        Text o text ->
+            return (Known o (Literali text))
 
-        Amount qty ->
-            return (Known (Quanticle qty))
+        Amount o qty ->
+            return (Known o (Quanticle qty))
 
-        Undefined ->
-            failBecause EncounteredUndefined
+        Undefined o -> do
+            failBecause o EncounteredUndefined
 
-        Object (Tablet bindings) -> do
+        Object o (Tablet bindings) -> do
             pairs <- foldM f [] bindings
-            return (Bench pairs)
+            return (Bench o pairs)
           where
             f :: [(Label,Step)] -> Binding -> Translate [(Label,Step)]
             f acc (Binding label subexpr) = do
                 step <- translateExpression subexpr
                 return (acc <> [(label,step)])
 
-        Variable is -> do
+        Variable o is -> do
             steps <- traverse g is
             case steps of
-                [] -> return (Nested empty)
+                [] -> return NoOp
                 [step] -> return step
-                _ -> return (Tuple steps)
+                _ -> return (Tuple o steps)
           where
             g :: Identifier -> Translate Step
             g i = do
-                name <- lookupVariable i
-                return (Depends name)
+                name <- lookupVariable o i
+                return (Depends o name)
 
-        Operation op subexpr1 subexpr2 ->
+        Operation offset op subexpr1 subexpr2 ->
           let
             prim = case op of
                     WaitEither  -> builtinProcedureWaitEither
@@ -188,13 +194,13 @@ translateExpression expr = do
           in do
             step1 <- translateExpression subexpr1
             step2 <- translateExpression subexpr2
-            let tuple = Tuple [step1,step2]
-            return (Invocation attr prim tuple)
+            let tuple = Tuple offset [step1,step2]
+            return (Invocation offset attr prim tuple)
 
-        Grouping subexpr ->
+        Grouping _ subexpr ->
             translateExpression subexpr
 
-        Restriction subattr block ->
+        Restriction _ subattr block ->
             applyRestriction subattr block
 
 
@@ -203,8 +209,8 @@ A given procedure call can either be to a user declared in-scope procedure
 or to a primative builtin. We have Invocation as the Step constructors for
 these cases.
 -}
-registerProcedure :: Function -> Translate ()
-registerProcedure func = do
+registerProcedure :: Offset -> Function -> Translate ()
+registerProcedure offset func = do
     env <- get
 
     let i = functionName func
@@ -212,7 +218,7 @@ registerProcedure func = do
     let defined = containsKey i known
 
     when defined $ do
-        failBecause (ProcedureAlreadyDeclared i)
+        failBecause offset (ProcedureAlreadyDeclared i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -222,17 +228,24 @@ registerProcedure func = do
 -- the overloading of throw between MonadError / ExceptT and the GHC
 -- exceptions mechansism is unfortunate. We're not throwing an exception,
 -- end it's definitely not pure `error`. Wrap it for clarity.
-failBecause :: CompilerFailure -> Translate a
-failBecause e = throwError e
+failBecause :: Offset -> FailureReason -> Translate a
+failBecause o reason = do
+    env <- get
+    let source = environmentSource env
+    let source' = source { sourceOffset = o }
 
-lookupVariable :: Identifier -> Translate Name
-lookupVariable i = do
+    let failure = CompilationError source' reason
+    throwError failure
+
+
+lookupVariable :: Offset -> Identifier -> Translate Name
+lookupVariable offset i = do
     env <- get
     let known = lookupKeyValue i (environmentVariables env)
 
     case known of
         Just name -> return name
-        Nothing -> failBecause (UseOfUnknownIdentifier i)
+        Nothing -> failBecause offset (UseOfUnknownIdentifier i)
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
@@ -240,12 +253,13 @@ them into the environment map. This is where we check for reuse of an
 already declared name (TODO) and given the local use of the identifier a
 scope-local (or globally?) unique name.
 -}
-insertVariable :: Identifier -> Translate Name
-insertVariable i = do
+insertVariable :: Offset -> Identifier -> Translate Name
+insertVariable offset i = do
     env <- get
     let known = environmentVariables env
+
     when (containsKey i known) $ do
-        failBecause (VariableAlreadyInUse i)
+        failBecause offset (VariableAlreadyInUse i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -255,7 +269,7 @@ insertVariable i = do
     return n
 
 {-|
-Accumulate a Step
+Accumulate a Step.
 -}
 appendStep :: Step -> Translate ()
 appendStep step = do
@@ -283,7 +297,7 @@ applyRestriction attr block = do
     let result = runTranslate subenv (translateBlock block)
 
     case result of
-        Left e -> failBecause e
+        Left e -> throwError e
         Right (steps,_) -> return steps
 
 
@@ -295,41 +309,40 @@ a function call is made, look up to see if we actually know what it is.
 -}
 resolveFunctions :: Step -> Translate Step
 resolveFunctions step = case step of
-    Invocation attr func substep -> do
-        func' <- lookupFunction func
+    Invocation offset attr func substep -> do
+        func' <- lookupFunction offset func
         substep' <- resolveFunctions substep
-        return (Invocation attr func' substep')
+        return (Invocation offset attr func' substep')
 
-    Tuple substeps -> do
+    Tuple offset substeps -> do
         substeps' <- traverse resolveFunctions substeps
-        return (Tuple substeps')
+        return (Tuple offset substeps')
 
-    Asynchronous names substep -> do
+    Asynchronous offset names substep -> do
         substep' <- resolveFunctions substep
-        return (Asynchronous names substep')
+        return (Asynchronous offset names substep')
 
-    Nested sublist -> do
+    Nested offset sublist -> do
         let actual = toList sublist
         actual' <- traverse resolveFunctions actual
         let sublist' = fromList actual'
-        return (Nested sublist')
+        return (Nested offset sublist')
 
-    Bench pairs -> do
+    Bench offset pairs -> do
         pairs' <- traverse f pairs
-        return (Bench pairs')
+        return (Bench offset pairs')
       where
         f :: (Label,Step) -> Translate (Label,Step)
         f (label,substep) = do
             substep' <- resolveFunctions substep
             return (label, substep')
 
-    Known _ -> return step
-    Depends _ -> return step
+    Known _ _ -> return step
+    Depends _ _ -> return step
     NoOp -> return step
 
-
-lookupFunction :: Function -> Translate Function
-lookupFunction func = do
+lookupFunction :: Offset -> Function -> Translate Function
+lookupFunction offset func = do
     env <- get
 
     let i = functionName func
@@ -337,5 +350,20 @@ lookupFunction func = do
         result = lookupKeyValue i known
 
     case result of
-        Nothing -> failBecause (CallToUnknownProcedure i)
+        Nothing -> failBecause offset (CallToUnknownProcedure i)
         Just actual -> return actual
+
+{-|
+Update the environment's idea of where in the source we are, so that if we
+need to generate an error message we can offer one with position
+information.
+-}
+setLocationFrom :: (Render a, Located a) => a -> Translate ()
+setLocationFrom thing = do
+    env <- get
+    let source = environmentSource env
+    let offset = locationOf thing
+    let source' = source { sourceOffset = offset }
+    let env' = env { environmentSource = source' }
+    put env'
+
