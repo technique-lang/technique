@@ -12,7 +12,6 @@ module Technique.Internal where
 import Core.Text
 import Data.DList
 
-import Technique.Failure (Source, emptySource)
 import Technique.Language
 import Technique.Quantity
 

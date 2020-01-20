@@ -98,7 +98,7 @@ translateProcedure procedure =
         Left e -> throwError e
         Right (step,_) -> do
             let func = Subroutine procedure step
-            registerProcedure func
+            registerProcedure (locationOf step) func
             return func
 
 {-|
@@ -118,9 +118,8 @@ translateStatement statement = do
 
     case statement of
         Assignment o vars expr -> do
-            env <- get
-
-            names <- traverse insertVariable vars
+            -- FIXME this offset will be incorrect if > 1 variable.
+            names <- traverse (insertVariable o) vars
             step <- translateExpression expr
 
             let step' = Asynchronous o names step
@@ -183,10 +182,10 @@ translateExpression expr = do
           where
             g :: Identifier -> Translate Step
             g i = do
-                name <- lookupVariable i
+                name <- lookupVariable o i
                 return (Depends o name)
 
-        Operation _ op subexpr1 subexpr2 ->
+        Operation offset op subexpr1 subexpr2 ->
           let
             prim = case op of
                     WaitEither  -> builtinProcedureWaitEither
@@ -195,8 +194,8 @@ translateExpression expr = do
           in do
             step1 <- translateExpression subexpr1
             step2 <- translateExpression subexpr2
-            let tuple = Tuple [step1,step2]
-            return (Invocation attr prim tuple)
+            let tuple = Tuple offset [step1,step2]
+            return (Invocation offset attr prim tuple)
 
         Grouping _ subexpr ->
             translateExpression subexpr
@@ -210,8 +209,8 @@ A given procedure call can either be to a user declared in-scope procedure
 or to a primative builtin. We have Invocation as the Step constructors for
 these cases.
 -}
-registerProcedure :: Function -> Translate ()
-registerProcedure func = do
+registerProcedure :: Offset -> Function -> Translate ()
+registerProcedure offset func = do
     env <- get
 
     let i = functionName func
@@ -219,7 +218,7 @@ registerProcedure func = do
     let defined = containsKey i known
 
     when defined $ do
-        failBecause (ProcedureAlreadyDeclared i)
+        failBecause offset (ProcedureAlreadyDeclared i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -239,14 +238,14 @@ failBecause o reason = do
     throwError failure
 
 
-lookupVariable :: Identifier -> Translate Name
-lookupVariable i = do
+lookupVariable :: Offset -> Identifier -> Translate Name
+lookupVariable offset i = do
     env <- get
     let known = lookupKeyValue i (environmentVariables env)
 
     case known of
         Just name -> return name
-        Nothing -> failBecause (UseOfUnknownIdentifier i)
+        Nothing -> failBecause offset (UseOfUnknownIdentifier i)
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
@@ -254,13 +253,13 @@ them into the environment map. This is where we check for reuse of an
 already declared name (TODO) and given the local use of the identifier a
 scope-local (or globally?) unique name.
 -}
-insertVariable :: Identifier -> Translate Name
-insertVariable i = do
+insertVariable :: Offset -> Identifier -> Translate Name
+insertVariable offset i = do
     env <- get
     let known = environmentVariables env
 
     when (containsKey i known) $ do
-        failBecause (VariableAlreadyInUse i)
+        failBecause offset (VariableAlreadyInUse i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -276,10 +275,9 @@ appendStep :: Step -> Translate ()
 appendStep step = do
     env <- get
     let steps = environmentAccumulated env
-    let source = environmentCurrent env
 
     -- see the Monoid instance for Step for the clever here
-    let steps' = mappend steps (Location source step)
+    let steps' = mappend steps step
 
     let env' = env { environmentAccumulated = steps' }
     put env'
@@ -311,46 +309,40 @@ a function call is made, look up to see if we actually know what it is.
 -}
 resolveFunctions :: Step -> Translate Step
 resolveFunctions step = case step of
-    Invocation attr func substep -> do
-        func' <- lookupFunction func
+    Invocation offset attr func substep -> do
+        func' <- lookupFunction offset func
         substep' <- resolveFunctions substep
-        return (Invocation attr func' substep')
+        return (Invocation offset attr func' substep')
 
-    Tuple substeps -> do
+    Tuple offset substeps -> do
         substeps' <- traverse resolveFunctions substeps
-        return (Tuple substeps')
+        return (Tuple offset substeps')
 
-    Asynchronous names substep -> do
+    Asynchronous offset names substep -> do
         substep' <- resolveFunctions substep
-        return (Asynchronous names substep')
+        return (Asynchronous offset names substep')
 
-    Nested sublist -> do
+    Nested offset sublist -> do
         let actual = toList sublist
         actual' <- traverse resolveFunctions actual
         let sublist' = fromList actual'
-        return (Nested sublist')
+        return (Nested offset sublist')
 
-    Bench pairs -> do
+    Bench offset pairs -> do
         pairs' <- traverse f pairs
-        return (Bench pairs')
+        return (Bench offset pairs')
       where
         f :: (Label,Step) -> Translate (Label,Step)
         f (label,substep) = do
             substep' <- resolveFunctions substep
             return (label, substep')
 
-    Known _ -> return step
-    Depends _ -> return step
+    Known _ _ -> return step
+    Depends _ _ -> return step
     NoOp -> return step
 
-    -- descend, setting location context
-    Located (offset,statement) substep -> do
-        setLocation (offset,statement)
-        resolveFunctions substep
-
-
-lookupFunction :: Function -> Translate Function
-lookupFunction func = do
+lookupFunction :: Offset -> Function -> Translate Function
+lookupFunction offset func = do
     env <- get
 
     let i = functionName func
@@ -358,7 +350,7 @@ lookupFunction func = do
         result = lookupKeyValue i known
 
     case result of
-        Nothing -> failBecause (CallToUnknownProcedure i)
+        Nothing -> failBecause offset (CallToUnknownProcedure i)
         Just actual -> return actual
 
 {-|

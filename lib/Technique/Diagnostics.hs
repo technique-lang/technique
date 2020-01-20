@@ -34,28 +34,28 @@ instance Render Step where
     type Token Step = TechniqueToken
     colourize = colourizeTechnique
     intoDocA step = case step of
-        Known value ->
+        Known _ value ->
             annotate StepToken "Known" <+> intoDocA value
 
-        Depends name ->
+        Depends _ name ->
             annotate StepToken "Depends" <+> intoDocA name
 
         NoOp ->
             annotate ErrorToken "NoOp"
 
-        Tuple steps ->
+        Tuple _ steps ->
             annotate StepToken "Tuple" <+>
                 lparen <+>
                 hsep (punctuate comma (fmap intoDocA steps)) <+>
                 rparen
 
-        Nested steps ->
+        Nested _ steps ->
             vcat (toList (fmap intoDocA steps))
 
-        Asynchronous names substep ->
+        Asynchronous _ names substep ->
             annotate StepToken "Asynchronous" <+> commaCat names <+> "<-" <+> intoDocA substep
 
-        Invocation attr func substep ->
+        Invocation _ attr func substep ->
           let
             i = functionName func
           in
@@ -63,7 +63,7 @@ instance Render Step where
                 line <> indent 4 (intoDocA substep)
 
 
-        Bench pairs ->      -- [(Label,Step)]
+        Bench _ pairs ->      -- [(Label,Step)]
             annotate StepToken "Bench" <>
                 line <>
                 indent 4 (
@@ -74,10 +74,6 @@ instance Render Step where
             f :: (Label,Step) -> Doc TechniqueToken
             f (label,substep) =
                 intoDocA label <+> "<-" <+> intoDocA substep
-
-        Location _ substep ->
-            intoDocA substep
-
 
 instance Render Name where
     type Token Name = TechniqueToken
