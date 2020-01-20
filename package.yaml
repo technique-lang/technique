@@ -1,5 +1,5 @@
 name: technique
-version:  0.2.4
+version:  0.2.5
 synopsis: Procedures and Sequences
 description: |
   A domain specific lanaguage for procedures.
