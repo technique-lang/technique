@@ -35,7 +35,7 @@ data Environment = Environment
     , environmentRole :: Attribute
 
     -- for reporting compiler errors
-    , environmentCurrent :: Source
+    , environmentSource :: Source
 
     -- the accumulator for the fold that the Translate monad represents
     , environmentAccumulated :: Step
@@ -47,7 +47,7 @@ emptyEnvironment = Environment
     { environmentVariables = emptyMap
     , environmentFunctions = emptyMap
     , environmentRole = Inherit
-    , environmentCurrent = emptySource
+    , environmentSource = emptySource
     , environmentAccumulated = NoOp
     }
 
@@ -361,9 +361,9 @@ information.
 setLocationFrom :: (Render a, Located a) => a -> Translate ()
 setLocationFrom thing = do
     env <- get
-    let source = environmentCurrent env
+    let source = environmentSource env
     let offset = locationOf thing
     let source' = source { sourceOffset = offset }
-    let env' = env { environmentCurrent = source' }
+    let env' = env { environmentSource = source' }
     put env'
 

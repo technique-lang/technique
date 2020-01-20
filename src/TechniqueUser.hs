@@ -110,7 +110,7 @@ translationPhase source technique =
   let
     env0 = emptyEnvironment
         { environmentFunctions = builtinProcedures
-        , environmentCurrent = source
+        , environmentSource = source
         }
     result = runTranslate env0 (translateTechnique technique)
   in do
