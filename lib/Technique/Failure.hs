@@ -25,7 +25,7 @@ import Text.Megaparsec.Error
     , ErrorItem(..)
     , ParseErrorBundle(..)
     )
-import Text.Megaparsec.Pos (mkPos, unPos)
+import Text.Megaparsec.Pos (unPos)
 
 import Technique.Language hiding (Label)
 import Technique.Formatter
@@ -249,30 +249,3 @@ extractParseError e = case e of
           in
             text
         EndOfInput -> "end of input"
-
-{-|
-This is a wrapper to put the line,column calculation into **megaparsec** terms.
--}
-reachOffset2 :: Int -> PosState Rope -> (SourcePos, Rope, PosState Rope)
-reachOffset2 target pstate =
-  let
-    input = pstateInput pstate
-    (before,after) = splitRope target input
-    src = pstateSourcePos pstate
-    l = unPos (sourceLine src)
-    c = unPos (sourceColumn src)
-
-    (l1,c1) = calculatePositionEnd before
-    l' = l + l1
-    c' = c + c1
-
-    src' = src
-        { sourceLine = mkPos l'
-        , sourceColumn = mkPos c'
-        }
-    pstate' = pstate
-        { pstateSourcePos = src'
-        }
-  in
-    (src',after,pstate')
-
