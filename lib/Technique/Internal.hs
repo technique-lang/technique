@@ -104,18 +104,28 @@ absolutely fabulous.
 -- while it probably would work to put an Asynchronous into a Tuple list,
 -- it's not valid from the point of view of the surface language syntax.
 data Step
-    = Known Value                           -- literals ("axioms")
-    | Bench [(Label,Step)]
-    | Depends Name                          -- block waiting on a value ("reference to a hypothesis denoted by a variable")
+    = Known Offset Value                           -- literals ("axioms")
+    | Bench Offset [(Label,Step)]
+    | Depends Offset Name                          -- block waiting on a value ("reference to a hypothesis denoted by a variable")
     | NoOp
-    | Tuple [Step]
-    | Asynchronous [Name] Step              -- assignment (ie lambda, "implication introduction"
-    | Invocation Attribute Function Step    -- function application ("implication elimination") on a [sub] Procedure
-    | Nested (DList Step)
-    | Located (Offset,Statement) Step
+    | Tuple Offset [Step]
+    | Asynchronous Offset [Name] Step              -- assignment (ie lambda, "implication introduction"
+    | Invocation Offset Attribute Function Step    -- function application ("implication elimination") on a [sub] Procedure
+    | Nested Offset (DList Step)
                                             -- assumption axiom?
                                             -- weakening?
     deriving (Eq,Show)
+
+instance Located Step where
+    locationOf step = case step of
+        Known offset _ -> offset
+        Bench offset _ -> offset
+        Depends offset _ -> offset
+        NoOp -> -2
+        Tuple offset _ -> offset
+        Asynchronous offset _ _ -> offset
+        Invocation offset _ _ _ -> offset
+        Nested offset _ -> offset
 
 instance Semigroup Step where
     (<>) = mappend
@@ -124,7 +134,7 @@ instance Monoid Step where
     mempty = NoOp
     mappend NoOp s2 = s2
     mappend s1 NoOp = s1
-    mappend (Nested list1) (Nested list2) = Nested (append list1 list2)
-    mappend (Nested list1) s2 = Nested (snoc list1 s2)
-    mappend s1 (Nested list2) = Nested (cons s1 list2)
-    mappend s1 s2 = Nested (cons s1 (singleton s2))
+    mappend (Nested offset1 list1) (Nested _ list2) = Nested offset1 (append list1 list2)
+    mappend (Nested offset1 list1) s2 = Nested offset1 (snoc list1 s2)
+    mappend s1 (Nested _ list2) = Nested (locationOf s1) (cons s1 list2)
+    mappend s1 s2 = Nested (locationOf s1) (cons s1 (singleton s2))

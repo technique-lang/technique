@@ -53,21 +53,21 @@ into a monadic sequence which results in a Result.
 -}
 evaluateStep :: Step -> Evaluate Value
 evaluateStep step = case step of
-    Known value -> do
+    Known _ value -> do
         return value
 
-    Depends name -> do
+    Depends _ name -> do
         blockUntilValue name
 
-    Tuple steps -> do
+    Tuple _ steps -> do
         values <- traverse evaluateStep steps
         return (Parametriq values)
 
-    Asynchronous names substep -> do
+    Asynchronous _ names substep -> do
         promise <- assignNames names substep
         undefined -- TODO put primise into environment
 
-    Invocation attr func substep -> do
+    Invocation _ attr func substep -> do
         functionApplication func substep   -- TODO do something with role!
 
 functionApplication :: Function -> Step -> Evaluate Value --  IO Promise ?

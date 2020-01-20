@@ -104,31 +104,31 @@ instance Render Block where
         line <>
         annotate SymbolToken rbrace
       where
-        go :: [(Offset,Statement)] -> Doc TechniqueToken
+        go :: [Statement] -> Doc TechniqueToken
         go [] = emptyDoc
-        go ((_,Series):(_,x1):xs) = intoDocA Series <> intoDocA x1 <> go xs
-        go ((_,x):xs) = line <> intoDocA x <> go xs
+        go (x@(Series _):x1:xs) = intoDocA x <> intoDocA x1 <> go xs
+        go (x:xs) = line <> intoDocA x <> go xs
 
 instance Render Statement where
     type Token Statement = TechniqueToken
     colourize = colourizeTechnique
     intoDocA statement = case statement of
-        Assignment vars expr ->
+        Assignment _ vars expr ->
             commaCat vars <+> annotate SymbolToken "=" <+> intoDocA expr
 
-        Execute expr ->
+        Execute _ expr ->
             intoDocA expr
 
-        Comment text ->
+        Comment _ text ->
             "-- " <> pretty text  -- TODO what about multiple lines?
 
-        Declaration proc ->
+        Declaration _ proc ->
             intoDocA proc
 
-        Blank ->
+        Blank _ ->
             emptyDoc
 
-        Series ->
+        Series _ ->
             annotate SymbolToken " ; "
 
 instance Render Attribute where
@@ -143,38 +143,38 @@ instance Render Expression where
     type Token Expression = TechniqueToken
     colourize = colourizeTechnique
     intoDocA expr = case expr of
-        Application name subexpr ->
+        Application _ name subexpr ->
             annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
 
-        None ->
+        None _ ->
             annotate SymbolToken ("()")
 
-        Undefined ->
+        Undefined _ ->
             annotate ErrorToken "?"
 
-        Amount qty ->
+        Amount _ qty ->
             intoDocA qty
 
-        Text text ->
+        Text _ text ->
             annotate SymbolToken dquote <>
             annotate StringToken (pretty text) <>
             annotate SymbolToken dquote
 
-        Object tablet ->
+        Object _ tablet ->
             intoDocA tablet
 
-        Variable vars ->
+        Variable _ vars ->
             commaCat vars
 
-        Operation operator subexpr1 subexpr2 ->
+        Operation _ operator subexpr1 subexpr2 ->
             intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
 
-        Grouping subexpr ->
+        Grouping _ subexpr ->
             annotate SymbolToken lparen <>
             intoDocA subexpr <>
             annotate SymbolToken rparen
 
-        Restriction attribute block ->
+        Restriction _ attribute block ->
             intoDocA attribute <>
             line <>
             intoDocA block        -- TODO some nesting?

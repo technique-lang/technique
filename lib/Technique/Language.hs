@@ -90,32 +90,57 @@ emptyProcedure = Procedure
     , procedureBlock = Block []
     }
 
-data Block = Block [(Offset,Statement)]
+data Block = Block [Statement]
     deriving (Show, Eq, Ord)
 
 type Offset = Int
 
+class Located a where
+    locationOf :: a -> Offset
+
 data Statement
-    = Assignment [Identifier] Expression
-    | Execute Expression
-    | Comment Rope
-    | Declaration Procedure
-    | Blank
-    | Series
+    = Assignment Offset [Identifier] Expression
+    | Execute Offset Expression
+    | Comment Offset Rope
+    | Declaration Offset Procedure
+    | Blank Offset
+    | Series Offset
     deriving (Show, Ord, Eq)
 
+instance Located Statement where
+    locationOf statement = case statement of
+        Assignment offset _ _ -> offset
+        Execute offset _ -> offset
+        Comment offset _ -> offset
+        Declaration offset _ -> offset
+        Blank offset -> offset
+        Series offset -> offset
+
 data Expression
-    = Application Identifier Expression     -- this had better turn out to be a procedure
-    | None
-    | Text Rope
-    | Amount Quantity
-    | Undefined
-    | Object Tablet
-    | Variable [Identifier]
-    | Operation Operator Expression Expression
-    | Grouping Expression
-    | Restriction Attribute Block
+    = Application Offset Identifier Expression     -- this had better turn out to be a procedure
+    | None Offset
+    | Text Offset Rope
+    | Amount Offset Quantity
+    | Undefined Offset
+    | Object Offset Tablet
+    | Variable Offset [Identifier]
+    | Operation Offset Operator Expression Expression
+    | Grouping Offset Expression
+    | Restriction Offset Attribute Block
     deriving (Show, Ord, Eq)
+
+instance Located Expression where
+    locationOf expr = case expr of
+        Application offset _ _ -> offset
+        None offset -> offset
+        Text offset _ -> offset
+        Amount offset _ -> offset
+        Undefined offset -> offset
+        Object offset _ -> offset
+        Variable offset _ -> offset
+        Operation offset _ _ _ -> offset
+        Grouping offset _ -> offset
+        Restriction offset _ _ -> offset
 
 data Tablet
     = Tablet [Binding]

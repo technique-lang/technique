@@ -33,16 +33,22 @@ import Technique.Formatter
 data Source = Source
     { sourceContents :: Rope
     , sourceFilename :: FilePath
-    , sourceStatement :: Statement
-    , sourceOffset :: Offset
+    , sourceOffset :: !Offset
     }
     deriving (Eq,Ord,Show)
+
+instance Located Source where
+    locationOf = sourceOffset
+
+instance Render Source where
+    type Token Source = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA source = pretty (sourceFilename source) <+> pretty (sourceOffset source) 
 
 emptySource :: Source
 emptySource = Source
     { sourceContents = emptyRope
     , sourceFilename = "<undefined>"
-    , sourceStatement = Blank
     , sourceOffset = -1
     }
 
