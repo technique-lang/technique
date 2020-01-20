@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module CheckAbstractSyntax
-    ( checkAbstractSyntax
+module CheckConcreteSyntax
+    ( checkConcreteSyntax
+    , main
     )
 where
 
+import Core.System
 import Core.Text.Rope ()
 import Core.Text.Utilities
 import Data.Text.Prettyprint.Doc (line)
@@ -20,6 +22,10 @@ import Technique.Quantity
 
 import ExampleProcedure hiding (main)
 
+main :: IO ()
+main = do
+    finally (hspec checkConcreteSyntax) (putStrLn ".")
+
 {-|
 When we set the expectation using a [quote| ... |] here doc we get a
 trailing newline that is not present in the rendered AST element. So
@@ -30,10 +36,10 @@ renderTest x = show (intoDocA x <> line)
 
 {-|
 These are less tests than a body of code that exercises construction of
-an abstract syntax tree.
+our concrete syntax tree.
 -}
-checkAbstractSyntax :: Spec
-checkAbstractSyntax = do
+checkConcreteSyntax :: Spec
+checkConcreteSyntax = do
     describe "Constructions matching intended language design" $ do
         it "key builtin procedures are available" $ do
             functionName builtinProcedureTask `shouldBe` Identifier "task"
@@ -41,7 +47,7 @@ checkAbstractSyntax = do
         it "procedure's function name is correct" $ do
             procedureName exampleRoastTurkey `shouldBe` Identifier "roast_turkey"
 
-    describe "Rendering of abstract syntax tree to Technique language" $ do
+    describe "Rendering of concrete syntax tree to Technique language" $ do
         it "renders a list as tuple" $ do
             show (commaCat [Identifier "one", Identifier "two", Identifier "three"])
                 `shouldBe` "one,two,three"
@@ -51,8 +57,8 @@ checkAbstractSyntax = do
         it "renders a tablet as expected" $
           let
             tablet = Tablet
-                        [ Binding (Label "Final temperature") (Variable [Identifier "temp"])
-                        , Binding (Label "Cooking time") (Grouping (Amount (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
+                        [ Binding (Label "Final temperature") (Variable 0 [Identifier "temp"])
+                        , Binding (Label "Cooking time") (Grouping 0 (Amount 0 (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
                         ]
           in do
             renderTest tablet `shouldBe` [quote|
@@ -66,7 +72,7 @@ checkAbstractSyntax = do
         it "renders a normal block with indentation" $
           let
             b = Block
-                [ (0, Execute (Variable [Identifier "x"]))
+                [ Execute 0 (Variable 0 [Identifier "x"])
                 ]
           in do
             renderTest b `shouldBe` [quote|
@@ -82,7 +88,7 @@ checkAbstractSyntax = do
                     { procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
                     , procedureOutput = [Type "Y"]
-                    , procedureBlock = Block [(0, Execute (Variable [Identifier "z"]))]
+                    , procedureBlock = Block [ Execute 0 (Variable 0 [Identifier "z"]) ]
                     }
           in do
             renderTest p `shouldBe` [quote|

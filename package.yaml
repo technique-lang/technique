@@ -72,7 +72,7 @@ tests:
       - tests
     main: TestSuite.hs
     other-modules:
-      - CheckAbstractSyntax
+      - CheckConcreteSyntax
       - CheckSkeletonParser
       - CheckQuantityBehaviour
       - CheckTranslationStage
