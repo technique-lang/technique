@@ -101,11 +101,11 @@ instance Render FailureReason where
           in
             un <> ex
 
-        VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
-        ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
-        CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
-        UseOfUnknownIdentifier i -> "Variable '" <> intoDocA i <> "' not in scope."
-        EncounteredUndefined -> "Encountered 'undefined' marker."
+        VariableAlreadyInUse i -> "Variable by the name of '" <> annotate VariableToken (intoDocA i) <> "' already defined."
+        ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> annotate ProcedureToken (intoDocA i) <> "' already declared."
+        CallToUnknownProcedure i -> "Call to unknown procedure '" <> annotate ApplicationToken (intoDocA i) <> "'."
+        UseOfUnknownIdentifier i -> "Variable '" <> annotate VariableToken (intoDocA i) <> "' not in scope."
+        EncounteredUndefined -> "Encountered an " <> annotate ErrorToken "undefined" <> " marker."
 
 {-|
 ErrorItem is a bit overbearing, but we handle its /four/ cases by saying
