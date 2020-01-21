@@ -37,7 +37,7 @@ instance Render Status where
     colourize = colourizeTechnique
     intoDocA status = case status of
         Ok -> annotate LabelToken "ok"
-        Failed e -> annotate ErrorToken "failed" <+> intoDocA e
+        Failed e -> intoDocA e
 
 data Source = Source
     { sourceContents :: Rope
