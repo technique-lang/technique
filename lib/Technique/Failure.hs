@@ -30,6 +30,15 @@ import Text.Megaparsec.Pos (unPos)
 import Technique.Language hiding (Label)
 import Technique.Formatter
 
+data Status = Ok | Failed CompilationError
+
+instance Render Status where
+    type Token Status = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA status = case status of
+        Ok -> annotate LabelToken "ok"
+        Failed e -> annotate ErrorToken "failed" <+> intoDocA e
+
 data Source = Source
     { sourceContents :: Rope
     , sourceFilename :: FilePath
@@ -187,7 +196,7 @@ instance Render CompilationError where
         padding = replicateChar (c - 1) ' '
         caroted = replicateChar (numberOfCarots reason) '^'
       in
-        filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
+        annotate StepToken filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
         pretty padding <> annotate ErrorToken (pretty caroted) <> hardline <>
