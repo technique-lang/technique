@@ -46,7 +46,7 @@ commandCheckTechnique = do
             terminate code
         Cycle -> do
             -- use inotify to rebuild on changes
-            forever (syntaxCheck procfile >> waitForChange [procfile])
+            forever (syntaxCheck procfile >> waitForChange [procfile] >> writeR Reload)
 
 syntaxCheck :: FilePath -> Program None Int
 syntaxCheck procfile =

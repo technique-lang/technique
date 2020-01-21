@@ -30,7 +30,7 @@ import Text.Megaparsec.Pos (unPos)
 import Technique.Language hiding (Label)
 import Technique.Formatter
 
-data Status = Ok | Failed CompilationError
+data Status = Ok | Failed CompilationError | Reload
 
 instance Render Status where
     type Token Status = TechniqueToken
@@ -38,6 +38,7 @@ instance Render Status where
     intoDocA status = case status of
         Ok -> annotate LabelToken "ok"
         Failed e -> intoDocA e
+        Reload -> annotate MagicToken "Δ"
 
 data Source = Source
     { sourceContents :: Rope
