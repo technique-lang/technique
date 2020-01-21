@@ -96,7 +96,7 @@ pMagicLine = do
     void spaceChar <?> "a space character"
     void (string "technique")
     void spaceChar <?> "a space character"
-    void (char 'v') <?> "the character v and then a number"
+    void (char 'v') <?> "the character 'v' and then a number"
     v <- numberLiteral <?> "the language version"
     void newline
     return (fromIntegral v)

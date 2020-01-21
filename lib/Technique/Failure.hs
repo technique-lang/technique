@@ -54,13 +54,13 @@ emptySource = Source
 
 data FailureReason
     = InvalidSetup                         -- TODO placeholder
-    | ParsingFailed [Rope] [Rope]
+    | ParsingFailed [ErrorItem Char] [ErrorItem Char]
     | VariableAlreadyInUse Identifier
     | ProcedureAlreadyDeclared Identifier
     | CallToUnknownProcedure Identifier
     | UseOfUnknownIdentifier Identifier
     | EncounteredUndefined
-    deriving (Eq,Ord,Show)
+    deriving Show
 
 instance Enum FailureReason where
     fromEnum x = case x of
@@ -92,12 +92,12 @@ instance Render FailureReason where
         ParsingFailed unexpected expected ->
           let
             un = case unexpected of
-                [token] -> "unexpected " <> formatErrorToken token <> hardline
-                _ -> emptyDoc
+                [] -> emptyDoc
+                (item:_) -> "unexpected " <> formatErrorItem StepToken item <> hardline
 
             ex = case expected of
                 [] -> emptyDoc
-                xs -> "expected " <> hsep (punctuate comma (fmap formatErrorToken xs)) <> "."
+                items -> "expected " <> hsep (punctuate comma (fmap (formatErrorItem SymbolToken) items)) <> "."
           in
             un <> ex
 
@@ -107,35 +107,42 @@ instance Render FailureReason where
         UseOfUnknownIdentifier i -> "Variable '" <> intoDocA i <> "' not in scope."
         EncounteredUndefined -> "Encountered 'undefined' marker."
 
-formatErrorToken :: Rope -> Doc ann
-formatErrorToken text = if widthRope text == 1
-    then formatErrorChar text
-    else pretty text
-
-formatErrorChar :: Rope -> Doc ann
-formatErrorChar text =
-  let
-    ch = head (fromRope text) :: Char
-  in
-    case ch of
-        '\n' -> "newline"
-        _ ->  pretty ch
-
-{-
-            let
-                statement = sourceStatement source
-                offset = sourceOffset source
-            in
-                pretty offset <> ": " <> intoDocA statement <> line <>
+{-|
+ErrorItem is a bit overbearing, but we handle its /four/ cases by saying
+single quotes around characters, double quotes around strings, /no/ quotes
+around labels (descriptive text) and hard code the end of input and newline
+cases.
 -}
+formatErrorItem :: TechniqueToken -> ErrorItem Char -> Doc TechniqueToken
+formatErrorItem token item = case item of
+
+-- It would appear that **prettyprinter** has a Pretty instance for
+-- NonEmpty a. In this case token ~ Char so these are Strings, ish.
+-- Previously we converted to Rope, but looks like we can go directly.
+
+    Tokens tokens ->
+        case NonEmpty.uncons tokens of
+            (ch, Nothing) -> case ch of
+                '\n' -> annotate token "newline"
+                _  -> pretty '\'' <> annotate token (pretty ch) <> pretty '\''
+
+            _ -> pretty '\"' <> annotate token (pretty tokens) <> pretty '\"'
+
+    Label chars ->
+        annotate token (pretty chars)
+
+    EndOfInput ->
+        "end of input"
 
 numberOfCarots :: FailureReason -> Int
 numberOfCarots reason = case reason of
     InvalidSetup -> 0
-    ParsingFailed unexpected _ ->
-        case unexpected of
-            [token] -> widthRope token - 2
-            _ -> 1
+    ParsingFailed unexpected _ -> case unexpected of
+        [] -> 1
+        (item:_) -> case item of
+            Tokens tokens -> NonEmpty.length tokens
+            Label chars -> NonEmpty.length chars
+            EndOfInput -> 1
     VariableAlreadyInUse i -> widthRope (unIdentifier i)
     ProcedureAlreadyDeclared i -> widthRope (unIdentifier i)
     CallToUnknownProcedure i -> widthRope (unIdentifier i)
@@ -179,12 +186,11 @@ instance Render CompilationError where
 
         padding = replicateChar (c - 1) ' '
         caroted = replicateChar (numberOfCarots reason) '^'
-
       in
         filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
-        pretty padding <> pretty caroted <> hardline <>
+        pretty padding <> annotate ErrorToken (pretty caroted) <> hardline <>
         hardline <>
         intoDocA reason
 
@@ -222,30 +228,14 @@ extractErrorBundle source bundle =
   in
     CompilationError source' reason
 
-extractParseError :: ParseError T.Text Void -> (Int,[Rope],[Rope])
+extractParseError :: ParseError T.Text Void -> (Int,[ErrorItem Char],[ErrorItem Char])
 extractParseError e = case e of
     TrivialError offset unexpected0 expected0 ->
       let
         unexpected = case unexpected0 of
-            Just item -> itemToRope item : []
+            Just item -> item : []
             Nothing -> []
-        expected = fmap itemToRope (OrdSet.toList expected0)
+        expected = OrdSet.toList expected0
       in
         (offset,unexpected,expected)
     FancyError _ _ -> error "Unexpected parser error"
-
-  where
-    itemToRope :: ErrorItem Char -> Rope
-    itemToRope item = case item of
-        Tokens tokens ->                    -- tokens ~ chars
-          let
-            text = intoRope (NonEmpty.toList tokens)
-          in case widthRope text of
-            1 -> "'" <> text <> "'"
-            _ -> "\"" <> text <> "\""
-        Label chars ->                      -- wow. "Non-empty string"
-          let
-            text = intoRope (NonEmpty.toList chars)
-          in
-            text
-        EndOfInput -> "end of input"
