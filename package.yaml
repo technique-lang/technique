@@ -56,7 +56,7 @@ executables:
   technique:
     dependencies:
       - technique
-    ghc-options: -threaded -dynamic
+    ghc-options: -threaded
     source-dirs: src
     main: TechniqueMain.hs
     other-modules:
@@ -67,7 +67,7 @@ tests:
     dependencies:
       - hspec
       - technique
-    ghc-options: -threaded -dynamic
+    ghc-options: -threaded
     source-dirs:
       - tests
     main: TestSuite.hs
