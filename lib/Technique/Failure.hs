@@ -166,12 +166,12 @@ instance Render CompilationError where
       let
         filename = pretty (sourceFilename source)
         contents = intoRope (sourceContents source)
-        offset = sourceOffset source
+        o = sourceOffset source
 
 -- Given an offset point where the error occured, split the input at that
 -- point.
 
-        (before,_) = splitRope offset contents
+        (before,_) = splitRope o contents
         (l,c) = calculatePositionEnd before
 
 -- Isolate the line on which the error occured. l and c are 1-origin here,
@@ -216,7 +216,7 @@ extractErrorBundle source bundle =
   let
     errors = bundleErrors bundle
     first = NonEmpty.head errors
-    (offset,unexpected,expected) = extractParseError first
+    (o,unexpected,expected) = extractParseError first
     pstate = bundlePosState bundle
     srcpos = pstateSourcePos pstate
 
@@ -233,19 +233,19 @@ extractErrorBundle source bundle =
     reason = ParsingFailed unexpected expected
 
     source' = source
-        { sourceOffset = offset + l + c
+        { sourceOffset = o + l + c
         }
   in
     CompilationError source' reason
 
 extractParseError :: ParseError T.Text Void -> (Int,[ErrorItem Char],[ErrorItem Char])
 extractParseError e = case e of
-    TrivialError offset unexpected0 expected0 ->
+    TrivialError o unexpected0 expected0 ->
       let
         unexpected = case unexpected0 of
             Just item -> item : []
             Nothing -> []
         expected = OrdSet.toList expected0
       in
-        (offset,unexpected,expected)
+        (o,unexpected,expected)
     FancyError _ _ -> error "Unexpected parser error"
