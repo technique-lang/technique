@@ -90,6 +90,9 @@ Skip at least /one/ actual space character.
 skipSpace1 :: Parser ()
 skipSpace1 = void (hidden (some (char ' ' <|> char '\t')))
 
+digitChar0 :: Parser Char
+digitChar0 = label "a digit" $ digitChar
+
 pMagicLine :: Parser Int
 pMagicLine = do
     void (char '%') <?> "first line to begin with % character"
@@ -144,7 +147,7 @@ pProcedureDeclaration = do
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
-identifierChar = hidden (lowerChar <|> digitChar <|> char '_' <|> char '\'')
+identifierChar = hidden (lowerChar <|> digitChar0 <|> char '_' <|> char '\'')
 
 
 -- these do NOT consume trailing space. That's for pExpression to do.
@@ -161,7 +164,7 @@ pIdentifiers1 :: Parser [Identifier]
 pIdentifiers1 = sepBy1 (pIdentifier <* skipSpace) (char ',' <* skipSpace)
 
 typeChar :: Parser Char
-typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
+typeChar = hidden (upperChar <|> lowerChar <|> digitChar0)
 
 pType :: Parser Type
 pType = label "a valid type" $ try
@@ -204,7 +207,7 @@ unitLiteral = label "a units symbol" $ do
 
 numberLiteral :: Parser Int64
 numberLiteral = label "a number literal" $ do
-    digits <- some digitChar
+    digits <- some digitChar0
     let result = readMaybe digits
     case result of
         Just number -> return number
@@ -212,10 +215,10 @@ numberLiteral = label "a number literal" $ do
 
 decimalLiteral :: Parser Decimal
 decimalLiteral = label "a decimal literal" $ do
-    digits1 <- some digitChar
+    digits1 <- some digitChar0
     fraction <- optional (do
         void (char '.')
-        some digitChar)
+        some digitChar0)
 
     return (case fraction of
         Nothing ->
@@ -260,7 +263,7 @@ pQuantity =
         -- decimal, a space, and then one of the characters that starts an
         -- uncertainty, magnitude, or symbol.
         lookAhead (try (do
-            skipMany (digitChar <|> char '.' <|> char '-' <|> char ' ')
+            skipMany (digitChar0 <|> char '.' <|> char '-' <|> char ' ')
             void (char '±' <|> char '+' <|> char '×' <|> char 'x' <|> unitChar)
             ))
 
@@ -431,7 +434,7 @@ pExpression = do
         lookAhead (try (do
             skipMany identifierChar
             skipSpace1
-            void (identifierChar <|> digitChar <|> char '(' <|> char '\"')))
+            void (identifierChar <|> digitChar0 <|> char '(' <|> char '\"')))
 
         name <- pIdentifier
         -- ie at least one space
