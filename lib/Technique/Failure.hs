@@ -107,7 +107,7 @@ instance Render FailureReason where
 
             ex = case expected of
                 [] -> emptyDoc
-                items -> "expected " <> hsep (punctuate comma (fmap (formatErrorItem SymbolToken) items)) <> "."
+                items -> "expecting " <> hcat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
           in
             un <> ex
 
@@ -117,6 +117,12 @@ instance Render FailureReason where
         UseOfUnknownIdentifier i -> "Variable '" <> annotate VariableToken (intoDocA i) <> "' not in scope."
         EncounteredUndefined -> "Encountered an " <> annotate ErrorToken "undefined" <> " marker."
 
+fancyPunctuate :: [Doc ann] -> [Doc ann]
+fancyPunctuate list = case list of
+    [] -> []
+    [x] -> [x]
+    (x1:x2:[]) -> x1 : ", or " : x2 : []
+    (x1:xs) -> x1 : ", " : fancyPunctuate xs
 {-|
 ErrorItem is a bit overbearing, but we handle its /four/ cases by saying
 single quotes around characters, double quotes around strings, /no/ quotes
