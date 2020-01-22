@@ -35,13 +35,10 @@ import Technique.Formatter () -- Render instances for main function
 
 exampleProcedureOven :: Procedure
 exampleProcedureOven =
-    Procedure
+    emptyProcedure
         { procedureName = Identifier "oven"
-        , procedureParams = []
         , procedureInput = [Type "Temperature"]
         , procedureOutput = [Type "()"] -- ?
-        , procedureTitle = Nothing
-        , procedureDescription = Nothing
         , procedureBlock = Block [ Execute 0 (Application 0 (Identifier "task") (Text 0 "Set oven temperature!")) ]
         }
 
@@ -91,7 +88,8 @@ exampleRoastTurkey =
                 ]
   in
     Procedure
-        { procedureName = Identifier "roast_turkey"
+        { procedureOffset = 0
+        , procedureName = Identifier "roast_turkey"
         , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
         , procedureInput = [i]
         , procedureOutput = [o]

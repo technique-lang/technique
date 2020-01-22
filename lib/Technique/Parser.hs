@@ -544,12 +544,14 @@ pMarkdown = do
 
 pProcedureCode :: Parser Procedure
 pProcedureCode = do
+    offset <- getOffset
     (name,params,ins,out) <- pProcedureDeclaration <* skipSpace <* optional newline <* skipSpace
 
     block <- pBlock <* skipSpace <* optional newline
 
     return (Procedure
-        { procedureName = name
+        { procedureOffset = offset
+        , procedureName = name
         , procedureParams = params
         , procedureInput = ins
         , procedureOutput = out

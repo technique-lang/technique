@@ -69,7 +69,8 @@ unitType :: Type
 unitType = Type "()"
 
 data Procedure = Procedure
-    { procedureName :: Identifier
+    { procedureOffset :: Offset
+    , procedureName :: Identifier
     , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: [Type]
@@ -81,7 +82,8 @@ data Procedure = Procedure
 
 emptyProcedure :: Procedure
 emptyProcedure = Procedure
-    { procedureName = Identifier "none"
+    { procedureOffset = -1
+    , procedureName = Identifier "none"
     , procedureParams = []
     , procedureInput = [unitType]
     , procedureOutput = [unitType]
@@ -97,6 +99,9 @@ type Offset = Int
 
 class Located a where
     locationOf :: a -> Offset
+
+instance Located Procedure where
+    locationOf = procedureOffset
 
 data Statement
     = Assignment Offset [Identifier] Expression
