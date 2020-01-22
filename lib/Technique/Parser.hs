@@ -90,13 +90,16 @@ Skip at least /one/ actual space character.
 skipSpace1 :: Parser ()
 skipSpace1 = void (hidden (some (char ' ' <|> char '\t')))
 
+digitChar0 :: Parser Char
+digitChar0 = label "a digit" $ digitChar
+
 pMagicLine :: Parser Int
 pMagicLine = do
     void (char '%') <?> "first line to begin with % character"
     void spaceChar <?> "a space character"
     void (string "technique")
     void spaceChar <?> "a space character"
-    void (char 'v') <?> "the character v and then a number"
+    void (char 'v') <?> "the character 'v' and then a number"
     v <- numberLiteral <?> "the language version"
     void newline
     return (fromIntegral v)
@@ -144,7 +147,7 @@ pProcedureDeclaration = do
     return (name,params,ins,out)
 
 identifierChar :: Parser Char
-identifierChar = hidden (lowerChar <|> digitChar <|> char '_' <|> char '\'')
+identifierChar = hidden (lowerChar <|> digitChar0 <|> char '_' <|> char '\'')
 
 
 -- these do NOT consume trailing space. That's for pExpression to do.
@@ -161,7 +164,7 @@ pIdentifiers1 :: Parser [Identifier]
 pIdentifiers1 = sepBy1 (pIdentifier <* skipSpace) (char ',' <* skipSpace)
 
 typeChar :: Parser Char
-typeChar = hidden (upperChar <|> lowerChar <|> digitChar)
+typeChar = hidden (upperChar <|> lowerChar <|> digitChar0)
 
 pType :: Parser Type
 pType = label "a valid type" $ try
@@ -204,7 +207,7 @@ unitLiteral = label "a units symbol" $ do
 
 numberLiteral :: Parser Int64
 numberLiteral = label "a number literal" $ do
-    digits <- some digitChar
+    digits <- some digitChar0
     let result = readMaybe digits
     case result of
         Just number -> return number
@@ -212,10 +215,10 @@ numberLiteral = label "a number literal" $ do
 
 decimalLiteral :: Parser Decimal
 decimalLiteral = label "a decimal literal" $ do
-    digits1 <- some digitChar
+    digits1 <- some digitChar0
     fraction <- optional (do
         void (char '.')
-        some digitChar)
+        some digitChar0)
 
     return (case fraction of
         Nothing ->
@@ -260,7 +263,7 @@ pQuantity =
         -- decimal, a space, and then one of the characters that starts an
         -- uncertainty, magnitude, or symbol.
         lookAhead (try (do
-            skipMany (digitChar <|> char '.' <|> char '-' <|> char ' ')
+            skipMany (digitChar0 <|> char '.' <|> char '-' <|> char ' ')
             void (char '±' <|> char '+' <|> char '×' <|> char 'x' <|> unitChar)
             ))
 
@@ -372,33 +375,33 @@ pAttribute =
 
 pExpression :: Parser Expression
 pExpression = do
-    offset <- getOffset
-    expr1 <- pTerm offset
+    o <- getOffset
+    expr1 <- pTerm o
     skipSpace
     rest <- (optional (try pOperation2))
     skipSpace
     case rest of
-        Just (oper,expr2)   -> return (Operation offset oper expr1 expr2)
+        Just (oper,expr2)   -> return (Operation o oper expr1 expr2)
         Nothing             -> return expr1
   where
-    pTerm offset =
-        pNone offset <|>
-        pUndefined offset <|>
-        pRestriction offset <|>
-        pGrouping offset <|>
-        pObject offset <|>
-        pApplication offset <|>
-        pLiteral offset <|>
-        pVariable offset
+    pTerm o =
+        pNone o <|>
+        pUndefined o <|>
+        pRestriction o <|>
+        pGrouping o <|>
+        pObject o <|>
+        pApplication o <|>
+        pLiteral o <|>
+        pVariable o
 
     pNone :: Offset -> Parser Expression
-    pNone offset = do
+    pNone o = do
         void (string "()")
-        return (None offset)
+        return (None o)
 
-    pUndefined offset = do
+    pUndefined o = do
         void (char '?')
-        return (Undefined offset)
+        return (Undefined o)
 
     pOperation2 = do                    -- 2 as in 2nd half
         operator <- pOperator
@@ -406,13 +409,13 @@ pExpression = do
         subexpr2 <- pExpression
         return (operator,subexpr2)
 
-    pRestriction offset = do
+    pRestriction o = do
         attr <- pAttribute
         hidden space
         block <- pBlock
-        return (Restriction offset attr block)
+        return (Restriction o attr block)
 
-    pGrouping offset = do
+    pGrouping o = do
         void (char '(')
         skipSpace
 
@@ -421,49 +424,49 @@ pExpression = do
         void (char ')')
         skipSpace
 
-        return (Grouping offset subexpr)
+        return (Grouping o subexpr)
 
-    pObject offset = do
+    pObject o = do
         tablet <- pTablet
-        return (Object offset tablet)
+        return (Object o tablet)
 
-    pApplication offset = do
+    pApplication o = do
         lookAhead (try (do
             skipMany identifierChar
             skipSpace1
-            void (identifierChar <|> digitChar <|> char '(' <|> char '\"')))
+            void (identifierChar <|> digitChar0 <|> char '(' <|> char '\"')))
 
         name <- pIdentifier
         -- ie at least one space
         skipSpace1
         -- FIXME better do this manually, not all valid
         subexpr <- pExpression
-        return (Application offset name subexpr)
+        return (Application o name subexpr)
 
-    pLiteral offset =
+    pLiteral o =
         (do
             str <- stringLiteral
-            return (Text offset (intoRope str))) <|>
+            return (Text o (intoRope str))) <|>
         (do
             qty <- pQuantity
-            return (Amount offset qty))
+            return (Amount o qty))
 
-    pVariable offset = do
+    pVariable o = do
         names <- pIdentifiers1
 
-        return (Variable offset names)
+        return (Variable o names)
 
 pStatement :: Parser Statement
 pStatement = do
-    offset <- getOffset
-    statement <- pAssignment offset <|>
-        pDeclaration offset <|>
-        pExecute offset <|>
-        pBlank offset <|>
-        pSeries offset
+    o <- getOffset
+    statement <- pAssignment o <|>
+        pDeclaration o <|>
+        pExecute o <|>
+        pBlank o <|>
+        pSeries o
     return statement
   where
-    pAssignment offset = label "an assignment" $ do
+    pAssignment o = label "an assignment" $ do
         lookAhead (try (do
             skipMany (identifierChar <|> char ',' <|> char ' ')
             void (char '=')))
@@ -472,27 +475,27 @@ pStatement = do
         void (char '=')
         hidden space
         expr <- pExpression
-        return (Assignment offset names expr)
+        return (Assignment o names expr)
 
-    pDeclaration offset = label "a declaration" $ do
+    pDeclaration o = label "a declaration" $ do
         lookAhead (try (do
             skipMany (identifierChar <|> char ',' <|> char ' ')
             void (char ':')))
 
         proc <- pProcedureCode
-        return (Declaration offset proc)
+        return (Declaration o proc)
 
-    pExecute offset = label "a value to execute" $ do
+    pExecute o = label "a value to execute" $ do
         expr <- pExpression
-        return (Execute offset expr)
+        return (Execute o expr)
 
-    pBlank offset = hidden $ do -- label "a blank line"
+    pBlank o = hidden $ do -- label "a blank line"
         void newline
-        return (Blank offset)
+        return (Blank o)
 
-    pSeries offset = do
+    pSeries o = do
         void (char ';')
-        return (Series offset)
+        return (Series o)
 
 ---------------------------------------------------------------------
 
@@ -544,12 +547,14 @@ pMarkdown = do
 
 pProcedureCode :: Parser Procedure
 pProcedureCode = do
+    o <- getOffset
     (name,params,ins,out) <- pProcedureDeclaration <* skipSpace <* optional newline <* skipSpace
 
     block <- pBlock <* skipSpace <* optional newline
 
     return (Procedure
-        { procedureName = name
+        { procedureOffset = o
+        , procedureName = name
         , procedureParams = params
         , procedureInput = ins
         , procedureOutput = out

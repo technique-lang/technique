@@ -98,7 +98,7 @@ translateProcedure procedure =
         Left e -> throwError e
         Right (step,_) -> do
             let func = Subroutine procedure step
-            registerProcedure (locationOf step) func
+            registerProcedure (locationOf procedure) func
             return func
 
 {-|
@@ -185,17 +185,17 @@ translateExpression expr = do
                 name <- lookupVariable o i
                 return (Depends o name)
 
-        Operation offset op subexpr1 subexpr2 ->
+        Operation o oper subexpr1 subexpr2 ->
           let
-            prim = case op of
+            prim = case oper of
                     WaitEither  -> builtinProcedureWaitEither
                     WaitBoth    -> builtinProcedureWaitBoth
                     Combine     -> builtinProcedureCombineValues
           in do
             step1 <- translateExpression subexpr1
             step2 <- translateExpression subexpr2
-            let tuple = Tuple offset [step1,step2]
-            return (Invocation offset attr prim tuple)
+            let tuple = Tuple o [step1,step2]
+            return (Invocation o attr prim tuple)
 
         Grouping _ subexpr ->
             translateExpression subexpr
@@ -210,7 +210,7 @@ or to a primative builtin. We have Invocation as the Step constructors for
 these cases.
 -}
 registerProcedure :: Offset -> Function -> Translate ()
-registerProcedure offset func = do
+registerProcedure o func = do
     env <- get
 
     let i = functionName func
@@ -218,7 +218,7 @@ registerProcedure offset func = do
     let defined = containsKey i known
 
     when defined $ do
-        failBecause offset (ProcedureAlreadyDeclared i)
+        failBecause o (ProcedureAlreadyDeclared i)
 
     let known' = insertKeyValue i func known
     let env' = env { environmentFunctions = known' }
@@ -239,13 +239,13 @@ failBecause o reason = do
 
 
 lookupVariable :: Offset -> Identifier -> Translate Name
-lookupVariable offset i = do
+lookupVariable o i = do
     env <- get
     let known = lookupKeyValue i (environmentVariables env)
 
     case known of
         Just name -> return name
-        Nothing -> failBecause offset (UseOfUnknownIdentifier i)
+        Nothing -> failBecause o (UseOfUnknownIdentifier i)
 
 {-|
 Identifiers are valid names but Names are unique, so that we can put
@@ -254,12 +254,12 @@ already declared name (TODO) and given the local use of the identifier a
 scope-local (or globally?) unique name.
 -}
 insertVariable :: Offset -> Identifier -> Translate Name
-insertVariable offset i = do
+insertVariable o i = do
     env <- get
     let known = environmentVariables env
 
     when (containsKey i known) $ do
-        failBecause offset (VariableAlreadyInUse i)
+        failBecause o (VariableAlreadyInUse i)
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
 
@@ -309,28 +309,28 @@ a function call is made, look up to see if we actually know what it is.
 -}
 resolveFunctions :: Step -> Translate Step
 resolveFunctions step = case step of
-    Invocation offset attr func substep -> do
-        func' <- lookupFunction offset func
+    Invocation o attr func substep -> do
+        func' <- lookupFunction o func
         substep' <- resolveFunctions substep
-        return (Invocation offset attr func' substep')
+        return (Invocation o attr func' substep')
 
-    Tuple offset substeps -> do
+    Tuple o substeps -> do
         substeps' <- traverse resolveFunctions substeps
-        return (Tuple offset substeps')
+        return (Tuple o substeps')
 
-    Asynchronous offset names substep -> do
+    Asynchronous o names substep -> do
         substep' <- resolveFunctions substep
-        return (Asynchronous offset names substep')
+        return (Asynchronous o names substep')
 
-    Nested offset sublist -> do
+    Nested o sublist -> do
         let actual = toList sublist
         actual' <- traverse resolveFunctions actual
         let sublist' = fromList actual'
-        return (Nested offset sublist')
+        return (Nested o sublist')
 
-    Bench offset pairs -> do
+    Bench o pairs -> do
         pairs' <- traverse f pairs
-        return (Bench offset pairs')
+        return (Bench o pairs')
       where
         f :: (Label,Step) -> Translate (Label,Step)
         f (label,substep) = do
@@ -342,7 +342,7 @@ resolveFunctions step = case step of
     NoOp -> return step
 
 lookupFunction :: Offset -> Function -> Translate Function
-lookupFunction offset func = do
+lookupFunction o func = do
     env <- get
 
     let i = functionName func
@@ -350,7 +350,7 @@ lookupFunction offset func = do
         result = lookupKeyValue i known
 
     case result of
-        Nothing -> failBecause offset (CallToUnknownProcedure i)
+        Nothing -> failBecause o (CallToUnknownProcedure i)
         Just actual -> return actual
 
 {-|
@@ -362,8 +362,8 @@ setLocationFrom :: (Render a, Located a) => a -> Translate ()
 setLocationFrom thing = do
     env <- get
     let source = environmentSource env
-    let offset = locationOf thing
-    let source' = source { sourceOffset = offset }
+    let o = locationOf thing
+    let source' = source { sourceOffset = o }
     let env' = env { environmentSource = source' }
     put env'
 

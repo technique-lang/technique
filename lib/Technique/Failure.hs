@@ -30,6 +30,16 @@ import Text.Megaparsec.Pos (unPos)
 import Technique.Language hiding (Label)
 import Technique.Formatter
 
+data Status = Ok | Failed CompilationError | Reload
+
+instance Render Status where
+    type Token Status = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA status = case status of
+        Ok -> annotate LabelToken "ok"
+        Failed e -> intoDocA e
+        Reload -> annotate MagicToken "Δ"
+
 data Source = Source
     { sourceContents :: Rope
     , sourceFilename :: FilePath
@@ -54,13 +64,13 @@ emptySource = Source
 
 data FailureReason
     = InvalidSetup                         -- TODO placeholder
-    | ParsingFailed [Rope] [Rope]
+    | ParsingFailed [ErrorItem Char] [ErrorItem Char]
     | VariableAlreadyInUse Identifier
     | ProcedureAlreadyDeclared Identifier
     | CallToUnknownProcedure Identifier
     | UseOfUnknownIdentifier Identifier
     | EncounteredUndefined
-    deriving (Eq,Ord,Show)
+    deriving (Show,Eq)
 
 instance Enum FailureReason where
     fromEnum x = case x of
@@ -92,50 +102,63 @@ instance Render FailureReason where
         ParsingFailed unexpected expected ->
           let
             un = case unexpected of
-                [token] -> "unexpected " <> formatErrorToken token <> hardline
-                _ -> emptyDoc
+                [] -> emptyDoc
+                (item:_) -> "unexpected " <> formatErrorItem StepToken item <> hardline
 
             ex = case expected of
                 [] -> emptyDoc
-                xs -> "expected " <> hsep (punctuate comma (fmap formatErrorToken xs)) <> "."
+                items -> "expecting " <> hcat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
           in
             un <> ex
 
-        VariableAlreadyInUse i -> "Variable by the name of '" <> intoDocA i <> "' already defined."
-        ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> intoDocA i <> "' already declared."
-        CallToUnknownProcedure i -> "Call to unknown procedure '" <> intoDocA i <> "'."
-        UseOfUnknownIdentifier i -> "Variable '" <> intoDocA i <> "' not in scope."
-        EncounteredUndefined -> "Encountered 'undefined' marker."
+        VariableAlreadyInUse i -> "Variable by the name of '" <> annotate VariableToken (intoDocA i) <> "' already defined."
+        ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> annotate ProcedureToken (intoDocA i) <> "' already declared."
+        CallToUnknownProcedure i -> "Call to unknown procedure '" <> annotate ApplicationToken (intoDocA i) <> "'."
+        UseOfUnknownIdentifier i -> "Variable '" <> annotate VariableToken (intoDocA i) <> "' not in scope."
+        EncounteredUndefined -> "Encountered an " <> annotate ErrorToken "undefined" <> " marker."
 
-formatErrorToken :: Rope -> Doc ann
-formatErrorToken text = if widthRope text == 1
-    then formatErrorChar text
-    else pretty text
-
-formatErrorChar :: Rope -> Doc ann
-formatErrorChar text =
-  let
-    ch = head (fromRope text) :: Char
-  in
-    case ch of
-        '\n' -> "newline"
-        _ ->  pretty ch
-
-{-
-            let
-                statement = sourceStatement source
-                offset = sourceOffset source
-            in
-                pretty offset <> ": " <> intoDocA statement <> line <>
+fancyPunctuate :: [Doc ann] -> [Doc ann]
+fancyPunctuate list = case list of
+    [] -> []
+    [x] -> [x]
+    (x1:x2:[]) -> x1 : ", or " : x2 : []
+    (x1:xs) -> x1 : ", " : fancyPunctuate xs
+{-|
+ErrorItem is a bit overbearing, but we handle its /four/ cases by saying
+single quotes around characters, double quotes around strings, /no/ quotes
+around labels (descriptive text) and hard code the end of input and newline
+cases.
 -}
+formatErrorItem :: TechniqueToken -> ErrorItem Char -> Doc TechniqueToken
+formatErrorItem token item = case item of
+
+-- It would appear that **prettyprinter** has a Pretty instance for
+-- NonEmpty a. In this case token ~ Char so these are Strings, ish.
+-- Previously we converted to Rope, but looks like we can go directly.
+
+    Tokens tokens ->
+        case NonEmpty.uncons tokens of
+            (ch, Nothing) -> case ch of
+                '\n' -> annotate token "newline"
+                _  -> pretty '\'' <> annotate token (pretty ch) <> pretty '\''
+
+            _ -> pretty '\"' <> annotate token (pretty tokens) <> pretty '\"'
+
+    Label chars ->
+        annotate token (pretty chars)
+
+    EndOfInput ->
+        "end of input"
 
 numberOfCarots :: FailureReason -> Int
 numberOfCarots reason = case reason of
     InvalidSetup -> 0
-    ParsingFailed unexpected _ ->
-        case unexpected of
-            [token] -> widthRope token - 2
-            _ -> 1
+    ParsingFailed unexpected _ -> case unexpected of
+        [] -> 1
+        (item:_) -> case item of
+            Tokens tokens -> NonEmpty.length tokens
+            Label chars -> NonEmpty.length chars
+            EndOfInput -> 1
     VariableAlreadyInUse i -> widthRope (unIdentifier i)
     ProcedureAlreadyDeclared i -> widthRope (unIdentifier i)
     CallToUnknownProcedure i -> widthRope (unIdentifier i)
@@ -149,12 +172,12 @@ instance Render CompilationError where
       let
         filename = pretty (sourceFilename source)
         contents = intoRope (sourceContents source)
-        offset = sourceOffset source
+        o = sourceOffset source
 
 -- Given an offset point where the error occured, split the input at that
 -- point.
 
-        (before,_) = splitRope offset contents
+        (before,_) = splitRope o contents
         (l,c) = calculatePositionEnd before
 
 -- Isolate the line on which the error occured. l and c are 1-origin here,
@@ -178,13 +201,17 @@ instance Render CompilationError where
             else offending
 
         padding = replicateChar (c - 1) ' '
-        caroted = replicateChar (numberOfCarots reason) '^'
+        num = numberOfCarots reason
+        caroted = replicateChar num '^'
 
+        columns = if num > 1
+            then colunum <> "-" <> pretty (c + num - 1)
+            else colunum
       in
-        filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
+        annotate StepToken filename <> ":" <> linenum <> ":" <> columns <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
-        pretty padding <> pretty caroted <> hardline <>
+        pretty padding <> annotate ErrorToken (pretty caroted) <> hardline <>
         hardline <>
         intoDocA reason
 
@@ -200,7 +227,7 @@ extractErrorBundle source bundle =
   let
     errors = bundleErrors bundle
     first = NonEmpty.head errors
-    (offset,unexpected,expected) = extractParseError first
+    (o,unexpected,expected) = extractParseError first
     pstate = bundlePosState bundle
     srcpos = pstateSourcePos pstate
 
@@ -217,35 +244,19 @@ extractErrorBundle source bundle =
     reason = ParsingFailed unexpected expected
 
     source' = source
-        { sourceOffset = offset + l + c
+        { sourceOffset = o + l + c
         }
   in
     CompilationError source' reason
 
-extractParseError :: ParseError T.Text Void -> (Int,[Rope],[Rope])
+extractParseError :: ParseError T.Text Void -> (Int,[ErrorItem Char],[ErrorItem Char])
 extractParseError e = case e of
-    TrivialError offset unexpected0 expected0 ->
+    TrivialError o unexpected0 expected0 ->
       let
         unexpected = case unexpected0 of
-            Just item -> itemToRope item : []
+            Just item -> item : []
             Nothing -> []
-        expected = fmap itemToRope (OrdSet.toList expected0)
+        expected = OrdSet.toList expected0
       in
-        (offset,unexpected,expected)
+        (o,unexpected,expected)
     FancyError _ _ -> error "Unexpected parser error"
-
-  where
-    itemToRope :: ErrorItem Char -> Rope
-    itemToRope item = case item of
-        Tokens tokens ->                    -- tokens ~ chars
-          let
-            text = intoRope (NonEmpty.toList tokens)
-          in case widthRope text of
-            1 -> "'" <> text <> "'"
-            _ -> "\"" <> text <> "\""
-        Label chars ->                      -- wow. "Non-empty string"
-          let
-            text = intoRope (NonEmpty.toList chars)
-          in
-            text
-        EndOfInput -> "end of input"

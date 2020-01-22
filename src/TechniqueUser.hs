@@ -46,7 +46,7 @@ commandCheckTechnique = do
             terminate code
         Cycle -> do
             -- use inotify to rebuild on changes
-            forever (syntaxCheck procfile >> waitForChange [procfile])
+            forever (syntaxCheck procfile >> waitForChange [procfile] >> writeR Reload)
 
 syntaxCheck :: FilePath -> Program None Int
 syntaxCheck procfile =
@@ -61,10 +61,10 @@ syntaxCheck procfile =
             abstract <- translationPhase source concrete
             debugR "abstract" abstract
             -- TODO extractionPhase
-            write "ok"
+            writeR Ok
             return 0)
         (\(e :: CompilationError) -> do
-            write ("failed: " <> render 78 e)
+            writeR (Failed e)
             return (exitCodeFor e))
 
 {-|

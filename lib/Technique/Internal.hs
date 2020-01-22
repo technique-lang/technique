@@ -118,14 +118,14 @@ data Step
 
 instance Located Step where
     locationOf step = case step of
-        Known offset _ -> offset
-        Bench offset _ -> offset
-        Depends offset _ -> offset
+        Known o _ -> o
+        Bench o _ -> o
+        Depends o _ -> o
         NoOp -> -2
-        Tuple offset _ -> offset
-        Asynchronous offset _ _ -> offset
-        Invocation offset _ _ _ -> offset
-        Nested offset _ -> offset
+        Tuple o _ -> o
+        Asynchronous o _ _ -> o
+        Invocation o _ _ _ -> o
+        Nested o _ -> o
 
 instance Semigroup Step where
     (<>) = mappend
@@ -134,7 +134,7 @@ instance Monoid Step where
     mempty = NoOp
     mappend NoOp s2 = s2
     mappend s1 NoOp = s1
-    mappend (Nested offset1 list1) (Nested _ list2) = Nested offset1 (append list1 list2)
-    mappend (Nested offset1 list1) s2 = Nested offset1 (snoc list1 s2)
+    mappend (Nested o1 list1) (Nested _ list2) = Nested o1 (append list1 list2)
+    mappend (Nested o1 list1) s2 = Nested o1 (snoc list1 s2)
     mappend s1 (Nested _ list2) = Nested (locationOf s1) (cons s1 list2)
     mappend s1 s2 = Nested (locationOf s1) (cons s1 (singleton s2))

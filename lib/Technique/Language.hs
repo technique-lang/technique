@@ -69,7 +69,8 @@ unitType :: Type
 unitType = Type "()"
 
 data Procedure = Procedure
-    { procedureName :: Identifier
+    { procedureOffset :: Offset
+    , procedureName :: Identifier
     , procedureParams :: [Identifier]
     , procedureInput :: [Type]
     , procedureOutput :: [Type]
@@ -81,7 +82,8 @@ data Procedure = Procedure
 
 emptyProcedure :: Procedure
 emptyProcedure = Procedure
-    { procedureName = Identifier "none"
+    { procedureOffset = -1
+    , procedureName = Identifier "none"
     , procedureParams = []
     , procedureInput = [unitType]
     , procedureOutput = [unitType]
@@ -98,6 +100,9 @@ type Offset = Int
 class Located a where
     locationOf :: a -> Offset
 
+instance Located Procedure where
+    locationOf = procedureOffset
+
 data Statement
     = Assignment Offset [Identifier] Expression
     | Execute Offset Expression
@@ -109,12 +114,12 @@ data Statement
 
 instance Located Statement where
     locationOf statement = case statement of
-        Assignment offset _ _ -> offset
-        Execute offset _ -> offset
-        Comment offset _ -> offset
-        Declaration offset _ -> offset
-        Blank offset -> offset
-        Series offset -> offset
+        Assignment o _ _ -> o
+        Execute o _ -> o
+        Comment o _ -> o
+        Declaration o _ -> o
+        Blank o -> o
+        Series o -> o
 
 data Expression
     = Application Offset Identifier Expression     -- this had better turn out to be a procedure
@@ -131,16 +136,16 @@ data Expression
 
 instance Located Expression where
     locationOf expr = case expr of
-        Application offset _ _ -> offset
-        None offset -> offset
-        Text offset _ -> offset
-        Amount offset _ -> offset
-        Undefined offset -> offset
-        Object offset _ -> offset
-        Variable offset _ -> offset
-        Operation offset _ _ _ -> offset
-        Grouping offset _ -> offset
-        Restriction offset _ _ -> offset
+        Application o _ _ -> o
+        None o -> o
+        Text o _ -> o
+        Amount o _ -> o
+        Undefined o -> o
+        Object o _ -> o
+        Variable o _ -> o
+        Operation o _ _ _ -> o
+        Grouping o _ -> o
+        Restriction o _ _ -> o
 
 data Tablet
     = Tablet [Binding]

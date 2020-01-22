@@ -39,9 +39,8 @@ checkTranslationStage = do
             result = runTranslate testEnv (translateExpression expr)
           in do
             case result of
-                Left (CompilationError _ failure) ->
+                Left (CompilationError _ failure) -> do
                     failure `shouldBe` EncounteredUndefined
-                Left _ -> fail "Incorrect CompilerFailure encountered"
                 Right _ -> fail "Should have emitted CompilerFailure"
 
         it "encountering unknown variable" $
@@ -52,7 +51,6 @@ checkTranslationStage = do
             case result of
                 Left (CompilationError _ failure) ->
                     failure `shouldBe` UseOfUnknownIdentifier (Identifier "y")
-                Left _ -> fail "Incorrect CompilerFailure encountered"
                 Right _ -> fail "Should have emitted CompilerFailure"
 
         it "encountering unknown procedure" $
