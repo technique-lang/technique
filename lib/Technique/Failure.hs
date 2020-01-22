@@ -195,9 +195,14 @@ instance Render CompilationError where
             else offending
 
         padding = replicateChar (c - 1) ' '
-        caroted = replicateChar (numberOfCarots reason) '^'
+        num = numberOfCarots reason
+        caroted = replicateChar num '^'
+
+        columns = if num > 1
+            then colunum <> "-" <> pretty (c + num - 1)
+            else colunum
       in
-        annotate StepToken filename <> ":" <> linenum <> ":" <> colunum <> hardline <>
+        annotate StepToken filename <> ":" <> linenum <> ":" <> columns <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
         pretty padding <> annotate ErrorToken (pretty caroted) <> hardline <>
