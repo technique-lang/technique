@@ -289,7 +289,8 @@ checkSkeletonParser = do
         it "parses a declaration and block" $ do
             parseMaybe pProcedureCode "f : X -> Y\n{ x }\n"
                 `shouldBe` Just (emptyProcedure
-                    { procedureName = Identifier "f"
+                    { procedureOffset = 0
+                    , procedureName = Identifier "f"
                     , procedureInput = [Type "X"]
                     , procedureOutput = [Type "Y"]
                     , procedureBlock = Block [Execute 13 (Variable 13 [Identifier "x"])]

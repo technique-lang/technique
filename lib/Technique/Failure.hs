@@ -70,7 +70,7 @@ data FailureReason
     | CallToUnknownProcedure Identifier
     | UseOfUnknownIdentifier Identifier
     | EncounteredUndefined
-    deriving Show
+    deriving (Show,Eq)
 
 instance Enum FailureReason where
     fromEnum x = case x of
