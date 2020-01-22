@@ -98,7 +98,7 @@ translateProcedure procedure =
         Left e -> throwError e
         Right (step,_) -> do
             let func = Subroutine procedure step
-            registerProcedure (locationOf step) func
+            registerProcedure (locationOf procedure) func
             return func
 
 {-|
