@@ -30,6 +30,15 @@ testEnv = emptyEnvironment
     , environmentFunctions = insertKeyValue (Identifier "oven") (Subroutine exampleProcedureOven NoOp) builtinProcedures
     }
 
+simpleProcedure :: Procedure
+simpleProcedure = emptyProcedure
+    { procedureName = Identifier "mock"
+    , procedureParams = [ Identifier "a", Identifier "b" ]
+    , procedureInput = [ Type "OneThing", Type "Another" ]
+    , procedureOutput = [ Type "Stuff" ]
+    , procedureBlock = Block [ Execute 0 (Variable 0 [Identifier "a", Identifier "b"]) ]
+    }
+
 checkTranslationStage :: Spec
 checkTranslationStage = do
     describe "Invalid code emits expected compiler failures" $ do
@@ -103,3 +112,19 @@ checkTranslationStage = do
                     i `shouldBe` "oven"
                 Left _ -> fail "Incorrect CompilerFailure encountered"
                 Right _ -> fail "Should have emitted CompilerFailure"
+
+{-|
+Having made it past the various things that should throw CompilationErrors,
+we now run through some examples which should parse and translate correctly
+to full abstract syntax trees.
+-}
+
+    describe "Known Procedure is translated to correct abstract syntax tree" $ do
+        it "multiple params of a procedure are in scope as variables" $
+          let
+            result = runTranslate testEnv (translateProcedure simpleProcedure)
+          in do
+            case result of
+                Right (func,_) -> func `shouldBe` Subroutine simpleProcedure
+                    (Tuple 0 [ Depends 0 (Name "!a"), Depends 0 (Name "!b") ])
+                _ -> fail "Should have translated procedure"

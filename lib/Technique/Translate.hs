@@ -87,12 +87,20 @@ translateTechnique technique = do
 translateProcedure :: Procedure -> Translate Function
 translateProcedure procedure =
   let
+    is = procedureParams procedure
+    o = procedureOffset procedure
     block = procedureBlock procedure
   in do
     env <- get
 
-    let subenv = env    -- placeholder in case we need to refine
-    let result = runTranslate subenv (translateBlock block)
+-- calling runTranslate here *is* the act of refining, but there's no way
+-- we're going to remember that so make it explicit. Gives us the
+-- opportunity to modify the environment before descending if necessary.
+
+    let subenv = env
+    let result = runTranslate subenv $ do
+            traverse_ (insertVariable o) is
+            translateBlock block
 
     case result of
         Left e -> throwError e
