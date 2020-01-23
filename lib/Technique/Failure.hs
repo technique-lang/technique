@@ -107,7 +107,7 @@ instance Render FailureReason where
 
             ex = case expected of
                 [] -> emptyDoc
-                items -> "expecting " <> hcat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
+                items -> "expecting " <> fillCat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
           in
             un <> ex
 
