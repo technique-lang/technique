@@ -72,19 +72,22 @@ instance Show Function where
         name = fromRope (unIdentifier (functionName func))
       in case func of
         Unresolved _ -> "Unresolved \"" ++ name ++ "\""
-        Subroutine _ _ -> "Subroutine \"" ++ name ++ "\""
+        Subroutine _ step -> "Subroutine \"" ++ name ++ "\" of " ++ show step
         Primitive _ _ -> "Primitive \"" ++ name ++ "\""
 
--- this is weak, but we can't compare Haskell functions for equality so if
--- the Procedures are the same then we assume the Primitives are.
 instance Eq Function where
     (==) f1 f2 = case f1 of
         Unresolved i1 -> case f2 of
             Unresolved i2 -> i1 == i2
             _ -> False
-        Subroutine proc1 _ -> case f2 of
-            Subroutine proc2 _ -> proc1 == proc2
+
+        Subroutine proc1 step1 -> case f2 of
+            Subroutine proc2 step2 -> proc1 == proc2 && step1 == step2
             _ -> False
+
+-- this is weak, but we can't compare Haskell functions for equality so if
+-- the Procedures are the same then we assume the Primitives are.
+
         Primitive proc1 _ -> case f2 of
             Primitive proc2 _ -> proc1 == proc2
             _ -> False
