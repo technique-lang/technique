@@ -28,6 +28,7 @@ data TechniqueToken
     | QuantityToken
     | RoleToken
     | ErrorToken
+    | FilenameToken
     | StepToken
 
 instance Pretty Procedure where
@@ -48,7 +49,8 @@ colourizeTechnique token = case token of
     QuantityToken -> color Magenta <> bold
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red <> bold
-    StepToken -> color White <> bold       -- for diagnostics in evalutator
+    FilenameToken -> color White <> bold
+    StepToken -> color Black <> bold       -- for diagnostics in evalutator
 
 
 instance Render Procedure where
