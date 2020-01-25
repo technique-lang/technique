@@ -98,10 +98,10 @@ instance Render Markdown where
 instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Block pairs) =
+    intoDocA (Block statements) =
         nest 4 (
             annotate SymbolToken lbrace <>
-            go pairs
+            go statements
         ) <>
         line <>
         annotate SymbolToken rbrace
