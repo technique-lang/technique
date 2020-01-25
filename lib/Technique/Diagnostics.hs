@@ -19,16 +19,16 @@ import Technique.Internal
 instance Render Function where
     type Token Function = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA func = " ↘ " <> indent 0 (case func of
+    intoDocA func = nest 3 (" ↘ " <> (case func of
         Unresolved i ->
             annotate ErrorToken "Unresolved" <+> annotate ProcedureToken (pretty (unIdentifier i)) <> line
         Subroutine proc step ->
             annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-                line <> " ↘ " <> indent 0 (intoDocA step) <> line
+                line <> (nest 3 (" ↘ " <> intoDocA step))
         Primitive proc action ->
             annotate StepToken "Primitive" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-                line <> " ↘ " <> indent 0 ("<primitive>"))
-
+                line <> " ↘ <primitive>"
+        ))
 
 instance Render Step where
     type Token Step = TechniqueToken
@@ -60,15 +60,14 @@ instance Render Step where
             i = functionName func
           in
             annotate StepToken "Invoke" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i) <>
-                line <> " ↘ " <> indent 0 (intoDocA substep)
+                line <> nest 3 (" ↘ " <> intoDocA substep)
 
 
         Bench _ pairs ->      -- [(Label,Step)]
             annotate StepToken "Bench" <>
                 line <>
-                indent 4 (
-                    hang 2 (lbracket <+>
-                        vsep (punctuate comma bindings)) <+> rbracket)
+                "   " <> hang 2 (lbracket <+>
+                        vsep (punctuate comma bindings)) <+> rbracket
           where
             bindings = fmap f pairs
             f :: (Label,Step) -> Doc TechniqueToken

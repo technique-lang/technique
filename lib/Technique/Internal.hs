@@ -72,7 +72,7 @@ instance Show Function where
         name = fromRope (unIdentifier (functionName func))
       in case func of
         Unresolved _ -> "Unresolved \"" ++ name ++ "\""
-        Subroutine _ step -> "Subroutine \"" ++ name ++ "\" of " ++ show step
+        Subroutine _ step -> "Subroutine \"" ++ name ++ "\": " ++ show step
         Primitive _ _ -> "Primitive \"" ++ name ++ "\""
 
 instance Eq Function where
