@@ -140,4 +140,4 @@ instance Monoid Step where
     mappend (Nested o1 list1) (Nested _ list2) = Nested o1 (append list1 list2)
     mappend (Nested o1 list1) s2 = Nested o1 (snoc list1 s2)
     mappend s1 (Nested _ list2) = Nested (locationOf s1) (cons s1 list2)
-    mappend s1 s2 = Nested (locationOf s1) (cons s1 (singleton s2))
+    mappend s1 s2 = Nested (locationOf s1) (snoc (singleton s1) s2)
