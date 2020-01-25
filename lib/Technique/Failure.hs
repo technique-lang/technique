@@ -103,11 +103,11 @@ instance Render FailureReason where
           let
             un = case unexpected of
                 [] -> emptyDoc
-                (item:_) -> "unexpected " <> formatErrorItem StepToken item <> hardline
+                (item:_) -> "unexpected " <> formatErrorItem FilenameToken item <> hardline
 
             ex = case expected of
                 [] -> emptyDoc
-                items -> "expecting " <> hcat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
+                items -> "expecting " <> fillCat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
           in
             un <> ex
 
@@ -208,7 +208,7 @@ instance Render CompilationError where
             then colunum <> "-" <> pretty (c + num - 1)
             else colunum
       in
-        annotate StepToken filename <> ":" <> linenum <> ":" <> columns <> hardline <>
+        annotate FilenameToken filename <> ":" <> linenum <> ":" <> columns <> hardline <>
         hardline <>
         pretty trimmed <> hardline <>
         pretty padding <> annotate ErrorToken (pretty caroted) <> hardline <>

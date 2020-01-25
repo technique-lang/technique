@@ -28,6 +28,7 @@ data TechniqueToken
     | QuantityToken
     | RoleToken
     | ErrorToken
+    | FilenameToken
     | StepToken
 
 instance Pretty Procedure where
@@ -48,7 +49,8 @@ colourizeTechnique token = case token of
     QuantityToken -> color Magenta <> bold
     RoleToken -> colorDull Yellow
     ErrorToken -> color Red <> bold
-    StepToken -> color White <> bold       -- for diagnostics in evalutator
+    FilenameToken -> color White <> bold
+    StepToken -> color Black <> bold       -- for diagnostics in evalutator
 
 
 instance Render Procedure where
@@ -96,10 +98,10 @@ instance Render Markdown where
 instance Render Block where
     type Token Block = TechniqueToken
     colourize = colourizeTechnique
-    intoDocA (Block pairs) =
+    intoDocA (Block statements) =
         nest 4 (
             annotate SymbolToken lbrace <>
-            go pairs
+            go statements
         ) <>
         line <>
         annotate SymbolToken rbrace
