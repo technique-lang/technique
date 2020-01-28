@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
@@ -12,7 +13,7 @@ import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
 import Core.Text
-import Data.UUID.Types (UUID)
+import Data.UUID.Types (UUID, nil)
 
 import Technique.Internal
 
@@ -26,6 +27,13 @@ data Context = Context
     { contextEvent :: UUID
     , contextPath :: Rope -- or a  list or a fingertree or...
     , contextValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
+    }
+
+emptyContext :: Context
+emptyContext = Context
+    { contextEvent = nil
+    , contextPath = "/"
+    , contextValues = emptyMap
     }
 
 {-
@@ -44,8 +52,9 @@ data Expression b where
 newtype Evaluate a = Evaluate (ReaderT Context IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Context)
 
-unEvaluate :: Evaluate a -> ReaderT Context IO a
-unEvaluate (Evaluate r) = r
+runEvaluate :: Context -> Evaluate a -> IO a
+runEvaluate context (Evaluate action) = runReaderT action context
+{-# INLINE runEvaluate #-}
 
 {-|
 The heart of the evaluation loop. Translate from the abstract syntax tree 
@@ -65,10 +74,20 @@ evaluateStep step = case step of
 
     Asynchronous _ names substep -> do
         promise <- assignNames names substep
-        undefined -- TODO put primise into environment
+        undefined -- TODO put promise into environment
 
     Invocation _ attr func substep -> do
         functionApplication func substep   -- TODO do something with role!
+
+-- FIXME this doesn't make sense. Unitus is neither null nor Nothing. The
+-- semantics of NoOp need tidying up.
+
+    NoOp -> return Unitus
+
+    Bench _ pairs -> undefined
+
+    Nested _ substeps -> undefined
+
 
 functionApplication :: Function -> Step -> Evaluate Value --  IO Promise ?
 functionApplication = undefined

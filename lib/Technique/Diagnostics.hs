@@ -49,8 +49,8 @@ instance Render Step where
                 hsep (punctuate comma (fmap intoDocA steps)) <+>
                 rparen
 
-        Nested _ steps ->
-            vcat (toList (fmap intoDocA steps))
+        Nested _ substeps ->
+            vcat (toList (fmap intoDocA substeps))
 
         Asynchronous _ names substep ->
             annotate StepToken "Asynch" <+> commaCat names <+> "◀-" <+> intoDocA substep
