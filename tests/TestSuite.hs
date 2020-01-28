@@ -8,6 +8,7 @@ import CheckConcreteSyntax hiding (main)
 import CheckSkeletonParser hiding (main)
 import CheckQuantityBehaviour hiding (main)
 import CheckTranslationPhase hiding (main)
+import CheckEvaluationPhase hiding (main)
 
 main :: IO ()
 main = do
@@ -19,3 +20,4 @@ suite = do
     checkConcreteSyntax
     checkSkeletonParser
     checkTranslationPhase
+    checkEvaluationPhase

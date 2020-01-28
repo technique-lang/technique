@@ -75,5 +75,6 @@ tests:
       - CheckConcreteSyntax
       - CheckSkeletonParser
       - CheckQuantityBehaviour
-      - CheckTranslationStage
+      - CheckTranslationPhase
+      - CheckEvaluationPhase
       - ExampleProcedure
