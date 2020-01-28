@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module CheckTranslationStage
-    ( checkTranslationStage
+module CheckTranslationPhase
+    ( checkTranslationPhase
     , main
     )
 where
@@ -22,7 +22,7 @@ import ExampleProcedure hiding (main)
 
 main :: IO ()
 main = do
-    finally (hspec checkTranslationStage) (putStrLn ".")
+    finally (hspec checkTranslationPhase) (putStrLn ".")
 
 testEnv :: Environment
 testEnv = emptyEnvironment
@@ -39,8 +39,8 @@ simpleProcedure = emptyProcedure
     , procedureBlock = Block [ Execute 0 (Variable 0 [Identifier "a", Identifier "b"]) ]
     }
 
-checkTranslationStage :: Spec
-checkTranslationStage = do
+checkTranslationPhase :: Spec
+checkTranslationPhase = do
     describe "Invalid code emits expected compiler failures" $ do
         it "encountering undefined symbol" $
           let

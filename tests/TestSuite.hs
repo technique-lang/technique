@@ -7,7 +7,7 @@ import Core.System
 import CheckConcreteSyntax hiding (main)
 import CheckSkeletonParser hiding (main)
 import CheckQuantityBehaviour hiding (main)
-import CheckTranslationStage hiding (main)
+import CheckTranslationPhase hiding (main)
 
 main :: IO ()
 main = do
@@ -18,4 +18,4 @@ suite = do
     checkQuantityBehaviour
     checkConcreteSyntax
     checkSkeletonParser
-    checkTranslationStage
+    checkTranslationPhase
