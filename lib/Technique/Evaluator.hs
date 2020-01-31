@@ -16,6 +16,7 @@ import Core.Text
 import Data.UUID.Types (UUID, nil)
 
 import Technique.Internal
+import Technique.Language
 
 {-|
 In order to execute a Procedure we need to supply a Context: an identifier
@@ -84,7 +85,14 @@ evaluateStep step = case step of
 
     NoOp -> return Unitus
 
-    Bench _ pairs -> undefined
+    Bench _ pairs -> do
+        values <- mapM f pairs
+        return (Tabularum values)
+      where
+         f :: (Label,Step) -> Evaluate (Label,Value)
+         f (label,substep) = do
+            value <- evaluateStep substep
+            assignLabel label value
 
     Nested _ substeps -> undefined
 
@@ -108,3 +116,8 @@ assignNames :: [Name] -> Step -> Evaluate Promise
 assignNames = do
     -- dunno
     return (undefined) -- fixme not empty list
+
+assignLabel :: Label -> Value -> Evaluate (Label,Value)
+assignLabel label value = do
+    -- TODO log event
+    return (label,value)

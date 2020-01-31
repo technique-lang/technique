@@ -43,6 +43,10 @@ instance Key Identifier
 newtype Label = Label Rope
     deriving (Show, Eq, Ord)
 
+unLabel :: Label -> Rope
+unLabel (Label text) = text
+{-# INLINE unLabel #-}
+
 data Attribute
     = Role Identifier
     | Place Identifier
