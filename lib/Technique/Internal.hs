@@ -32,7 +32,7 @@ data Value
     = Unitus
     | Literali Rope
     | Quanticle Quantity
-    | Tabularum [(Rope,Value)]
+    | Tabularum [(Label,Value)]
     | Parametriq [Value]
     deriving (Eq,Show)
 
