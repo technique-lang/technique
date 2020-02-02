@@ -8,7 +8,8 @@ Given an instantiated Technique Procedure, evalutate it at runtime.
 -- converted to a typeclass in the tagless final style.
 module Technique.Evaluator where
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad (foldM)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
@@ -94,7 +95,16 @@ evaluateStep step = case step of
             value <- evaluateStep substep
             assignLabel label value
 
-    Nested _ substeps -> undefined
+-- Again we're using Unitus as the empty value. This is probably wrong.
+
+    Nested _ substeps -> do
+        final <- foldM g Unitus substeps
+        return final
+      where
+        g :: Value -> Step -> Evaluate Value
+        g _ substep = do
+            value <- evaluateStep substep
+            return value
 
 
 functionApplication :: Function -> Step -> Evaluate Value --  IO Promise ?
