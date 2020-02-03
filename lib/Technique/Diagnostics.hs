@@ -16,6 +16,12 @@ import Technique.Language
 import Technique.Formatter  -- already have lots of useful definitions
 import Technique.Internal
 
+
+instance Render Executable where
+    type Token Executable = TechniqueToken
+    colourize = colourizeTechnique
+    intoDocA (Executable funcs) = vcat (fmap intoDocA funcs)
+
 instance Render Function where
     type Token Function = TechniqueToken
     colourize = colourizeTechnique

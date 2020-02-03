@@ -67,14 +67,14 @@ runTranslate env (Translate action) = runExcept (runStateT action env)
 {-# INLINE runTranslate #-}
 
 
-translateTechnique :: Technique -> Translate [Function]
+translateTechnique :: Technique -> Translate Executable
 translateTechnique technique = do
     -- Stage 1: conduct translation
     funcs1 <- traverse translateProcedure (techniqueBody technique)
 
     -- Stage 2: resolve functions
     funcs2 <- traverse resolver funcs1
-    return funcs2
+    return (Executable funcs2)
   where
     resolver :: Function -> Translate Function
     resolver func = case func of

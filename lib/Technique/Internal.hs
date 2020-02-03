@@ -11,6 +11,7 @@ module Technique.Internal where
 
 import Core.Text
 import Data.DList
+import qualified Data.List as List
 
 import Technique.Language
 import Technique.Quantity
@@ -91,6 +92,14 @@ instance Eq Function where
         Primitive proc1 _ -> case f2 of
             Primitive proc2 _ -> proc1 == proc2
             _ -> False
+
+{-|
+Fully resolved abstract syntax tree ready for evaluation.
+-}
+newtype Executable = Executable [Function]
+
+entryPoint :: Executable -> Maybe Function
+entryPoint (Executable funcs) = fmap fst (List.uncons funcs)
 
 newtype Name = Name Rope -- ??? upgrade to named IVar := Promise ???
     deriving (Eq,Show)
