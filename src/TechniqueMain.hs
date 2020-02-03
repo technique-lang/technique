@@ -33,6 +33,12 @@ main = do
                 The file containing the code for the procedure you want to format.
               |]
             ]
+        , Command "simulate" "Evaluate a procedure in simulation mode"
+            [ Argument "filename" [quote|
+                The file containing the code for the procedure you want to evaluate.
+              |]
+            ]
+
         ])
     executeWith context program
 

@@ -17,6 +17,7 @@ import Text.Megaparsec (parse)
 
 import Technique.Builtins
 import Technique.Diagnostics ()
+import Technique.Evaluator
 import Technique.Failure
 import Technique.Formatter ()
 import Technique.Internal
@@ -105,7 +106,7 @@ the concrete syntax types and the abstract syntax we can feed to an
 evaluator.
 -}
 -- FIXME better return type
-translationPhase :: Source -> Technique -> Program None [Function]
+translationPhase :: Source -> Technique -> Program None Executable
 translationPhase source technique =
   let
     env0 = emptyEnvironment
@@ -152,3 +153,38 @@ commandFormatTechnique = do
         (\(e :: CompilationError) -> do
             write ("failed: " <> render 78 e)
             terminate (exitCodeFor e))
+
+
+commandSimulateTechnique :: Program None ()
+commandSimulateTechnique = do
+    params <- getCommandLine
+
+    let procfile = case lookupArgument "filename" params of
+            Just file   -> file
+            _           -> error "Invalid State"
+
+    catch
+        (do
+            surface <- loadTechnique procfile
+            let source = emptySource
+                    { sourceFilename = procfile
+                    , sourceContents = surface
+                    }
+            concrete <- parsingPhase source
+            abstract <- translationPhase source concrete
+            final <- evaluationPhase abstract
+
+            writeR final
+        )
+        (\(e :: CompilationError) -> do
+            write ("failed: " <> render 78 e)
+            terminate (exitCodeFor e)
+        )
+
+evaluationPhase :: Executable -> Program None Value
+evaluationPhase abstract = do
+    let inital = entryPoint abstract
+    result <- liftIO $ do
+        -- runEvaluate context initial
+        undefined
+    return result
