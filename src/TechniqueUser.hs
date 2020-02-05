@@ -6,7 +6,11 @@
 Programs implementing front-end commands for users: check, format
 -}
 
-module TechniqueUser where
+module TechniqueUser
+    ( commandCheckTechnique
+    , commandFormatTechnique
+    , commandSimulateTechnique
+    ) where
 
 import Control.Monad (forever)
 import Core.Program

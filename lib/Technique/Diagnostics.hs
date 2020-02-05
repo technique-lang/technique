@@ -33,7 +33,7 @@ instance Render Function where
                 line <> (nest 3 (" ↘ " <> intoDocA step))
         Primitive proc action ->
             annotate StepToken "Primitive" <+> annotate ProcedureToken (pretty (procedureName proc)) <>
-                line <> " ↘ <primitive>"
+                line <> " ↘ <native>"
         ))
 
 instance Render Step where

@@ -8,6 +8,7 @@ import Core.Text
 import TechniqueUser
     ( commandCheckTechnique
     , commandFormatTechnique
+    , commandSimulateTechnique
     )
 
 version :: Version
@@ -52,6 +53,7 @@ program = do
         Just command -> case command of
             "check"     -> commandCheckTechnique
             "format"    -> commandFormatTechnique
+            "simulate"  -> commandSimulateTechnique
             _       -> do
                 write "Unknown command?"
                 terminate 3
