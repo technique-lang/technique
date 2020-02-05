@@ -174,9 +174,11 @@ commandSimulateTechnique = do
                     { sourceFilename = procfile
                     , sourceContents = surface
                     }
+            let initial = Unitus -- FIXME fake hardcoded
+
             concrete <- parsingPhase source
             abstract <- translationPhase source concrete
-            final <- evaluationPhase abstract
+            final <- evaluationPhase abstract initial
 
             writeR final
         )
@@ -185,10 +187,8 @@ commandSimulateTechnique = do
             terminate (exitCodeFor e)
         )
 
-evaluationPhase :: Executable -> Program None Value
-evaluationPhase abstract = do
-    let inital = entryPoint abstract
-    result <- liftIO $ do
-        -- runEvaluate context initial
-        undefined
+evaluationPhase :: Executable -> Value -> Program None Value
+evaluationPhase abstract initial = do
+    let context = emptyContext  -- that's a big FIXME 10-4 good buddy roger over and out
+    result <- liftIO $ runEvaluate context (evaluateExecutable abstract initial)
     return result

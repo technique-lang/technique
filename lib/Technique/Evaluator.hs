@@ -58,6 +58,22 @@ runEvaluate :: Context -> Evaluate a -> IO a
 runEvaluate context (Evaluate action) = runReaderT action context
 {-# INLINE runEvaluate #-}
 
+
+{-|
+Take a fully resolved abstract syntax tree representation and lift it into
+the Evaluate monad ready for binding with a context so it is able to be
+evaluated.
+
+The type of a technique is the type of the first top-level procedure
+defined in the file.
+-}
+evaluateExecutable :: Executable -> Value -> Evaluate Value
+evaluateExecutable abstract  value = do
+    let initial = entryPoint abstract
+    case initial of
+        Nothing -> error "No function?!?"
+        Just func -> functionApplication func value
+
 {-|
 The heart of the evaluation loop. Translate from the abstract syntax tree 
 into a monadic sequence which results in a Result.
@@ -79,7 +95,8 @@ evaluateStep step = case step of
         undefined -- TODO put promise into environment
 
     Invocation _ attr func substep -> do
-        functionApplication func substep   -- TODO do something with role!
+        value <- evaluateStep substep
+        functionApplication func value   -- TODO do something with role!
 
 -- FIXME this doesn't make sense. Unitus is neither null nor Nothing. The
 -- semantics of NoOp need tidying up.
@@ -107,8 +124,18 @@ evaluateStep step = case step of
             return value
 
 
-functionApplication :: Function -> Step -> Evaluate Value --  IO Promise ?
-functionApplication = undefined
+functionApplication :: Function -> Value -> Evaluate Value --  IO Promise ?
+functionApplication func value = case func of
+    -- TODO no this isn't right. runEvaluate to create a sub scope?
+    Subroutine _ step -> evaluateStep step
+
+    -- TODO unfinished; we're supposed to pass in a step as argument?
+    Primitive _ action -> undefined -- executeAction action
+
+    -- TODO This should be unreachable if we indeed completed the
+    -- translation phase. But nothing guarantees that yet.
+    Unresolved _ -> error (show func)
+
 
 executeAction :: Function -> Step -> Evaluate Value --  IO Promise ?
 executeAction = undefined
