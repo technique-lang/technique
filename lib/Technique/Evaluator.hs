@@ -14,6 +14,7 @@ import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
 import Core.Text
+import Core.System (liftIO)
 import Data.UUID.Types (UUID, nil)
 
 import Technique.Internal
@@ -94,9 +95,11 @@ evaluateStep step = case step of
         promise <- assignNames names substep
         undefined -- TODO put promise into environment
 
+-- TODO do something with role!
+
     Invocation _ attr func substep -> do
         value <- evaluateStep substep
-        functionApplication func value   -- TODO do something with role!
+        functionApplication func value
 
 -- FIXME this doesn't make sense. Unitus is neither null nor Nothing. The
 -- semantics of NoOp need tidying up.
@@ -127,18 +130,18 @@ evaluateStep step = case step of
 functionApplication :: Function -> Value -> Evaluate Value --  IO Promise ?
 functionApplication func value = case func of
     -- TODO no this isn't right. runEvaluate to create a sub scope?
-    Subroutine _ step -> evaluateStep step
 
-    -- TODO unfinished; we're supposed to pass in a step as argument?
-    Primitive _ action -> undefined -- executeAction action
+    -- HERE the value is the input parameter; it had a name, but does it now? Does it need one?
+
+    Subroutine _ step -> do
+        -- TODO HERE put value into Context?!?
+        evaluateStep step
+
+    Primitive _ action -> liftIO (action value)
 
     -- TODO This should be unreachable if we indeed completed the
     -- translation phase. But nothing guarantees that yet.
     Unresolved _ -> error (show func)
-
-
-executeAction :: Function -> Step -> Evaluate Value --  IO Promise ?
-executeAction = undefined
 
 
 blockUntilValue :: Name -> Evaluate Value
