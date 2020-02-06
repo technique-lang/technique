@@ -59,7 +59,7 @@ encountered in the same scope.
 data Function
     = Unresolved Identifier
     | Subroutine Procedure Step
-    | Primitive Procedure (Step -> IO Value)
+    | Primitive Procedure (Value -> IO Value)
 
 functionName :: Function -> Identifier
 functionName func = case func of
@@ -124,8 +124,8 @@ data Step
     | Asynchronous Offset [Name] Step              -- assignment (ie lambda, "implication introduction"
     | Invocation Offset Attribute Function Step    -- function application ("implication elimination") on a [sub] Procedure
     | Nested Offset (DList Step)
-                                            -- assumption axiom?
-                                            -- weakening?
+                                                   -- assumption axiom?
+                                                   -- weakening?
     deriving (Eq,Show)
 
 instance Located Step where
