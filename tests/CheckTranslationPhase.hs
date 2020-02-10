@@ -91,9 +91,9 @@ checkTranslationPhase = do
           in do
             let result = runTranslate testEnv (translateTechnique tech)
             case result of
-                Right ([(Subroutine _ (Invocation _ _ (Primitive proc1 _) _))], _) ->
+                Right (Executable [(Subroutine _ (Invocation _ _ (Primitive proc1 _) _))], _) ->
                     procedureName proc1 `shouldBe` Identifier "task"
-                Right (((Subroutine _ step):_),_) -> fail ("Should have translated to a Primitive, step " ++ show step) -- probable that the above pattern match now needs fixing
+                Right (Executable ((Subroutine _ step):_),_) -> fail ("Should have translated to a Primitive, step " ++ show step) -- probable that the above pattern match now needs fixing
                 _ -> fail "Should have pattern matched"
 
         it "encounters a declaration for an already existing procedure name" $
