@@ -10,6 +10,11 @@ module TechniqueUser
     ( commandCheckTechnique
     , commandFormatTechnique
     , commandSimulateTechnique
+
+    -- for testing
+    , loadTechnique
+    , parsingPhase
+    , translationPhase
     ) where
 
 import Control.Monad (forever)
