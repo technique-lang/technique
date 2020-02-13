@@ -1,12 +1,21 @@
+# generated files
 /technique.cabal
-/tags
-/tests/redis.sock
-/tests/dump.rdb
-/technique
-/check
-/tests/redis.log
-/tests/redis.pid
 /.stack-work/
 /stack.yaml.lock
-/zzz
+/tags
+
+# [symlinks to] binaries
+/technique
+/check
+
+# old work, candidate for removal
+/tests/redis.log
+/tests/redis.pid
+/tests/redis.sock
+/tests/dump.rdb
+
+# personal detritus
 /.vscode
+/zzz
+/stack.yaml-*
+/package.yaml-*
