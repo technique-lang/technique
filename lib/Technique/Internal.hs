@@ -10,6 +10,7 @@ Builing blocks for the translation stage of the compiler.
 module Technique.Internal where
 
 import Core.Text
+import Core.Program
 import Data.DList
 import qualified Data.List as List
 
@@ -59,7 +60,7 @@ encountered in the same scope.
 data Function
     = Unresolved Identifier
     | Subroutine Procedure Step
-    | Primitive Procedure (Value -> IO Value)
+    | Primitive Procedure (Value -> Program None Value)
 
 functionName :: Function -> Identifier
 functionName func = case func of

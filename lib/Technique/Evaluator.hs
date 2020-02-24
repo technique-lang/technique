@@ -8,35 +8,40 @@ Given an instantiated Technique Procedure, evalutate it at runtime.
 -- converted to a typeclass in the tagless final style.
 module Technique.Evaluator where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, liftM)
+import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader.Class (MonadReader(..))
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Control.Monad.Trans.Except (Except(), runExceptT)
 import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
 import Core.Text
+import Core.Program
 import Core.System (liftIO)
 import Data.UUID.Types (UUID, nil)
 
 import Technique.Internal
 import Technique.Language
+import Technique.Failure
 
 {-|
-In order to execute a Procedure we need to supply a Context: an identifier
+In order to execute a Procedure we need to supply a context: an identifier
 for the event (collection of procedure calls) it is a part of, and the path
 history we took to get here.
 -}
 -- TODO values needs to be somewhere, but here?
-data Context = Context
-    { contextEvent :: UUID
-    , contextPath :: Rope -- or a  list or a fingertree or...
-    , contextValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
+data Unique = Unique
+    { uniqueEvent :: UUID
+    , uniquePath :: Rope -- or a  list or a fingertree or...
+    , uniqueValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
     }
 
-emptyContext :: Context
-emptyContext = Context
-    { contextEvent = nil
-    , contextPath = "/"
-    , contextValues = emptyMap
+emptyUnique :: Unique
+emptyUnique = Unique
+    { uniqueEvent = nil
+    , uniquePath = "/"
+    , uniqueValues = emptyMap
     }
 
 {-
@@ -52,13 +57,23 @@ data Expression b where
 -- support different interpeters / backends? This seems so cumbersome
 -- compared to the elegent tagless final method.
 
-newtype Evaluate a = Evaluate (ReaderT Context IO a)
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Context)
+newtype Evaluate a = Evaluate (ReaderT (Unique,Context None) (Program None) a)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Unique,Context None))
 
-runEvaluate :: Context -> Evaluate a -> IO a
-runEvaluate context (Evaluate action) = runReaderT action context
+{-|
+Given an initial context and a fully-translated ready-to-evaluate
+'Evaluate' action, execute it in the 'Program' monad.
+-}
+runEvaluate :: Unique -> Evaluate a -> Program None a
+runEvaluate unique (Evaluate action) = do
+    context <- getContext
+    runReaderT action (unique,context)
 {-# INLINE runEvaluate #-}
 
+liftProgram' :: Program None a -> Evaluate a
+liftProgram' program = do
+    (_,context) <- ask
+    liftIO $ subProgram context program
 
 {-|
 Take a fully resolved abstract syntax tree representation and lift it into
@@ -77,7 +92,7 @@ evaluateExecutable abstract  value = do
 
 {-|
 The heart of the evaluation loop. Translate from the abstract syntax tree 
-into a monadic sequence which results in a Result.
+into a monadic sequence which results in a Value.
 -}
 evaluateStep :: Step -> Evaluate Value
 evaluateStep step = case step of
@@ -137,7 +152,7 @@ functionApplication func value = case func of
         -- TODO HERE put value into Context?!?
         evaluateStep step
 
-    Primitive _ action -> liftIO (action value)
+    Primitive _ action -> liftProgram' (action value)
 
     -- TODO This should be unreachable if we indeed completed the
     -- translation phase. But nothing guarantees that yet.

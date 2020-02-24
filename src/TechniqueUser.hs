@@ -15,6 +15,7 @@ module TechniqueUser
     , loadTechnique
     , parsingPhase
     , translationPhase
+    , evaluationPhase
     ) where
 
 import Control.Monad (forever)
@@ -194,6 +195,6 @@ commandSimulateTechnique = do
 
 evaluationPhase :: Executable -> Value -> Program None Value
 evaluationPhase abstract initial = do
-    let context = emptyContext  -- that's a big FIXME 10-4 good buddy roger over and out
-    result <- liftIO $ runEvaluate context (evaluateExecutable abstract initial)
+    let unique = emptyUnique  -- that's a big FIXME 10-4 good buddy roger over and out
+    result <- runEvaluate unique (evaluateExecutable abstract initial)
     return result
