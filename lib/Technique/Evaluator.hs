@@ -21,9 +21,9 @@ import Core.Program
 import Core.System (liftIO)
 import Data.UUID.Types (UUID, nil)
 
+import Technique.Failure
 import Technique.Internal
 import Technique.Language
-import Technique.Failure
 
 {-|
 In order to execute a Procedure we need to supply a context: an identifier
@@ -57,6 +57,14 @@ data Expression b where
 -- support different interpeters / backends? This seems so cumbersome
 -- compared to the elegent tagless final method.
 
+{-|
+A monad in which to run an abstract Procedure.
+-}
+-- Ideally accessing the internals of the Program monad (the Context type)
+-- would not be necessary - or at least confined to the core-program
+-- library. It is exposed, sure, but having to explicitly weave it into the
+-- type of Evaluate in order to have it available to use in liftProgram' is
+-- a bit messy.
 newtype Evaluate a = Evaluate (ReaderT (Unique,Context None) (Program None) a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader (Unique,Context None))
 

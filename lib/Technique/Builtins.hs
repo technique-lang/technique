@@ -10,8 +10,11 @@ This is the beginnings of the standard library.
 module Technique.Builtins where
 
 import Core.Data.Structures
+import Core.Program.Execute (Program, None)
+import Core.Program.Logging (writeR)
 import Core.Text.Rope ()
 
+import Technique.Diagnostics ()
 import Technique.Internal
 import Technique.Language
 
@@ -24,6 +27,11 @@ builtinProcedures = intoMap (fmap (\p -> (functionName p, p))
     , builtinProcedureRecord
     ])
 
+placeholder :: Value -> Program None Value
+placeholder value = do
+    writeR value
+    return value
+
 builtinProcedureTask :: Function
 builtinProcedureTask = Primitive
     emptyProcedure
@@ -33,7 +41,7 @@ builtinProcedureTask = Primitive
         , procedureTitle = Just (Markdown "Task")
         , procedureDescription = Just (Markdown "A task to be executed by the person carrying out this role.")
         }
-    undefined
+    placeholder
 
 builtinProcedureRecord :: Function
 builtinProcedureRecord = Primitive
@@ -44,7 +52,7 @@ builtinProcedureRecord = Primitive
         , procedureTitle = Just (Markdown "Record")
         , procedureDescription = Just (Markdown "Input from the user to be parsed as a quantity.")
         }
-    undefined
+    placeholder
 
 -- the '|' operation
 builtinProcedureWaitEither :: Function
@@ -56,7 +64,7 @@ builtinProcedureWaitEither = Primitive
         , procedureTitle = Just (Markdown "Wait Either")
         , procedureDescription = Just (Markdown "Wait for either of two values to be ready.")
         }
-    undefined
+    placeholder
 
 -- the '&' operation
 builtinProcedureWaitBoth :: Function
@@ -68,7 +76,7 @@ builtinProcedureWaitBoth = Primitive
         , procedureTitle = Just (Markdown "Wait Both")
         , procedureDescription = Just (Markdown "Wait for two values to both be ready.")
         }
-    undefined
+    placeholder
 
 -- the '+' operation
 builtinProcedureCombineValues :: Function
@@ -80,4 +88,4 @@ builtinProcedureCombineValues = Primitive
         , procedureTitle = Just (Markdown "Combine Two Values")
         , procedureDescription = Just (Markdown "Combine two values. This will involve coersion if the concrete types differ.")
         }
-    undefined
+    placeholder
