@@ -1,11 +1,11 @@
-resolver: lts-14.20
+resolver: lts-14.27
 
 packages:
  - .
 
 extra-deps:
- - core-text-0.2.2.6
- - core-program-0.2.3.0
- - core-data-0.2.1.4
+ - core-text-0.2.3.3
+ - core-program-0.2.4.2
+ - core-data-0.2.1.5
  - ivar-simple-0.3.2
 
