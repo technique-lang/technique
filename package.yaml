@@ -11,7 +11,7 @@ author: Andrew Cowie <andrew@operationaldynamics.com>
 maintainer: Andrew Cowie <andrew@operationaldynamics.com>
 copyright: © 2002-2020 Operational Dynamics and Others
 category: Tools
-tested-with: GHC == 8.6
+tested-with: GHC == 8.8
 github: oprdyn/technique
 
 dependencies:
@@ -20,7 +20,7 @@ dependencies:
   - containers
   - core-data >= 0.2.1
   - core-text >= 0.2.3.1
-  - core-program >= 0.2.4
+  - core-program >= 0.2.4.2
   - dlist
   - free
   - megaparsec

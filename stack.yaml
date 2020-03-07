@@ -4,8 +4,5 @@ packages:
  - .
 
 extra-deps:
- - /home/andrew/src/oprdyn/unbeliever/core-text
- - /home/andrew/src/oprdyn/unbeliever/core-program
- - /home/andrew/src/oprdyn/unbeliever/core-data
  - ivar-simple-0.3.2
 
