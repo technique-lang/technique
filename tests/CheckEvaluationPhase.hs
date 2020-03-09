@@ -8,11 +8,12 @@ module CheckEvaluationPhase
 where
 
 import Core.Data.Structures
-import Core.Text.Rope ()
+import Core.Program
 import Core.System
+import Core.Text.Rope ()
 import Data.DList (fromList)
 import Data.Int (Int64)
-import Test.Hspec
+import Test.Hspec hiding (context)
 
 import Technique.Internal
 import Technique.Evaluator
@@ -24,8 +25,13 @@ main :: IO ()
 main = do
     finally (hspec checkEvaluationPhase) (putStrLn ".")
 
-testContext :: Context
-testContext = emptyContext
+runProgram :: Program None a -> IO a
+runProgram program = do
+    context <- configure "0" None blank
+    subProgram context program
+
+testUnique :: Unique
+testUnique = emptyUnique
 
 
 exampleSubroutineOven :: Function
@@ -44,5 +50,5 @@ checkEvaluationPhase :: Spec
 checkEvaluationPhase = do
     describe "Evaluator behaviour fundamentals" $ do
         it "single Step of Known Quantity evaluates" $ do
-            result <- runEvaluate testContext (evaluateStep singleStep)
+            result <- runProgram (runEvaluate testUnique (evaluateStep singleStep))
             result `shouldBe` Quanticle (Number 42)
