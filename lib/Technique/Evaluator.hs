@@ -7,7 +7,7 @@ Given an instantiated Technique Procedure, evalutate it at runtime.
 -- converted to a typeclass in the tagless final style.
 module Technique.Evaluator where
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader.Class (MonadReader(..))
 import Control.Monad.Trans.Reader (ReaderT(..))
 import Core.Data
@@ -65,7 +65,7 @@ evaluateStep step = case step of
 
     Asynchronous _ names substep -> do
         promise <- assignNames names substep
-        undefined -- TODO put primise into environment
+        undefined -- TODO put promise into environment
 
     Invocation _ attr func substep -> do
         functionApplication func substep   -- TODO do something with role!
