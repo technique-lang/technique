@@ -366,7 +366,7 @@ Update the environment's idea of where in the source we are, so that if we
 need to generate an error message we can offer one with position
 information.
 -}
-setLocationFrom :: (Render a, Located a) => a -> Translate ()
+setLocationFrom :: (Located a) => a -> Translate ()
 setLocationFrom thing = do
     env <- get
     let source = environmentSource env
