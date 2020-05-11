@@ -113,7 +113,7 @@ checkTranslationPhase = do
                 Left _ -> fail "Incorrect CompilerFailure encountered"
                 Right _ -> fail "Should have emitted CompilerFailure"
 
-{-|
+{-
 Having made it past the various things that should throw CompilationErrors,
 we now run through some examples which should parse and translate correctly
 to full abstract syntax trees.
