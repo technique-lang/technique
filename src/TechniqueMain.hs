@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE CPP #-}
 
 import Core.Program
 import Core.Text
@@ -10,8 +11,13 @@ import TechniqueUser
     , commandFormatTechnique
     )
 
+#ifdef __GHCIDE__
+version :: Version
+version = "0"
+#else
 version :: Version
 version = $(fromPackage)
+#endif
 
 main :: IO ()
 main = do
