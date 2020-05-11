@@ -67,6 +67,12 @@ tests:
     dependencies:
       - hspec
       - technique
+# and, because no multi-cradle support:
+      - async
+      - hashable
+      - mtl
+      - transformers
+      - uuid-types
     ghc-options: -threaded
     source-dirs:
       - tests
