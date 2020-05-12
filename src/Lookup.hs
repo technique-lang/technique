@@ -13,19 +13,17 @@ import Database.Redis
 
 fromReply :: (Either Reply (Maybe S.ByteString)) -> Maybe S.ByteString
 fromReply x =
-    case x of
-        Right sm'       -> sm'
-        Left (Error s') -> Just s'
-        Left _          -> Just "Kaboom!\n"     -- Is this even possible?
-
+  case x of
+    Right sm' -> sm'
+    Left (Error s') -> Just s'
+    Left _ -> Just "Kaboom!\n" -- Is this even possible?
 
 queryResource :: S.ByteString -> Redis (Maybe S.ByteString)
 queryResource x' = do
-    k <- get key'
-    return $ fromReply k
+  k <- get key'
+  return $ fromReply k
   where
     key' = S.append "resource:" x'
-
 
 --
 -- Establish connection to redis database and conduct query. This is more or
@@ -34,49 +32,44 @@ queryResource x' = do
 --
 
 settings =
-    defaultConnectInfo {
-        connectPort = UnixSocket "tests/redis.sock"
+  defaultConnectInfo
+    { connectPort = UnixSocket "tests/redis.sock"
     }
 
-
 lookupResource :: S.ByteString -> IO (Maybe S.ByteString)
-lookupResource d = bracket
+lookupResource d =
+  bracket
     (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ queryResource d)
 
-
 writeResource :: S.ByteString -> S.ByteString -> Redis ()
 writeResource d' t' = do
-    _ <- set key value      -- FIXME there's a return value; check for errors!
-    return ()
+  _ <- set key value -- FIXME there's a return value; check for errors!
+  return ()
   where
-    key   = S.append "resource:" d'
+    key = S.append "resource:" d'
     value = t'
 
-
 storeResource :: S.ByteString -> S.ByteString -> IO ()
-storeResource d' t' = bracket
+storeResource d' t' =
+  bracket
     (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ writeResource d' t')
-
 
 --
 -- For tests,
 --
 
 flushDatastore :: IO ()
-flushDatastore = bracket
+flushDatastore =
+  bracket
     (connect settings)
     (\r -> runRedis r $ quit)
     (\r -> runRedis r $ dropResources)
 
-
 dropResources :: Redis ()
 dropResources = do
-    _ <- flushdb
-    return ()
-
-
-
+  _ <- flushdb
+  return ()
