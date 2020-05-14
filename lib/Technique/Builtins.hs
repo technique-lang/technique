@@ -6,9 +6,10 @@
 module Technique.Builtins where
 
 import Core.Data.Structures
-import Core.Program.Execute (None, Program)
-import Core.Program.Logging (writeR)
-import Core.Text.Rope ()
+import Core.Program.Execute (None, Program, getConsoleWidth)
+import Core.Program.Logging (write, writeR)
+import Core.Text.Rope
+import Core.Text.Utilities (render)
 import Technique.Diagnostics ()
 import Technique.Internal
 import Technique.Language
@@ -45,7 +46,14 @@ builtinProcedureTask =
         procedureTitle = Just (Markdown "Task"),
         procedureDescription = Just (Markdown "A task to be executed by the person carrying out this role.")
       }
-    placeholder
+    action
+  where
+    action :: Value -> Program None Value
+    action input = do
+      width <- getConsoleWidth
+      let msg = "[ ] Task: "
+      write (msg <> render (width - widthRope msg) input)
+      return Unitus
 
 builtinProcedureRecord :: Function
 builtinProcedureRecord =
