@@ -27,7 +27,8 @@ builtinProcedures =
           builtinProcedureWaitBoth,
           builtinProcedureCombineValues,
           builtinProcedureTask,
-          builtinProcedureRecord
+          builtinProcedureRecord,
+          builtinProcedureChoice
         ]
     )
 
@@ -64,6 +65,18 @@ builtinProcedureRecord =
         procedureOutput = [Type "Text"], -- ?
         procedureTitle = Just (Markdown "Record"),
         procedureDescription = Just (Markdown "Input from the user to be parsed as a quantity.")
+      }
+    placeholder
+
+builtinProcedureChoice :: Function
+builtinProcedureChoice =
+  Primitive
+    emptyProcedure
+      { procedureName = Identifier "choice",
+        procedureInput = [Type "Text"],
+        procedureOutput = [Type "*"], -- FIXME
+        procedureTitle = Just (Markdown "Choice"),
+        procedureDescription = Just (Markdown "Ask the user to make a choice from the supplied options.")
       }
     placeholder
 
