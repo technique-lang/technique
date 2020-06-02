@@ -43,7 +43,7 @@ colourizeTechnique token = case token of
   OperatorToken -> colorDull Yellow <> bold
   VariableToken -> color Cyan
   ApplicationToken -> color Blue <> bold
-  LabelToken -> color Green <> bold
+  LabelToken -> color Green
   StringToken -> color Green <> bold
   QuantityToken -> color Magenta <> bold
   RoleToken -> colorDull Yellow

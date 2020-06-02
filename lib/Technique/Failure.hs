@@ -237,5 +237,6 @@ extractParseError e = case e of
           Just item -> item : []
           Nothing -> []
         expected = OrdSet.toList expected0
-     in (o, unexpected, expected)
+    in
+        (o,unexpected,expected)
   FancyError _ _ -> error "Unexpected parser error"

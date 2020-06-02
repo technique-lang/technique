@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-unused-matches -fno-warn-unused-imports #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-unused-imports #-}
 
 module Technique.Diagnostics where
 
@@ -99,5 +99,22 @@ instance Render Value where
         <> annotate SymbolToken dquote
     Quanticle qty ->
       intoDocA qty
-    _ ->
-      undefined
+    Tabularum bindings ->
+      -- This duplicates the implementation in the Render instance for
+      -- Tablet and Binding in Technique.Formatter. I don't know if there's
+      -- a way around this but it's not the end of the world.
+      nest
+        4
+        ( annotate SymbolToken lbracket
+            <> foldl' g emptyDoc bindings
+        )
+        <> line
+        <> annotate SymbolToken rbracket
+      where
+        g :: Doc TechniqueToken -> (Label, Value) -> Doc TechniqueToken
+        g built (sublabel, subvalue) =
+          built
+            <> line
+            <> intoDocA sublabel
+            <> annotate SymbolToken " ~ "
+            <> intoDocA subvalue
