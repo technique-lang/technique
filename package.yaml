@@ -2,17 +2,17 @@ name: technique
 version:  0.2.5
 synopsis: Procedures and Sequences
 description: |
-  A domain specific lanaguage for procedures.
+  A domain specific language for procedures.
 
 stability: experimental
 license: MIT
 license-file: LICENSE
-author: Andrew Cowie <andrew@operationaldynamics.com>
-maintainer: Andrew Cowie <andrew@operationaldynamics.com>
-copyright: © 2002-2020 Operational Dynamics and Others
+author: Andrew Cowie <istathar@gmail.com>
+maintainer: Andrew Cowie <istathar@gmail.com>
+copyright: © 2002-2020 Athae Eredh Siniath and Others
 category: Tools
-tested-with: GHC == 8.8
-github: oprdyn/technique
+tested-with: GHC == 8.8.3
+github: technique-lang/technique
 
 dependencies:
   - base >= 4.11 && < 5
