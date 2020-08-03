@@ -118,3 +118,5 @@ instance Render Value where
             <> intoDocA sublabel
             <> annotate SymbolToken " ~ "
             <> intoDocA subvalue
+    Parametriq list ->
+      commaCat list
