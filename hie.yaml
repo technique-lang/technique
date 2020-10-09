@@ -1,0 +1,3 @@
+cradle:
+  stack:
+    component: "technique:test:check"
