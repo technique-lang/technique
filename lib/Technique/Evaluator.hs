@@ -100,61 +100,63 @@ evaluateExecutable abstract value = do
 -- The heart of the evaluation loop. Translate from the abstract syntax tree
 -- into a monadic sequence which results in a Value.
 evaluateStep :: Step -> Evaluate Value
-evaluateStep step = case step of
-  Known _ value -> do
-    return value
-  Depends _ name -> do
-    blockUntilValue name
-  Tuple _ steps -> do
-    values <- traverse evaluateStep steps
-    return (Parametriq values)
-  Asynchronous _ names substep -> do
-    promises <- assignNames names substep
-    undefined -- TODO put promise into environment
+evaluateStep step = do
+  case step of
+    Known _ value -> do
+      return value
+    Depends _ name -> do
+      blockUntilValue name
+    Tuple _ steps -> do
+      values <- traverse evaluateStep steps
+      return (Parametriq values)
+    Asynchronous _ names substep -> do
+      promises <- assignNames names substep
+      undefined -- TODO put promise into environment
 
-  -- TODO do something with role!
+    -- TODO do something with role!
 
-  Invocation _ attr func substep -> do
-    value <- evaluateStep substep
-    functionApplication func value
+    Invocation _ attr func substep -> do
+      value <- evaluateStep substep
+      functionApplication func value
 
-  -- FIXME this doesn't make sense. Unitus is neither null nor Nothing. The
-  -- semantics of NoOp need tidying up.
+    -- FIXME this doesn't make sense. Unitus is neither null nor Nothing. The
+    -- semantics of NoOp need tidying up.
 
-  NoOp -> return Unitus
-  Bench _ pairs -> do
-    values <- mapM f pairs
-    return (Tabularum values)
-    where
-      f :: (Label, Step) -> Evaluate (Label, Value)
-      f (label, substep) = do
-        value <- evaluateStep substep
-        assignLabel label value
+    NoOp -> return Unitus
+    Bench _ pairs -> do
+      values <- mapM f pairs
+      return (Tabularum values)
+      where
+        f :: (Label, Step) -> Evaluate (Label, Value)
+        f (label, substep) = do
+          value <- evaluateStep substep
+          assignLabel label value
 
-  -- Again we're using Unitus as the empty value. This is probably wrong.
+    -- Again we're using Unitus as the empty value. This is probably wrong.
 
-  Nested _ substeps -> do
-    final <- foldM g Unitus substeps
-    return final
-    where
-      g :: Value -> Step -> Evaluate Value
-      g _ substep = do
-        value <- evaluateStep substep
-        return value
+    Nested _ substeps -> do
+      final <- foldM g Unitus substeps
+      return final
+      where
+        g :: Value -> Step -> Evaluate Value
+        g _ substep = do
+          value <- evaluateStep substep
+          return value
 
 functionApplication :: Function -> Value -> Evaluate Value --  IO Promise ?
-functionApplication func value = case func of
-  -- TODO no this isn't right. runEvaluate to create a sub scope?
+functionApplication func value = do
+  case func of
+    -- TODO no this isn't right. runEvaluate to create a sub scope?
 
-  -- HERE the value is the input parameter; it had a name, but does it now? Does it need one?
+    -- HERE the value is the input parameter; it had a name, but does it now? Does it need one?
 
-  Subroutine _ step -> do
-    -- TODO HERE put value into Context?!?
-    evaluateStep step
-  Primitive _ action -> liftProgram' (action value)
-  -- TODO This should be unreachable if we indeed completed the
-  -- translation phase. But nothing guarantees that yet.
-  Unresolved _ -> error (show func)
+    Subroutine _ step -> do
+      -- TODO HERE put value into Context?!?
+      evaluateStep step
+    Primitive _ action -> liftProgram' (action value)
+    -- TODO This should be unreachable if we indeed completed the
+    -- translation phase. But nothing guarantees that yet.
+    Unresolved _ -> error (show func)
 
 blockUntilValue :: Name -> Evaluate Value
 blockUntilValue = undefined
