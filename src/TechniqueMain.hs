@@ -1,16 +1,15 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 import Core.Program
 import Core.Text
 import TechniqueUser
-    ( commandCheckTechnique
-    , commandFormatTechnique
-    , commandSimulateTechnique
-    )
+  ( commandCheckTechnique,
+    commandFormatTechnique,
+    commandSimulateTechnique,
+  )
 
 #ifdef __GHCIDE__
 version :: Version
@@ -59,28 +58,32 @@ main = do
                   [quote|
                 The file containing the code for the procedure you want to format.
               |]
-            ]
-        , Command "simulate" "Evaluate a procedure in simulation mode"
-            [ Argument "filename" [quote|
+              ],
+            Command
+              "simulate"
+              "Evaluate a procedure in simulation mode"
+              [ Argument
+                  "filename"
+                  [quote|
                 The file containing the code for the procedure you want to evaluate.
               |]
-            ]
-
-        ])
+              ]
+          ]
+      )
   executeWith context program
 
 program :: Program None ()
 program = do
-    params <- getCommandLine
-    case commandNameFrom params of
-        Nothing -> do
-            write "Illegal state?"
-            terminate 2
-        Just command -> case command of
-            "check"     -> commandCheckTechnique
-            "format"    -> commandFormatTechnique
-            "simulate"  -> commandSimulateTechnique
-            _       -> do
-                write "Unknown command?"
-                terminate 3
-    event "Done"
+  params <- getCommandLine
+  case commandNameFrom params of
+    Nothing -> do
+      write "Illegal state?"
+      terminate 2
+    Just command -> case command of
+      "check" -> commandCheckTechnique
+      "format" -> commandFormatTechnique
+      "simulate" -> commandSimulateTechnique
+      _ -> do
+        write "Unknown command?"
+        terminate 3
+  event "Done"
