@@ -109,7 +109,7 @@ evaluateStep step = case step of
     values <- traverse evaluateStep steps
     return (Parametriq values)
   Asynchronous _ names substep -> do
-    promise <- assignNames names substep
+    promises <- assignNames names substep
     undefined -- TODO put promise into environment
 
   -- TODO do something with role!
@@ -163,7 +163,7 @@ blockUntilValue = undefined
 -- Take a step and lauch it asynchronously, binding its result to a name.
 -- Returns a promise of a value that can be in evaluated (block on) when
 -- needed.
-assignNames :: [Name] -> Step -> Evaluate Promise
+assignNames :: [Name] -> Step -> Evaluate [Promise]
 assignNames = do
   -- dunno
   return (undefined) -- fixme not empty list
