@@ -1,4 +1,4 @@
-resolver: lts-16.8
+resolver: lts-16.17
 
 packages:
  - .
@@ -12,3 +12,5 @@ extra-deps:
 build:
   haddock: false
 
+nix:
+  packages: [openssl]
