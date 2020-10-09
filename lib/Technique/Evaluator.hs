@@ -4,6 +4,12 @@
 -- At present this is a proof of concept. It might benefit from being
 -- converted to a typeclass in the tagless final style.
 
+-- Here's a nice way to render a completed task, should that ever be useful:
+-- Contrasts to the todo notation in GitHub flavoured Markdown:
+--
+-- [ ] This needs doing  
+-- [✓] Completed task.
+
 -- |
 -- Given an instantiated Technique Procedure, evalutate it at runtime.
 module Technique.Evaluator where
