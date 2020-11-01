@@ -33,9 +33,9 @@ data Status = Ok | Failed CompilationError | Reload
 instance Render Status where
   type Token Status = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA status = case status of
+  highlight status = case status of
     Ok -> annotate LabelToken "ok"
-    Failed e -> intoDocA e
+    Failed e -> highlight e
     Reload -> annotate MagicToken "Δ"
 
 data Source = Source
@@ -51,7 +51,7 @@ instance Located Source where
 instance Render Source where
   type Token Source = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA source = pretty (sourceFilename source) <+> pretty (sourceOffset source)
+  highlight source = pretty (sourceFilename source) <+> pretty (sourceOffset source)
 
 emptySource :: Source
 emptySource =
@@ -95,7 +95,7 @@ exitCodeFor (CompilationError _ reason) = fromEnum reason
 instance Render FailureReason where
   type Token FailureReason = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA failure = case failure of
+  highlight failure = case failure of
     InvalidSetup -> "Invalid setup!"
     ParsingFailed unexpected expected ->
       let un = case unexpected of
@@ -105,10 +105,10 @@ instance Render FailureReason where
             [] -> emptyDoc
             items -> "expecting " <> fillCat (fancyPunctuate (fmap (formatErrorItem SymbolToken) items)) <> "."
        in un <> ex
-    VariableAlreadyInUse i -> "Variable by the name of '" <> annotate VariableToken (intoDocA i) <> "' already defined."
-    ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> annotate ProcedureToken (intoDocA i) <> "' already declared."
-    CallToUnknownProcedure i -> "Call to unknown procedure '" <> annotate ApplicationToken (intoDocA i) <> "'."
-    UseOfUnknownIdentifier i -> "Variable '" <> annotate VariableToken (intoDocA i) <> "' not in scope."
+    VariableAlreadyInUse i -> "Variable by the name of '" <> annotate VariableToken (highlight i) <> "' already defined."
+    ProcedureAlreadyDeclared i -> "Procedure by the name of '" <> annotate ProcedureToken (highlight i) <> "' already declared."
+    CallToUnknownProcedure i -> "Call to unknown procedure '" <> annotate ApplicationToken (highlight i) <> "'."
+    UseOfUnknownIdentifier i -> "Variable '" <> annotate VariableToken (highlight i) <> "' not in scope."
     EncounteredUndefined -> "Encountered an " <> annotate ErrorToken "undefined" <> " marker."
 
 fancyPunctuate :: [Doc ann] -> [Doc ann]
@@ -158,7 +158,7 @@ numberOfCarots reason = case reason of
 instance Render CompilationError where
   type Token CompilationError = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (CompilationError source reason) =
+  highlight (CompilationError source reason) =
     let filename = pretty (sourceFilename source)
         contents = intoRope (sourceContents source)
         o = sourceOffset source
@@ -202,7 +202,7 @@ instance Render CompilationError where
           <> annotate ErrorToken (pretty caroted)
           <> hardline
           <> hardline
-          <> intoDocA reason
+          <> highlight reason
 
 -- |
 -- When we get a failure in the parsing stage **megaparsec** returns a

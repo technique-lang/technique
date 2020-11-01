@@ -31,40 +31,39 @@ data TechniqueToken
   | StepToken
 
 instance Pretty Procedure where
-  pretty = unAnnotate . intoDocA
+  pretty = unAnnotate . highlight
 
--- no use of white, suggesting colours
-colourizeTechnique :: TechniqueToken -> AnsiStyle
+colourizeTechnique :: TechniqueToken -> AnsiColour
 colourizeTechnique token = case token of
-  MagicToken -> color Black
-  ProcedureToken -> colorDull Blue <> bold
-  TypeToken -> colorDull Yellow
-  SymbolToken -> colorDull Cyan <> bold
-  OperatorToken -> colorDull Yellow <> bold
-  VariableToken -> color Cyan
-  ApplicationToken -> color Blue <> bold
-  LabelToken -> color Green <> bold
-  StringToken -> color Green <> bold
-  QuantityToken -> color Magenta <> bold
-  RoleToken -> colorDull Yellow
-  ErrorToken -> color Red <> bold
-  FilenameToken -> color White <> bold
-  StepToken -> color Black <> bold -- for diagnostics in evalutator
+  MagicToken -> brightGrey
+  ProcedureToken -> bold dullBlue
+  TypeToken -> dullYellow
+  SymbolToken -> bold dullCyan
+  OperatorToken -> bold dullYellow
+  VariableToken -> brightCyan
+  ApplicationToken -> bold brightBlue
+  LabelToken -> brightGreen
+  StringToken -> bold brightGreen
+  QuantityToken -> bold brightMagenta
+  RoleToken -> dullYellow
+  ErrorToken -> bold pureRed
+  FilenameToken -> bold brightWhite
+  StepToken -> bold brightGrey -- for diagnostics in evalutator
 
 instance Render Procedure where
   type Token Procedure = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA proc =
-    let name = intoDocA . procedureName $ proc
+  highlight proc =
+    let name = highlight . procedureName $ proc
         params = case procedureParams proc of
           [] -> emptyDoc
           xs -> commaCat xs <> " "
         from = commaCat . procedureInput $ proc
-        into = intoDocA . procedureOutput $ proc
-        block = intoDocA . procedureBlock $ proc
+        into = highlight . procedureOutput $ proc
+        block = highlight . procedureBlock $ proc
         description = case procedureDescription proc of
           Nothing -> emptyDoc
-          Just text -> intoDocA text
+          Just text -> highlight text
      in description
           <> ( indent
                  4
@@ -82,22 +81,22 @@ instance Render Procedure where
 -- |
 -- Punctuate a list with commas annotated with Symbol highlighting.
 commaCat :: (Render a, Token a ~ TechniqueToken) => [a] -> Doc (Token a)
-commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap (annotate VariableToken . intoDocA)
+commaCat = hcat . punctuate (annotate SymbolToken comma) . fmap (annotate VariableToken . highlight)
 
 instance Render Type where
   type Token Type = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Type name) = annotate TypeToken (pretty name)
+  highlight (Type name) = annotate TypeToken (pretty name)
 
 instance Render Markdown where
   type Token Markdown = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Markdown text) = pretty text
+  highlight (Markdown text) = pretty text
 
 instance Render Block where
   type Token Block = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Block statements) =
+  highlight (Block statements) =
     nest
       4
       ( annotate SymbolToken lbrace
@@ -108,21 +107,21 @@ instance Render Block where
     where
       go :: [Statement] -> Doc TechniqueToken
       go [] = emptyDoc
-      go (x@(Series _) : x1 : xs) = intoDocA x <> intoDocA x1 <> go xs
-      go (x : xs) = line <> intoDocA x <> go xs
+      go (x@(Series _) : x1 : xs) = highlight x <> highlight x1 <> go xs
+      go (x : xs) = line <> highlight x <> go xs
 
 instance Render Statement where
   type Token Statement = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA statement = case statement of
+  highlight statement = case statement of
     Assignment _ vars expr ->
-      commaCat vars <+> annotate SymbolToken "=" <+> intoDocA expr
+      commaCat vars <+> annotate SymbolToken "=" <+> highlight expr
     Execute _ expr ->
-      intoDocA expr
+      highlight expr
     Comment _ text ->
       "-- " <> pretty text -- TODO what about multiple lines?
     Declaration _ proc ->
-      intoDocA proc
+      highlight proc
     Blank _ ->
       emptyDoc
     Series _ ->
@@ -131,7 +130,7 @@ instance Render Statement where
 instance Render Attribute where
   type Token Attribute = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA role = case role of
+  highlight role = case role of
     Role name -> annotate RoleToken ("@" <> pretty name)
     Place name -> annotate RoleToken ("#" <> pretty name)
     Inherit -> annotate ErrorToken "Inherit"
@@ -139,60 +138,60 @@ instance Render Attribute where
 instance Render Expression where
   type Token Expression = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA expr = case expr of
+  highlight expr = case expr of
     Application _ name subexpr ->
-      annotate ApplicationToken (intoDocA name) <+> intoDocA subexpr
+      annotate ApplicationToken (highlight name) <+> highlight subexpr
     None _ ->
       annotate SymbolToken ("()")
     Undefined _ ->
       annotate ErrorToken "?"
     Amount _ qty ->
-      intoDocA qty
+      highlight qty
     Text _ text ->
       annotate SymbolToken dquote
         <> annotate StringToken (pretty text)
         <> annotate SymbolToken dquote
     Object _ tablet ->
-      intoDocA tablet
+      highlight tablet
     Variable _ vars ->
       commaCat vars
     Operation _ operator subexpr1 subexpr2 ->
-      intoDocA subexpr1 <+> intoDocA operator <+> intoDocA subexpr2
+      highlight subexpr1 <+> highlight operator <+> highlight subexpr2
     Grouping _ subexpr ->
       annotate SymbolToken lparen
-        <> intoDocA subexpr
+        <> highlight subexpr
         <> annotate SymbolToken rparen
     Restriction _ attribute block ->
-      intoDocA attribute
+      highlight attribute
         <> line
-        <> intoDocA block -- TODO some nesting?
+        <> highlight block -- TODO some nesting?
 
 instance Render Identifier where
   type Token Identifier = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Identifier name) = pretty name
+  highlight (Identifier name) = pretty name
 
 instance Pretty Identifier where
-  pretty = unAnnotate . intoDocA
+  pretty = unAnnotate . highlight
 
 instance Render Decimal where
   type Token Decimal = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA = pretty . decimalToRope
+  highlight = pretty . decimalToRope
 
 instance Render Quantity where
   type Token Quantity = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA qty = case qty of
+  highlight qty = case qty of
     Number i ->
       annotate QuantityToken (pretty i)
     Quantity i u m unit ->
       let measurement =
-            intoDocA i <> " "
+            highlight i <> " "
           uncertainty =
             if isZeroDecimal u
               then emptyDoc
-              else "± " <> intoDocA u <> " "
+              else "± " <> highlight u <> " "
           magnitude =
             if m == 0
               then emptyDoc
@@ -221,12 +220,12 @@ toSuperscript c = case c of
   _ -> error "Invalid, digit expected"
 
 instance Pretty Quantity where
-  pretty = unAnnotate . intoDocA
+  pretty = unAnnotate . highlight
 
 instance Render Tablet where
   type Token Tablet = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Tablet bindings) =
+  highlight (Tablet bindings) =
     nest
       4
       ( annotate SymbolToken lbracket
@@ -236,18 +235,18 @@ instance Render Tablet where
       <> annotate SymbolToken rbracket
     where
       g :: Doc TechniqueToken -> Binding -> Doc TechniqueToken
-      g built binding = built <> line <> intoDocA binding
+      g built binding = built <> line <> highlight binding
 
 instance Render Label where
   type Token Label = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Label text) =
+  highlight (Label text) =
     annotate SymbolToken dquote
       <> annotate LabelToken (pretty text)
       <> annotate SymbolToken dquote
 
 instance Pretty Label where
-  pretty = unAnnotate . intoDocA
+  pretty = unAnnotate . highlight
 
 -- the annotation for the label duplicates the code Quantity's Text
 -- constructor, but for the LabelToken token. This distinction may not be
@@ -255,15 +254,15 @@ instance Pretty Label where
 instance Render Binding where
   type Token Binding = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Binding label subexpr) =
-    intoDocA label
+  highlight (Binding label subexpr) =
+    highlight label
       <+> annotate SymbolToken "~"
-      <+> intoDocA subexpr
+      <+> highlight subexpr
 
 instance Render Operator where
   type Token Operator = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA operator =
+  highlight operator =
     annotate OperatorToken $ case operator of
       WaitBoth -> pretty '&'
       WaitEither -> pretty '|'
@@ -272,13 +271,13 @@ instance Render Operator where
 instance Render Technique where
   type Token Technique = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA technique =
+  highlight technique =
     let version = pretty . techniqueVersion $ technique
         license = pretty . techniqueLicense $ technique
         copyright = case techniqueCopyright technique of
           Just owner -> "; ©" <+> pretty owner
           Nothing -> emptyDoc
-        body = fmap intoDocA . techniqueBody $ technique
+        body = fmap highlight . techniqueBody $ technique
      in annotate MagicToken ("%" <+> "technique" <+> "v" <> version) <> line
           <> annotate MagicToken ("!" <+> license <> copyright)
           <> line

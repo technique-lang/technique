@@ -18,7 +18,7 @@ import Technique.Language
 instance Render Function where
   type Token Function = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA func =
+  highlight func =
     nest
       3
       ( " ↘ "
@@ -28,7 +28,7 @@ instance Render Function where
                  Subroutine proc step ->
                    annotate StepToken "Subroutine" <+> annotate ProcedureToken (pretty (procedureName proc))
                      <> line
-                     <> (nest 3 (" ↘ " <> intoDocA step))
+                     <> (nest 3 (" ↘ " <> highlight step))
                  Primitive proc action ->
                    annotate StepToken "Primitive" <+> annotate ProcedureToken (pretty (procedureName proc))
                      <> line
@@ -39,27 +39,27 @@ instance Render Function where
 instance Render Step where
   type Token Step = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA step = case step of
+  highlight step = case step of
     Known _ value ->
-      annotate StepToken "Known" <+> intoDocA value
+      annotate StepToken "Known" <+> highlight value
     Depends _ name ->
-      annotate StepToken "Depends" <+> intoDocA name
+      annotate StepToken "Depends" <+> highlight name
     NoOp ->
       annotate ErrorToken "NoOp"
     Tuple _ steps ->
       annotate StepToken "Tuple"
         <+> lparen
-        <+> hsep (punctuate comma (fmap intoDocA steps))
+        <+> hsep (punctuate comma (fmap highlight steps))
         <+> rparen
     Nested _ steps ->
-      vcat (toList (fmap intoDocA steps))
+      vcat (toList (fmap highlight steps))
     Asynchronous _ names substep ->
-      annotate StepToken "Asynch" <+> commaCat names <+> "◀-" <+> intoDocA substep
+      annotate StepToken "Asynch" <+> commaCat names <+> "◀-" <+> highlight substep
     Invocation _ attr func substep ->
       let i = functionName func
-       in annotate StepToken "Invoke" <+> intoDocA attr <+> annotate ApplicationToken (intoDocA i)
+       in annotate StepToken "Invoke" <+> highlight attr <+> annotate ApplicationToken (highlight i)
             <> line
-            <> nest 3 (" ↘ " <> intoDocA substep)
+            <> nest 3 (" ↘ " <> highlight substep)
     Bench _ pairs ->
       -- [(Label,Step)]
       annotate StepToken "Bench"
@@ -75,17 +75,17 @@ instance Render Step where
         bindings = fmap f pairs
         f :: (Label, Step) -> Doc TechniqueToken
         f (label, substep) =
-          intoDocA label <+> "◀-" <+> intoDocA substep
+          highlight label <+> "◀-" <+> highlight substep
 
 instance Render Name where
   type Token Name = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA (Name name) = annotate VariableToken (pretty name)
+  highlight (Name name) = annotate VariableToken (pretty name)
 
 instance Render Value where
   type Token Value = TechniqueToken
   colourize = colourizeTechnique
-  intoDocA value = case value of
+  highlight value = case value of
     Unitus ->
       annotate QuantityToken "()"
     Literali text ->
@@ -93,6 +93,6 @@ instance Render Value where
         <> annotate StringToken (pretty text)
         <> annotate SymbolToken dquote
     Quanticle qty ->
-      intoDocA qty
+      highlight qty
     _ ->
       undefined

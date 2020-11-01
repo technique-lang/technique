@@ -19,7 +19,7 @@ main = do
   finally (hspec checkQuantityBehaviour) (putStrLn ".")
 
 renderTest :: Render a => a -> String
-renderTest x = show (intoDocA x)
+renderTest x = show (highlight x)
 
 -- |
 -- These are less tests than a body of code that exercises construction of

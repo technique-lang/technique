@@ -27,7 +27,7 @@ main = do
 -- trailing newline that is not present in the rendered AST element. So
 -- administratively add one here.
 renderTest :: Render a => a -> String
-renderTest x = show (intoDocA x <> line)
+renderTest x = show (highlight x <> line)
 
 -- |
 -- These are less tests than a body of code that exercises construction of

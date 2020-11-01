@@ -19,7 +19,7 @@ dependencies:
   - ivar-simple
   - containers
   - core-data >= 0.2.1
-  - core-text >= 0.2.3.1
+  - core-text >= 0.3.0
   - core-program >= 0.2.4.2
   - dlist
   - free
