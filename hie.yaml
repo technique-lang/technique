@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./lib"
+      component: "technique:lib"
+
+    - path: "./src"
+      component: "technique:exe:technique"
+
+    - path: "./tests"
+      component: "technique:test:check"
