@@ -27,7 +27,6 @@ dependencies:
   - text
   - parser-combinators
   - prettyprinter
-  - prettyprinter-ansi-terminal
 
 ghc-options: -Wall -Wwarn -fwarn-tabs
 
