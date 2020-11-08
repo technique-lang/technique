@@ -30,31 +30,32 @@ dependencies:
 
 ghc-options: -Wall -Wwarn -fwarn-tabs
 
-library:
-  dependencies:
-    - async
-    - hashable
-    - mtl
-    - transformers
-    - uuid-types
-  source-dirs: lib
-  exposed-modules:
-    - Technique.Builtins
-    - Technique.Diagnostics
-    - Technique.Evaluator
-    - Technique.Failure
-    - Technique.Formatter
-    - Technique.Language
-    - Technique.Internal
-    - Technique.Parser
-    - Technique.Quantity
-    - Technique.Translate
-  other-modules: []
+internal-libraries:
+  technique-internal:
+    dependencies:
+      - async
+      - hashable
+      - mtl
+      - transformers
+      - uuid-types
+    source-dirs: lib
+    exposed-modules:
+      - Technique.Builtins
+      - Technique.Diagnostics
+      - Technique.Evaluator
+      - Technique.Failure
+      - Technique.Formatter
+      - Technique.Language
+      - Technique.Internal
+      - Technique.Parser
+      - Technique.Quantity
+      - Technique.Translate
+    other-modules: []
 
 executables:
   technique:
     dependencies:
-      - technique
+      - technique-internal
     ghc-options: -threaded
     source-dirs: src
     main: TechniqueMain.hs
@@ -65,7 +66,7 @@ tests:
   check:
     dependencies:
       - hspec
-      - technique
+      - technique-internal
 # and, because no multi-cradle support:
       - async
       - hashable
