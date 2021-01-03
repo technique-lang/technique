@@ -9,7 +9,7 @@ license: MIT
 license-file: LICENSE
 author: Andrew Cowie <istathar@gmail.com>
 maintainer: Andrew Cowie <istathar@gmail.com>
-copyright: © 2002-2020 Athae Eredh Siniath and Others
+copyright: © 2002-2021 Athae Eredh Siniath and Others
 category: Tools
 tested-with: GHC == 8.8.4
 github: technique-lang/technique
