@@ -1,19 +1,20 @@
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 import Core.Program
-import Core.Text
 import Core.System
+import Core.Text
 import Data.Text (Text)
 import Text.Megaparsec
 
-import Technique.Parser
 import Technique.Formatter ()
+import Technique.Parser
 
 text :: Text
 text = "5.9722 × 10^24 kg"
 
-text1 = [quote|
+text1 =
+    [quote|
 { 
     (42 )  
 }
@@ -29,12 +30,12 @@ main = execute $ do
     liftIO $ hFlush stdout
     sleep 0.25
     case result of
-        Left err    -> write (intoRope (errorBundlePretty err))
-        Right x     -> writeR x
-
+        Left err -> write (intoRope (errorBundlePretty err))
+        Right x -> writeR x
 
 blob1 :: Text
-blob1 = [quote|
+blob1 =
+    [quote|
 % technique v0
 ! PublicDomain
     check_sensors : Reading -> Emergency
@@ -44,7 +45,8 @@ blob1 = [quote|
 |]
 
 blob2 :: Text
-blob2 = [quote|
+blob2 =
+    [quote|
 % technique v0
 ! PublicDomain
 
@@ -75,7 +77,8 @@ Aftermath
 |]
 
 blob4 :: Text
-blob4 = [quote|
+blob4 =
+    [quote|
 % technique v0
 ! Super Secret Squirrel Private Not License
 
