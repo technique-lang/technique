@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utilities
-  ( assertMaybe,
-    assertPass,
-  )
+    ( assertMaybe,
+      assertPass,
+    )
 where
 
 import Test.HUnit
@@ -14,13 +14,13 @@ import Test.HUnit
 
 assertMaybe :: String -> Maybe a -> Assertion
 assertMaybe prefix m0 =
-  case m0 of
-    Nothing -> assertFailure prefix
-    Just _ -> assertBool "" True
+    case m0 of
+        Nothing -> assertFailure prefix
+        Just _ -> assertBool "" True
 
 --
 -- For when code didn't throw an exception; puts it in Assertion which is IO ().
 --
 assertPass :: Assertion
 assertPass = do
-  assertBool "" True
+    assertBool "" True
