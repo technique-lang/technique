@@ -9,11 +9,11 @@ import Test.Hspec (Spec, hspec)
 
 main :: IO ()
 main = do
-  finally (hspec suite) (putStrLn ".")
+    finally (hspec suite) (putStrLn ".")
 
 suite :: Spec
 suite = do
-  checkQuantityBehaviour
-  checkConcreteSyntax
-  checkSkeletonParser
-  checkTranslationPhase
+    checkQuantityBehaviour
+    checkConcreteSyntax
+    checkSkeletonParser
+    checkTranslationPhase
