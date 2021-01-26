@@ -24,9 +24,9 @@ history we took to get here.
 
 -- TODO values needs to be somewhere, but here?
 data Context = Context
-    { contextEvent :: UUID,
-      contextPath :: Rope, -- or a  list or a fingertree or...
-      contextValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
+    { contextEvent :: UUID
+    , contextPath :: Rope -- or a  list or a fingertree or...
+    , contextValues :: Map Name Promise -- TODO this needs to evolve to IVars or equivalent
     }
 
 {-
