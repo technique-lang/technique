@@ -11,89 +11,88 @@ operators, for example. Mostly we want to have "good error messages" which is
 tough and subjective anyway. Not having multiline anything, for example, might
 be a good choice, except that we also want to be whitepsace insensitive.
 -}
-module Technique.Parser
-    ( -- parser for technique procedure files.
-      pTechnique,
-      -- everthing else is only exposed for testing purposes.
-      pMagicLine,
-      pSpdxLine,
-      pIdentifier,
-      pType,
-      stringLiteral,
-      numberLiteral,
-      pQuantity,
-      pAttribute,
-      pExpression,
-      pStatement,
-      pBlock,
-      pProcedureDeclaration,
-      pProcedureCode,
-    )
-where
+module Technique.Parser (
+    -- parser for technique procedure files.
+    pTechnique,
+    -- everthing else is only exposed for testing purposes.
+    pMagicLine,
+    pSpdxLine,
+    pIdentifier,
+    pType,
+    stringLiteral,
+    numberLiteral,
+    pQuantity,
+    pAttribute,
+    pExpression,
+    pStatement,
+    pBlock,
+    pProcedureDeclaration,
+    pProcedureCode,
+) where
 
-import Control.Monad
-    ( unless,
-      void,
-    )
-import Control.Monad.Combinators
-    ( many,
-      optional,
-      sepBy,
-      sepBy1,
-      some,
-      (<|>),
-    )
-import Core.Text.Rope
-    ( Rope,
-      appendRope,
-      emptyRope,
-      intoRope,
-      singletonRope,
-    )
-import Data.Foldable
-    ( foldl',
-    )
-import Data.Int
-    ( Int64,
-      Int8,
-    )
-import Data.Text
-    ( Text,
-    )
+import Control.Monad (
+    unless,
+    void,
+ )
+import Control.Monad.Combinators (
+    many,
+    optional,
+    sepBy,
+    sepBy1,
+    some,
+    (<|>),
+ )
+import Core.Text.Rope (
+    Rope,
+    appendRope,
+    emptyRope,
+    intoRope,
+    singletonRope,
+ )
+import Data.Foldable (
+    foldl',
+ )
+import Data.Int (
+    Int64,
+    Int8,
+ )
+import Data.Text (
+    Text,
+ )
 import qualified Data.Text as T (pack)
-import Data.Void
-    ( Void,
-    )
+import Data.Void (
+    Void,
+ )
 import Technique.Language
 import Technique.Quantity
-import Text.Megaparsec
-    ( Parsec,
-      getOffset,
-      hidden,
-      label,
-      lookAhead,
-      notFollowedBy,
-      oneOf,
-      skipMany,
-      takeWhile1P,
-      takeWhileP,
-      try,
-      (<?>),
-    )
-import Text.Megaparsec.Char
-    ( char,
-      digitChar,
-      lowerChar,
-      newline,
-      printChar,
-      space,
-      spaceChar,
-      string,
-      upperChar,
-    )
-import Text.Read
-    ( readMaybe,
-    )
+import Text.Megaparsec (
+    Parsec,
+    getOffset,
+    hidden,
+    label,
+    lookAhead,
+    notFollowedBy,
+    oneOf,
+    skipMany,
+    takeWhile1P,
+    takeWhileP,
+    try,
+    (<?>),
+ )
+import Text.Megaparsec.Char (
+    char,
+    digitChar,
+    lowerChar,
+    newline,
+    printChar,
+    space,
+    spaceChar,
+    string,
+    upperChar,
+ )
+import Text.Read (
+    readMaybe,
+ )
 
 type Parser = Parsec Void Text
 
@@ -345,17 +344,17 @@ pQuantity =
         void (string "10")
         number <-
             ( do
-                void (char '^')
-                sign <- optional (char '-')
-                e <- numberLiteral
-                pure
-                    ( fromIntegral
-                        ( case sign of
-                            Just _ -> negate e
-                            Nothing -> e
+                    void (char '^')
+                    sign <- optional (char '-')
+                    e <- numberLiteral
+                    pure
+                        ( fromIntegral
+                            ( case sign of
+                                Just _ -> negate e
+                                Nothing -> e
+                            )
                         )
-                    )
-                <|> superscriptLiteral
+                    <|> superscriptLiteral
                 )
         skipSpace
         return number
@@ -615,14 +614,14 @@ pProcedureCode = do
 
     return
         ( Procedure
-            { procedureOffset = o,
-              procedureName = name,
-              procedureParams = params,
-              procedureInput = ins,
-              procedureOutput = out,
-              procedureTitle = Nothing, -- FIXME
-              procedureDescription = Nothing,
-              procedureBlock = block
+            { procedureOffset = o
+            , procedureName = name
+            , procedureParams = params
+            , procedureInput = ins
+            , procedureOutput = out
+            , procedureTitle = Nothing -- FIXME
+            , procedureDescription = Nothing
+            , procedureBlock = block
             }
         )
 
@@ -634,8 +633,8 @@ pProcedure = do
 
     return
         ( proc
-            { procedureTitle = Nothing, -- FIXME
-              procedureDescription = description
+            { procedureTitle = Nothing -- FIXME
+            , procedureDescription = description
             }
         )
 
@@ -652,8 +651,8 @@ pTechnique = do
 
     return $
         Technique
-            { techniqueVersion = version,
-              techniqueLicense = intoRope license,
-              techniqueCopyright = fmap intoRope copyright,
-              techniqueBody = body
+            { techniqueVersion = version
+            , techniqueLicense = intoRope license
+            , techniqueCopyright = fmap intoRope copyright
+            , techniqueBody = body
             }
