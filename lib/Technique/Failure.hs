@@ -21,11 +21,11 @@ import Data.Void
 import Technique.Formatter
 import Technique.Language hiding (Label)
 import Text.Megaparsec (PosState (..), SourcePos (..))
-import Text.Megaparsec.Error
-    ( ErrorItem (..),
-      ParseError (..),
-      ParseErrorBundle (..),
-    )
+import Text.Megaparsec.Error (
+    ErrorItem (..),
+    ParseError (..),
+    ParseErrorBundle (..),
+ )
 import Text.Megaparsec.Pos (unPos)
 import Prelude hiding (lines)
 
@@ -40,9 +40,9 @@ instance Render Status where
         Reload -> annotate MagicToken "Δ"
 
 data Source = Source
-    { sourceContents :: Rope,
-      sourceFilename :: FilePath,
-      sourceOffset :: !Offset
+    { sourceContents :: Rope
+    , sourceFilename :: FilePath
+    , sourceOffset :: !Offset
     }
     deriving (Eq, Ord, Show)
 
@@ -57,9 +57,9 @@ instance Render Source where
 emptySource :: Source
 emptySource =
     Source
-        { sourceContents = emptyRope,
-          sourceFilename = "<undefined>",
-          sourceOffset = -1
+        { sourceContents = emptyRope
+        , sourceFilename = "<undefined>"
+        , sourceOffset = -1
         }
 
 data FailureReason
