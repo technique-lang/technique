@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Utilities
-    ( assertMaybe,
-      assertPass,
-    )
-where
+module Utilities (
+    assertMaybe,
+    assertPass,
+) where
 
 import Test.HUnit
 
