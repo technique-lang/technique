@@ -2,11 +2,10 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module CheckSkeletonParser
-    ( checkSkeletonParser,
-      main,
-    )
-where
+module CheckSkeletonParser (
+    checkSkeletonParser,
+    main,
+) where
 
 import Core.System
 import Core.Text
@@ -54,10 +53,10 @@ checkSkeletonParser = do
             |]
                 `shouldBe` Just
                     ( Technique
-                        { techniqueVersion = 0,
-                          techniqueLicense = "BSD-3-Clause",
-                          techniqueCopyright = Nothing,
-                          techniqueBody = []
+                        { techniqueVersion = 0
+                        , techniqueLicense = "BSD-3-Clause"
+                        , techniqueCopyright = Nothing
+                        , techniqueBody = []
                         }
                     )
 
@@ -187,8 +186,8 @@ checkSkeletonParser = do
                     ( Object
                         0
                         ( Tablet
-                            [ Binding (Label "first") (Text 12 "George"),
-                              Binding (Label "last") (Text 32 "Windsor")
+                            [ Binding (Label "first") (Text 12 "George")
+                            , Binding (Label "last") (Text 32 "Windsor")
                             ]
                         )
                     )
@@ -245,9 +244,9 @@ checkSkeletonParser = do
             parseMaybe pBlock "{\nx1\n\nx2\n}"
                 `shouldBe` Just
                     ( Block
-                        [ Execute 2 (Variable 2 [Identifier "x1"]),
-                          Blank 5,
-                          Execute 6 (Variable 6 [Identifier "x2"])
+                        [ Execute 2 (Variable 2 [Identifier "x1"])
+                        , Blank 5
+                        , Execute 6 (Variable 6 [Identifier "x2"])
                         ]
                     )
 
@@ -255,8 +254,8 @@ checkSkeletonParser = do
             parseMaybe pBlock "{\nx\nanswer = 42\n}"
                 `shouldBe` Just
                     ( Block
-                        [ Execute 2 (Variable 2 [Identifier "x"]),
-                          Assignment 4 [Identifier "answer"] (Amount 13 (Number 42))
+                        [ Execute 2 (Variable 2 [Identifier "x"])
+                        , Assignment 4 [Identifier "answer"] (Amount 13 (Number 42))
                         ]
                     )
 
@@ -264,9 +263,9 @@ checkSkeletonParser = do
             parseMaybe pBlock "{x ; answer = 42}"
                 `shouldBe` Just
                     ( Block
-                        [ Execute 1 (Variable 1 [Identifier "x"]),
-                          Series 3,
-                          Assignment 5 [Identifier "answer"] (Amount 14 (Number 42))
+                        [ Execute 1 (Variable 1 [Identifier "x"])
+                        , Series 3
+                        , Assignment 5 [Identifier "answer"] (Amount 14 (Number 42))
                         ]
                     )
 
@@ -294,8 +293,8 @@ checkSkeletonParser = do
             parseMaybe pBlock "{ answer = 42 ; }"
                 `shouldBe` Just
                     ( Block
-                        [ Assignment 2 [Identifier "answer"] (Amount 11 (Number 42)),
-                          Series 14
+                        [ Assignment 2 [Identifier "answer"] (Amount 11 (Number 42))
+                        , Series 14
                         ]
                     )
 
@@ -307,19 +306,19 @@ checkSkeletonParser = do
         it "declaration with multiple variables and input types" $ do
             parseMaybe pProcedureDeclaration "after_dinner i,s,w : IceCream,Strawberries,Waffles -> Dessert"
                 `shouldBe` Just
-                    ( Identifier "after_dinner",
-                      [Identifier "i", Identifier "s", Identifier "w"],
-                      [Type "IceCream", Type "Strawberries", Type "Waffles"],
-                      [Type "Dessert"]
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , [Type "Dessert"]
                     )
 
         it "handles spurious whitespace" $ do
             parseMaybe pProcedureDeclaration "after_dinner   i ,s ,w  :  IceCream ,Strawberries,  Waffles -> Dessert"
                 `shouldBe` Just
-                    ( Identifier "after_dinner",
-                      [Identifier "i", Identifier "s", Identifier "w"],
-                      [Type "IceCream", Type "Strawberries", Type "Waffles"],
-                      [Type "Dessert"]
+                    ( Identifier "after_dinner"
+                    , [Identifier "i", Identifier "s", Identifier "w"]
+                    , [Type "IceCream", Type "Strawberries", Type "Waffles"]
+                    , [Type "Dessert"]
                     )
 
     describe "Parses a the code for a complete procedure" $ do
@@ -327,10 +326,10 @@ checkSkeletonParser = do
             parseMaybe pProcedureCode "f : X -> Y\n{ x }\n"
                 `shouldBe` Just
                     ( emptyProcedure
-                        { procedureOffset = 0,
-                          procedureName = Identifier "f",
-                          procedureInput = [Type "X"],
-                          procedureOutput = [Type "Y"],
-                          procedureBlock = Block [Execute 13 (Variable 13 [Identifier "x"])]
+                        { procedureOffset = 0
+                        , procedureName = Identifier "f"
+                        , procedureInput = [Type "X"]
+                        , procedureOutput = [Type "Y"]
+                        , procedureBlock = Block [Execute 13 (Variable 13 [Identifier "x"])]
                         }
                     )
