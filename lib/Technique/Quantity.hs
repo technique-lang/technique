@@ -1,21 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
 
-module Technique.Quantity
-    ( Quantity (..),
-      Decimal (..),
-      Magnitude,
-      decimalToRope,
-      isZeroDecimal,
-      negateDecimal,
-      Symbol,
-      Unit (..),
-      Group (..),
-      Prefix (..),
-      units,
-      prefixes,
-    )
-where
+module Technique.Quantity (
+    Quantity (..),
+    Decimal (..),
+    Magnitude,
+    decimalToRope,
+    isZeroDecimal,
+    negateDecimal,
+    Symbol,
+    Unit (..),
+    Group (..),
+    Prefix (..),
+    units,
+    prefixes,
+) where
 
 import Core.Data.Structures
 import Core.Text.Rope
@@ -92,15 +91,15 @@ data Group
 
 knownUnits :: [Unit]
 knownUnits =
-    [ Unit "metre" "metres" "m" Metric,
-      Unit "gram" "grams" "g" Metric,
-      Unit "litre" "litres" "L" Metric,
-      Unit "second" "seconds" "sec" Time,
-      Unit "minute" "minutes" "min" Time,
-      Unit "hour" "hours" "hr" Time,
-      Unit "day" "days" "d" Time,
-      Unit "degree celsius" "degrees celsius" "°C" Normal,
-      Unit "degree kelvin" "degrees kelvin" "K" Metric
+    [ Unit "metre" "metres" "m" Metric
+    , Unit "gram" "grams" "g" Metric
+    , Unit "litre" "litres" "L" Metric
+    , Unit "second" "seconds" "sec" Time
+    , Unit "minute" "minutes" "min" Time
+    , Unit "hour" "hours" "hr" Time
+    , Unit "day" "days" "d" Time
+    , Unit "degree celsius" "degrees celsius" "°C" Normal
+    , Unit "degree kelvin" "degrees kelvin" "K" Metric
     ]
 
 prefixes :: Map Symbol Prefix
@@ -111,29 +110,29 @@ prefixes =
 
 knownPrefixes :: [Prefix]
 knownPrefixes =
-    [ Prefix "peta" "P" 15,
-      Prefix "tera" "T" 12,
-      Prefix "giga" "G" 9,
-      Prefix "mega" "M" 6,
-      Prefix "kilo" "k" 3,
-      Prefix "" "" 0,
-      Prefix "milli" "m" (-3),
-      Prefix "micro" "μ" (-6),
-      Prefix "nano" "n" (-9),
-      Prefix "pico" "p" (-12)
+    [ Prefix "peta" "P" 15
+    , Prefix "tera" "T" 12
+    , Prefix "giga" "G" 9
+    , Prefix "mega" "M" 6
+    , Prefix "kilo" "k" 3
+    , Prefix "" "" 0
+    , Prefix "milli" "m" (-3)
+    , Prefix "micro" "μ" (-6)
+    , Prefix "nano" "n" (-9)
+    , Prefix "pico" "p" (-12)
     ]
 
 data Prefix = Prefix
-    { prefixName :: Rope,
-      prefixSymbol :: Symbol,
-      prefixScale :: Int -- FIXME change this to a hard coded numerical constant?
+    { prefixName :: Rope
+    , prefixSymbol :: Symbol
+    , prefixScale :: Int -- FIXME change this to a hard coded numerical constant?
     }
     deriving (Show, Eq)
 
 data Unit = Unit
-    { unitName :: Rope,
-      unitPlural :: Rope,
-      unitSymbol :: Rope,
-      unitGroup :: Group
+    { unitName :: Rope
+    , unitPlural :: Rope
+    , unitSymbol :: Rope
+    , unitGroup :: Group
     }
     deriving (Show, Eq)
