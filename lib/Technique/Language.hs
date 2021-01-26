@@ -11,20 +11,20 @@ import GHC.Generics (Generic)
 import Technique.Quantity
 
 data Technique = Technique
-    { techniqueVersion :: Int,
-      techniqueLicense :: Rope,
-      techniqueCopyright :: Maybe Rope,
-      techniqueBody :: [Procedure]
+    { techniqueVersion :: Int
+    , techniqueLicense :: Rope
+    , techniqueCopyright :: Maybe Rope
+    , techniqueBody :: [Procedure]
     }
     deriving (Show, Eq)
 
 emptyTechnique :: Technique
 emptyTechnique =
     Technique
-        { techniqueVersion = 0,
-          techniqueLicense = emptyRope,
-          techniqueCopyright = Nothing,
-          techniqueBody = []
+        { techniqueVersion = 0
+        , techniqueLicense = emptyRope
+        , techniqueCopyright = Nothing
+        , techniqueBody = []
         }
 
 -- TODO
@@ -69,28 +69,28 @@ unitType :: Type
 unitType = Type "()"
 
 data Procedure = Procedure
-    { procedureOffset :: Offset,
-      procedureName :: Identifier,
-      procedureParams :: [Identifier],
-      procedureInput :: [Type],
-      procedureOutput :: [Type],
-      procedureTitle :: Maybe Markdown,
-      procedureDescription :: Maybe Markdown,
-      procedureBlock :: Block
+    { procedureOffset :: Offset
+    , procedureName :: Identifier
+    , procedureParams :: [Identifier]
+    , procedureInput :: [Type]
+    , procedureOutput :: [Type]
+    , procedureTitle :: Maybe Markdown
+    , procedureDescription :: Maybe Markdown
+    , procedureBlock :: Block
     }
     deriving (Show, Eq, Ord)
 
 emptyProcedure :: Procedure
 emptyProcedure =
     Procedure
-        { procedureOffset = -1,
-          procedureName = Identifier "none",
-          procedureParams = [],
-          procedureInput = [unitType],
-          procedureOutput = [unitType],
-          procedureTitle = Nothing,
-          procedureDescription = Nothing,
-          procedureBlock = Block []
+        { procedureOffset = -1
+        , procedureName = Identifier "none"
+        , procedureParams = []
+        , procedureInput = [unitType]
+        , procedureOutput = [unitType]
+        , procedureTitle = Nothing
+        , procedureDescription = Nothing
+        , procedureBlock = Block []
         }
 
 data Block = Block [Statement]
