@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module CheckConcreteSyntax
-    ( checkConcreteSyntax,
-      main,
-    )
-where
+module CheckConcreteSyntax (
+    checkConcreteSyntax,
+    main,
+) where
 
 import Core.System
 import Core.Text.Rope ()
@@ -53,8 +52,8 @@ checkConcreteSyntax = do
         it "renders a tablet as expected" $
             let tablet =
                     Tablet
-                        [ Binding (Label "Final temperature") (Variable 0 [Identifier "temp"]),
-                          Binding (Label "Cooking time") (Grouping 0 (Amount 0 (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
+                        [ Binding (Label "Final temperature") (Variable 0 [Identifier "temp"])
+                        , Binding (Label "Cooking time") (Grouping 0 (Amount 0 (Quantity (Decimal 3 0) (Decimal 0 0) 0 "hr")))
                         ]
              in do
                     renderTest tablet
@@ -83,10 +82,10 @@ checkConcreteSyntax = do
         it "renders a function signature correctly" $
             let p =
                     emptyProcedure
-                        { procedureName = Identifier "f",
-                          procedureInput = [Type "X"],
-                          procedureOutput = [Type "Y"],
-                          procedureBlock = Block [Execute 0 (Variable 0 [Identifier "z"])]
+                        { procedureName = Identifier "f"
+                        , procedureInput = [Type "X"]
+                        , procedureOutput = [Type "Y"]
+                        , procedureBlock = Block [Execute 0 (Variable 0 [Identifier "z"])]
                         }
              in do
                     renderTest p

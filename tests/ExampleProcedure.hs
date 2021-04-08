@@ -37,10 +37,10 @@ import Technique.Quantity
 exampleProcedureOven :: Procedure
 exampleProcedureOven =
     emptyProcedure
-        { procedureName = Identifier "oven",
-          procedureInput = [Type "Temperature"],
-          procedureOutput = [Type "()"], -- ?
-          procedureBlock = Block [Execute 0 (Application 0 (Identifier "task") (Text 0 "Set oven temperature!"))]
+        { procedureName = Identifier "oven"
+        , procedureInput = [Type "Temperature"]
+        , procedureOutput = [Type "()"] -- ?
+        , procedureBlock = Block [Execute 0 (Application 0 (Identifier "task") (Text 0 "Set oven temperature!"))]
         }
 
 exampleRoastTurkey :: Procedure
@@ -64,22 +64,22 @@ exampleRoastTurkey =
                                     0
                                     (Identifier "oven")
                                     (Grouping 0 (Amount 0 (Quantity (Decimal 180 0) (Decimal 0 0) 0 celsius)))
-                                ),
-                              Execute
+                                )
+                            , Execute
                                 0
                                 ( Application
                                     0
                                     (Identifier "task")
                                     (Text 0 "Bacon strips onto bird")
-                                ),
-                              Execute
+                                )
+                            , Execute
                                 0
-                                (Variable 0 [Identifier "preheat"]),
-                              Execute
+                                (Variable 0 [Identifier "preheat"])
+                            , Execute
                                 0
-                                (Undefined 0),
-                              Blank 0,
-                              Execute
+                                (Undefined 0)
+                            , Blank 0
+                            , Execute
                                 0
                                 ( Operation
                                     0
@@ -94,20 +94,20 @@ exampleRoastTurkey =
                                             (Variable 0 [Identifier "w3"])
                                         )
                                     )
-                                ),
-                              Blank 0,
-                              Execute 0 (Variable 0 [Identifier "v1"]),
-                              Series 0,
-                              Execute 0 (Variable 0 [Identifier "v2"]),
-                              Assignment
+                                )
+                            , Blank 0
+                            , Execute 0 (Variable 0 [Identifier "v1"])
+                            , Series 0
+                            , Execute 0 (Variable 0 [Identifier "v2"])
+                            , Assignment
                                 0
                                 [Identifier "temp"]
                                 ( Application
                                     0
                                     (Identifier "record")
                                     (Text 0 "Probe bird temperature")
-                                ),
-                              Execute
+                                )
+                            , Execute
                                 0
                                 ( Object
                                     0
@@ -120,23 +120,23 @@ exampleRoastTurkey =
                     )
                 ]
      in Procedure
-            { procedureOffset = 0,
-              procedureName = Identifier "roast_turkey",
-              procedureParams = [Identifier "i", Identifier "j", Identifier "k"],
-              procedureInput = [i],
-              procedureOutput = [o],
-              procedureTitle = Just (Markdown "Roast Turkey"),
-              procedureDescription = Nothing,
-              procedureBlock = block
+            { procedureOffset = 0
+            , procedureName = Identifier "roast_turkey"
+            , procedureParams = [Identifier "i", Identifier "j", Identifier "k"]
+            , procedureInput = [i]
+            , procedureOutput = [o]
+            , procedureTitle = Just (Markdown "Roast Turkey")
+            , procedureDescription = Nothing
+            , procedureBlock = block
             }
 
 exampleTechnique :: Technique
 exampleTechnique =
     Technique
-        { techniqueVersion = 0,
-          techniqueLicense = "BSD-3-Clause",
-          techniqueCopyright = Just "2018 Allicin Wonderland",
-          techniqueBody = [exampleRoastTurkey]
+        { techniqueVersion = 0
+        , techniqueLicense = "BSD-3-Clause"
+        , techniqueCopyright = Just "2018 Allicin Wonderland"
+        , techniqueBody = [exampleRoastTurkey]
         }
 
 main :: IO ()

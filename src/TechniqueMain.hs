@@ -5,10 +5,10 @@
 
 import Core.Program
 import Core.Text
-import TechniqueUser
-    ( commandCheckTechnique,
-      commandFormatTechnique,
-    )
+import TechniqueUser (
+    commandCheckTechnique,
+    commandFormatTechnique,
+ )
 
 #ifdef __GHCIDE__
 version :: Version
@@ -34,14 +34,14 @@ main = do
                         Empty
                         [quote|
                 Watch the given procedure file and recompile if changes are detected.
-                        |],
-                      Argument
+                        |]
+                    , Argument
                         "filename"
                         [quote|
                 The file containing the code for the procedure you want to type-check.
                         |]
-                    ],
-                  Command
+                    ]
+                , Command
                     "format"
                     "Format the given procedure"
                     [ Option
@@ -51,8 +51,8 @@ main = do
                         [quote|
                 Emit ANSI escape codes for syntax highlighting even if output
                 is redirected to a pipe or file.
-                        |],
-                      Argument
+                        |]
+                    , Argument
                         "filename"
                         [quote|
                 The file containing the code for the procedure you want to format.

@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module CheckTranslationPhase
-    ( checkTranslationPhase,
-      main,
-    )
-where
+module CheckTranslationPhase (
+    checkTranslationPhase,
+    main,
+) where
 
 import Core.Data.Structures
 import Core.System
@@ -25,18 +24,18 @@ main = do
 testEnv :: Environment
 testEnv =
     emptyEnvironment
-        { environmentVariables = singletonMap (Identifier "x") (Name "!x"),
-          environmentFunctions = insertKeyValue (Identifier "oven") (Subroutine exampleProcedureOven NoOp) builtinProcedures
+        { environmentVariables = singletonMap (Identifier "x") (Name "!x")
+        , environmentFunctions = insertKeyValue (Identifier "oven") (Subroutine exampleProcedureOven NoOp) builtinProcedures
         }
 
 simpleProcedure :: Procedure
 simpleProcedure =
     emptyProcedure
-        { procedureName = Identifier "mock",
-          procedureParams = [Identifier "a", Identifier "b"],
-          procedureInput = [Type "OneThing", Type "Another"],
-          procedureOutput = [Type "Stuff"],
-          procedureBlock = Block [Execute 0 (Variable 0 [Identifier "a", Identifier "b"])]
+        { procedureName = Identifier "mock"
+        , procedureParams = [Identifier "a", Identifier "b"]
+        , procedureInput = [Type "OneThing", Type "Another"]
+        , procedureOutput = [Type "Stuff"]
+        , procedureBlock = Block [Execute 0 (Variable 0 [Identifier "a", Identifier "b"])]
         }
 
 checkTranslationPhase :: Spec
@@ -65,7 +64,7 @@ checkTranslationPhase = do
                 expr2 = Application 0 (Identifier "f") expr1
                 stmt = Execute 0 expr2
                 block = Block [stmt]
-                technique = emptyTechnique {techniqueBody = [emptyProcedure {procedureBlock = block}]}
+                technique = emptyTechnique{techniqueBody = [emptyProcedure{procedureBlock = block}]}
              in do
                     let result = runTranslate testEnv (translateTechnique technique)
                     case result of
@@ -82,8 +81,8 @@ checkTranslationPhase = do
             let expr = Application 0 (Identifier "task") (Text 5 "Say Hello")
                 stmt = Execute 0 expr
                 block = Block [stmt]
-                proc = emptyProcedure {procedureName = Identifier "hypothetical", procedureBlock = block}
-                tech = emptyTechnique {techniqueBody = [proc]}
+                proc = emptyProcedure{procedureName = Identifier "hypothetical", procedureBlock = block}
+                tech = emptyTechnique{techniqueBody = [proc]}
              in do
                     let result = runTranslate testEnv (translateTechnique tech)
                     case result of

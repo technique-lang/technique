@@ -53,8 +53,8 @@ syntaxCheck procfile =
             surface <- loadTechnique procfile
             let source =
                     emptySource
-                        { sourceFilename = procfile,
-                          sourceContents = surface
+                        { sourceFilename = procfile
+                        , sourceContents = surface
                         }
             concrete <- parsingPhase source
             abstract <- translationPhase source concrete
@@ -110,8 +110,8 @@ translationPhase :: Source -> Technique -> Program None [Function]
 translationPhase source technique =
     let env0 =
             emptyEnvironment
-                { environmentFunctions = builtinProcedures,
-                  environmentSource = source
+                { environmentFunctions = builtinProcedures
+                , environmentSource = source
                 }
         result = runTranslate env0 (translateTechnique technique)
      in do
@@ -140,8 +140,8 @@ commandFormatTechnique = do
             surface <- loadTechnique procfile
             let source =
                     emptySource
-                        { sourceFilename = procfile,
-                          sourceContents = surface
+                        { sourceFilename = procfile
+                        , sourceContents = surface
                         }
 
             technique <- parsingPhase source

@@ -30,12 +30,12 @@ their bindings.
 -- work as there are three states: 1) as yet unspecified, 2) specified, and
 -- 3) explicitly reset to any. Are (1) and (3) the same?
 data Environment = Environment
-    { environmentVariables :: Map Identifier Name,
-      environmentFunctions :: Map Identifier Function,
-      environmentRole :: Attribute,
-      -- for reporting compiler errors
-      environmentSource :: Source,
-      -- the accumulator for the fold that the Translate monad represents
+    { environmentVariables :: Map Identifier Name
+    , environmentFunctions :: Map Identifier Function
+    , environmentRole :: Attribute
+    , -- for reporting compiler errors
+      environmentSource :: Source
+    , -- the accumulator for the fold that the Translate monad represents
       environmentAccumulated :: Step
     }
     deriving (Eq, Show)
@@ -43,11 +43,11 @@ data Environment = Environment
 emptyEnvironment :: Environment
 emptyEnvironment =
     Environment
-        { environmentVariables = emptyMap,
-          environmentFunctions = emptyMap,
-          environmentRole = Inherit,
-          environmentSource = emptySource,
-          environmentAccumulated = NoOp
+        { environmentVariables = emptyMap
+        , environmentFunctions = emptyMap
+        , environmentRole = Inherit
+        , environmentSource = emptySource
+        , environmentAccumulated = NoOp
         }
 
 newtype Translate a = Translate (StateT Environment (Except CompilationError) a)
@@ -212,7 +212,7 @@ registerProcedure o func = do
         failBecause o (ProcedureAlreadyDeclared i)
 
     let known' = insertKeyValue i func known
-    let env' = env {environmentFunctions = known'}
+    let env' = env{environmentFunctions = known'}
 
     put env'
 
@@ -223,7 +223,7 @@ failBecause :: Offset -> FailureReason -> Translate a
 failBecause o reason = do
     env <- get
     let source = environmentSource env
-    let source' = source {sourceOffset = o}
+    let source' = source{sourceOffset = o}
 
     let failure = CompilationError source' reason
     throwError failure
@@ -253,7 +253,7 @@ insertVariable o i = do
 
     let n = Name (singletonRope '!' <> unIdentifier i) -- TODO
     let known' = insertKeyValue i n known
-    let env' = env {environmentVariables = known'}
+    let env' = env{environmentVariables = known'}
     put env'
     return n
 
@@ -268,7 +268,7 @@ appendStep step = do
     -- see the Monoid instance for Step for the clever here
     let steps' = mappend steps step
 
-    let env' = env {environmentAccumulated = steps'}
+    let env' = env{environmentAccumulated = steps'}
     put env'
 
 {- |
@@ -346,6 +346,6 @@ setLocationFrom thing = do
     env <- get
     let source = environmentSource env
     let o = locationOf thing
-    let source' = source {sourceOffset = o}
-    let env' = env {environmentSource = source'}
+    let source' = source{sourceOffset = o}
+    let env' = env{environmentSource = source'}
     put env'

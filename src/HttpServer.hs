@@ -21,29 +21,29 @@ import Prelude
 
 site :: Snap ()
 site =
-  catch
-    (routeRequests)
-    (\e -> serveError "Splat\n" e)
+    catch
+        (routeRequests)
+        (\e -> serveError "Splat\n" e)
 
 routeRequests :: Snap ()
 routeRequests =
-  ifTop serveHome
-    <|> route
-      [ ("resource/:id/:other", serveResource),
-        ("resource/:id", serveResource)
-      ]
-    <|> serveNotFound
+    ifTop serveHome
+        <|> route
+            [ ("resource/:id/:other", serveResource)
+            , ("resource/:id", serveResource)
+            ]
+        <|> serveNotFound
 
 serveResource :: Snap ()
 serveResource = do
-  r <- getRequest
+    r <- getRequest
 
-  let m = rqMethod r
-  case m of
-    GET -> handleGetMethod
-    PUT -> handlePutMethod
-    POST -> handlePostMethod
-    _ -> serveBadRequest -- wrong! There's actually a 4xx code for this
+    let m = rqMethod r
+    case m of
+        GET -> handleGetMethod
+        PUT -> handlePutMethod
+        POST -> handlePostMethod
+        _ -> serveBadRequest -- wrong! There's actually a 4xx code for this
 
 --
 -- If they request / then we send them to an info page.
@@ -51,22 +51,22 @@ serveResource = do
 
 serveHome :: Snap ()
 serveHome = do
-  modifyResponse $ setContentType "text/plain"
-  writeBS "Home\n"
+    modifyResponse $ setContentType "text/plain"
+    writeBS "Home\n"
 
 serveNotFound :: Snap a
 serveNotFound = do
-  modifyResponse $ setResponseStatus 404 "Not Found"
-  modifyResponse $ setContentType "text/html"
-  sendFile "content/404.html"
+    modifyResponse $ setResponseStatus 404 "Not Found"
+    modifyResponse $ setContentType "text/html"
+    sendFile "content/404.html"
 
-  r <- getResponse
-  finishWith r
+    r <- getResponse
+    finishWith r
 
 serveBadRequest :: Snap ()
 serveBadRequest = do
-  modifyResponse $ setResponseStatus 400 "Bad Request"
-  writeBS "400 Bad Request\n"
+    modifyResponse $ setResponseStatus 400 "Bad Request"
+    writeBS "400 Bad Request\n"
 
 --
 -- Dispatch normal GET requests based on MIME type.
@@ -74,29 +74,29 @@ serveBadRequest = do
 
 handleGetMethod :: Snap ()
 handleGetMethod = do
-  r <- getRequest
-  let mime0 = getHeader "Accept" r
+    r <- getRequest
+    let mime0 = getHeader "Accept" r
 
-  case mime0 of
-    Just "application/json" -> handleAsREST
-    Just "text/html" -> handleAsBrowser
-    _ -> handleAsText
+    case mime0 of
+        Just "application/json" -> handleAsREST
+        Just "text/html" -> handleAsBrowser
+        _ -> handleAsText
 
 handleAsREST :: Snap ()
 handleAsREST = do
-  im' <- getParam "id"
-  om' <- getParam "other"
+    im' <- getParam "id"
+    om' <- getParam "other"
 
-  let k' = combine im' om'
+    let k' = combine im' om'
 
-  e' <- lookupById k'
+    e' <- lookupById k'
 
-  let l = fromIntegral $ S.length e'
+    let l = fromIntegral $ S.length e'
 
-  modifyResponse $ setContentType "application/json"
-  modifyResponse $ setHeader "Cache-Control" "max-age=42"
-  modifyResponse $ setContentLength $ l
-  writeBS e'
+    modifyResponse $ setContentType "application/json"
+    modifyResponse $ setHeader "Cache-Control" "max-age=42"
+    modifyResponse $ setContentLength $ l
+    writeBS e'
 
 --
 -- Need to route second parameter. Concatoncate it as first:second, otherwise
@@ -105,22 +105,22 @@ handleAsREST = do
 
 combine :: Maybe ByteString -> Maybe ByteString -> ByteString
 combine am' bm' =
-  case am' of
-    Just a' -> case bm' of
-      Just b' -> S.intercalate ":" [a', b']
-      Nothing -> a'
-    Nothing -> "0"
+    case am' of
+        Just a' -> case bm' of
+            Just b' -> S.intercalate ":" [a', b']
+            Nothing -> a'
+        Nothing -> "0"
 
 handleAsBrowser :: Snap ()
 handleAsBrowser = do
-  modifyResponse $ setContentType "text/html; charset=UTF-8"
-  modifyResponse $ setHeader "Cache-Control" "max-age=1"
-  sendFile "content/hello.html"
+    modifyResponse $ setContentType "text/html; charset=UTF-8"
+    modifyResponse $ setHeader "Cache-Control" "max-age=1"
+    sendFile "content/hello.html"
 
 handleAsText :: Snap ()
 handleAsText = do
-  modifyResponse $ setContentType "text/plain"
-  writeBS "Sounds good to me\n"
+    modifyResponse $ setContentType "text/plain"
+    writeBS "Sounds good to me\n"
 
 --
 -- Create a new procedures
@@ -128,9 +128,9 @@ handleAsText = do
 
 handlePostMethod :: Snap ()
 handlePostMethod = do
-  modifyResponse $ setResponseStatus 201 "Created"
-  modifyResponse $ setHeader "Cache-Control" "no-cache"
-  modifyResponse $ setHeader "Location" "http://server.example.com/something/788"
+    modifyResponse $ setResponseStatus 201 "Created"
+    modifyResponse $ setHeader "Cache-Control" "no-cache"
+    modifyResponse $ setHeader "Location" "http://server.example.com/something/788"
 
 --
 -- Given an correctly addressed procedure, update it with the inbound entity.
@@ -138,35 +138,35 @@ handlePostMethod = do
 
 handlePutMethod :: Snap ()
 handlePutMethod = do
-  r <- getRequest
-  let mime0 = getHeader "Content-Type" r
+    r <- getRequest
+    let mime0 = getHeader "Content-Type" r
 
-  case mime0 of
-    Just "application/json" -> updateResource
-    _ -> serveUnsupported
+    case mime0 of
+        Just "application/json" -> updateResource
+        _ -> serveUnsupported
 
 updateResource :: Snap ()
 updateResource = do
-  bs' <- readRequestBody 4096
-  let b' = fromLazy bs'
+    bs' <- readRequestBody 4096
+    let b' = fromLazy bs'
 
-  im' <- getParam "id"
-  let i' = fromMaybe "0" im'
+    im' <- getParam "id"
+    let i' = fromMaybe "0" im'
 
-  storeById i' b'
-  modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
-  modifyResponse $ setHeader "Cache-Control" "no-cache"
-  modifyResponse $ setContentLength 0
-  return ()
+    storeById i' b'
+    modifyResponse $ setResponseStatus 204 "Updated" -- "No Content"
+    modifyResponse $ setHeader "Cache-Control" "no-cache"
+    modifyResponse $ setContentLength 0
+    return ()
   where
     fromLazy ls' = S.concat $ L.toChunks ls'
 
 serveUnsupported :: Snap ()
 serveUnsupported = do
-  modifyResponse $ setResponseStatus 415 "Unsupported Media Type"
-  writeBS "415 Unsupported Media Type\n"
-  r <- getResponse
-  finishWith r
+    modifyResponse $ setResponseStatus 415 "Unsupported Media Type"
+    writeBS "415 Unsupported Media Type\n"
+    r <- getResponse
+    finishWith r
 
 --
 -- The exception will be dumped to the server's stdout, while the supplied
@@ -176,20 +176,20 @@ serveUnsupported = do
 
 serveError :: ByteString -> SomeException -> Snap ()
 serveError x' e = do
-  debug msg
-  modifyResponse $ setResponseStatus 500 "Internal Server Error"
-  writeBS x'
-  r <- getResponse
-  finishWith r
+    debug msg
+    modifyResponse $ setResponseStatus 500 "Internal Server Error"
+    writeBS x'
+    r <- getResponse
+    finishWith r
   where
     msg = show (e :: SomeException)
 
 debug :: String -> Snap ()
 debug cs = do
-  liftIO $ do
-    hPutStrLn stderr ""
-    hPutStrLn stderr cs
-    hFlush stderr
+    liftIO $ do
+        hPutStrLn stderr ""
+        hPutStrLn stderr cs
+        hFlush stderr
 
 --
 -- Switch from Snap monad (through IO) to Redis. The Maybe return represents a
@@ -198,11 +198,11 @@ debug cs = do
 
 lookupById :: ByteString -> Snap ByteString
 lookupById i' = do
-  xm' <- liftIO $ lookupResource i'
-  case xm' of
-    Just x' -> return x'
-    Nothing -> serveNotFound
+    xm' <- liftIO $ lookupResource i'
+    case xm' of
+        Just x' -> return x'
+        Nothing -> serveNotFound
 
 storeById :: ByteString -> ByteString -> Snap ()
 storeById i' x' = do
-  liftIO $ storeResource i' x'
+    liftIO $ storeResource i' x'

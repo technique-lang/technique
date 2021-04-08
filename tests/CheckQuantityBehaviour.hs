@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module CheckQuantityBehaviour
-    ( checkQuantityBehaviour,
-      main,
-    )
-where
+module CheckQuantityBehaviour (
+    checkQuantityBehaviour,
+    main,
+) where
 
 import Core.System
 import Core.Text.Rope ()
