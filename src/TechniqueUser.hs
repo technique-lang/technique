@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 {- |
 Programs implementing front-end commands for users: check, format
@@ -73,7 +72,7 @@ Load a technique file hopefully containing a procedure.
 -}
 loadTechnique :: FilePath -> Program None Rope
 loadTechnique filename = do
-    event "Read source from technique file"
+    info "Read source from technique file"
 
     -- This is somewhat horrible; reading into Bytes, then going through
     -- Rope to get to Text is a bit silly... except that interop was kinda
@@ -90,7 +89,7 @@ Parse technique content into a concrete syntax object.
 -}
 parsingPhase :: Source -> Program None Technique
 parsingPhase source = do
-    event "Parse surface language into concrete Procedures"
+    info "Parse surface language into concrete Procedures"
     let contents = sourceContents source
 
     let result = parse pTechnique "" (fromRope contents)
@@ -115,7 +114,7 @@ translationPhase source technique =
                 }
         result = runTranslate env0 (translateTechnique technique)
      in do
-            event "Translate Procedures into abstract Subroutines"
+            info "Translate Procedures into abstract Subroutines"
             case result of
                 Left failure -> do
                     throw failure

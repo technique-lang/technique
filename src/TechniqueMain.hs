@@ -24,7 +24,7 @@ main = do
         configure
             version
             None
-            ( complex
+            ( complexConfig
                 [ Command
                     "check"
                     "Syntax- and type-check the given procedure"
@@ -43,7 +43,7 @@ main = do
                     ]
                 , Command
                     "format"
-                    "Format the given procedure"
+                    "Code format the given procedure"
                     [ Option
                         "raw-control-chars"
                         (Just 'R')
@@ -75,4 +75,4 @@ program = do
             _ -> do
                 write "Unknown command?"
                 terminate 3
-    event "Done"
+    info "Done"
