@@ -6,7 +6,8 @@ module CheckConcreteSyntax (
     main,
 ) where
 
-import Core.System
+import Control.Exception.Base (finally)
+import Core.System.Pretty
 import Core.Text.Rope ()
 import Core.Text.Utilities
 import ExampleProcedure hiding (main)

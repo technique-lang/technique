@@ -6,8 +6,8 @@ module CheckTranslationPhase (
     main,
 ) where
 
+import Control.Exception.Base (finally)
 import Core.Data.Structures
-import Core.System
 import Core.Text.Rope ()
 import ExampleProcedure hiding (main)
 import Technique.Builtins

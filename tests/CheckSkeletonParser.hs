@@ -7,7 +7,7 @@ module CheckSkeletonParser (
     main,
 ) where
 
-import Core.System
+import Control.Exception.Base (finally)
 import Core.Text
 import Technique.Language
 import Technique.Parser
