@@ -36,19 +36,19 @@ instance Pretty Procedure where
 colourizeTechnique :: TechniqueToken -> AnsiColour
 colourizeTechnique token = case token of
     MagicToken -> brightGrey
-    ProcedureToken -> bold dullBlue
+    ProcedureToken -> boldColour dullBlue
     TypeToken -> dullYellow
-    SymbolToken -> bold dullCyan
-    OperatorToken -> bold dullYellow
+    SymbolToken -> boldColour dullCyan
+    OperatorToken -> boldColour dullYellow
     VariableToken -> brightCyan
-    ApplicationToken -> bold brightBlue
+    ApplicationToken -> boldColour brightBlue
     LabelToken -> brightGreen
-    StringToken -> bold brightGreen
-    QuantityToken -> bold brightMagenta
+    StringToken -> boldColour brightGreen
+    QuantityToken -> boldColour brightMagenta
     RoleToken -> dullYellow
-    ErrorToken -> bold pureRed
-    FilenameToken -> bold brightWhite
-    StepToken -> bold brightGrey -- for diagnostics in evalutator
+    ErrorToken -> boldColour pureRed
+    FilenameToken -> boldColour brightWhite
+    StepToken -> boldColour brightGrey -- for diagnostics in evalutator
 
 instance Render Procedure where
     type Token Procedure = TechniqueToken

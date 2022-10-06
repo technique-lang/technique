@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -25,16 +26,12 @@ data Mode = Cycle | Once
 
 commandCheckTechnique :: Program None ()
 commandCheckTechnique = do
-    params <- getCommandLine
+    procfile <- queryArgument "filename" >>= pure . fromRope
 
-    let procfile = case lookupArgument "filename" params of
-            Just file -> file
-            _ -> error "Invalid State"
-
-    let mode = case lookupOptionFlag "watch" params of
-            Just True -> Cycle
-            Nothing -> Once
-            _ -> error "Invalid State"
+    mode <-
+        queryOptionFlag "watch" >>= \case
+            True -> pure Cycle
+            False -> pure Once
 
     case mode of
         Once -> do
@@ -123,16 +120,9 @@ translationPhase source technique =
 
 commandFormatTechnique :: Program None ()
 commandFormatTechnique = do
-    params <- getCommandLine
+    raw <- queryOptionFlag "raw-control-chars"
 
-    let raw = case lookupOptionFlag "raw-control-chars" params of
-            Nothing -> False
-            Just True -> True
-            _ -> error "Invalid State"
-
-    let procfile = case lookupArgument "filename" params of
-            Just file -> file
-            _ -> error "Invalid State"
+    procfile <- queryArgument "filename" >>= pure . fromRope
 
     catch
         ( do
