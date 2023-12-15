@@ -1,11 +1,9 @@
-resolver: nightly-2022-10-06
+resolver: lts-21.23
+compiler: ghc-9.4.8
 
 packages:
 - .
 
 extra-deps:
 - ivar-simple-0.3.2
-- core-data-0.3.8.0
-- core-program-0.6.0.1
-- core-text-0.3.8.0
-- core-telemetry-0.2.6.1
+- core-program-0.7.0.0
