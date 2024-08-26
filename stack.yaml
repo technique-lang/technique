@@ -1,9 +1,0 @@
-resolver: lts-21.23
-compiler: ghc-9.4.8
-
-packages:
-- .
-
-extra-deps:
-- ivar-simple-0.3.2
-- core-program-0.7.0.0
