@@ -1,0 +1,10 @@
+[package]
+name = "technique"
+version = "1.0.0"
+edition = "2021"
+description = "A domain specific lanaguage for procedures."
+authors = [ "Andrew Cowie" ]
+repository = "https://github.com/technique-lang/technique"
+license = "MIT"
+
+[dependencies]
