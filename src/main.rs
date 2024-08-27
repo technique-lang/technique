@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 
 fn main() {
     let matches = Command::new("technique")
@@ -13,6 +13,7 @@ fn main() {
                 .arg(
                     Arg::new("watch")
                         .long("watch")
+                        .action(clap::ArgAction::SetTrue)
                         .help("Watch the given procedure file and recompile if changes are detected."),
                 )
                 .arg(
@@ -28,6 +29,7 @@ fn main() {
                     Arg::new("raw-control-chars")
                         .short('R')
                         .long("raw-control-chars")
+                        .action(ArgAction::SetTrue)
                         .help("Emit ANSI escape codes for syntax highlighting even if output is redirected to a pipe or file."),
                 )
                 .arg(
@@ -55,6 +57,12 @@ fn main() {
                 println!("Format command executed with filename: {}", filename);
             }
         }
-        _ => println!("No valid subcommand was used"),
+        Some(_) => {
+            println!("No valid subcommand was used")
+        }
+        None => {
+            println!("usage: technique [COMMAND] ...");
+            println!("Try '--help' for more information.");
+        }
     }
 }
