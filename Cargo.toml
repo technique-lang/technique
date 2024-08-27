@@ -8,3 +8,4 @@ repository = "https://github.com/technique-lang/technique"
 license = "MIT"
 
 [dependencies]
+clap = "4.5.16"
