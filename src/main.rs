@@ -1,4 +1,5 @@
 use clap::{Arg, ArgAction, Command};
+use std::path::Path;
 use tracing_subscriber;
 
 mod rendering;
@@ -76,7 +77,7 @@ fn main() {
         }
         Some(("print", submatches)) => {
             if let Some(filename) = submatches.get_one::<String>("filename") {
-                rendering::via_typst(filename);
+                rendering::via_typst(&Path::new(filename));
             }
         }
         Some(_) => {
