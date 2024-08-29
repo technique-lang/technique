@@ -1,9 +1,13 @@
 use clap::{Arg, ArgAction, Command};
+use tracing_subscriber;
 
 mod rendering;
 
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+
+    // Initialize the tracing subscriber
+    tracing_subscriber::fmt::init();
 
     let matches = Command::new("technique")
         .version(VERSION)
