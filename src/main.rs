@@ -1,5 +1,7 @@
 use clap::{Arg, ArgAction, Command};
 
+mod rendering;
+
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
@@ -40,6 +42,15 @@ fn main() {
                         .help("The file containing the code for the procedure you want to format."),
                 ),
         )
+        .subcommand(
+            Command::new("print")
+                .about("Highlight the Technique source code and render it into a printable PDF")
+                .arg(
+                    Arg::new("filename")
+                        .required(true)
+                        .help("The file containing the code for the procedure you want to print."),
+                ),
+        )
         .get_matches();
 
     match matches.subcommand() {
@@ -57,6 +68,11 @@ fn main() {
             }
             if let Some(filename) = submatches.get_one::<String>("filename") {
                 println!("Format command executed with filename: {}", filename);
+            }
+        }
+        Some(("print", submatches)) => {
+            if let Some(filename) = submatches.get_one::<String>("filename") {
+                rendering::via_typst(filename);
             }
         }
         Some(_) => {
