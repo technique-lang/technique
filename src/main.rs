@@ -1,8 +1,10 @@
 use clap::{Arg, ArgAction, Command};
 
 fn main() {
+    const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+
     let matches = Command::new("technique")
-        .version("1.0")
+        .version(VERSION)
         .propagate_version(true)
         .author("Andrew Cowie")
         .about("The Technique Procedures Language.")
