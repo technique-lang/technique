@@ -26,18 +26,21 @@ struct Context {
     filename: String,
 }
 
-pub(crate) fn via_typst(filename: &Path) {
-    info!("Printing file: {:?}", filename);
+pub(crate) fn via_typst(source: &Path) {
+    let filename = source.display();
+    info!("Printing file: {}", filename);
 
     // Verify that the file actually exists
-    if !filename.exists() {
-        panic!("Supplied procedure file does not exist: {}", filename.display());
+    if !source.exists() {
+        panic!("Supplied procedure file does not exist: {}", filename);
     }
+
+    let target = source.with_extension("pdf");
 
     let mut child = Command::new("typst")
         .arg("compile")
         .arg("-")
-        .arg("FIXME.pdf")
+        .arg(target)
         .stdin(Stdio::piped())
         .spawn()
         .expect("Failed to start external Typst process");
@@ -49,7 +52,7 @@ pub(crate) fn via_typst(filename: &Path) {
     tt.add_template("hello", TEMPLATE).unwrap();
 
     let context = Context {
-        filename: filename.display().to_string(),
+        filename: filename.to_string(),
     };
 
     let rendered = tt.render("hello", &context).unwrap();
