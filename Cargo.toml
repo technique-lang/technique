@@ -8,7 +8,7 @@ repository = "https://github.com/technique-lang/technique"
 license = "MIT"
 
 [dependencies]
-clap = "4.5.16"
+clap = { version = "4.5.16", features = [ "wrap_help" ] }
 serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
 tracing = "0.1.40"

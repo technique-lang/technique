@@ -48,8 +48,12 @@ fn main() {
                 ),
         )
         .subcommand(
-            Command::new("print")
-                .about("Highlight the Technique source code and render it into a printable PDF")
+            Command::new("render")
+                .about("Render the Technique procedure into a printable PDF")
+                .long_about("Render the Technique procedure into a printable \
+                    PDF. By default this will highlight the source of the \
+                    input file for the purposes of reviewing the raw \
+                    procedure.")
                 .arg(
                     Arg::new("filename")
                         .required(true)
@@ -75,7 +79,7 @@ fn main() {
                 println!("Format command executed with filename: {}", filename);
             }
         }
-        Some(("print", submatches)) => {
+        Some(("render", submatches)) => {
             if let Some(filename) = submatches.get_one::<String>("filename") {
                 rendering::via_typst(&Path::new(filename));
             }
