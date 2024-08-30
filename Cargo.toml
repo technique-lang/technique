@@ -9,5 +9,7 @@ license = "MIT"
 
 [dependencies]
 clap = "4.5.16"
+serde = { version = "1.0.209", features = [ "derive" ] }
+tinytemplate = "1.2.1"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
