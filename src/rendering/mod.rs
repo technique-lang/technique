@@ -46,16 +46,22 @@ pub(crate) fn via_typst(source: &Path) {
         .expect("Failed to start external Typst process");
 
     // Write the file contents to the process's stdin
-    let mut stdin = child.stdin.take().unwrap();
+    let mut stdin = child
+        .stdin
+        .take()
+        .unwrap();
 
     let mut tt = TinyTemplate::new();
-    tt.add_template("hello", TEMPLATE).unwrap();
+    tt.add_template("hello", TEMPLATE)
+        .unwrap();
 
     let context = Context {
         filename: filename.to_string(),
     };
 
-    let rendered = tt.render("hello", &context).unwrap();
+    let rendered = tt
+        .render("hello", &context)
+        .unwrap();
     stdin
         .write(rendered.as_bytes())
         .expect("Write header to child prcess");
@@ -63,7 +69,9 @@ pub(crate) fn via_typst(source: &Path) {
     drop(stdin);
 
     // Wait for the process to complete
-    let output = child.wait_with_output().expect("Failed to read stdout");
+    let output = child
+        .wait_with_output()
+        .expect("Failed to read stdout");
 
     // Log the output
     debug!("Process output: {:?}", output);
