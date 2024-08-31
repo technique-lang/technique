@@ -16,6 +16,22 @@ fn main() {
         .author("Andrew Cowie")
         .about("The Technique Procedures Language.")
         .disable_help_subcommand(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .long_help("Print help")
+                .global(true)
+                .hide(true)
+                .action(ArgAction::Help))
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .long_help("Print version")
+                .global(true)
+                .hide(true)
+                .action(ArgAction::Version))
         .subcommand(
             Command::new("check")
                 .about("Syntax- and type-check the given procedure")
