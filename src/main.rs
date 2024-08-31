@@ -1,5 +1,6 @@
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
+use tracing::debug;
 use tracing_subscriber;
 
 mod rendering;
@@ -80,25 +81,47 @@ fn main() {
 
     match matches.subcommand() {
         Some(("check", submatches)) => {
-            if submatches.contains_id("watch") {
-                println!("Check command executed with watch option");
-            }
-            if let Some(filename) = submatches.get_one::<String>("filename") {
-                println!("Check command executed with filename: {}", filename);
-            }
+            let watching = submatches
+                .get_one::<bool>("watch")
+                .unwrap(); // flags are always present since SetTrue implies default_value
+
+            debug!(watching);
+
+            let filename = submatches
+                .get_one::<String>("filename")
+                .unwrap(); // argument are required by definitin so always present
+
+            debug!(filename);
+
+            todo!();
         }
         Some(("format", submatches)) => {
             if submatches.contains_id("raw-control-chars") {
                 println!("Format command executed with raw-control-chars option");
             }
-            if let Some(filename) = submatches.get_one::<String>("filename") {
-                println!("Format command executed with filename: {}", filename);
-            }
+
+            let raw_output = submatches
+                .get_one::<bool>("raw-control-chars")
+                .unwrap(); // flags are always present since SetTrue implies default_value
+
+            debug!(raw_output);
+
+            let filename = submatches
+                .get_one::<String>("filename")
+                .unwrap(); // argument are required by definition so always present
+
+            debug!(filename);
+
+            todo!();
         }
         Some(("render", submatches)) => {
-            if let Some(filename) = submatches.get_one::<String>("filename") {
-                rendering::via_typst(&Path::new(filename));
-            }
+            let filename = submatches
+                .get_one::<String>("filename")
+                .unwrap(); // argument are required by definition so always present
+
+            debug!(filename);
+
+            rendering::via_typst(&Path::new(filename));
         }
         Some(_) => {
             println!("No valid subcommand was used")
