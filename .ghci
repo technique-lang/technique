@@ -1,3 +1,0 @@
-:set -XOverloadedStrings
-:set -ilib:src:tests
-
