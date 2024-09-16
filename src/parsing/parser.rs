@@ -1,6 +1,6 @@
 // parsing machinery
 
-use pest::Parser;
+use pest::{consumes_to, parses_to, Parser};
 use pest_derive::Parser;
 
 #[derive(Parser)]
@@ -14,7 +14,7 @@ mod tests {
     use super::*; // Import all parent module items
 
     #[test]
-    fn check_procedure_declaration() {
+    fn check_procedure_declaration_explicit() {
         let input = "making_coffee : Beans, Milk -> Coffee";
 
         let declaration = TechniqueParser::parse(Rule::declaration, &input)
@@ -66,5 +66,24 @@ mod tests {
 
         assert_eq!(range.as_str(), "Coffee");
         assert_eq!(range.as_rule(), Rule::typa);
+    }
+
+    #[test]
+    fn check_procedure_declaration_macro() {
+        parses_to! {
+            parser: TechniqueParser,
+            input: "making_coffee : Beans, Milk -> Coffee",
+            rule: Rule::declaration,
+            tokens: [
+                declaration(0, 37, [
+                    identifier(0, 13),
+                    signature(16, 37, [
+                        typa(16, 21),
+                        typa(23, 27),
+                        typa(31, 37)
+                    ])
+                ])
+            ]
+        };
     }
 }
