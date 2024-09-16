@@ -1,0 +1,15 @@
+// Parsing Expression Grammar for v1 of the Technique Procedure Language
+
+WHITESPACE = _{ " " | "\t" }
+
+declaration = { identifier ~ ":"  ~ signature? }
+
+identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
+
+signature = { type ~ "->" ~ type }
+
+type = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+
+
+
+
