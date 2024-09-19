@@ -2,15 +2,24 @@
 
 WHITESPACE = _{ " " | "\t" }
 
-technique = { SOI ~ magic_line ~ spdx_line? ~ NEWLINE* ~ declaration ~ EOI }
+technique = {
+      SOI
+    ~ magic_line
+    ~ NEWLINE
+    ~ spdx_line?
+    ~ NEWLINE+
+    ~ declaration
+    ~ NEWLINE+
+    ~ EOI
+}
 
 // File Format Header
 
-magic_line = { "%" ~ "technique" ~ "v1" ~ NEWLINE }
+magic_line = { "%" ~ "technique" ~ "v1" }
 
 // License and Copyright Header
 
-spdx_line = { "!" ~ license ~ ";" ~ copyright ~ NEWLINE }
+spdx_line = { "!" ~ license ~ ";" ~ copyright }
 
 license = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" | " " )* }
 
@@ -22,7 +31,7 @@ owner = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" 
 
 // Procedure Declaration
 
-declaration = { identifier ~ ":"  ~ signature? ~ NEWLINE }
+declaration = { identifier ~ ":"  ~ signature? }
 
 identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 
