@@ -7,7 +7,10 @@ use pest_derive::Parser;
 #[grammar = "../technique.pest"]
 struct TechniqueParser;
 
-pub fn load() {}
+pub fn parse_via_pest(content: &str) {
+    let technique = TechniqueParser::parse(Rule::technique, &content);
+    println!("{:?}", technique);
+}
 
 #[cfg(test)]
 mod tests {
