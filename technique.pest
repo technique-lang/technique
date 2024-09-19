@@ -6,9 +6,9 @@ declaration = { identifier ~ ":"  ~ signature? }
 
 identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 
-signature = { typa ~ ("," ~ typa)* ~ "->" ~ typa }
+signature = { forma ~ ("," ~ forma )* ~ "->" ~ forma }
 
-typa = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+forma = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 
 
 

@@ -51,21 +51,21 @@ mod tests {
             .unwrap();
 
         assert_eq!(domain1.as_str(), "Beans");
-        assert_eq!(domain1.as_rule(), Rule::typa);
+        assert_eq!(domain1.as_rule(), Rule::forma);
 
         let domain2 = pairs
             .next()
             .unwrap();
 
         assert_eq!(domain2.as_str(), "Milk");
-        assert_eq!(domain2.as_rule(), Rule::typa);
+        assert_eq!(domain2.as_rule(), Rule::forma);
 
         let range = pairs
             .next()
             .unwrap();
 
         assert_eq!(range.as_str(), "Coffee");
-        assert_eq!(range.as_rule(), Rule::typa);
+        assert_eq!(range.as_rule(), Rule::forma);
     }
 
     #[test]
@@ -78,9 +78,9 @@ mod tests {
                 declaration(0, 37, [
                     identifier(0, 13),
                     signature(16, 37, [
-                        typa(16, 21),
-                        typa(23, 27),
-                        typa(31, 37)
+                        forma(16, 21),
+                        forma(23, 27),
+                        forma(31, 37)
                     ])
                 ])
             ]
