@@ -1,6 +1,6 @@
 // parsing machinery
 
-use pest::{consumes_to, parses_to, Parser};
+use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
@@ -14,6 +14,8 @@ pub fn parse_via_pest(content: &str) {
 
 #[cfg(test)]
 mod tests {
+    use pest::{consumes_to, fails_with, parses_to};
+
     use super::*; // Import all parent module items
 
     #[test]
@@ -127,6 +129,40 @@ mod tests {
             tokens: [
                 year(0,4),
             ]
+        };
+    }
+
+    #[test]
+    fn check_header_template() {
+        parses_to! {
+            parser: TechniqueParser,
+            input: "& checklist",
+            rule: Rule::template_line,
+            tokens: [
+                template_line(0, 11, [
+                    template(2, 11)
+                ])
+            ]
+        };
+
+        parses_to! {
+            parser: TechniqueParser,
+            input: "& nasa-flight-plan-v4.0",
+            rule: Rule::template_line,
+            tokens: [
+                template_line(0, 23, [
+                    template(2, 23)
+                ])
+            ]
+        };
+
+        fails_with! {
+            parser: TechniqueParser,
+            input: "&",
+            rule: Rule::template_line,
+            positives: [Rule::template],
+            negatives: [],
+            pos: 1
         };
     }
 }
