@@ -130,6 +130,38 @@ mod tests {
                 year(0,4),
             ]
         };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "2024-",
+            rule: Rule::year,
+            tokens: [
+                year(0,5),
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "2002-2024",
+            rule: Rule::year,
+            tokens: [
+                year(0,9),
+            ]
+        };
+        fails_with! {
+            parser: TechniqueParser,
+            input: "02",
+            rule: Rule::year,
+            positives: [Rule::year],
+            negatives: [],
+            pos: 0
+        };
+        fails_with! {
+            parser: TechniqueParser,
+            input: "02-24",
+            rule: Rule::year,
+            positives: [Rule::year],
+            negatives: [],
+            pos: 0
+        };
     }
 
     #[test]
