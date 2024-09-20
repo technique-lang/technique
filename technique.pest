@@ -3,14 +3,14 @@
 WHITESPACE = _{ " " | "\t" }
 
 technique = {
-      SOI
-    ~ magic_line
-    ~ NEWLINE
-    ~ spdx_line?
-    ~ NEWLINE+
-    ~ declaration
-    ~ NEWLINE+
-    ~ EOI
+    SOI ~
+    magic_line ~
+    NEWLINE ~
+    spdx_line? ~
+    NEWLINE+ ~
+    declaration ~
+    NEWLINE+ ~
+    EOI
 }
 
 // File Format Header
@@ -19,15 +19,15 @@ magic_line = { "%" ~ "technique" ~ "v1" }
 
 // License and Copyright Header
 
-spdx_line = { "!" ~ license ~ ";" ~ copyright }
+spdx_line = { "!" ~ license ~ (";" ~ copyright)? }
 
-license = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" | " " )* }
+license = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" | " " | "." )* }
 
 copyright = { ("©" | "(c)" | "(C)") ~ year? ~ owner }
 
-year = @{ ASCII_DIGIT{4} }
+year = @{ ASCII_DIGIT{4} ~ "-" ~ (ASCII_DIGIT{4})? | ASCII_DIGIT{4} }
 
-owner = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" | " " | ",")* }
+owner = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "_" | " " | "," | "." )* }
 
 // Procedure Declaration
 

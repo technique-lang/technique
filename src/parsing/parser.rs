@@ -89,4 +89,44 @@ mod tests {
             ]
         };
     }
+
+    #[test]
+    fn check_header_spdx() {
+        parses_to! {
+            parser: TechniqueParser,
+            input: "! MIT; (c) ACME, Inc.",
+            rule: Rule::spdx_line,
+            tokens: [
+                spdx_line(0, 21, [
+                    license(2, 5),
+                    copyright(7, 21, [
+                        owner(11, 21)
+                    ])
+                ])
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "! MIT; (c) 2024 ACME, Inc.",
+            rule: Rule::spdx_line,
+            tokens: [
+                spdx_line(0, 26, [
+                    license(2, 5),
+                    copyright(7, 26, [
+                        year(11,15),
+                        owner(16, 26)
+                    ])
+                ])
+            ]
+        };
+
+        parses_to! {
+            parser: TechniqueParser,
+            input: "2024",
+            rule: Rule::year,
+            tokens: [
+                year(0,4),
+            ]
+        };
+    }
 }
