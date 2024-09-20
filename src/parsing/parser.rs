@@ -121,6 +121,41 @@ mod tests {
                 ])
             ]
         };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "! PD",
+            rule: Rule::spdx_line,
+            tokens: [
+                spdx_line(0, 4, [
+                    license(2, 4)
+                ])
+            ]
+        };
+
+        parses_to! {
+            parser: TechniqueParser,
+            input: "MIT",
+            rule: Rule::license,
+            tokens: [
+                license(0,3),
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "Public Domain",
+            rule: Rule::license,
+            tokens: [
+                license(0,13),
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "CC BY-SA 3.0 IGO",
+            rule: Rule::license,
+            tokens: [
+                license(0,16),
+            ]
+        };
 
         parses_to! {
             parser: TechniqueParser,
