@@ -39,7 +39,7 @@ template = @{ (ASCII_ALPHA | ASCII_DIGIT) ~ (ASCII_ALPHA | ASCII_DIGIT | "-" | "
 
 // Procedure Declaration
 
-declaration = { identifier ~ ":"  ~ signature? }
+declaration = { identifier ~ ":" ~ signature? }
 
 identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 

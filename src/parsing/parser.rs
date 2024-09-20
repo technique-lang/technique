@@ -115,7 +115,7 @@ mod tests {
                 spdx_line(0, 26, [
                     license(2, 5),
                     copyright(7, 26, [
-                        year(11,15),
+                        year(11, 15),
                         owner(16, 26)
                     ])
                 ])
@@ -137,7 +137,7 @@ mod tests {
             input: "MIT",
             rule: Rule::license,
             tokens: [
-                license(0,3),
+                license(0, 3),
             ]
         };
         parses_to! {
@@ -145,7 +145,7 @@ mod tests {
             input: "Public Domain",
             rule: Rule::license,
             tokens: [
-                license(0,13),
+                license(0, 13),
             ]
         };
         parses_to! {
@@ -153,7 +153,7 @@ mod tests {
             input: "CC BY-SA 3.0 IGO",
             rule: Rule::license,
             tokens: [
-                license(0,16),
+                license(0, 16),
             ]
         };
 
@@ -162,7 +162,7 @@ mod tests {
             input: "2024",
             rule: Rule::year,
             tokens: [
-                year(0,4),
+                year(0, 4),
             ]
         };
         parses_to! {
@@ -170,7 +170,7 @@ mod tests {
             input: "2024-",
             rule: Rule::year,
             tokens: [
-                year(0,5),
+                year(0, 5),
             ]
         };
         parses_to! {
@@ -178,7 +178,7 @@ mod tests {
             input: "2002-2024",
             rule: Rule::year,
             tokens: [
-                year(0,9),
+                year(0, 9),
             ]
         };
         fails_with! {
@@ -211,7 +211,6 @@ mod tests {
                 ])
             ]
         };
-
         parses_to! {
             parser: TechniqueParser,
             input: "& nasa-flight-plan-v4.0",
@@ -222,7 +221,6 @@ mod tests {
                 ])
             ]
         };
-
         fails_with! {
             parser: TechniqueParser,
             input: "&",
@@ -230,6 +228,78 @@ mod tests {
             positives: [Rule::template],
             negatives: [],
             pos: 1
+        };
+    }
+
+    #[test]
+    fn check_identifier_rules() {
+        parses_to! {
+            parser: TechniqueParser,
+            input: "p",
+            rule: Rule::identifier,
+            tokens: [
+                identifier(0, 1)
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "pizza",
+            rule: Rule::identifier,
+            tokens: [
+                identifier(0, 5)
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "cook_pizza",
+            rule: Rule::identifier,
+            tokens: [
+                identifier(0, 10)
+            ]
+        };
+        fails_with! {
+            parser: TechniqueParser,
+            input: "0trust",
+            rule: Rule::identifier,
+            positives: [Rule::identifier],
+            negatives: [],
+            pos: 0
+        };
+    }
+
+    #[test]
+    fn check_declaration_syntax() {
+        parses_to! {
+            parser: TechniqueParser,
+            input: "p :",
+            rule: Rule::declaration,
+            tokens: [
+                declaration(0, 3, [
+                    identifier(0, 1)
+                ])
+            ]
+        };
+        parses_to! {
+            parser: TechniqueParser,
+            input: "p : A -> B",
+            rule: Rule::declaration,
+            tokens: [
+                declaration(0, 10, [
+                    identifier(0, 1),
+                    signature(4, 10, [
+                        forma(4, 5),
+                        forma(9, 10)
+                    ])
+                ])
+            ]
+        };
+        fails_with! {
+            parser: TechniqueParser,
+            input: "cook-pizza :",
+            rule: Rule::declaration,
+            positives: [Rule::declaration],
+            negatives: [],
+            pos: 0
         };
     }
 }
