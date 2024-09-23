@@ -15,3 +15,4 @@ serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+winnow = "0.6.18"
