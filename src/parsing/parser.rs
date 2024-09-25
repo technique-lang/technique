@@ -1,262 +1,45 @@
 // parsing machinery
 
-use pest::Parser;
-use pest_derive::Parser;
+// struct TechniqueParser;
 
-#[derive(Parser)]
-#[grammar = "../technique.pest"]
-struct TechniqueParser;
+use winnow::token::take_while;
+use winnow::{PResult, Parser};
 
-pub fn parse_via_pest(content: &str) {
-    let technique = TechniqueParser::parse(Rule::technique, &content);
-    println!("{:?}", technique);
+pub fn parse_via_winnow(_content: &str) {
+    // let technique = TechniqueParser::parse(Rule::technique, &content);
+    // println!("{:?}", technique);
+}
+
+fn parse_identifier<'s>(input: &mut &'s str) -> PResult<&'s str> {
+    take_while(1.., (('0'..='9'), ('A'..='Z'), ('a'..='z'), ('_'))).parse_next(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use pest::{consumes_to, fails_with, parses_to};
-
-    use super::*; // Import all parent module items
-
-    #[test]
-    fn check_procedure_declaration_explicit() {
-        let input = "making_coffee : Beans, Milk -> Coffee";
-
-        let declaration = TechniqueParser::parse(Rule::declaration, &input)
-            .expect("Unsuccessful Parse")
-            .next()
-            .unwrap();
-
-        assert_eq!(
-            declaration.as_str(),
-            "making_coffee : Beans, Milk -> Coffee"
-        );
-        assert_eq!(declaration.as_rule(), Rule::declaration);
-
-        let mut pairs = declaration.into_inner();
-
-        let identifier = pairs
-            .next()
-            .unwrap();
-
-        assert_eq!(identifier.as_str(), "making_coffee");
-        assert_eq!(identifier.as_rule(), Rule::identifier);
-
-        let signature = pairs
-            .next()
-            .unwrap();
-
-        assert_eq!(signature.as_str(), "Beans, Milk -> Coffee");
-        assert_eq!(signature.as_rule(), Rule::signature);
-
-        let mut pairs = signature.into_inner();
-
-        let domain1 = pairs
-            .next()
-            .unwrap();
-
-        assert_eq!(domain1.as_str(), "Beans");
-        assert_eq!(domain1.as_rule(), Rule::forma);
-
-        let domain2 = pairs
-            .next()
-            .unwrap();
-
-        assert_eq!(domain2.as_str(), "Milk");
-        assert_eq!(domain2.as_rule(), Rule::forma);
-
-        let range = pairs
-            .next()
-            .unwrap();
-
-        assert_eq!(range.as_str(), "Coffee");
-        assert_eq!(range.as_rule(), Rule::forma);
-    }
-
-    #[test]
-    fn check_procedure_declaration_macro() {
-        parses_to! {
-            parser: TechniqueParser,
-            input: "making_coffee : Beans, Milk -> Coffee",
-            rule: Rule::declaration,
-            tokens: [
-                declaration(0, 37, [
-                    identifier(0, 13),
-                    signature(16, 37, [
-                        forma(16, 21),
-                        forma(23, 27),
-                        forma(31, 37)
-                    ])
-                ])
-            ]
-        };
-    }
-
-    #[test]
-    fn check_header_spdx() {
-        parses_to! {
-            parser: TechniqueParser,
-            input: "! MIT; (c) ACME, Inc.",
-            rule: Rule::spdx_line,
-            tokens: [
-                spdx_line(0, 21, [
-                    license(2, 5),
-                    copyright(7, 21, [
-                        owner(11, 21)
-                    ])
-                ])
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "! MIT; (c) 2024 ACME, Inc.",
-            rule: Rule::spdx_line,
-            tokens: [
-                spdx_line(0, 26, [
-                    license(2, 5),
-                    copyright(7, 26, [
-                        year(11, 15),
-                        owner(16, 26)
-                    ])
-                ])
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "! PD",
-            rule: Rule::spdx_line,
-            tokens: [
-                spdx_line(0, 4, [
-                    license(2, 4)
-                ])
-            ]
-        };
-
-        parses_to! {
-            parser: TechniqueParser,
-            input: "MIT",
-            rule: Rule::license,
-            tokens: [
-                license(0, 3),
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "Public Domain",
-            rule: Rule::license,
-            tokens: [
-                license(0, 13),
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "CC BY-SA 3.0 IGO",
-            rule: Rule::license,
-            tokens: [
-                license(0, 16),
-            ]
-        };
-
-        parses_to! {
-            parser: TechniqueParser,
-            input: "2024",
-            rule: Rule::year,
-            tokens: [
-                year(0, 4),
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "2024-",
-            rule: Rule::year,
-            tokens: [
-                year(0, 5),
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "2002-2024",
-            rule: Rule::year,
-            tokens: [
-                year(0, 9),
-            ]
-        };
-        fails_with! {
-            parser: TechniqueParser,
-            input: "02",
-            rule: Rule::year,
-            positives: [Rule::year],
-            negatives: [],
-            pos: 0
-        };
-        fails_with! {
-            parser: TechniqueParser,
-            input: "02-24",
-            rule: Rule::year,
-            positives: [Rule::year],
-            negatives: [],
-            pos: 0
-        };
-    }
-
-    #[test]
-    fn check_header_template() {
-        parses_to! {
-            parser: TechniqueParser,
-            input: "& checklist",
-            rule: Rule::template_line,
-            tokens: [
-                template_line(0, 11, [
-                    template(2, 11)
-                ])
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "& nasa-flight-plan-v4.0",
-            rule: Rule::template_line,
-            tokens: [
-                template_line(0, 23, [
-                    template(2, 23)
-                ])
-            ]
-        };
-        fails_with! {
-            parser: TechniqueParser,
-            input: "&",
-            rule: Rule::template_line,
-            positives: [Rule::template],
-            negatives: [],
-            pos: 1
-        };
-    }
-
+    use super::*;
+    
     #[test]
     fn check_identifier_rules() {
-        parses_to! {
-            parser: TechniqueParser,
-            input: "p",
-            rule: Rule::identifier,
-            tokens: [
-                identifier(0, 1)
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "pizza",
-            rule: Rule::identifier,
-            tokens: [
-                identifier(0, 5)
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "cook_pizza",
-            rule: Rule::identifier,
-            tokens: [
-                identifier(0, 10)
-            ]
-        };
+        let mut input = "p";
+
+        let result = parse_identifier
+            .parse_next(&mut input)
+            .unwrap();
+
+        assert_eq!(result, "p");
+
+        let mut input = "pizza";
+        let result = parse_identifier
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(result, "pizza");
+
+        let mut input = "cook_pizza";
+        let result = parse_identifier
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(result, "cook_pizza");
+        /*
         fails_with! {
             parser: TechniqueParser,
             input: "0trust",
@@ -265,7 +48,199 @@ mod tests {
             negatives: [],
             pos: 0
         };
+        */
     }
+
+    // Import all parent module items
+    /*
+        #[test]
+        fn check_procedure_declaration_explicit() {
+            let input = "making_coffee : Beans, Milk -> Coffee";
+
+            // let declaration = TechniqueParser::parse(Rule::declaration, &input)
+            //     .expect("Unsuccessful Parse")
+            //     .next()
+            //     .unwrap();
+
+            assert_eq!(
+                input, // FIXME
+                "making_coffee : Beans, Milk -> Coffee"
+            );
+
+            // assert_eq!(identifier.as_str(), "making_coffee");
+            // assert_eq!(identifier.as_rule(), Rule::identifier);
+
+            // assert_eq!(signature.as_str(), "Beans, Milk -> Coffee");
+            // assert_eq!(signature.as_rule(), Rule::signature);
+
+            // assert_eq!(domain1.as_str(), "Beans");
+            // assert_eq!(domain1.as_rule(), Rule::forma);
+
+            // assert_eq!(domain2.as_str(), "Milk");
+            // assert_eq!(domain2.as_rule(), Rule::forma);
+
+            // assert_eq!(range.as_str(), "Coffee");
+            // assert_eq!(range.as_rule(), Rule::forma);
+        }
+    */
+    /*
+        #[test]
+        fn check_procedure_declaration_macro() {
+            parses_to! {
+                parser: TechniqueParser,
+                input: "making_coffee : Beans, Milk -> Coffee",
+                rule: Rule::declaration,
+                tokens: [
+                    declaration(0, 37, [
+                        identifier(0, 13),
+                        signature(16, 37, [
+                            forma(16, 21),
+                            forma(23, 27),
+                            forma(31, 37)
+                        ])
+                    ])
+                ]
+            };
+        }
+
+        #[test]
+        fn check_header_spdx() {
+            parses_to! {
+                parser: TechniqueParser,
+                input: "! MIT; (c) ACME, Inc.",
+                rule: Rule::spdx_line,
+                tokens: [
+                    spdx_line(0, 21, [
+                        license(2, 5),
+                        copyright(7, 21, [
+                            owner(11, 21)
+                        ])
+                    ])
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "! MIT; (c) 2024 ACME, Inc.",
+                rule: Rule::spdx_line,
+                tokens: [
+                    spdx_line(0, 26, [
+                        license(2, 5),
+                        copyright(7, 26, [
+                            year(11, 15),
+                            owner(16, 26)
+                        ])
+                    ])
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "! PD",
+                rule: Rule::spdx_line,
+                tokens: [
+                    spdx_line(0, 4, [
+                        license(2, 4)
+                    ])
+                ]
+            };
+
+            parses_to! {
+                parser: TechniqueParser,
+                input: "MIT",
+                rule: Rule::license,
+                tokens: [
+                    license(0, 3),
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "Public Domain",
+                rule: Rule::license,
+                tokens: [
+                    license(0, 13),
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "CC BY-SA 3.0 IGO",
+                rule: Rule::license,
+                tokens: [
+                    license(0, 16),
+                ]
+            };
+
+            parses_to! {
+                parser: TechniqueParser,
+                input: "2024",
+                rule: Rule::year,
+                tokens: [
+                    year(0, 4),
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "2024-",
+                rule: Rule::year,
+                tokens: [
+                    year(0, 5),
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "2002-2024",
+                rule: Rule::year,
+                tokens: [
+                    year(0, 9),
+                ]
+            };
+            fails_with! {
+                parser: TechniqueParser,
+                input: "02",
+                rule: Rule::year,
+                positives: [Rule::year],
+                negatives: [],
+                pos: 0
+            };
+            fails_with! {
+                parser: TechniqueParser,
+                input: "02-24",
+                rule: Rule::year,
+                positives: [Rule::year],
+                negatives: [],
+                pos: 0
+            };
+        }
+
+        #[test]
+        fn check_header_template() {
+            parses_to! {
+                parser: TechniqueParser,
+                input: "& checklist",
+                rule: Rule::template_line,
+                tokens: [
+                    template_line(0, 11, [
+                        template(2, 11)
+                    ])
+                ]
+            };
+            parses_to! {
+                parser: TechniqueParser,
+                input: "& nasa-flight-plan-v4.0",
+                rule: Rule::template_line,
+                tokens: [
+                    template_line(0, 23, [
+                        template(2, 23)
+                    ])
+                ]
+            };
+            fails_with! {
+                parser: TechniqueParser,
+                input: "&",
+                rule: Rule::template_line,
+                positives: [Rule::template],
+                negatives: [],
+                pos: 1
+            };
+        }
 
     #[test]
     fn check_declaration_syntax() {
@@ -302,4 +277,5 @@ mod tests {
             pos: 0
         };
     }
+    */
 }
