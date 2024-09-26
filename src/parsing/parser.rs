@@ -2,7 +2,9 @@
 
 // struct TechniqueParser;
 
-use winnow::token::take_while;
+use winnow::combinator::empty;
+use winnow::stream::AsChar;
+use winnow::token::{one_of, take_while};
 use winnow::{PResult, Parser};
 
 pub fn parse_via_winnow(_content: &str) {
@@ -10,14 +12,20 @@ pub fn parse_via_winnow(_content: &str) {
     // println!("{:?}", technique);
 }
 
+// a winnow parser that takes an alpha and then any character
 fn parse_identifier<'s>(input: &mut &'s str) -> PResult<&'s str> {
-    take_while(1.., (('0'..='9'), ('A'..='Z'), ('a'..='z'), ('_'))).parse_next(input)
+    (
+        one_of('a'..='z'),
+        take_while(0.., (('0'..='9'), ('a'..='z'), ('_'))),
+    )
+        .take()
+        .parse_next(input)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn check_identifier_rules() {
         let mut input = "p";
@@ -39,16 +47,9 @@ mod tests {
             .parse_next(&mut input)
             .unwrap();
         assert_eq!(result, "cook_pizza");
-        /*
-        fails_with! {
-            parser: TechniqueParser,
-            input: "0trust",
-            rule: Rule::identifier,
-            positives: [Rule::identifier],
-            negatives: [],
-            pos: 0
-        };
-        */
+
+        assert!(parse_identifier(&mut "0trust").is_err());
+        assert!(parse_identifier(&mut "Pizza").is_err());
     }
 
     // Import all parent module items
