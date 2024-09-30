@@ -2,7 +2,7 @@
 
 // struct TechniqueParser;
 
-use chumsky::{prelude::*, Span};
+use chumsky::prelude::*;
 
 pub fn parse_via_chumsky(content: &str) {
     let result = parse_identifier().parse(content);
@@ -22,6 +22,12 @@ fn parse_identifier() -> impl Parser<char, Identifier, Error = Simple<char>> {
             filter(|c: &char| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_').repeated(),
         )
         .collect()
+}
+
+fn parse_magic_line() -> impl Parser<char, u8, Error = Simple<char>> {
+    just('%')
+        .ignore_then(just("technique").padded())
+        .ignore_then(just("v1").to(1u8))
 }
 
 #[cfg(test)]
@@ -47,6 +53,15 @@ mod tests {
         let result = parse_identifier().parse(input);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn check_magic_line() {
+        assert_eq!(parse_magic_line().parse("% technique v1"), Ok(1));
+        assert_eq!(parse_magic_line().parse("%technique v1"), Ok(1));
+        // this isn't really ideal, but there's no absolutely vital reason it
+        // has to be rejected.
+        assert_eq!(parse_magic_line().parse("%techniquev1"), Ok(1));
     }
 
     // Import all parent module items
