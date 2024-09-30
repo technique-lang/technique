@@ -2,27 +2,26 @@
 
 // struct TechniqueParser;
 
-use winnow::error::StrContext;
-use winnow::token::{one_of, take_while};
-use winnow::{PResult, Parser};
+use chumsky::{prelude::*, Span};
 
-pub fn parse_via_winnow(content: &str) {
-    // let technique = TechniqueParser::parse(Rule::technique, &content);
-    // println!("{:?}", technique);
-    let result = parse_identifier.parse(content).unwrap();
-    println!("{}", result);
+pub fn parse_via_chumsky(content: &str) {
+    let result = parse_identifier().parse(content);
+    println!("{:?}", result);
+    std::process::exit(0);
 }
 
-// a winnow parser that takes an alpha and then any character
-fn parse_identifier<'s>(input: &mut &'s str) -> PResult<&'s str> {
-    (
-        one_of('a'..='z'),
-        take_while(0.., (('0'..='9'), ('a'..='z'), ('_'))),
-    )
-        .take()
-        .verify(|s: &str| s.len() == input.len())
-        .context(StrContext::Label("identifier"))
-        .parse_next(input)
+type Identifier = String;
+
+// takes a single lower case character then any lower case character, digit,
+// or unerscore. Based on the parser code in chumsky::text::ident().
+
+fn parse_identifier() -> impl Parser<char, Identifier, Error = Simple<char>> {
+    filter(|c: &char| c.is_ascii_lowercase())
+        .map(Some)
+        .chain::<char, Vec<_>, _>(
+            filter(|c: &char| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_').repeated(),
+        )
+        .collect()
 }
 
 #[cfg(test)]
@@ -31,32 +30,23 @@ mod tests {
 
     #[test]
     fn check_identifier_rules() {
-        let mut input = "p";
+        let input = "make_dinner";
 
-        let result = parse_identifier
-            .parse_next(&mut input)
-            .unwrap();
+        let result = parse_identifier().parse(input);
 
-        assert_eq!(result, "p");
+        assert_eq!(result, Ok("make_dinner".to_string()));
 
-        let mut input = "pizza";
-        let result = parse_identifier
-            .parse_next(&mut input)
-            .unwrap();
-        assert_eq!(result, "pizza");
+        let input = "";
 
-        let mut input = "cook_pizza";
-        let result = parse_identifier
-            .parse_next(&mut input)
-            .unwrap();
-        assert_eq!(result, "cook_pizza");
+        let result = parse_identifier().parse(input);
 
-        assert!(parse_identifier(&mut "0trust").is_err());
-        assert!(parse_identifier(&mut "Pizza").is_err());
-        assert!(parse_identifier(&mut "pizZa").is_err());
+        assert!(result.is_err());
 
-        assert_eq!(parse_identifier(&mut "cook_pizza"), Ok("cook_pizza"));
-        assert!(parse_identifier(&mut "cook-pizza").is_err());
+        let input = "MakeDinner";
+
+        let result = parse_identifier().parse(input);
+
+        assert!(result.is_err());
     }
 
     // Import all parent module items
