@@ -8,6 +8,7 @@ repository = "https://github.com/technique-lang/technique"
 license = "MIT"
 
 [dependencies]
+chumsky = "0.9.3"
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
 pest = "2.7.11"
 pest_derive = "2.7.11"
