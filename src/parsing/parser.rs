@@ -30,6 +30,74 @@ fn parse_magic_line() -> impl Parser<char, u8, Error = Simple<char>> {
         .ignore_then(just("v1").to(1u8))
 }
 
+fn parse_spdx_line() -> impl Parser<char, (String, String), Error = Simple<char>>
+{
+    just('!')
+        .ignore_then(parse_license())
+        .then_ignore(just(';'))
+        .then(parse_copyright())
+}
+
+fn parse_license() -> impl Parser<char, String, Error = Simple<char>> {
+    filter(|c: &char| {
+        c.is_ascii_uppercase()
+            || c.is_ascii_lowercase()
+            || c.is_ascii_digit()
+            || *c != ';' // symbol which separates license and copyright probably shouldn't ever encounter it
+            || c.is_ascii_punctuation()
+            || *c == ' '
+    })
+    .repeated()
+    .at_least(1)
+    .collect()
+}
+
+// change to a semantic Copyright type
+fn parse_copyright() -> impl Parser<char, String, Error = Simple<char>> {
+    let p = parse_copyright_year()
+        .padded()
+        .then(parse_copyright_owner());
+
+    p.map(|((y1, y2), o)| {
+        let mut r = String::new();
+        r.push_str(&y1);
+        r.push_str(&y2);
+        r.push_str(&o);
+        r
+    })
+}
+
+fn year() -> impl Parser<char, String, Error = Simple<char>> {
+    filter(|c: &char| c.is_ascii_digit())
+        .repeated()
+        .at_least(4)
+        .at_most(4)
+        .collect()
+}
+
+fn parse_copyright_year() -> impl Parser<char, (String, String), Error = Simple<char>> {
+    year()
+        .then_ignore(just('-'))
+        .then(year())
+        .or(year()
+            .then_ignore(just('-'))
+            .map(|yyyy| (yyyy, "".to_string())))
+        .or(year().map(|yyyy| (yyyy, "".to_string())))
+}
+
+fn parse_copyright_owner() -> impl Parser<char, String, Error = Simple<char>> {
+    filter(|c: &char| {
+        c.is_ascii_uppercase()
+            || c.is_ascii_lowercase()
+            || c.is_ascii_digit()
+            || c.is_ascii_punctuation()
+            || *c == ' '
+    })
+    .repeated()
+    .at_least(1)
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,7 +132,48 @@ mod tests {
         assert_eq!(parse_magic_line().parse("%techniquev1"), Ok(1));
     }
 
-    // Import all parent module items
+    #[test]
+    fn check_header_spdx() {
+        assert_eq!(parse_license().parse("MIT"), Ok("MIT".to_string()));
+        assert_eq!(
+            parse_license().parse("Public Domain"),
+            Ok("Public Domain".to_string())
+        );
+        assert_eq!(
+            parse_license().parse("CC BY-SA 3.0 IGO"),
+            Ok("CC BY-SA 3.0 IGO".to_string())
+        );
+
+        assert_eq!(
+            parse_copyright_year().parse("2024"),
+            Ok(("2024".to_string(), "".to_string()))
+        );
+        assert_eq!(
+            parse_copyright_year().parse("2024-"),
+            Ok(("2024".to_string(), "".to_string()))
+        );
+        assert_eq!(
+            parse_copyright_year().parse("2002-2024"),
+            Ok(("2002".to_string(), "2024".to_string()))
+        );
+
+        assert!(parse_copyright_year()
+            .parse("24")
+            .is_err());
+        assert!(parse_copyright_year()
+            .parse("02-24")
+            .is_err());
+
+        assert_eq!(
+            parse_copyright_owner().parse("ACME"),
+            Ok("ACME".to_string())
+        );
+        assert_eq!(
+            parse_copyright_owner().parse("ACME, Inc."),
+            Ok("ACME, Inc.".to_string())
+        );
+    }
+
     /*
         #[test]
         fn check_procedure_declaration_explicit() {
@@ -97,132 +206,27 @@ mod tests {
         }
     */
     /*
-        #[test]
-        fn check_procedure_declaration_macro() {
-            parses_to! {
-                parser: TechniqueParser,
-                input: "making_coffee : Beans, Milk -> Coffee",
-                rule: Rule::declaration,
-                tokens: [
-                    declaration(0, 37, [
-                        identifier(0, 13),
-                        signature(16, 37, [
-                            forma(16, 21),
-                            forma(23, 27),
-                            forma(31, 37)
+            #[test]
+            fn check_procedure_declaration_macro() {
+                parses_to! {
+                    parser: TechniqueParser,
+                    input: "making_coffee : Beans, Milk -> Coffee",
+                    rule: Rule::declaration,
+                    tokens: [
+                        declaration(0, 37, [
+                            identifier(0, 13),
+                            signature(16, 37, [
+                                forma(16, 21),
+                                forma(23, 27),
+                                forma(31, 37)
+                            ])
                         ])
-                    ])
-                ]
-            };
-        }
+                    ]
+                };
+            }
+    */
 
-        #[test]
-        fn check_header_spdx() {
-            parses_to! {
-                parser: TechniqueParser,
-                input: "! MIT; (c) ACME, Inc.",
-                rule: Rule::spdx_line,
-                tokens: [
-                    spdx_line(0, 21, [
-                        license(2, 5),
-                        copyright(7, 21, [
-                            owner(11, 21)
-                        ])
-                    ])
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "! MIT; (c) 2024 ACME, Inc.",
-                rule: Rule::spdx_line,
-                tokens: [
-                    spdx_line(0, 26, [
-                        license(2, 5),
-                        copyright(7, 26, [
-                            year(11, 15),
-                            owner(16, 26)
-                        ])
-                    ])
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "! PD",
-                rule: Rule::spdx_line,
-                tokens: [
-                    spdx_line(0, 4, [
-                        license(2, 4)
-                    ])
-                ]
-            };
-
-            parses_to! {
-                parser: TechniqueParser,
-                input: "MIT",
-                rule: Rule::license,
-                tokens: [
-                    license(0, 3),
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "Public Domain",
-                rule: Rule::license,
-                tokens: [
-                    license(0, 13),
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "CC BY-SA 3.0 IGO",
-                rule: Rule::license,
-                tokens: [
-                    license(0, 16),
-                ]
-            };
-
-            parses_to! {
-                parser: TechniqueParser,
-                input: "2024",
-                rule: Rule::year,
-                tokens: [
-                    year(0, 4),
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "2024-",
-                rule: Rule::year,
-                tokens: [
-                    year(0, 5),
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "2002-2024",
-                rule: Rule::year,
-                tokens: [
-                    year(0, 9),
-                ]
-            };
-            fails_with! {
-                parser: TechniqueParser,
-                input: "02",
-                rule: Rule::year,
-                positives: [Rule::year],
-                negatives: [],
-                pos: 0
-            };
-            fails_with! {
-                parser: TechniqueParser,
-                input: "02-24",
-                rule: Rule::year,
-                positives: [Rule::year],
-                negatives: [],
-                pos: 0
-            };
-        }
-
+    /*
         #[test]
         fn check_header_template() {
             parses_to! {
