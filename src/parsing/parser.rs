@@ -22,6 +22,7 @@ fn parse_identifier() -> impl Parser<char, Identifier, Error = Simple<char>> {
             filter(|c: &char| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_').repeated(),
         )
         .collect()
+    // .validate(|s : String, span : Range, emit| if s.len() != span.end() - span.start() { emit(Simple::custom(span, "Wrong length")) })
 }
 
 fn parse_magic_line() -> impl Parser<char, u8, Error = Simple<char>> {
@@ -30,62 +31,41 @@ fn parse_magic_line() -> impl Parser<char, u8, Error = Simple<char>> {
         .ignore_then(just("v1").to(1u8))
 }
 
-fn parse_spdx_line() -> impl Parser<char, (String, String), Error = Simple<char>>
-{
+fn parse_spdx_line() -> impl Parser<char, (Option<String>, Option<String>), Error = Simple<char>> {
     just('!')
-        .ignore_then(parse_license())
-        .then_ignore(just(';'))
-        .then(parse_copyright())
+        .ignore_then(
+            parse_license()
+                .padded()
+                .or_not(),
+        )
+        .then(
+            just(';')
+                .ignore_then(
+                    just("(c)")
+                        .or(just("(C)"))
+                        .or(just("©"))
+                        .padded(),
+                )
+                .ignore_then(parse_copyright().padded())
+                .or_not(),
+        )
 }
 
 fn parse_license() -> impl Parser<char, String, Error = Simple<char>> {
     filter(|c: &char| {
-        c.is_ascii_uppercase()
-            || c.is_ascii_lowercase()
-            || c.is_ascii_digit()
-            || *c != ';' // symbol which separates license and copyright probably shouldn't ever encounter it
-            || c.is_ascii_punctuation()
-            || *c == ' '
+        *c != ';'
+            && (c.is_ascii_uppercase()
+                || c.is_ascii_lowercase()
+                || c.is_ascii_digit()
+                || c.is_ascii_punctuation()
+                || *c == ' ')
     })
     .repeated()
     .at_least(1)
     .collect()
 }
 
-// change to a semantic Copyright type
 fn parse_copyright() -> impl Parser<char, String, Error = Simple<char>> {
-    let p = parse_copyright_year()
-        .padded()
-        .then(parse_copyright_owner());
-
-    p.map(|((y1, y2), o)| {
-        let mut r = String::new();
-        r.push_str(&y1);
-        r.push_str(&y2);
-        r.push_str(&o);
-        r
-    })
-}
-
-fn year() -> impl Parser<char, String, Error = Simple<char>> {
-    filter(|c: &char| c.is_ascii_digit())
-        .repeated()
-        .at_least(4)
-        .at_most(4)
-        .collect()
-}
-
-fn parse_copyright_year() -> impl Parser<char, (String, String), Error = Simple<char>> {
-    year()
-        .then_ignore(just('-'))
-        .then(year())
-        .or(year()
-            .then_ignore(just('-'))
-            .map(|yyyy| (yyyy, "".to_string())))
-        .or(year().map(|yyyy| (yyyy, "".to_string())))
-}
-
-fn parse_copyright_owner() -> impl Parser<char, String, Error = Simple<char>> {
     filter(|c: &char| {
         c.is_ascii_uppercase()
             || c.is_ascii_lowercase()
@@ -144,33 +124,43 @@ mod tests {
             Ok("CC BY-SA 3.0 IGO".to_string())
         );
 
+        assert_eq!(parse_copyright().parse("ACME"), Ok("ACME".to_string()));
         assert_eq!(
-            parse_copyright_year().parse("2024"),
-            Ok(("2024".to_string(), "".to_string()))
-        );
-        assert_eq!(
-            parse_copyright_year().parse("2024-"),
-            Ok(("2024".to_string(), "".to_string()))
-        );
-        assert_eq!(
-            parse_copyright_year().parse("2002-2024"),
-            Ok(("2002".to_string(), "2024".to_string()))
-        );
-
-        assert!(parse_copyright_year()
-            .parse("24")
-            .is_err());
-        assert!(parse_copyright_year()
-            .parse("02-24")
-            .is_err());
-
-        assert_eq!(
-            parse_copyright_owner().parse("ACME"),
-            Ok("ACME".to_string())
-        );
-        assert_eq!(
-            parse_copyright_owner().parse("ACME, Inc."),
+            parse_copyright().parse("ACME, Inc."),
             Ok("ACME, Inc.".to_string())
+        );
+
+        assert_eq!(
+            parse_copyright().parse("2024 ACME, Inc."),
+            Ok("2024 ACME, Inc.".to_string())
+        );
+
+        assert_eq!(
+            parse_spdx_line().parse("! PD"),
+            Ok((Some("PD".to_string()), None))
+        );
+        assert_eq!(
+            parse_spdx_line().parse("! MIT; (c) ACME, Inc.".to_string()),
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+        );
+        assert_eq!(
+            parse_spdx_line().parse("! MIT; (C) ACME, Inc.".to_string()),
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+        );
+        assert_eq!(
+            parse_spdx_line().parse("! MIT; © ACME, Inc.".to_string()),
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+        );
+        assert_eq!(
+            parse_spdx_line().parse("! MIT; (c) 2024 ACME, Inc."),
+            Ok((Some("MIT".to_string()), Some("2024 ACME, Inc.".to_string())))
+        );
+        assert_eq!(
+            parse_spdx_line().parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
+            Ok((
+                Some("CC BY-SA 3.0 [IGO]".to_string()),
+                Some("2024 ACME, Inc.".to_string())
+            ))
         );
     }
 
