@@ -4,6 +4,7 @@ use tracing::debug;
 use tracing_subscriber;
 
 mod rendering;
+mod parsing;
 
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
@@ -89,10 +90,11 @@ fn main() {
 
             let filename = submatches
                 .get_one::<String>("filename")
-                .unwrap(); // argument are required by definitin so always present
+                .unwrap(); // argument are required by definition so always present
 
             debug!(filename);
 
+            parsing::load(&Path::new(filename));
             todo!();
         }
         Some(("format", submatches)) => {
