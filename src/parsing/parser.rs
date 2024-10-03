@@ -1,17 +1,12 @@
-// parsing machinery
+use lalrpop_util::lalrpop_mod;
 
-// struct TechniqueParser;
+lalrpop_mod!(pub technique);
 
-use chumsky::prelude::*;
-
-pub fn parse_via_chumsky(content: &str) {
-    let result = parse_identifier().parse(content);
-    println!("{:?}", result);
+pub fn parse_via_lalrpop(_content: &str) {
     std::process::exit(0);
 }
 
-type Identifier = String;
-
+/*
 // takes a single lower case character then any lower case character, digit,
 // or unerscore. Based on the parser code in chumsky::text::ident().
 
@@ -99,32 +94,44 @@ fn parse_template() -> impl Parser<char, String, Error = Simple<char>> {
     .at_least(1)
     .collect()
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lalrpop_util::ParseError;
 
     #[test]
     fn check_identifier_rules() {
-        let input = "make_dinner";
+        let p = technique::identifierParser::new();
 
-        let result = parse_identifier().parse(input);
-
-        assert_eq!(result, Ok("make_dinner".to_string()));
-
-        let input = "";
-
-        let result = parse_identifier().parse(input);
-
-        assert!(result.is_err());
-
-        let input = "MakeDinner";
-
-        let result = parse_identifier().parse(input);
-
-        assert!(result.is_err());
+        assert_eq!(p.parse("a"), Ok("a".to_string()));
+        assert_eq!(p.parse("ab"), Ok("ab".to_string()));
+        assert_eq!(p.parse("johnny5"), Ok("johnny5".to_string()));
+        assert_eq!(
+            p.parse("Pizza"),
+            Err(ParseError::InvalidToken { location: 0 })
+        );
+        assert_eq!(
+            p.parse("pizZa"),
+            Err(ParseError::InvalidToken { location: 3 })
+        );
+        assert_eq!(
+            p.parse("0trust"),
+            Err(ParseError::InvalidToken { location: 0 })
+        );
+        assert_eq!(p.parse("make_dinner"), Ok("make_dinner".to_string()));
+        assert_eq!(
+            p.parse("MakeDinner"),
+            Err(ParseError::InvalidToken { location: 0 })
+        );
+        assert_eq!(
+            p.parse("make-dinner"),
+            Err(ParseError::InvalidToken { location: 4 })
+        );
     }
-
+}
+/*
     #[test]
     fn check_magic_line() {
         assert_eq!(parse_magic_line().parse("% technique v1"), Ok(1));
@@ -327,3 +334,4 @@ mod tests {
     }
     */
 }
+*/

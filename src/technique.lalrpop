@@ -1,0 +1,7 @@
+use std::str::FromStr;
+
+grammar;
+
+pub identifier: String = {
+    <r"[a-z][a-z0-9_]*"> => <>.to_string()
+};
