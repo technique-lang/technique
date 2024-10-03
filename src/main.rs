@@ -3,8 +3,8 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-mod rendering;
 mod parsing;
+mod rendering;
 
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
