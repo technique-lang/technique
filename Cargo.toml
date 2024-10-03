@@ -8,12 +8,12 @@ repository = "https://github.com/technique-lang/technique"
 license = "MIT"
 
 [dependencies]
-chumsky = "0.9.3"
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
-pest = "2.7.11"
-pest_derive = "2.7.11"
+lalrpop-util  = { version = "0.22.0", features = [ "lexer", "unicode" ] }
 serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-winnow = "0.6.18"
+
+[build-dependencies]
+lalrpop = { version = "0.22.0", features = [ "lexer", "unicode" ] }
