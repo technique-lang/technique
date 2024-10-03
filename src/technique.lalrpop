@@ -5,3 +5,7 @@ grammar;
 pub identifier: String = {
     <r"[a-z][a-z0-9_]*"> => <>.to_string()
 };
+
+pub magic_line: u8 = {
+    "%" "technique" "v1" => 1
+};

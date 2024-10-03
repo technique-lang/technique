@@ -99,7 +99,7 @@ fn parse_template() -> impl Parser<char, String, Error = Simple<char>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lalrpop_util::ParseError;
+    use lalrpop_util::{lexer::Token, ParseError};
 
     #[test]
     fn check_identifier_rules() {
@@ -130,17 +130,26 @@ mod tests {
             Err(ParseError::InvalidToken { location: 4 })
         );
     }
-}
-/*
+
     #[test]
     fn check_magic_line() {
-        assert_eq!(parse_magic_line().parse("% technique v1"), Ok(1));
-        assert_eq!(parse_magic_line().parse("%technique v1"), Ok(1));
-        // this isn't really ideal, but there's no absolutely vital reason it
-        // has to be rejected.
-        assert_eq!(parse_magic_line().parse("%techniquev1"), Ok(1));
+        let p = technique::magic_lineParser::new();
+        assert_eq!(p.parse("% technique v1"), Ok(1));
+        assert_eq!(p.parse("%technique v1"), Ok(1));
+        // this is rejected because the technique keyword isn't present. I'm
+        // not convinced there is great value to having an error of this degree
+        // of detail hard-coded in the test case; change to .is_err() if it
+        // ever becomes a problem.
+        assert_eq!(
+            p.parse("%techniquev1"),
+            Err(ParseError::UnrecognizedToken {
+                token: (1, Token(0, "techniquev1"), 12),
+                expected: vec!["\"technique\"".to_string()]
+            })
+        );
     }
-
+}
+/*
     #[test]
     fn check_header_spdx() {
         assert_eq!(parse_license().parse("MIT"), Ok("MIT".to_string()));
