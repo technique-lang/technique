@@ -78,6 +78,28 @@ fn parse_copyright() -> impl Parser<char, String, Error = Simple<char>> {
     .collect()
 }
 
+fn parse_template_line() -> impl Parser<char, Option<String>, Error = Simple<char>> {
+    just('&').ignore_then(
+        parse_template()
+            .padded()
+            .or_not(),
+    )
+}
+
+fn parse_template() -> impl Parser<char, String, Error = Simple<char>> {
+    filter(|c: &char| {
+        c.is_ascii_uppercase()
+            || c.is_ascii_lowercase()
+            || c.is_ascii_digit()
+            || *c == '.'
+            || *c == ','
+            || *c == '-'
+    })
+    .repeated()
+    .at_least(1)
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,6 +186,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn check_header_template() {
+        assert_eq!(
+            parse_template().parse("checklist"),
+            Ok("checklist".to_string())
+        );
+        assert_eq!(
+            parse_template().parse("checklist,v1"),
+            Ok("checklist,v1".to_string())
+        );
+        assert_eq!(
+            parse_template().parse("checklist-v1.0"),
+            Ok("checklist-v1.0".to_string())
+        );
+        assert_eq!(
+            parse_template_line().parse("& checklist-v1"),
+            Ok(Some("checklist-v1".to_string()))
+        );
+    }
     /*
         #[test]
         fn check_procedure_declaration_explicit() {
