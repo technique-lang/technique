@@ -9,6 +9,7 @@ pub fn parse_via_lalrpop(_content: &str) {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ValidationError {
+    ZeroLengthToken,
     InvalidIdentifier,
 }
 
@@ -27,11 +28,12 @@ impl<T, E, L, R> WrapError<T, E, L, R> for Result<T, E> {
 /// to `[a-z][a-zA-Z0-9_]*` as an identifier.
 fn validate_identifier(input: &str) -> Result<String, ValidationError> {
     if input.len() == 0 {
-        return Err(ValidationError::InvalidIdentifier);
+        return Err(ValidationError::ZeroLengthToken);
     }
 
-    if !input
-        .chars()
+    let mut cs = input.chars();
+
+    if !cs
         .next()
         .unwrap()
         .is_ascii_lowercase()
@@ -39,7 +41,7 @@ fn validate_identifier(input: &str) -> Result<String, ValidationError> {
         return Err(ValidationError::InvalidIdentifier);
     }
 
-    for c in input.chars() {
+    for c in cs {
         if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
             return Err(ValidationError::InvalidIdentifier);
         }
