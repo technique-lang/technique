@@ -6,96 +6,6 @@ pub fn parse_via_lalrpop(_content: &str) {
     std::process::exit(0);
 }
 
-/*
-// takes a single lower case character then any lower case character, digit,
-// or unerscore. Based on the parser code in chumsky::text::ident().
-
-fn parse_identifier() -> impl Parser<char, Identifier, Error = Simple<char>> {
-    filter(|c: &char| c.is_ascii_lowercase())
-        .map(Some)
-        .chain::<char, Vec<_>, _>(
-            filter(|c: &char| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_').repeated(),
-        )
-        .collect()
-    // .validate(|s : String, span : Range, emit| if s.len() != span.end() - span.start() { emit(Simple::custom(span, "Wrong length")) })
-}
-
-fn parse_magic_line() -> impl Parser<char, u8, Error = Simple<char>> {
-    just('%')
-        .ignore_then(just("technique").padded())
-        .ignore_then(just("v1").to(1u8))
-}
-
-fn parse_spdx_line() -> impl Parser<char, (Option<String>, Option<String>), Error = Simple<char>> {
-    just('!')
-        .ignore_then(
-            parse_license()
-                .padded()
-                .or_not(),
-        )
-        .then(
-            just(';')
-                .ignore_then(
-                    just("(c)")
-                        .or(just("(C)"))
-                        .or(just("©"))
-                        .padded(),
-                )
-                .ignore_then(parse_copyright().padded())
-                .or_not(),
-        )
-}
-
-fn parse_license() -> impl Parser<char, String, Error = Simple<char>> {
-    filter(|c: &char| {
-        *c != ';'
-            && (c.is_ascii_uppercase()
-                || c.is_ascii_lowercase()
-                || c.is_ascii_digit()
-                || c.is_ascii_punctuation()
-                || *c == ' ')
-    })
-    .repeated()
-    .at_least(1)
-    .collect()
-}
-
-fn parse_copyright() -> impl Parser<char, String, Error = Simple<char>> {
-    filter(|c: &char| {
-        c.is_ascii_uppercase()
-            || c.is_ascii_lowercase()
-            || c.is_ascii_digit()
-            || c.is_ascii_punctuation()
-            || *c == ' '
-    })
-    .repeated()
-    .at_least(1)
-    .collect()
-}
-
-fn parse_template_line() -> impl Parser<char, Option<String>, Error = Simple<char>> {
-    just('&').ignore_then(
-        parse_template()
-            .padded()
-            .or_not(),
-    )
-}
-
-fn parse_template() -> impl Parser<char, String, Error = Simple<char>> {
-    filter(|c: &char| {
-        c.is_ascii_uppercase()
-            || c.is_ascii_lowercase()
-            || c.is_ascii_digit()
-            || *c == '.'
-            || *c == ','
-            || *c == '-'
-    })
-    .repeated()
-    .at_least(1)
-    .collect()
-}
-*/
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,10 +40,7 @@ mod tests {
         let p = technique::magic_lineParser::new();
         assert_eq!(p.parse("% technique v1"), Ok(1));
         assert_eq!(p.parse("%technique v1"), Ok(1));
-        // this is rejected because the technique keyword isn't present. I'm
-        // not convinced there is great value to having an error of this degree
-        // of detail hard-coded in the test case; change to .is_err() if it
-        // ever becomes a problem.
+        // this is rejected because the technique keyword isn't present.
         assert!(p
             .parse("%techniquev1")
             .is_err());
