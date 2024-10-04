@@ -6,6 +6,35 @@ pub fn parse_via_lalrpop(_content: &str) {
     std::process::exit(0);
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ValidationError {
+    InvalidIdentifier,
+}
+
+// only accept [a-z][a-zA-Z0-9_]* as an identifier
+fn validate_identifier(input: &str) -> Result<String, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::InvalidIdentifier);
+    }
+
+    if !input
+        .chars()
+        .next()
+        .unwrap()
+        .is_ascii_lowercase()
+    {
+        return Err(ValidationError::InvalidIdentifier);
+    }
+
+    for c in input.chars() {
+        if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+            return Err(ValidationError::InvalidIdentifier);
+        }
+    }
+
+    Ok(input.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,6 +89,7 @@ mod tests {
         );
 
         assert_eq!(c.parse("ACME"), Ok("ACME".to_string()));
+        assert_eq!(c.parse("lower"), Ok("lower".to_string()));
         assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_string()));
 
         assert_eq!(

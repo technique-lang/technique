@@ -1,14 +1,22 @@
+use super::{ValidationError, validate_identifier};
+use lalrpop_util::ParseError;
+
 grammar;
 
+extern {
+    type Error = ValidationError;
+}
+
 match {
-    r"[a-z][a-z0-9_]*" => IDENTIFIER,
+    r"[A-Za-z0-9_\-\.,\[\]]*" => WORD,
     _
-} else {
-    r"[A-Za-z0-9_\-\.,\[\]]*" => WORD
+
 }
 
 pub identifier: String = {
-    <IDENTIFIER> => <>.to_string()
+    <WORD> =>? validate_identifier(<>).map_err(|e| ParseError::User {
+            error: e
+        })
 };
 
 pub magic_line: u8 = {
@@ -18,6 +26,10 @@ pub magic_line: u8 = {
 pub spdx_line: (String,String) = {
     "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (one.to_string(),two.to_string()),
     "!" <one:license> => (one.to_string(),"".to_string())
+}
+
+pub template_line: String = {
+    "&" <WORD> => <>.to_string()
 }
 
 pub license: String = {
