@@ -99,7 +99,6 @@ fn parse_template() -> impl Parser<char, String, Error = Simple<char>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lalrpop_util::{lexer::Token, ParseError};
 
     #[test]
     fn check_identifier_rules() {
@@ -139,60 +138,56 @@ mod tests {
             .parse("%techniquev1")
             .is_err());
     }
-}
-/*
+
     #[test]
     fn check_header_spdx() {
-        assert_eq!(parse_license().parse("MIT"), Ok("MIT".to_string()));
+        let l = technique::licenseParser::new();
+        let c = technique::copyrightParser::new();
+        let p = technique::spdx_lineParser::new();
+
+        assert_eq!(l.parse("MIT"), Ok("MIT".to_string()));
+        assert_eq!(l.parse("Public Domain"), Ok("Public Domain".to_string()));
         assert_eq!(
-            parse_license().parse("Public Domain"),
-            Ok("Public Domain".to_string())
-        );
-        assert_eq!(
-            parse_license().parse("CC BY-SA 3.0 IGO"),
+            l.parse("CC BY-SA 3.0 IGO"),
             Ok("CC BY-SA 3.0 IGO".to_string())
         );
 
-        assert_eq!(parse_copyright().parse("ACME"), Ok("ACME".to_string()));
-        assert_eq!(
-            parse_copyright().parse("ACME, Inc."),
-            Ok("ACME, Inc.".to_string())
-        );
+        assert_eq!(c.parse("ACME"), Ok("ACME".to_string()));
+        assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_string()));
 
         assert_eq!(
-            parse_copyright().parse("2024 ACME, Inc."),
+            c.parse("2024 ACME, Inc."),
             Ok("2024 ACME, Inc.".to_string())
         );
 
+        assert_eq!(p.parse("! PD"), Ok(("PD".to_string(), "".to_string())));
         assert_eq!(
-            parse_spdx_line().parse("! PD"),
-            Ok((Some("PD".to_string()), None))
+            p.parse("! MIT; (c) ACME, Inc."),
+            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
         );
         assert_eq!(
-            parse_spdx_line().parse("! MIT; (c) ACME, Inc.".to_string()),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            p.parse("! MIT; (C) ACME, Inc."),
+            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
         );
         assert_eq!(
-            parse_spdx_line().parse("! MIT; (C) ACME, Inc.".to_string()),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            p.parse("! MIT; © ACME, Inc."),
+            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
         );
         assert_eq!(
-            parse_spdx_line().parse("! MIT; © ACME, Inc.".to_string()),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            p.parse("! MIT; (c) 2024 ACME, Inc."),
+            Ok(("MIT".to_string(), "2024 ACME, Inc.".to_string()))
         );
         assert_eq!(
-            parse_spdx_line().parse("! MIT; (c) 2024 ACME, Inc."),
-            Ok((Some("MIT".to_string()), Some("2024 ACME, Inc.".to_string())))
-        );
-        assert_eq!(
-            parse_spdx_line().parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
+            p.parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
             Ok((
-                Some("CC BY-SA 3.0 [IGO]".to_string()),
-                Some("2024 ACME, Inc.".to_string())
+                "CC BY-SA 3.0 [IGO]".to_string(),
+                "2024 ACME, Inc.".to_string()
             ))
         );
     }
+}
 
+/*
     #[test]
     fn check_header_template() {
         assert_eq!(

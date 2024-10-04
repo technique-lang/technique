@@ -1,12 +1,10 @@
-use std::str::FromStr;
-
 grammar;
 
 match {
     r"[a-z][a-z0-9_]*" => IDENTIFIER,
     _
 } else {
-    r"[A-Za-z0-9][A-Za-z0-9_\-\.]*" => WORD
+    r"[A-Za-z0-9_\-\.,\[\]]*" => WORD
 }
 
 pub identifier: String = {
@@ -16,3 +14,16 @@ pub identifier: String = {
 pub magic_line: u8 = {
     "%" "technique" "v1" => 1
 };
+
+pub spdx_line: (String,String) = {
+    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (one.to_string(),two.to_string()),
+    "!" <one:license> => (one.to_string(),"".to_string())
+}
+
+pub license: String = {
+    <WORD+> => <>.join(" ").to_string()
+};
+
+pub copyright: String = {
+    <WORD+> => <>.join(" ").to_string()
+}
