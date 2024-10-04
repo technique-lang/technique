@@ -1,5 +1,4 @@
-use super::{ValidationError, validate_identifier};
-use lalrpop_util::ParseError;
+use super::{ValidationError, validate_identifier, WrapError};
 
 grammar;
 
@@ -14,9 +13,7 @@ match {
 }
 
 pub identifier: String = {
-    <WORD> =>? validate_identifier(<>).map_err(|e| ParseError::User {
-            error: e
-        })
+    <WORD> =>? validate_identifier(<>).wrap()
 };
 
 pub magic_line: u8 = {

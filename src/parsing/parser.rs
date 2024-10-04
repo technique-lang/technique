@@ -1,4 +1,5 @@
 use lalrpop_util::lalrpop_mod;
+use lalrpop_util::ParseError;
 
 lalrpop_mod!(pub technique);
 
@@ -11,7 +12,19 @@ pub enum ValidationError {
     InvalidIdentifier,
 }
 
-// only accept [a-z][a-zA-Z0-9_]* as an identifier
+/// An adapter trait to wrap our custom errors into a `ParseError`.
+pub trait WrapError<T, E, L, R> {
+    fn wrap(self) -> Result<T, ParseError<L, R, E>>;
+}
+
+impl<T, E, L, R> WrapError<T, E, L, R> for Result<T, E> {
+    fn wrap(self) -> Result<T, ParseError<L, R, E>> {
+        self.map_err(|e| ParseError::User { error: e })
+    }
+}
+
+/// Validates if the input string is a valid identifier corresponding
+/// to `[a-z][a-zA-Z0-9_]*` as an identifier.
 fn validate_identifier(input: &str) -> Result<String, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::InvalidIdentifier);
