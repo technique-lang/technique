@@ -2,8 +2,15 @@ use std::str::FromStr;
 
 grammar;
 
+match {
+    r"[a-z][a-z0-9_]*" => IDENTIFIER,
+    _
+} else {
+    r"[A-Za-z0-9][A-Za-z0-9_\-\.]*" => WORD
+}
+
 pub identifier: String = {
-    <r"[a-z][a-z0-9_]*"> => <>.to_string()
+    <IDENTIFIER> => <>.to_string()
 };
 
 pub magic_line: u8 = {
