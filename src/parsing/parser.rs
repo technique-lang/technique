@@ -1,7 +1,8 @@
 use lalrpop_util::lalrpop_mod;
 use lalrpop_util::ParseError;
+use technique::language::*;
 
-lalrpop_mod!(pub technique);
+lalrpop_mod!(pub grammar);
 
 pub fn parse_via_lalrpop(_content: &str) {
     std::process::exit(0);
@@ -56,7 +57,7 @@ mod tests {
 
     #[test]
     fn check_identifier_rules() {
-        let p = technique::identifierParser::new();
+        let p = grammar::identifierParser::new();
 
         assert_eq!(p.parse("a"), Ok("a".to_string()));
         assert_eq!(p.parse("ab"), Ok("ab".to_string()));
@@ -81,7 +82,7 @@ mod tests {
 
     #[test]
     fn check_magic_line() {
-        let p = technique::magic_lineParser::new();
+        let p = grammar::magic_lineParser::new();
         assert_eq!(p.parse("% technique v1"), Ok(1));
         assert_eq!(p.parse("%technique v1"), Ok(1));
         // this is rejected because the technique keyword isn't present.
@@ -92,9 +93,9 @@ mod tests {
 
     #[test]
     fn check_header_spdx() {
-        let l = technique::licenseParser::new();
-        let c = technique::copyrightParser::new();
-        let p = technique::spdx_lineParser::new();
+        let l = grammar::licenseParser::new();
+        let c = grammar::copyrightParser::new();
+        let p = grammar::spdx_lineParser::new();
 
         assert_eq!(l.parse("MIT"), Ok("MIT".to_string()));
         assert_eq!(l.parse("Public Domain"), Ok("Public Domain".to_string()));
