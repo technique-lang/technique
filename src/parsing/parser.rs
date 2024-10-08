@@ -121,6 +121,12 @@ mod tests {
         let result = parse_identifier().parse(input);
 
         assert!(result.is_err());
+
+        let input = "make-dinner";
+
+        let result = parse_identifier().parse(input);
+
+        assert!(result.is_err());
     }
 
     #[test]
