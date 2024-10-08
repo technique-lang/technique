@@ -9,6 +9,8 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
+pest = "2.7.11"
+pest_derive = "2.7.11"
 serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
 tracing = "0.1.40"
