@@ -265,6 +265,14 @@ mod tests {
             negatives: [],
             pos: 0
         };
+        fails_with! {
+            parser: TechniqueParser,
+            input: "cook-pizza",
+            rule: Rule::identifier,
+            positives: [Rule::identifier],
+            negatives: [],
+            pos: 0
+        };
     }
 
     #[test]
