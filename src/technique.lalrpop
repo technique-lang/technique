@@ -1,0 +1,38 @@
+use super::{ValidationError, validate_identifier, WrapError};
+
+grammar;
+
+extern {
+    type Error = ValidationError;
+}
+
+match {
+    r"[A-Za-z0-9_\-\.,\[\]]*" => WORD,
+    _
+
+}
+
+pub identifier: String = {
+    <WORD> =>? validate_identifier(<>).wrap()
+};
+
+pub magic_line: u8 = {
+    "%" "technique" "v1" => 1
+};
+
+pub spdx_line: (String,String) = {
+    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (one.to_string(),two.to_string()),
+    "!" <one:license> => (one.to_string(),"".to_string())
+}
+
+pub template_line: String = {
+    "&" <WORD> => <>.to_string()
+}
+
+pub license: String = {
+    <WORD+> => <>.join(" ").to_string()
+};
+
+pub copyright: String = {
+    <WORD+> => <>.join(" ").to_string()
+}

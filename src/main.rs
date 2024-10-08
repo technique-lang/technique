@@ -3,6 +3,7 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
+mod parsing;
 mod rendering;
 
 fn main() {
@@ -89,10 +90,11 @@ fn main() {
 
             let filename = submatches
                 .get_one::<String>("filename")
-                .unwrap(); // argument are required by definitin so always present
+                .unwrap(); // argument are required by definition so always present
 
             debug!(filename);
 
+            parsing::load(&Path::new(filename));
             todo!();
         }
         Some(("format", submatches)) => {
