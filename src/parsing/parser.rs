@@ -138,28 +138,21 @@ mod tests {
             ))
         );
     }
-}
 
-/*
     #[test]
     fn check_header_template() {
-        assert_eq!(
-            parse_template().parse("checklist"),
-            Ok("checklist".to_string())
-        );
-        assert_eq!(
-            parse_template().parse("checklist,v1"),
-            Ok("checklist,v1".to_string())
-        );
-        assert_eq!(
-            parse_template().parse("checklist-v1.0"),
-            Ok("checklist-v1.0".to_string())
-        );
-        assert_eq!(
-            parse_template_line().parse("& checklist-v1"),
-            Ok(Some("checklist-v1".to_string()))
-        );
+        let t = grammar::templateParser::new();
+        let p = grammar::template_lineParser::new();
+
+        assert_eq!(t.parse("checklist"), Ok("checklist".to_string()));
+        assert_eq!(t.parse("checklist,v1"), Ok("checklist,v1".to_string()));
+        assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_string()));
+
+        assert_eq!(p.parse("& nasa"), Ok("nasa".to_string()));
+        assert_eq!(p.parse("& nasa-flight-procedure,v9"), Ok("nasa-flight-procedure,v9".to_string()));
     }
+}
+/*
     /*
         #[test]
         fn check_procedure_declaration_explicit() {

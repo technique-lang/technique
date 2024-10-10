@@ -27,7 +27,11 @@ pub spdx_line: (String,String) = {
 }
 
 pub template_line: String = {
-    "&" <WORD> => <>.to_string()
+    "&" <template> => <>.to_string()
+}
+
+pub template: String = {
+    <WORD> => <>.to_string()
 }
 
 pub license: String = {
