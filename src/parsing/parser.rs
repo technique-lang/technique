@@ -1,6 +1,6 @@
 use lalrpop_util::lalrpop_mod;
 use lalrpop_util::ParseError;
-use technique::language::*;
+// use technique::language::*;
 
 lalrpop_mod!(pub grammar);
 
