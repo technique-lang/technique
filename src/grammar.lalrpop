@@ -21,9 +21,9 @@ pub magic_line: u8 = {
     "%" "technique" "v1" => 1
 };
 
-pub spdx_line: (String,String) = {
-    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (one.to_string(),two.to_string()),
-    "!" <one:license> => (one.to_string(),"".to_string())
+pub spdx_line: (Option<String>,Option<String>) = {
+    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (Some(one.to_string()),Some(two.to_string())),
+    "!" <one:license> => (Some(one.to_string()),None)
 }
 
 pub template_line: String = {

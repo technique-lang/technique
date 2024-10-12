@@ -113,28 +113,31 @@ mod tests {
             Ok("2024 ACME, Inc.".to_string())
         );
 
-        assert_eq!(p.parse("! PD"), Ok(("PD".to_string(), "".to_string())));
+        assert_eq!(
+            p.parse("! PD"),
+            Ok((Some("PD".to_string()), None))
+        );
         assert_eq!(
             p.parse("! MIT; (c) ACME, Inc."),
-            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
         );
         assert_eq!(
             p.parse("! MIT; (C) ACME, Inc."),
-            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
         );
         assert_eq!(
             p.parse("! MIT; © ACME, Inc."),
-            Ok(("MIT".to_string(), "ACME, Inc.".to_string()))
+            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
         );
         assert_eq!(
             p.parse("! MIT; (c) 2024 ACME, Inc."),
-            Ok(("MIT".to_string(), "2024 ACME, Inc.".to_string()))
+            Ok((Some("MIT".to_string()), Some("2024 ACME, Inc.".to_string())))
         );
         assert_eq!(
             p.parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
             Ok((
-                "CC BY-SA 3.0 [IGO]".to_string(),
-                "2024 ACME, Inc.".to_string()
+                Some("CC BY-SA 3.0 [IGO]".to_string()),
+                Some("2024 ACME, Inc.".to_string())
             ))
         );
     }
@@ -149,7 +152,10 @@ mod tests {
         assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_string()));
 
         assert_eq!(p.parse("& nasa"), Ok("nasa".to_string()));
-        assert_eq!(p.parse("& nasa-flight-procedure,v9"), Ok("nasa-flight-procedure,v9".to_string()));
+        assert_eq!(
+            p.parse("& nasa-flight-procedure,v9"),
+            Ok("nasa-flight-procedure,v9".to_string())
+        );
     }
 }
 /*
