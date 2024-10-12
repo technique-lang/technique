@@ -151,10 +151,10 @@ mod tests {
         assert_eq!(t.parse("checklist,v1"), Ok("checklist,v1".to_string()));
         assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_string()));
 
-        assert_eq!(p.parse("& nasa"), Ok("nasa".to_string()));
+        assert_eq!(p.parse("& nasa"), Ok(Some("nasa".to_string())));
         assert_eq!(
-            p.parse("& nasa-flight-procedure,v9"),
-            Ok("nasa-flight-procedure,v9".to_string())
+            p.parse("& nasa-flight-plan,v4.0"),
+            Ok(Some("nasa-flight-plan,v4.0".to_string()))
         );
     }
 }

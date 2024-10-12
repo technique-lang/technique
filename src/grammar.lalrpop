@@ -26,8 +26,8 @@ pub spdx_line: (Option<String>,Option<String>) = {
     "!" <one:license> => (Some(one.to_string()),None)
 }
 
-pub template_line: String = {
-    "&" <template> => <>.to_string()
+pub template_line: Option<String> = {
+    "&" <template> => Some(<>.to_string())
 }
 
 pub template: String = {
