@@ -13,6 +13,15 @@ match {
 
 }
 
+pub technique_file: Technique = {
+    <m:magic_line>
+    <s:spdx_line?>
+    <t:template_line?> => {
+        println!("spdx_line: {:?}", s);
+        Technique {version:m, license:None, copyright:None}
+    }
+}
+
 pub identifier: String = {
     <WORD> =>? validate_identifier(<>).wrap()
 };

@@ -1,10 +1,12 @@
 use lalrpop_util::lalrpop_mod;
 use lalrpop_util::ParseError;
-// use technique::language::*;
 
 lalrpop_mod!(pub grammar);
 
-pub fn parse_via_lalrpop(_content: &str) {
+pub fn parse_via_lalrpop(content: &str) {
+    let p = grammar::technique_fileParser::new();
+    let result = p.parse(content);
+    println!("{:?}", result);
     std::process::exit(0);
 }
 
@@ -54,6 +56,7 @@ fn validate_identifier(input: &str) -> Result<String, ValidationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use technique::language::*;
 
     #[test]
     fn check_identifier_rules() {
