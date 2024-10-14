@@ -16,3 +16,13 @@ impl Default for Technique {
         }
     }
 }
+
+pub struct Procedure {
+    pub name: String,
+    pub formation: Option<Formation>,
+}
+
+pub struct Formation {
+    pub domain: String,
+    pub range: String,
+}

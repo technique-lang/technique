@@ -14,6 +14,7 @@ pub fn parse_via_lalrpop(content: &str) {
 pub enum ValidationError {
     ZeroLengthToken,
     InvalidIdentifier,
+    InvalidForma,
 }
 
 /// An adapter trait to wrap our custom errors into a `ParseError`.
@@ -47,6 +48,30 @@ fn validate_identifier(input: &str) -> Result<String, ValidationError> {
     for c in cs {
         if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
             return Err(ValidationError::InvalidIdentifier);
+        }
+    }
+
+    Ok(input.to_string())
+}
+
+fn validate_forma(input: &str) -> Result<String, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::ZeroLengthToken);
+    }
+
+    let mut cs = input.chars();
+
+    if !cs
+        .next()
+        .unwrap()
+        .is_ascii_uppercase()
+    {
+        return Err(ValidationError::InvalidForma);
+    }
+
+    for c in cs {
+        if !(c.is_ascii_uppercase() || c.is_ascii_lowercase() || c.is_ascii_digit()) {
+            return Err(ValidationError::InvalidForma);
         }
     }
 
@@ -116,10 +141,7 @@ mod tests {
             Ok("2024 ACME, Inc.".to_string())
         );
 
-        assert_eq!(
-            p.parse("! PD"),
-            Ok((Some("PD".to_string()), None))
-        );
+        assert_eq!(p.parse("! PD"), Ok((Some("PD".to_string()), None)));
         assert_eq!(
             p.parse("! MIT; (c) ACME, Inc."),
             Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
@@ -160,7 +182,30 @@ mod tests {
             Ok(Some("nasa-flight-plan,v4.0".to_string()))
         );
     }
+
+    #[test]
+    fn check_procedure_declaration() {
+        let d = grammar::declarationParser::new();
+
+        assert_eq!(d.parse("making_coffee :"), Ok("making_coffee".to_string()));
+        assert_eq!(d.parse("f : A -> B"), Ok("f".to_string()));
+    }
+
+    #[test]
+    fn check_technique_file() {
+        let p = grammar::technique_fileParser::new();
+
+        assert_eq!(
+            p.parse("% technique v1"),
+            Ok(Technique {
+                version: 1,
+                license: None,
+                copyright: None
+            })
+        );
+    }
 }
+
 /*
     /*
         #[test]

@@ -1,4 +1,4 @@
-use super::{ValidationError, validate_identifier, WrapError};
+use super::{ValidationError, validate_identifier, validate_forma, WrapError};
 use technique::language::*;
 
 grammar;
@@ -26,6 +26,10 @@ pub identifier: String = {
     <WORD> =>? validate_identifier(<>).wrap()
 };
 
+pub forma: String = {
+    <WORD> =>? validate_forma(<>).wrap()
+}
+
 pub magic_line: u8 = {
     "%" "technique" "v1" => 1
 };
@@ -49,4 +53,16 @@ pub license: String = {
 
 pub copyright: String = {
     <WORD+> => <>.join(" ").to_string()
+}
+
+pub declaration_line: Procedure = {
+    <n:declaration> <f:formation?> => Procedure { name:n, formation:f } // match formation to extract domain range
+}
+
+pub formation: Formation = {
+    <d:forma> "->" <r:forma> => Formation { domain:d, range:r }
+}
+
+pub declaration: String = {
+    <identifier> ":" => <>.to_string()
 }
