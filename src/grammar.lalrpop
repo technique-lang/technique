@@ -74,3 +74,14 @@ pub signature: Signature = {
 pub declaration: String = {
     <identifier> ":" => <>.to_owned()
 }
+
+pub attribute_line: Attribute = {
+    "@" <attribute> => <>,
+}
+
+pub attribute: Attribute = {
+    <identifier> =>
+        Attribute {
+            name: <>.to_owned()
+        }
+}

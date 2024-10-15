@@ -28,3 +28,8 @@ pub struct Signature {
     pub domain: String,
     pub range: String,
 }
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Attribute {
+    pub name: String
+}

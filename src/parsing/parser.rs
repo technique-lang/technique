@@ -220,6 +220,22 @@ mod tests {
     }
 
     #[test]
+    fn check_attribute_role() {
+        let a = grammar::attributeParser::new();
+
+        assert_eq!(a.parse("chef"), Ok(Attribute{
+                name: "chef".to_owned()
+            }));
+
+        let p = grammar::attribute_lineParser::new();
+
+        assert_eq!(p.parse("@chef"), Ok(Attribute{
+                name: "chef".to_owned()
+            }));
+
+    }
+
+    #[test]
     fn check_technique_file() {
         let p = grammar::technique_fileParser::new();
 
