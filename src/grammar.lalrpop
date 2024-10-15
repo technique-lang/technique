@@ -35,24 +35,24 @@ pub magic_line: u8 = {
 };
 
 pub spdx_line: (Option<String>,Option<String>) = {
-    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (Some(one.to_string()),Some(two.to_string())),
-    "!" <one:license> => (Some(one.to_string()),None)
+    "!" <one:license> ";" r"\(c\)|\(C\)|©" <two:copyright> => (Some(one.to_owned()),Some(two.to_owned())),
+    "!" <one:license> => (Some(one.to_owned()),None)
 }
 
 pub template_line: Option<String> = {
-    "&" <template> => Some(<>.to_string())
+    "&" <template> => Some(<>.to_owned())
 }
 
 pub template: String = {
-    <WORD> => <>.to_string()
+    <WORD> => <>.to_owned()
 }
 
 pub license: String = {
-    <WORD+> => <>.join(" ").to_string()
+    <WORD+> => <>.join(" ").to_owned()
 };
 
 pub copyright: String = {
-    <WORD+> => <>.join(" ").to_string()
+    <WORD+> => <>.join(" ").to_owned()
 }
 
 pub declaration_line: Procedure = {
@@ -64,5 +64,5 @@ pub formation: Formation = {
 }
 
 pub declaration: String = {
-    <identifier> ":" => <>.to_string()
+    <identifier> ":" => <>.to_owned()
 }

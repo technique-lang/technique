@@ -51,7 +51,7 @@ fn validate_identifier(input: &str) -> Result<String, ValidationError> {
         }
     }
 
-    Ok(input.to_string())
+    Ok(input.to_owned())
 }
 
 fn validate_forma(input: &str) -> Result<String, ValidationError> {
@@ -75,7 +75,7 @@ fn validate_forma(input: &str) -> Result<String, ValidationError> {
         }
     }
 
-    Ok(input.to_string())
+    Ok(input.to_owned())
 }
 
 #[cfg(test)]
@@ -87,9 +87,9 @@ mod tests {
     fn check_identifier_rules() {
         let p = grammar::identifierParser::new();
 
-        assert_eq!(p.parse("a"), Ok("a".to_string()));
-        assert_eq!(p.parse("ab"), Ok("ab".to_string()));
-        assert_eq!(p.parse("johnny5"), Ok("johnny5".to_string()));
+        assert_eq!(p.parse("a"), Ok("a".to_owned()));
+        assert_eq!(p.parse("ab"), Ok("ab".to_owned()));
+        assert_eq!(p.parse("johnny5"), Ok("johnny5".to_owned()));
         assert!(p
             .parse("Pizza")
             .is_err(),);
@@ -99,7 +99,7 @@ mod tests {
         assert!(p
             .parse("0trust")
             .is_err());
-        assert_eq!(p.parse("make_dinner"), Ok("make_dinner".to_string()));
+        assert_eq!(p.parse("make_dinner"), Ok("make_dinner".to_owned()));
         assert!(p
             .parse("MakeDinner")
             .is_err());
@@ -125,44 +125,44 @@ mod tests {
         let c = grammar::copyrightParser::new();
         let p = grammar::spdx_lineParser::new();
 
-        assert_eq!(l.parse("MIT"), Ok("MIT".to_string()));
-        assert_eq!(l.parse("Public Domain"), Ok("Public Domain".to_string()));
+        assert_eq!(l.parse("MIT"), Ok("MIT".to_owned()));
+        assert_eq!(l.parse("Public Domain"), Ok("Public Domain".to_owned()));
         assert_eq!(
             l.parse("CC BY-SA 3.0 IGO"),
-            Ok("CC BY-SA 3.0 IGO".to_string())
+            Ok("CC BY-SA 3.0 IGO".to_owned())
         );
 
-        assert_eq!(c.parse("ACME"), Ok("ACME".to_string()));
-        assert_eq!(c.parse("lower"), Ok("lower".to_string()));
-        assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_string()));
+        assert_eq!(c.parse("ACME"), Ok("ACME".to_owned()));
+        assert_eq!(c.parse("lower"), Ok("lower".to_owned()));
+        assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_owned()));
 
         assert_eq!(
             c.parse("2024 ACME, Inc."),
-            Ok("2024 ACME, Inc.".to_string())
+            Ok("2024 ACME, Inc.".to_owned())
         );
 
-        assert_eq!(p.parse("! PD"), Ok((Some("PD".to_string()), None)));
+        assert_eq!(p.parse("! PD"), Ok((Some("PD".to_owned()), None)));
         assert_eq!(
             p.parse("! MIT; (c) ACME, Inc."),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
         );
         assert_eq!(
             p.parse("! MIT; (C) ACME, Inc."),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
         );
         assert_eq!(
             p.parse("! MIT; © ACME, Inc."),
-            Ok((Some("MIT".to_string()), Some("ACME, Inc.".to_string())))
+            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
         );
         assert_eq!(
             p.parse("! MIT; (c) 2024 ACME, Inc."),
-            Ok((Some("MIT".to_string()), Some("2024 ACME, Inc.".to_string())))
+            Ok((Some("MIT".to_owned()), Some("2024 ACME, Inc.".to_owned())))
         );
         assert_eq!(
             p.parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
             Ok((
-                Some("CC BY-SA 3.0 [IGO]".to_string()),
-                Some("2024 ACME, Inc.".to_string())
+                Some("CC BY-SA 3.0 [IGO]".to_owned()),
+                Some("2024 ACME, Inc.".to_owned())
             ))
         );
     }
@@ -172,14 +172,14 @@ mod tests {
         let t = grammar::templateParser::new();
         let p = grammar::template_lineParser::new();
 
-        assert_eq!(t.parse("checklist"), Ok("checklist".to_string()));
-        assert_eq!(t.parse("checklist,v1"), Ok("checklist,v1".to_string()));
-        assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_string()));
+        assert_eq!(t.parse("checklist"), Ok("checklist".to_owned()));
+        assert_eq!(t.parse("checklist,v1"), Ok("checklist,v1".to_owned()));
+        assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_owned()));
 
-        assert_eq!(p.parse("& nasa"), Ok(Some("nasa".to_string())));
+        assert_eq!(p.parse("& nasa"), Ok(Some("nasa".to_owned())));
         assert_eq!(
             p.parse("& nasa-flight-plan,v4.0"),
-            Ok(Some("nasa-flight-plan,v4.0".to_string()))
+            Ok(Some("nasa-flight-plan,v4.0".to_owned()))
         );
     }
 
@@ -187,8 +187,8 @@ mod tests {
     fn check_procedure_declaration() {
         let d = grammar::declarationParser::new();
 
-        assert_eq!(d.parse("making_coffee :"), Ok("making_coffee".to_string()));
-        assert_eq!(d.parse("f : A -> B"), Ok("f".to_string()));
+        assert_eq!(d.parse("making_coffee :"), Ok("making_coffee".to_owned()));
+        assert_eq!(d.parse("f : A -> B"), Ok("f".to_owned()));
     }
 
     #[test]
