@@ -136,10 +136,7 @@ mod tests {
         assert_eq!(c.parse("lower"), Ok("lower".to_owned()));
         assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_owned()));
 
-        assert_eq!(
-            c.parse("2024 ACME, Inc."),
-            Ok("2024 ACME, Inc.".to_owned())
-        );
+        assert_eq!(c.parse("2024 ACME, Inc."), Ok("2024 ACME, Inc.".to_owned()));
 
         assert_eq!(p.parse("! PD"), Ok((Some("PD".to_owned()), None)));
         assert_eq!(
@@ -184,11 +181,42 @@ mod tests {
     }
 
     #[test]
+    fn check_procedure_signature() {
+        let p = grammar::signatureParser::new();
+
+        assert_eq!(
+            p.parse("A -> B"),
+            Ok(Signature {
+                domain: "A".to_owned(),
+                range: "B".to_owned()
+            })
+        );
+        assert!(p
+            .parse("A ->")
+            .is_err());
+        assert!(p
+            .parse("A")
+            .is_err());
+    }
+
+    #[test]
     fn check_procedure_declaration() {
         let d = grammar::declarationParser::new();
 
         assert_eq!(d.parse("making_coffee :"), Ok("making_coffee".to_owned()));
-        assert_eq!(d.parse("f : A -> B"), Ok("f".to_owned()));
+
+        let p = grammar::declaration_lineParser::new();
+
+        assert_eq!(
+            p.parse("f : A -> B"),
+            Ok(Procedure {
+                name: "f".to_owned(),
+                signature: Some(Signature {
+                    domain: "A".to_owned(),
+                    range: "B".to_owned()
+                })
+            })
+        );
     }
 
     #[test]

@@ -17,12 +17,14 @@ impl Default for Technique {
     }
 }
 
+#[derive(Eq, Debug, PartialEq)]
 pub struct Procedure {
     pub name: String,
-    pub formation: Option<Formation>,
+    pub signature: Option<Signature>,
 }
 
-pub struct Formation {
+#[derive(Eq, Debug, PartialEq)]
+pub struct Signature {
     pub domain: String,
     pub range: String,
 }

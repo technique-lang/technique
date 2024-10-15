@@ -56,11 +56,19 @@ pub copyright: String = {
 }
 
 pub declaration_line: Procedure = {
-    <n:declaration> <f:formation?> => Procedure { name:n, formation:f } // match formation to extract domain range
+    <n:declaration> <s:signature?> =>
+        Procedure {
+            name:n,
+            signature:s
+        }
 }
 
-pub formation: Formation = {
-    <d:forma> "->" <r:forma> => Formation { domain:d, range:r }
+pub signature: Signature = {
+    <d:forma> "->" <r:forma> =>
+        Signature {
+            domain:d,
+            range:r
+        }
 }
 
 pub declaration: String = {
