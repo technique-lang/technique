@@ -10,7 +10,6 @@ extern {
 match {
     r"[A-Za-z0-9_\-\.,\[\]]*" => WORD,
     _
-
 }
 
 pub technique_file: Technique = {
@@ -75,12 +74,15 @@ pub declaration: String = {
     <identifier> ":" => <>.to_owned()
 }
 
-pub attribute_line: Attribute = {
-    "@" <attribute> => <>,
+pub attribute_line: Vec<Attribute> = {
+    <mut v:(<attribute> "+")*> <e:attribute> => {
+            v.push(e);
+            v
+        }
 }
 
 pub attribute: Attribute = {
-    <identifier> =>
+    "@" <identifier> =>
         Attribute {
             name: <>.to_owned()
         }

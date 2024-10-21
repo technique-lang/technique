@@ -223,16 +223,32 @@ mod tests {
     fn check_attribute_role() {
         let a = grammar::attributeParser::new();
 
-        assert_eq!(a.parse("chef"), Ok(Attribute{
+        assert_eq!(
+            a.parse("@chef"),
+            Ok(Attribute {
                 name: "chef".to_owned()
-            }));
+            })
+        );
 
         let p = grammar::attribute_lineParser::new();
 
-        assert_eq!(p.parse("@chef"), Ok(Attribute{
+        assert_eq!(
+            p.parse("@chef"),
+            Ok(vec![Attribute {
                 name: "chef".to_owned()
-            }));
-
+            }])
+        );
+        assert_eq!(
+            p.parse("@chef + @sous"),
+            Ok(vec![
+                Attribute {
+                    name: "chef".to_owned()
+                },
+                Attribute {
+                    name: "sous".to_owned()
+                }
+            ])
+        );
     }
 
     #[test]
