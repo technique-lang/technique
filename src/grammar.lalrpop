@@ -21,7 +21,12 @@ pub technique_file: Technique = {
             None => (None, None)
         };
 
-        Technique {version:m, license, copyright}
+        let template = match t {
+            Some(possible_template) => possible_template,
+            None => None
+        };
+
+        Technique {version:m, license, copyright, template}
     }
 }
 

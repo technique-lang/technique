@@ -5,6 +5,7 @@ pub struct Technique {
     pub version: u8,
     pub license: Option<String>,
     pub copyright: Option<String>,
+    pub template: Option<String>,
 }
 
 impl Default for Technique {
@@ -13,6 +14,7 @@ impl Default for Technique {
             version: 1,
             license: None,
             copyright: None,
+            template: None
         }
     }
 }

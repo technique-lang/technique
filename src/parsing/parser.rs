@@ -260,7 +260,8 @@ mod tests {
             Ok(Technique {
                 version: 1,
                 license: None,
-                copyright: None
+                copyright: None,
+                template: None
             })
         );
     }
