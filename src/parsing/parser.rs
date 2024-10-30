@@ -208,6 +208,18 @@ mod tests {
         let p = grammar::declaration_lineParser::new();
 
         assert_eq!(
+            p.parse("f :"),
+            Ok(Procedure {
+                name: "f".to_owned(),
+                signature: None
+            })
+        );
+
+        assert!(p
+            .parse("cook-pizza :B")
+            .is_err());
+
+        assert_eq!(
             p.parse("f : A -> B"),
             Ok(Procedure {
                 name: "f".to_owned(),
@@ -318,95 +330,4 @@ mod tests {
             // assert_eq!(range.as_rule(), Rule::forma);
         }
     */
-    /*
-            #[test]
-            fn check_procedure_declaration_macro() {
-                parses_to! {
-                    parser: TechniqueParser,
-                    input: "making_coffee : Beans, Milk -> Coffee",
-                    rule: Rule::declaration,
-                    tokens: [
-                        declaration(0, 37, [
-                            identifier(0, 13),
-                            signature(16, 37, [
-                                forma(16, 21),
-                                forma(23, 27),
-                                forma(31, 37)
-                            ])
-                        ])
-                    ]
-                };
-            }
-    */
-
-    /*
-        #[test]
-        fn check_header_template() {
-            parses_to! {
-                parser: TechniqueParser,
-                input: "& checklist",
-                rule: Rule::template_line,
-                tokens: [
-                    template_line(0, 11, [
-                        template(2, 11)
-                    ])
-                ]
-            };
-            parses_to! {
-                parser: TechniqueParser,
-                input: "& nasa-flight-plan-v4.0",
-                rule: Rule::template_line,
-                tokens: [
-                    template_line(0, 23, [
-                        template(2, 23)
-                    ])
-                ]
-            };
-            fails_with! {
-                parser: TechniqueParser,
-                input: "&",
-                rule: Rule::template_line,
-                positives: [Rule::template],
-                negatives: [],
-                pos: 1
-            };
-        }
-
-    #[test]
-    fn check_declaration_syntax() {
-        parses_to! {
-            parser: TechniqueParser,
-            input: "p :",
-            rule: Rule::declaration,
-            tokens: [
-                declaration(0, 3, [
-                    identifier(0, 1)
-                ])
-            ]
-        };
-        parses_to! {
-            parser: TechniqueParser,
-            input: "p : A -> B",
-            rule: Rule::declaration,
-            tokens: [
-                declaration(0, 10, [
-                    identifier(0, 1),
-                    signature(4, 10, [
-                        forma(4, 5),
-                        forma(9, 10)
-                    ])
-                ])
-            ]
-        };
-        fails_with! {
-            parser: TechniqueParser,
-            input: "cook-pizza :",
-            rule: Rule::declaration,
-            positives: [Rule::declaration],
-            negatives: [],
-            pos: 0
-        };
-    }
-    */
-}
 */
