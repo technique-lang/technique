@@ -16,8 +16,12 @@ pub technique_file: Technique = {
     <m:magic_line>
     <s:spdx_line?>
     <t:template_line?> => {
-        println!("spdx_line: {:?}", s);
-        Technique {version:m, license:None, copyright:None}
+        let (license, copyright) = match s {
+            Some((possible_license, possible_copyright)) => (possible_license, possible_copyright),
+            None => (None, None)
+        };
+
+        Technique {version:m, license, copyright}
     }
 }
 
