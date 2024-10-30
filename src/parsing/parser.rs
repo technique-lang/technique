@@ -251,8 +251,11 @@ mod tests {
         );
     }
 
+    // the verify_*() functions are where we do verificaton of larger composite
+    // structures built up from the smaller pieces check_*()'d above.
+
     #[test]
-    fn check_technique_file() {
+    fn verify_technique_header() {
         let p = grammar::technique_fileParser::new();
 
         assert_eq!(
@@ -262,6 +265,22 @@ mod tests {
                 license: None,
                 copyright: None,
                 template: None
+            })
+        );
+
+        assert_eq!(
+            p.parse(
+                r#"
+% technique v1
+! MIT; (c) ACME, Inc
+& checklist
+            "#
+            ),
+            Ok(Technique {
+                version: 1,
+                license: Some("MIT".to_owned()),
+                copyright: Some("ACME, Inc".to_owned()),
+                template: Some("checklist".to_owned())
             })
         );
     }
