@@ -1,5 +1,6 @@
 use lalrpop_util::lalrpop_mod;
 use lalrpop_util::ParseError;
+use technique::language::*;
 
 lalrpop_mod!(pub grammar);
 
@@ -54,7 +55,7 @@ fn validate_identifier(input: &str) -> Result<String, ValidationError> {
     Ok(input.to_owned())
 }
 
-fn validate_forma(input: &str) -> Result<String, ValidationError> {
+fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
     }
@@ -75,13 +76,14 @@ fn validate_forma(input: &str) -> Result<String, ValidationError> {
         }
     }
 
-    Ok(input.to_owned())
+    Ok(Forma {
+        name: input.to_owned(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use technique::language::*;
 
     #[test]
     fn check_identifier_rules() {
@@ -181,14 +183,38 @@ mod tests {
     }
 
     #[test]
+    fn check_type_definitions() {
+        let f = grammar::formaParser::new();
+        let g = grammar::genusParser::new();
+
+        assert_eq!(
+            f.parse("A"),
+            Ok(Forma {
+                name: "A".to_owned()
+            })
+        );
+
+        assert_eq!(
+            g.parse("A"),
+            Ok(Genus::Single(Forma {
+                name: "A".to_owned()
+            }))
+        );
+    }
+
+    #[test]
     fn check_procedure_signature() {
         let p = grammar::signatureParser::new();
 
         assert_eq!(
             p.parse("A -> B"),
             Ok(Signature {
-                domain: "A".to_owned(),
-                range: "B".to_owned()
+                domain: Genus::Single(Forma {
+                    name: "A".to_owned()
+                }),
+                range: Genus::Single(Forma {
+                    name: "B".to_owned()
+                })
             })
         );
         assert!(p
@@ -224,8 +250,12 @@ mod tests {
             Ok(Procedure {
                 name: "f".to_owned(),
                 signature: Some(Signature {
-                    domain: "A".to_owned(),
-                    range: "B".to_owned()
+                    domain: Genus::Single(Forma {
+                        name: "A".to_owned()
+                    }),
+                    range: Genus::Single(Forma {
+                        name: "B".to_owned()
+                    })
                 })
             })
         );

@@ -26,9 +26,21 @@ pub struct Procedure {
 }
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct Forma {
+    pub name: String
+}
+
+#[derive(Eq, Debug, PartialEq)]
+pub enum Genus {
+    Single(Forma),
+    Tuple(Vec<Forma>),
+    List(Forma)
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub struct Signature {
-    pub domain: String,
-    pub range: String,
+    pub domain: Genus,
+    pub range: Genus,
 }
 
 #[derive(Eq, Debug, PartialEq)]

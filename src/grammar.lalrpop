@@ -34,7 +34,7 @@ pub identifier: String = {
     <WORD> =>? validate_identifier(<>).wrap()
 };
 
-pub forma: String = {
+pub forma: Forma = {
     <WORD> =>? validate_forma(<>).wrap()
 }
 
@@ -66,16 +66,20 @@ pub copyright: String = {
 pub declaration_line: Procedure = {
     <n:declaration> <s:signature?> =>
         Procedure {
-            name:n,
-            signature:s
+            name: n,
+            signature: s
         }
 }
 
+pub genus: Genus = {
+    <f:forma> => Genus::Single(f)
+}
+
 pub signature: Signature = {
-    <d:forma> "->" <r:forma> =>
+    <d:genus> "->" <r:genus> =>
         Signature {
-            domain:d,
-            range:r
+            domain: d,
+            range: r
         }
 }
 
