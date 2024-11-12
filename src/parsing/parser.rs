@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
+use regex::Regex;
 use technique::language::*;
 
 pub fn parse_via_string(content: &str) {
@@ -14,32 +15,6 @@ pub enum ValidationError {
     ZeroLengthToken,
     InvalidIdentifier,
     InvalidForma,
-}
-
-/// Validates if the input string is a valid identifier corresponding
-/// to `[a-z][a-zA-Z0-9_]*` as an identifier.
-fn validate_identifier(input: &str) -> Result<String, ValidationError> {
-    if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
-    }
-
-    let mut cs = input.chars();
-
-    if !cs
-        .next()
-        .unwrap()
-        .is_ascii_lowercase()
-    {
-        return Err(ValidationError::InvalidIdentifier);
-    }
-
-    for c in cs {
-        if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
-            return Err(ValidationError::InvalidIdentifier);
-        }
-    }
-
-    Ok(input.to_owned())
 }
 
 fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
@@ -68,10 +43,18 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     })
 }
 
-fn parse_identifier(input: &str) -> &str {
-    ""
-}
+fn parse_identifier(input: &str) -> Result<&str, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::ZeroLengthToken);
+    }
 
+    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    let i = re
+        .find(input)
+        .map(|v| v.as_str())
+        .ok_or(ValidationError::InvalidIdentifier);
+    i
+}
 
 #[cfg(test)]
 mod tests {
@@ -79,21 +62,23 @@ mod tests {
 
     #[test]
     fn check_identifier_rules() {
-        
-        assert_eq!(validate_identifier("a"), Ok("a".to_owned()));
-        assert_eq!(validate_identifier("ab"), Ok("ab".to_owned()));
-        assert_eq!(validate_identifier("johnny5"), Ok("johnny5".to_owned()));
-        assert_eq!(validate_identifier("Pizza"), Err(ValidationError::InvalidIdentifier));
-        assert!(validate_identifier("pizZa")
-            .is_err());
-        assert!(validate_identifier("0trust")
-            .is_err());
-        assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner".to_owned()));
-        assert!(validate_identifier("MakeDinner")
-            .is_err());
-        assert!(validate_identifier("make-dinner")
-            .is_err());
+        assert_eq!(parse_identifier("a"), Ok("a"));
+        assert_eq!(parse_identifier("ab"), Ok("ab"));
+        assert_eq!(parse_identifier("johnny5"), Ok("johnny5"));
+        assert_eq!(
+            parse_identifier("Pizza"),
+            Err(ValidationError::InvalidIdentifier)
+        );
+        assert_eq!(
+            parse_identifier("pizZa"),
+            Err(ValidationError::InvalidIdentifier)
+        );
+        assert!(parse_identifier("0trust").is_err());
+        assert_eq!(parse_identifier("make_dinner"), Ok("make_dinner"));
+        assert!(parse_identifier("MakeDinner").is_err());
+        assert!(parse_identifier("make-dinner").is_err());
     }
+}
 /*
     #[test]
     fn check_magic_line() {
@@ -312,7 +297,6 @@ mod tests {
         );
     }
 */
-}
 
 /*
     /*
