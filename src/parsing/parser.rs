@@ -1,13 +1,11 @@
-use lalrpop_util::lalrpop_mod;
-use lalrpop_util::ParseError;
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
 use technique::language::*;
 
-lalrpop_mod!(pub grammar);
-
-pub fn parse_via_lalrpop(content: &str) {
-    let p = grammar::technique_fileParser::new();
-    let result = p.parse(content);
-    println!("{:?}", result);
+pub fn parse_via_string(content: &str) {
+    // let result = p.parse(content);
+    // println!("{:?}", result);
     std::process::exit(0);
 }
 
@@ -16,17 +14,6 @@ pub enum ValidationError {
     ZeroLengthToken,
     InvalidIdentifier,
     InvalidForma,
-}
-
-/// An adapter trait to wrap our custom errors into a `ParseError`.
-pub trait WrapError<T, E, L, R> {
-    fn wrap(self) -> Result<T, ParseError<L, R, E>>;
-}
-
-impl<T, E, L, R> WrapError<T, E, L, R> for Result<T, E> {
-    fn wrap(self) -> Result<T, ParseError<L, R, E>> {
-        self.map_err(|e| ParseError::User { error: e })
-    }
 }
 
 /// Validates if the input string is a valid identifier corresponding
@@ -81,35 +68,33 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     })
 }
 
+fn parse_identifier(input: &str) -> &str {
+    ""
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn check_identifier_rules() {
-        let p = grammar::identifierParser::new();
-
-        assert_eq!(p.parse("a"), Ok("a".to_owned()));
-        assert_eq!(p.parse("ab"), Ok("ab".to_owned()));
-        assert_eq!(p.parse("johnny5"), Ok("johnny5".to_owned()));
-        assert!(p
-            .parse("Pizza")
-            .is_err(),);
-        assert!(p
-            .parse("pizZa")
+        
+        assert_eq!(validate_identifier("a"), Ok("a".to_owned()));
+        assert_eq!(validate_identifier("ab"), Ok("ab".to_owned()));
+        assert_eq!(validate_identifier("johnny5"), Ok("johnny5".to_owned()));
+        assert_eq!(validate_identifier("Pizza"), Err(ValidationError::InvalidIdentifier));
+        assert!(validate_identifier("pizZa")
             .is_err());
-        assert!(p
-            .parse("0trust")
+        assert!(validate_identifier("0trust")
             .is_err());
-        assert_eq!(p.parse("make_dinner"), Ok("make_dinner".to_owned()));
-        assert!(p
-            .parse("MakeDinner")
+        assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner".to_owned()));
+        assert!(validate_identifier("MakeDinner")
             .is_err());
-        assert!(p
-            .parse("make-dinner")
+        assert!(validate_identifier("make-dinner")
             .is_err());
     }
-
+/*
     #[test]
     fn check_magic_line() {
         let p = grammar::magic_lineParser::new();
@@ -326,6 +311,7 @@ mod tests {
             })
         );
     }
+*/
 }
 
 /*
