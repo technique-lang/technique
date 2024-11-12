@@ -54,7 +54,46 @@ fn parse_magic_line(input: &str) -> Result<u8, ValidationError> {
     i
 }
 
-fn parse_identifier(input: &str) -> Result<&str, ValidationError> {
+fn parse_spdx_line(input: &str) -> Result<(Option<&str>, Option<&str>), ValidationError> {
+    let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
+
+    let possible = re.captures(input);
+    match possible {
+        Some(cap) => {
+            let one = cap
+                .get(1)
+                .map(|v| v.as_str());
+            let two = cap
+                .get(2)
+                .map(|v| v.as_str());
+
+            Ok((one, two))
+        }
+        None => Err(ValidationError::Unrecognized),
+    }
+}
+
+fn validate_license(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
+
+    let i = re
+        .find(input)
+        .map(|v| v.as_str())
+        .ok_or(ValidationError::InvalidIdentifier);
+    i
+}
+
+fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
+
+    let i = re
+        .find(input)
+        .map(|v| v.as_str())
+        .ok_or(ValidationError::InvalidIdentifier);
+    i
+}
+
+fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
     }
@@ -73,21 +112,21 @@ mod tests {
 
     #[test]
     fn check_identifier_rules() {
-        assert_eq!(parse_identifier("a"), Ok("a"));
-        assert_eq!(parse_identifier("ab"), Ok("ab"));
-        assert_eq!(parse_identifier("johnny5"), Ok("johnny5"));
+        assert_eq!(validate_identifier("a"), Ok("a"));
+        assert_eq!(validate_identifier("ab"), Ok("ab"));
+        assert_eq!(validate_identifier("johnny5"), Ok("johnny5"));
         assert_eq!(
-            parse_identifier("Pizza"),
+            validate_identifier("Pizza"),
             Err(ValidationError::InvalidIdentifier)
         );
         assert_eq!(
-            parse_identifier("pizZa"),
+            validate_identifier("pizZa"),
             Err(ValidationError::InvalidIdentifier)
         );
-        assert!(parse_identifier("0trust").is_err());
-        assert_eq!(parse_identifier("make_dinner"), Ok("make_dinner"));
-        assert!(parse_identifier("MakeDinner").is_err());
-        assert!(parse_identifier("make-dinner").is_err());
+        assert!(validate_identifier("0trust").is_err());
+        assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner"));
+        assert!(validate_identifier("MakeDinner").is_err());
+        assert!(validate_identifier("make-dinner").is_err());
     }
 
     #[test]
@@ -100,27 +139,22 @@ mod tests {
             Err(ValidationError::Unrecognized)
         );
     }
-}
-/*
+
     #[test]
     fn check_header_spdx() {
-        let l = grammar::licenseParser::new();
-        let c = grammar::copyrightParser::new();
-        let p = grammar::spdx_lineParser::new();
+        assert_eq!(validate_license("MIT"), Ok("MIT"));
+        assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
+        assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
 
-        assert_eq!(l.parse("MIT"), Ok("MIT".to_owned()));
-        assert_eq!(l.parse("Public Domain"), Ok("Public Domain".to_owned()));
-        assert_eq!(
-            l.parse("CC BY-SA 3.0 IGO"),
-            Ok("CC BY-SA 3.0 IGO".to_owned())
-        );
+        assert_eq!(validate_copyright("ACME"), Ok("ACME"));
+        assert_eq!(validate_copyright("lower"), Ok("lower"));
+        assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
+        assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
 
-        assert_eq!(c.parse("ACME"), Ok("ACME".to_owned()));
-        assert_eq!(c.parse("lower"), Ok("lower".to_owned()));
-        assert_eq!(c.parse("ACME, Inc."), Ok("ACME, Inc.".to_owned()));
+        assert_eq!(parse_spdx_line("! PD"), Ok((Some("PD"), None)));
+    }
 
-        assert_eq!(c.parse("2024 ACME, Inc."), Ok("2024 ACME, Inc.".to_owned()));
-
+    /*
         assert_eq!(p.parse("! PD"), Ok((Some("PD".to_owned()), None)));
         assert_eq!(
             p.parse("! MIT; (c) ACME, Inc."),
@@ -146,6 +180,9 @@ mod tests {
             ))
         );
     }
+    */
+}
+/*
 
     #[test]
     fn check_header_template() {
