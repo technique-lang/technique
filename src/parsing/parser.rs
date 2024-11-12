@@ -76,21 +76,21 @@ fn parse_spdx_line(input: &str) -> Result<(Option<&str>, Option<&str>), Validati
 fn validate_license(input: &str) -> Result<&str, ValidationError> {
     let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
 
-    let i = re
-        .find(input)
-        .map(|v| v.as_str())
-        .ok_or(ValidationError::InvalidIdentifier);
-    i
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidIdentifier)
+    }
 }
 
 fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
     let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
 
-    let i = re
-        .find(input)
-        .map(|v| v.as_str())
-        .ok_or(ValidationError::InvalidIdentifier);
-    i
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidIdentifier)
+    }
 }
 
 fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
@@ -99,11 +99,11 @@ fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
     }
 
     let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
-    let i = re
-        .find(input)
-        .map(|v| v.as_str())
-        .ok_or(ValidationError::InvalidIdentifier);
-    i
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidIdentifier)
+    }
 }
 
 #[cfg(test)]
