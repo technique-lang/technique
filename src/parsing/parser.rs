@@ -13,6 +13,7 @@ pub fn parse_via_string(content: &str) {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ValidationError {
     ZeroLengthToken,
+    Unrecognized, // improve this
     InvalidIdentifier,
     InvalidForma,
 }
@@ -41,6 +42,16 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     Ok(Forma {
         name: input.to_owned(),
     })
+}
+
+fn parse_magic_line(input: &str) -> Result<u8, ValidationError> {
+    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+    let i = re
+        .find(input)
+        .map(|_| 1)
+        .ok_or(ValidationError::Unrecognized);
+    i
 }
 
 fn parse_identifier(input: &str) -> Result<&str, ValidationError> {
@@ -78,19 +89,19 @@ mod tests {
         assert!(parse_identifier("MakeDinner").is_err());
         assert!(parse_identifier("make-dinner").is_err());
     }
-}
-/*
+
     #[test]
     fn check_magic_line() {
-        let p = grammar::magic_lineParser::new();
-        assert_eq!(p.parse("% technique v1"), Ok(1));
-        assert_eq!(p.parse("%technique v1"), Ok(1));
+        assert_eq!(parse_magic_line("% technique v1"), Ok(1));
+        assert_eq!(parse_magic_line("%technique v1"), Ok(1));
         // this is rejected because the technique keyword isn't present.
-        assert!(p
-            .parse("%techniquev1")
-            .is_err());
+        assert_eq!(
+            parse_magic_line("%techniquev1"),
+            Err(ValidationError::Unrecognized)
+        );
     }
-
+}
+/*
     #[test]
     fn check_header_spdx() {
         let l = grammar::licenseParser::new();
