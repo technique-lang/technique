@@ -10,6 +10,7 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
 lalrpop-util  = { version = "0.22.0", features = [ "lexer", "unicode" ] }
+regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
 tracing = "0.1.40"
