@@ -109,6 +109,35 @@ fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
     }
 }
 
+fn parse_template_line(input: &str) -> Result<Option<&str>, ValidationError> {
+    let re = Regex::new(r"&\s*(.+)$").unwrap();
+
+    let cap = re
+        .captures(input)
+        .ok_or(ValidationError::Unrecognized)?;
+
+    let one = cap
+        .get(1)
+        .map(|v| v.as_str())
+        .ok_or(ValidationError::InvalidHeader)?;
+
+    let one = validate_template(one)?;
+
+    let one = Some(one);
+
+    Ok(one)
+}
+
+fn validate_template(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidHeader)
+    }
+}
+
 fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
@@ -181,25 +210,22 @@ mod tests {
             Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
         );
     }
-}
-
-/*
 
     #[test]
     fn check_header_template() {
-        let t = grammar::templateParser::new();
-        let p = grammar::template_lineParser::new();
+        assert_eq!(validate_template("checklist"), Ok("checklist"));
+        assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
+        assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
 
-        assert_eq!(t.parse("checklist"), Ok("checklist".to_owned()));
-        assert_eq!(t.parse("checklist,v1"), Ok("checklist,v1".to_owned()));
-        assert_eq!(t.parse("checklist-v1.0"), Ok("checklist-v1.0".to_owned()));
-
-        assert_eq!(p.parse("& nasa"), Ok(Some("nasa".to_owned())));
+        assert_eq!(parse_template_line("& nasa"), Ok(Some("nasa")));
         assert_eq!(
-            p.parse("& nasa-flight-plan,v4.0"),
-            Ok(Some("nasa-flight-plan,v4.0".to_owned()))
+            parse_template_line("& nasa-flight-plan,v4.0"),
+            Ok(Some("nasa-flight-plan,v4.0"))
         );
     }
+}
+
+/*
 
     #[test]
     fn check_type_definitions() {
