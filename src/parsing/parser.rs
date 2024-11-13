@@ -14,6 +14,7 @@ pub fn parse_via_string(content: &str) {
 pub enum ValidationError {
     ZeroLengthToken,
     Unrecognized, // improve this
+    InvalidHeader,
     InvalidIdentifier,
     InvalidForma,
 }
@@ -54,23 +55,35 @@ fn parse_magic_line(input: &str) -> Result<u8, ValidationError> {
     i
 }
 
+// This one is awkward because if a SPDX line is present, then it really needs
+// to have a license, whereas the copyright part is optional.
+
 fn parse_spdx_line(input: &str) -> Result<(Option<&str>, Option<&str>), ValidationError> {
     let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
 
-    let possible = re.captures(input);
-    match possible {
-        Some(cap) => {
-            let one = cap
-                .get(1)
-                .map(|v| v.as_str());
-            let two = cap
-                .get(2)
-                .map(|v| v.as_str());
+    let cap = re
+        .captures(input)
+        .ok_or(ValidationError::Unrecognized)?;
 
-            Ok((one, two))
-        }
-        None => Err(ValidationError::Unrecognized),
-    }
+    let one = cap
+        .get(1)
+        .map(|v| v.as_str())
+        .ok_or(ValidationError::InvalidHeader)?;
+
+    let one = validate_license(one)?;
+
+    let one = Some(one);
+
+    let two = cap
+        .get(2)
+        .map(|v| v.as_str());
+
+    let two = match two {
+        Some(text) => Some(validate_copyright(text)?),
+        None => None,
+    };
+
+    Ok((one, two))
 }
 
 fn validate_license(input: &str) -> Result<&str, ValidationError> {
