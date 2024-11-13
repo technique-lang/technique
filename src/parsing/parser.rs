@@ -86,23 +86,26 @@ fn parse_spdx_line(input: &str) -> Result<(Option<&str>, Option<&str>), Validati
     Ok((one, two))
 }
 
+// the validate functions all need to have start and end anchors, which seems
+// like it should be abstracted away.
+
 fn validate_license(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
 
     if re.is_match(input) {
         Ok(input)
     } else {
-        Err(ValidationError::InvalidIdentifier)
+        Err(ValidationError::InvalidHeader)
     }
 }
 
 fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"[A-Za-z0-9.,\-_ ]+").unwrap();
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
 
     if re.is_match(input) {
         Ok(input)
     } else {
-        Err(ValidationError::InvalidIdentifier)
+        Err(ValidationError::InvalidHeader)
     }
 }
 
@@ -165,36 +168,21 @@ mod tests {
         assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
 
         assert_eq!(parse_spdx_line("! PD"), Ok((Some("PD"), None)));
-    }
-
-    /*
-        assert_eq!(p.parse("! PD"), Ok((Some("PD".to_owned()), None)));
         assert_eq!(
-            p.parse("! MIT; (c) ACME, Inc."),
-            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
+            parse_spdx_line("! MIT; (c) ACME, Inc."),
+            Ok((Some("MIT"), Some("ACME, Inc.")))
         );
         assert_eq!(
-            p.parse("! MIT; (C) ACME, Inc."),
-            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
+            parse_spdx_line("! MIT; (c) 2024 ACME, Inc."),
+            Ok((Some("MIT"), Some("2024 ACME, Inc.")))
         );
         assert_eq!(
-            p.parse("! MIT; © ACME, Inc."),
-            Ok((Some("MIT".to_owned()), Some("ACME, Inc.".to_owned())))
-        );
-        assert_eq!(
-            p.parse("! MIT; (c) 2024 ACME, Inc."),
-            Ok((Some("MIT".to_owned()), Some("2024 ACME, Inc.".to_owned())))
-        );
-        assert_eq!(
-            p.parse("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
-            Ok((
-                Some("CC BY-SA 3.0 [IGO]".to_owned()),
-                Some("2024 ACME, Inc.".to_owned())
-            ))
+            parse_spdx_line("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
+            Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
         );
     }
-    */
 }
+
 /*
 
     #[test]
