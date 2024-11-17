@@ -19,6 +19,21 @@ pub enum ValidationError {
     InvalidForma,
 }
 
+fn parse_technique_header(input: &str) -> Result<Technique, ValidationError> {
+    let version = parse_magic_line(input)?;
+
+    let (license, copyright) = parse_spdx_line(input)?;
+
+    let template = parse_template_line(input)?;
+
+    Ok(Technique {
+        version: version,
+        license: license,
+        copyright: copyright,
+        template: template,
+    })
+}
+
 fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
@@ -223,6 +238,35 @@ mod tests {
             Ok(Some("nasa-flight-plan,v4.0"))
         );
     }
+
+    #[test]
+    fn verify_technique_header() {
+        assert_eq!(
+            parse_technique_header("% technique v1"),
+            Ok(Technique {
+                version: 1,
+                license: None,
+                copyright: None,
+                template: None
+            })
+        );
+
+        assert_eq!(
+            parse_technique_header(
+                r#"
+% technique v1
+! MIT; (c) ACME, Inc
+& checklist
+            "#
+            ),
+            Ok(Technique {
+                version: 1,
+                license: Some("MIT"),
+                copyright: Some("ACME, Inc"),
+                template: Some("checklist")
+            })
+        );
+    }
 }
 
 /*
@@ -341,39 +385,6 @@ mod tests {
     // the verify_*() functions are where we do verificaton of larger composite
     // structures built up from the smaller pieces check_*()'d above.
 
-    #[test]
-    fn verify_technique_header() {
-        let p = grammar::technique_fileParser::new();
-
-        assert_eq!(
-            p.parse("% technique v1"),
-            Ok(Technique {
-                version: 1,
-                license: None,
-                copyright: None,
-                template: None
-            })
-        );
-
-        assert_eq!(
-            p.parse(
-                r#"
-% technique v1
-! MIT; (c) ACME, Inc
-& checklist
-            "#
-            ),
-            Ok(Technique {
-                version: 1,
-                license: Some("MIT".to_owned()),
-                copyright: Some("ACME, Inc".to_owned()),
-                template: Some("checklist".to_owned())
-            })
-        );
-    }
-*/
-
-/*
     /*
         #[test]
         fn check_procedure_declaration_explicit() {
