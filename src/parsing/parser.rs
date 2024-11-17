@@ -56,7 +56,7 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     }
 
     Ok(Forma {
-        name: input.to_owned(),
+        name: input,
     })
 }
 

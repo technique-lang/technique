@@ -1,4 +1,4 @@
-// Abstact Syntax Trees for the Technique language
+// Abstract Syntax Trees for the Technique language
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Technique<'i> {
@@ -14,36 +14,36 @@ impl Default for Technique<'_> {
             version: 1,
             license: None,
             copyright: None,
-            template: None
+            template: None,
         }
     }
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Procedure {
-    pub name: String,
-    pub signature: Option<Signature>,
+pub struct Procedure<'i> {
+    pub name: &'i str,
+    pub signature: Option<Signature<'i>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Forma {
-    pub name: String
+pub struct Forma<'i> {
+    pub name: &'i str,
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub enum Genus {
-    Single(Forma),
-    Tuple(Vec<Forma>),
-    List(Forma)
+pub enum Genus<'i> {
+    Single(Forma<'i>),
+    Tuple(Vec<Forma<'i>>),
+    List(Forma<'i>),
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Signature {
-    pub domain: Genus,
-    pub range: Genus,
+pub struct Signature<'i> {
+    pub domain: Genus<'i>,
+    pub range: Genus<'i>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Attribute {
-    pub name: String
+pub struct Attribute<'i> {
+    pub name: &'i str,
 }
