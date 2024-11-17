@@ -1,14 +1,14 @@
 // Abstact Syntax Trees for the Technique language
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Technique {
+pub struct Technique<'i> {
     pub version: u8,
-    pub license: Option<String>,
-    pub copyright: Option<String>,
-    pub template: Option<String>,
+    pub license: Option<&'i str>,
+    pub copyright: Option<&'i str>,
+    pub template: Option<&'i str>,
 }
 
-impl Default for Technique {
+impl Default for Technique<'_> {
     fn default() -> Self {
         Technique {
             version: 1,

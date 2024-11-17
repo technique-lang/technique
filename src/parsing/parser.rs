@@ -19,7 +19,7 @@ pub enum ValidationError {
     InvalidForma,
 }
 
-fn parse_technique_header(input: &str) -> Result<Technique, ValidationError> {
+fn parse_technique_header<'i>(input: &'i str) -> Result<Technique<'i>, ValidationError> {
     let version = parse_magic_line(input)?;
 
     let (license, copyright) = parse_spdx_line(input)?;
