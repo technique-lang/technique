@@ -5,7 +5,8 @@ use regex::Regex;
 use technique::language::*;
 
 pub fn parse_via_string(content: &str) {
-    // let result = p.parse(content);
+    let mut input = Parser::new();
+    input.initialize(content);
     // println!("{:?}", result);
     std::process::exit(0);
 }
@@ -17,6 +18,35 @@ pub enum ValidationError {
     InvalidHeader,
     InvalidIdentifier,
     InvalidForma,
+}
+
+struct Parser<'i> {
+    source: &'i str,
+    offset: usize,
+}
+
+impl<'i> Parser<'i> {
+    fn new() -> Parser<'i> {
+        Parser {
+            source: "",
+            offset: 0,
+        }
+    }
+
+    fn initialize(&mut self, content: &'i str) {
+        self.source = content;
+        self.offset = 0;
+    }
+
+    fn parse_magic_line(&mut self) -> Result<u8, ValidationError> {
+        let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+        let i = re
+            .find(self.source)
+            .map(|_| 1)
+            .ok_or(ValidationError::Unrecognized);
+        i
+    }
 }
 
 fn parse_technique_header<'i>(input: &'i str) -> Result<Technique<'i>, ValidationError> {
@@ -55,19 +85,7 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
         }
     }
 
-    Ok(Forma {
-        name: input,
-    })
-}
-
-fn parse_magic_line(input: &str) -> Result<u8, ValidationError> {
-    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
-
-    let i = re
-        .find(input)
-        .map(|_| 1)
-        .ok_or(ValidationError::Unrecognized);
-    i
+    Ok(Forma { name: input })
 }
 
 // This one is awkward because if a SPDX line is present, then it really needs
@@ -191,13 +209,17 @@ mod tests {
 
     #[test]
     fn check_magic_line() {
-        assert_eq!(parse_magic_line("% technique v1"), Ok(1));
-        assert_eq!(parse_magic_line("%technique v1"), Ok(1));
+        let mut input = Parser::new();
+
+        input.initialize("% technique v1");
+        assert_eq!(input.parse_magic_line(), Ok(1));
+
+        input.initialize("%technique v1");
+        assert_eq!(input.parse_magic_line(), Ok(1));
+
         // this is rejected because the technique keyword isn't present.
-        assert_eq!(
-            parse_magic_line("%techniquev1"),
-            Err(ValidationError::Unrecognized)
-        );
+        input.initialize("%techniquev1");
+        assert_eq!(input.parse_magic_line(), Err(ValidationError::Unrecognized));
     }
 
     #[test]
