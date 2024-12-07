@@ -38,14 +38,57 @@ impl<'i> Parser<'i> {
         self.offset = 0;
     }
 
+    // hardwire the version for now. If we ever grow to supporting multiple
+    // major versions then this will become a lot more complicated.
     fn parse_magic_line(&mut self) -> Result<u8, ValidationError> {
         let re = Regex::new(r"%\s*technique\s+v1").unwrap();
 
-        let i = re
+        let m = re
             .find(self.source)
-            .map(|_| 1)
-            .ok_or(ValidationError::Unrecognized);
-        i
+            .ok_or(ValidationError::Unrecognized)?;
+
+        let l = m.end();
+
+        self.source = &self.source[l..];
+
+        Ok(1)
+    }
+
+    // This one is awkward because if a SPDX line is present, then it really needs
+    // to have a license, whereas the copyright part is optional.
+    fn parse_spdx_line(&mut self) -> Result<(Option<&str>, Option<&str>), ValidationError> {
+        let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
+
+        let cap = re
+            .captures(self.source)
+            .ok_or(ValidationError::Unrecognized)?;
+
+        let l = cap
+            .get(0)
+            .ok_or(ValidationError::Unrecognized)?
+            .len();
+
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ValidationError::InvalidHeader)?;
+
+        let one = validate_license(one)?;
+
+        let one = Some(one);
+
+        let two = cap
+            .get(2)
+            .map(|v| v.as_str());
+
+        let two = match two {
+            Some(text) => Some(validate_copyright(text)?),
+            None => None,
+        };
+
+        self.source = &self.source[l..];
+
+        Ok((one, two))
     }
 }
 
@@ -86,37 +129,6 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     }
 
     Ok(Forma { name: input })
-}
-
-// This one is awkward because if a SPDX line is present, then it really needs
-// to have a license, whereas the copyright part is optional.
-
-fn parse_spdx_line(input: &str) -> Result<(Option<&str>, Option<&str>), ValidationError> {
-    let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
-
-    let cap = re
-        .captures(input)
-        .ok_or(ValidationError::Unrecognized)?;
-
-    let one = cap
-        .get(1)
-        .map(|v| v.as_str())
-        .ok_or(ValidationError::InvalidHeader)?;
-
-    let one = validate_license(one)?;
-
-    let one = Some(one);
-
-    let two = cap
-        .get(2)
-        .map(|v| v.as_str());
-
-    let two = match two {
-        Some(text) => Some(validate_copyright(text)?),
-        None => None,
-    };
-
-    Ok((one, two))
 }
 
 // the validate functions all need to have start and end anchors, which seems
@@ -224,6 +236,8 @@ mod tests {
 
     #[test]
     fn check_header_spdx() {
+        let mut input = Parser::new();
+
         assert_eq!(validate_license("MIT"), Ok("MIT"));
         assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
         assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
@@ -233,17 +247,24 @@ mod tests {
         assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
         assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
 
-        assert_eq!(parse_spdx_line("! PD"), Ok((Some("PD"), None)));
+        input.initialize("! PD");
+        assert_eq!(input.parse_spdx_line(), Ok((Some("PD"), None)));
+
+        input.initialize("! MIT; (c) ACME, Inc.");
         assert_eq!(
-            parse_spdx_line("! MIT; (c) ACME, Inc."),
+            input.parse_spdx_line(),
             Ok((Some("MIT"), Some("ACME, Inc.")))
         );
+
+        input.initialize("! MIT; (c) 2024 ACME, Inc.");
         assert_eq!(
-            parse_spdx_line("! MIT; (c) 2024 ACME, Inc."),
+            input.parse_spdx_line(),
             Ok((Some("MIT"), Some("2024 ACME, Inc.")))
         );
+
+        input.initialize("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.");
         assert_eq!(
-            parse_spdx_line("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc."),
+            input.parse_spdx_line(),
             Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
         );
     }
