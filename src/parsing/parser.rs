@@ -90,6 +90,31 @@ impl<'i> Parser<'i> {
 
         Ok((one, two))
     }
+
+    fn parse_template_line(&mut self) -> Result<Option<&str>, ValidationError> {
+        let re = Regex::new(r"&\s*(.+)$").unwrap();
+
+        let cap = re
+            .captures(self.source)
+            .ok_or(ValidationError::Unrecognized)?;
+
+        let l = cap
+            .get(0)
+            .unwrap()
+            .len();
+
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ValidationError::InvalidHeader)?;
+
+        let one = validate_template(one)?;
+
+        let one = Some(one);
+
+        self.source = &self.source[l..];
+        Ok(one)
+    }
 }
 
 fn parse_technique_header<'i>(input: &'i str) -> Result<Technique<'i>, ValidationError> {
@@ -152,25 +177,6 @@ fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
     } else {
         Err(ValidationError::InvalidHeader)
     }
-}
-
-fn parse_template_line(input: &str) -> Result<Option<&str>, ValidationError> {
-    let re = Regex::new(r"&\s*(.+)$").unwrap();
-
-    let cap = re
-        .captures(input)
-        .ok_or(ValidationError::Unrecognized)?;
-
-    let one = cap
-        .get(1)
-        .map(|v| v.as_str())
-        .ok_or(ValidationError::InvalidHeader)?;
-
-    let one = validate_template(one)?;
-
-    let one = Some(one);
-
-    Ok(one)
 }
 
 fn validate_template(input: &str) -> Result<&str, ValidationError> {
@@ -275,9 +281,14 @@ mod tests {
         assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
 
-        assert_eq!(parse_template_line("& nasa"), Ok(Some("nasa")));
+
+        let mut input = Parser::new();
+        input.initialize("& nasa");
+        assert_eq!(input.parse_template_line(), Ok(Some("nasa")));
+
+        input.initialize("& nasa-flight-plan,v4.0");
         assert_eq!(
-            parse_template_line("& nasa-flight-plan,v4.0"),
+            input.parse_template_line(),
             Ok(Some("nasa-flight-plan,v4.0"))
         );
     }
