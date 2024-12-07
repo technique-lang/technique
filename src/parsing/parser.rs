@@ -20,6 +20,7 @@ pub enum ValidationError {
     InvalidForma,
 }
 
+#[derive(Debug)]
 struct Parser<'i> {
     source: &'i str,
     offset: usize,
@@ -56,7 +57,7 @@ impl<'i> Parser<'i> {
 
     // This one is awkward because if a SPDX line is present, then it really needs
     // to have a license, whereas the copyright part is optional.
-    fn parse_spdx_line(&mut self) -> Result<(Option<&str>, Option<&str>), ValidationError> {
+    fn parse_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ValidationError> {
         let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
 
         let cap = re
@@ -66,7 +67,7 @@ impl<'i> Parser<'i> {
         let l = cap
             .get(0)
             .ok_or(ValidationError::Unrecognized)?
-            .len();
+            .end();
 
         let one = cap
             .get(1)
@@ -91,8 +92,8 @@ impl<'i> Parser<'i> {
         Ok((one, two))
     }
 
-    fn parse_template_line(&mut self) -> Result<Option<&str>, ValidationError> {
-        let re = Regex::new(r"&\s*(.+)$").unwrap();
+    fn parse_template_line(&mut self) -> Result<Option<&'i str>, ValidationError> {
+        let re = Regex::new(r"&\s*(.+)").unwrap();
 
         let cap = re
             .captures(self.source)
@@ -101,7 +102,7 @@ impl<'i> Parser<'i> {
         let l = cap
             .get(0)
             .unwrap()
-            .len();
+            .end();
 
         let one = cap
             .get(1)
@@ -115,21 +116,21 @@ impl<'i> Parser<'i> {
         self.source = &self.source[l..];
         Ok(one)
     }
-}
 
-fn parse_technique_header<'i>(input: &'i str) -> Result<Technique<'i>, ValidationError> {
-    let version = parse_magic_line(input)?;
+    fn parse_technique_header(&mut self) -> Result<Technique<'i>, ValidationError> {
+        let version = self.parse_magic_line()?;
 
-    let (license, copyright) = parse_spdx_line(input)?;
+        let (license, copyright) = self.parse_spdx_line()?;
 
-    let template = parse_template_line(input)?;
+        let template = self.parse_template_line()?;
 
-    Ok(Technique {
-        version: version,
-        license: license,
-        copyright: copyright,
-        template: template,
-    })
+        Ok(Technique {
+            version: version,
+            license: license,
+            copyright: copyright,
+            template: template,
+        })
+    }
 }
 
 fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
@@ -281,10 +282,9 @@ mod tests {
         assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
 
-
         let mut input = Parser::new();
-        input.initialize("& nasa");
-        assert_eq!(input.parse_template_line(), Ok(Some("nasa")));
+        input.initialize("& checklist");
+        assert_eq!(input.parse_template_line(), Ok(Some("checklist")));
 
         input.initialize("& nasa-flight-plan,v4.0");
         assert_eq!(
@@ -295,8 +295,11 @@ mod tests {
 
     #[test]
     fn verify_technique_header() {
+        let mut input = Parser::new();
+        input.initialize("% technique v1");
+
         assert_eq!(
-            parse_technique_header("% technique v1"),
+            input.parse_technique_header(),
             Ok(Technique {
                 version: 1,
                 license: None,
@@ -305,14 +308,15 @@ mod tests {
             })
         );
 
-        assert_eq!(
-            parse_technique_header(
-                r#"
+        input.initialize(
+            r#"
 % technique v1
 ! MIT; (c) ACME, Inc
 & checklist
-            "#
-            ),
+            "#,
+        );
+        assert_eq!(
+            input.parse_technique_header(),
             Ok(Technique {
                 version: 1,
                 license: Some("MIT"),
