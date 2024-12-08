@@ -20,7 +20,6 @@ pub enum ValidationError {
     ZeroLengthToken,
     Unrecognized, // improve this
     InvalidHeader,
-    InvalidIdentifier,
     InvalidForma,
 }
 
@@ -194,41 +193,9 @@ fn validate_template(input: &str) -> Result<&str, ValidationError> {
     }
 }
 
-fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
-    if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
-    }
-
-    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidIdentifier)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn check_identifier_rules() {
-        assert_eq!(validate_identifier("a"), Ok("a"));
-        assert_eq!(validate_identifier("ab"), Ok("ab"));
-        assert_eq!(validate_identifier("johnny5"), Ok("johnny5"));
-        assert_eq!(
-            validate_identifier("Pizza"),
-            Err(ValidationError::InvalidIdentifier)
-        );
-        assert_eq!(
-            validate_identifier("pizZa"),
-            Err(ValidationError::InvalidIdentifier)
-        );
-        assert!(validate_identifier("0trust").is_err());
-        assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner"));
-        assert!(validate_identifier("MakeDinner").is_err());
-        assert!(validate_identifier("make-dinner").is_err());
-    }
 
     #[test]
     fn check_magic_line() {
