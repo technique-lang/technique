@@ -24,6 +24,9 @@ impl Default for Technique<'_> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ValidationError {
     ZeroLengthToken,
+    InvalidLicense,
+    InvalidCopyright,
+    InvalidTemplate,
     InvalidIdentifier,
     InvalidForma,
 }
@@ -57,8 +60,6 @@ pub struct Attribute<'i> {
     pub name: &'i str,
 }
 
-// HERE ALSO ... validating identifiers should be here!!!
-
 pub fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
@@ -69,6 +70,39 @@ pub fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
         Ok(input)
     } else {
         Err(ValidationError::InvalidIdentifier)
+    }
+}
+
+// the validate functions all need to have start and end anchors, which seems
+// like it should be abstracted away.
+
+pub fn validate_license(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidLicense)
+    }
+}
+
+pub fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidCopyright)
+    }
+}
+
+pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidTemplate)
     }
 }
 
@@ -93,6 +127,28 @@ mod tests {
         assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner"));
         assert!(validate_identifier("MakeDinner").is_err());
         assert!(validate_identifier("make-dinner").is_err());
+    }
+
+    #[test]
+    fn check_license_rules() {
+        assert_eq!(validate_license("MIT"), Ok("MIT"));
+        assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
+        assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
+    }
+
+    #[test]
+    fn check_copyright_rules() {
+        assert_eq!(validate_copyright("ACME"), Ok("ACME"));
+        assert_eq!(validate_copyright("lower"), Ok("lower"));
+        assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
+        assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
+    }
+
+    #[test]
+    fn check_template_rules() {
+        assert_eq!(validate_template("checklist"), Ok("checklist"));
+        assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
+        assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
     }
 
     fn maker<'i>() -> Technique<'i> {

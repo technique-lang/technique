@@ -160,39 +160,6 @@ fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     Ok(Forma { name: input })
 }
 
-// the validate functions all need to have start and end anchors, which seems
-// like it should be abstracted away.
-
-fn validate_license(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidHeader)
-    }
-}
-
-fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidHeader)
-    }
-}
-
-fn validate_template(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidHeader)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,15 +182,6 @@ mod tests {
     #[test]
     fn check_header_spdx() {
         let mut input = Parser::new();
-
-        assert_eq!(validate_license("MIT"), Ok("MIT"));
-        assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
-        assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
-
-        assert_eq!(validate_copyright("ACME"), Ok("ACME"));
-        assert_eq!(validate_copyright("lower"), Ok("lower"));
-        assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
-        assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
 
         input.initialize("! PD");
         assert_eq!(input.parse_spdx_line(), Ok((Some("PD"), None)));
@@ -249,10 +207,6 @@ mod tests {
 
     #[test]
     fn check_header_template() {
-        assert_eq!(validate_template("checklist"), Ok("checklist"));
-        assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
-        assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
-
         let mut input = Parser::new();
         input.initialize("& checklist");
         assert_eq!(input.parse_template_line(), Ok(Some("checklist")));
