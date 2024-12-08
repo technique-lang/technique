@@ -7,7 +7,11 @@ use technique::language::*;
 pub fn parse_via_string(content: &str) {
     let mut input = Parser::new();
     input.initialize(content);
-    // println!("{:?}", result);
+
+    let result = input.parse_technique_header();
+    println!("{:?}", result);
+    println!("{:?}", input);
+
     std::process::exit(0);
 }
 
