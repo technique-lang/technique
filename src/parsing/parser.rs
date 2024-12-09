@@ -16,11 +16,18 @@ pub fn parse_via_string(content: &str) {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ValidationError {
+pub enum ParsingError {
     ZeroLengthToken,
     Unrecognized, // improve this
     InvalidHeader,
+    ValidationFailure(ValidationError),
     InvalidForma,
+}
+
+impl From<ValidationError> for ParsingError {
+    fn from(error: ValidationError) -> Self {
+        ParsingError::ValidationFailure(error)
+    }
 }
 
 #[derive(Debug)]
@@ -44,12 +51,12 @@ impl<'i> Parser<'i> {
 
     // hardwire the version for now. If we ever grow to supporting multiple
     // major versions then this will become a lot more complicated.
-    fn parse_magic_line(&mut self) -> Result<u8, ValidationError> {
+    fn parse_magic_line(&mut self) -> Result<u8, ParsingError> {
         let re = Regex::new(r"%\s*technique\s+v1").unwrap();
 
         let m = re
             .find(self.source)
-            .ok_or(ValidationError::Unrecognized)?;
+            .ok_or(ParsingError::Unrecognized)?;
 
         let l = m.end();
 
@@ -60,22 +67,22 @@ impl<'i> Parser<'i> {
 
     // This one is awkward because if a SPDX line is present, then it really needs
     // to have a license, whereas the copyright part is optional.
-    fn parse_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ValidationError> {
+    fn parse_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError> {
         let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
 
         let cap = re
             .captures(self.source)
-            .ok_or(ValidationError::Unrecognized)?;
+            .ok_or(ParsingError::Unrecognized)?;
 
         let l = cap
             .get(0)
-            .ok_or(ValidationError::Unrecognized)?
+            .ok_or(ParsingError::Unrecognized)?
             .end();
 
         let one = cap
             .get(1)
             .map(|v| v.as_str())
-            .ok_or(ValidationError::InvalidHeader)?;
+            .ok_or(ParsingError::InvalidHeader)?;
 
         let one = validate_license(one)?;
 
@@ -95,12 +102,12 @@ impl<'i> Parser<'i> {
         Ok((one, two))
     }
 
-    fn parse_template_line(&mut self) -> Result<Option<&'i str>, ValidationError> {
+    fn parse_template_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
         let re = Regex::new(r"&\s*(.+)").unwrap();
 
         let cap = re
             .captures(self.source)
-            .ok_or(ValidationError::Unrecognized)?;
+            .ok_or(ParsingError::Unrecognized)?;
 
         let l = cap
             .get(0)
@@ -110,7 +117,7 @@ impl<'i> Parser<'i> {
         let one = cap
             .get(1)
             .map(|v| v.as_str())
-            .ok_or(ValidationError::InvalidHeader)?;
+            .ok_or(ParsingError::InvalidHeader)?;
 
         let one = validate_template(one)?;
 
@@ -120,7 +127,7 @@ impl<'i> Parser<'i> {
         Ok(one)
     }
 
-    fn parse_technique_header(&mut self) -> Result<Technique<'i>, ValidationError> {
+    fn parse_technique_header(&mut self) -> Result<Technique<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
 
         let (license, copyright) = self.parse_spdx_line()?;
@@ -176,7 +183,7 @@ mod tests {
 
         // this is rejected because the technique keyword isn't present.
         input.initialize("%techniquev1");
-        assert_eq!(input.parse_magic_line(), Err(ValidationError::Unrecognized));
+        assert_eq!(input.parse_magic_line(), Err(ParsingError::Unrecognized));
     }
 
     #[test]
