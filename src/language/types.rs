@@ -73,6 +73,30 @@ pub fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
     }
 }
 
+pub fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::ZeroLengthToken);
+    }
+
+    let mut cs = input.chars();
+
+    if !cs
+        .next()
+        .unwrap()
+        .is_ascii_uppercase()
+    {
+        return Err(ValidationError::InvalidForma);
+    }
+
+    for c in cs {
+        if !(c.is_ascii_uppercase() || c.is_ascii_lowercase() || c.is_ascii_digit()) {
+            return Err(ValidationError::InvalidForma);
+        }
+    }
+
+    Ok(Forma { name: input })
+}
+
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
 
@@ -127,6 +151,17 @@ mod tests {
         assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner"));
         assert!(validate_identifier("MakeDinner").is_err());
         assert!(validate_identifier("make-dinner").is_err());
+    }
+
+    #[test]
+    fn check_forma_rules() {
+        assert_eq!(validate_forma("A"), Ok(Forma { name: "A" }));
+        assert_eq!(validate_forma("Beans"), Ok(Forma { name: "Beans" }));
+        assert_eq!(validate_forma("lower"), Err(ValidationError::InvalidForma));
+        assert_eq!(
+            validate_forma("0Degrees"),
+            Err(ValidationError::InvalidForma)
+        );
     }
 
     #[test]

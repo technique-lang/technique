@@ -143,30 +143,6 @@ impl<'i> Parser<'i> {
     }
 }
 
-fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
-    if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
-    }
-
-    let mut cs = input.chars();
-
-    if !cs
-        .next()
-        .unwrap()
-        .is_ascii_uppercase()
-    {
-        return Err(ValidationError::InvalidForma);
-    }
-
-    for c in cs {
-        if !(c.is_ascii_uppercase() || c.is_ascii_lowercase() || c.is_ascii_digit()) {
-            return Err(ValidationError::InvalidForma);
-        }
-    }
-
-    Ok(Forma { name: input })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,14 +372,6 @@ mod tests {
             // assert_eq!(signature.as_str(), "Beans, Milk -> Coffee");
             // assert_eq!(signature.as_rule(), Rule::signature);
 
-            // assert_eq!(domain1.as_str(), "Beans");
-            // assert_eq!(domain1.as_rule(), Rule::forma);
-
-            // assert_eq!(domain2.as_str(), "Milk");
-            // assert_eq!(domain2.as_rule(), Rule::forma);
-
-            // assert_eq!(range.as_str(), "Coffee");
-            // assert_eq!(range.as_rule(), Rule::forma);
         }
     */
 */
