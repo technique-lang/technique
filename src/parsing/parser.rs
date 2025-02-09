@@ -21,6 +21,8 @@ pub enum ParsingError {
     Unrecognized, // improve this
     InvalidHeader,
     ValidationFailure(ValidationError),
+    InvalidCharacter(char),
+    UnexpectedEndOfInput,
     InvalidForma,
 }
 
@@ -68,16 +70,50 @@ impl<'i> Parser<'i> {
     // This one is awkward because if a SPDX line is present, then it really needs
     // to have a license, whereas the copyright part is optional.
     fn parse_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError> {
-        let re = Regex::new(r"!\s*([^;]+)(?:;\s*\(c\)\s*(.+))?").unwrap();
+        // First establish we have a valid line.
+
+        if self
+            .source
+            .len()
+            == 0
+        {
+            return Ok((None, None));
+        }
+
+        let x = self.source[0..1]
+            .chars()
+            .next()
+            .unwrap();
+
+        if x != '!' {
+            return Err(ParsingError::InvalidHeader);
+        }
+
+        let mut lines = self
+            .source
+            .lines();
+        let line = lines
+            .next()
+            .unwrap();
+
+        let re = Regex::new(r"!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?").unwrap();
 
         let cap = re
-            .captures(self.source)
+            .captures(line)
             .ok_or(ParsingError::Unrecognized)?;
+
+        // Get the length of the match as a whole so we can advance the parser
+        // state later.
 
         let l = cap
             .get(0)
             .ok_or(ParsingError::Unrecognized)?
             .end();
+
+        // Now to extracting the values we need. We get the license code from
+        // the first capture. It must be present otherwise we don't have a
+        // valid SPDX line (and we declared that we're on an SPDX line by the
+        // presense of the '!' character at the beginning of the line).
 
         let one = cap
             .get(1)
@@ -85,8 +121,9 @@ impl<'i> Parser<'i> {
             .ok_or(ParsingError::InvalidHeader)?;
 
         let one = validate_license(one)?;
-
         let one = Some(one);
+
+        // Now dig out the copyright, if present:
 
         let two = cap
             .get(2)
@@ -96,6 +133,8 @@ impl<'i> Parser<'i> {
             Some(text) => Some(validate_copyright(text)?),
             None => None,
         };
+
+        // Advance the parser state, and return.
 
         self.source = &self.source[l..];
 
