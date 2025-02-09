@@ -35,6 +35,7 @@ impl From<ValidationError> for ParsingError {
 #[derive(Debug)]
 struct Parser<'i> {
     source: &'i str,
+    count: usize,
     offset: usize,
 }
 
@@ -42,19 +43,56 @@ impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
             source: "",
+            count: 0,
             offset: 0,
         }
     }
 
     fn initialize(&mut self, content: &'i str) {
         self.source = content;
+        self.count = 0;
         self.offset = 0;
+    }
+
+    fn parse_newline(&mut self) -> Result<(), ParsingError> {
+        for (i, c) in self
+            .source
+            .char_indices()
+        {
+            let l = i + 1;
+
+            if c == '\n' {
+                self.source = &self.source[l..];
+                self.count += 1;
+                self.offset += l;
+                return Ok(());
+            } else if c.is_ascii_whitespace() {
+                continue;
+            } else {
+                return Err(ParsingError::InvalidCharacter(c));
+            }
+        }
+
+        // We don't actually require a newline to end the file.
+
+        self.source = "";
+        self.offset += self
+            .source
+            .len();
+        Ok(())
+        // Err(ParsingError::UnexpectedEndOfInput)
     }
 
     // hardwire the version for now. If we ever grow to supporting multiple
     // major versions then this will become a lot more complicated.
     fn parse_magic_line(&mut self) -> Result<u8, ParsingError> {
         let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+        let line = self
+            .source
+            .lines()
+            .next()
+            .unwrap();
 
         let m = re
             .find(self.source)
@@ -63,6 +101,7 @@ impl<'i> Parser<'i> {
         let l = m.end();
 
         self.source = &self.source[l..];
+        self.offset += l;
 
         Ok(1)
     }
@@ -144,9 +183,10 @@ impl<'i> Parser<'i> {
     fn parse_template_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
         let re = Regex::new(r"&\s*(.+)").unwrap();
 
-        let cap = re
-            .captures(self.source)
-            .ok_or(ParsingError::Unrecognized)?;
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
 
         let l = cap
             .get(0)
@@ -168,10 +208,13 @@ impl<'i> Parser<'i> {
 
     fn parse_technique_header(&mut self) -> Result<Technique<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
+        self.parse_newline()?;
 
         let (license, copyright) = self.parse_spdx_line()?;
+        self.parse_newline()?;
 
         let template = self.parse_template_line()?;
+        self.parse_newline()?;
 
         Ok(Technique {
             version: version,
@@ -214,7 +257,7 @@ mod tests {
             Ok((Some("MIT"), Some("ACME, Inc.")))
         );
 
-        input.initialize("! MIT; (c) 2024 ACME, Inc.");
+        input.initialize("! MIT; (C) 2024 ACME, Inc.");
         assert_eq!(
             input.parse_spdx_line(),
             Ok((Some("MIT"), Some("2024 ACME, Inc.")))
