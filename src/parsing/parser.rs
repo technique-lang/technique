@@ -83,7 +83,7 @@ impl<'i> Parser<'i> {
         // Err(ParsingError::UnexpectedEndOfInput)
     }
 
-    // hardwire the version for now. If we ever grow to supporting multiple
+    // hard wire the version for now. If we ever grow to supporting multiple
     // major versions then this will become a lot more complicated.
     fn parse_magic_line(&mut self) -> Result<u8, ParsingError> {
         let re = Regex::new(r"%\s*technique\s+v1").unwrap();
@@ -119,7 +119,7 @@ impl<'i> Parser<'i> {
             return Ok((None, None));
         }
 
-        let x = self.source[0..1]
+        let x = self.source
             .chars()
             .next()
             .unwrap();
@@ -152,7 +152,7 @@ impl<'i> Parser<'i> {
         // Now to extracting the values we need. We get the license code from
         // the first capture. It must be present otherwise we don't have a
         // valid SPDX line (and we declared that we're on an SPDX line by the
-        // presense of the '!' character at the beginning of the line).
+        // presence of the '!' character at the beginning of the line).
 
         let one = cap
             .get(1)
