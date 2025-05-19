@@ -119,7 +119,8 @@ impl<'i> Parser<'i> {
             return Ok((None, None));
         }
 
-        let x = self.source
+        let x = self
+            .source
             .chars()
             .next()
             .unwrap();
@@ -221,6 +222,31 @@ impl<'i> Parser<'i> {
             license: license,
             copyright: copyright,
             template: template,
+        })
+    }
+
+    fn parse_identifier(&mut self) -> Result<&'i str, ParsingError> {
+        Ok("")
+    }
+
+    fn parse_procedure_declaration(
+        &mut self,
+    ) -> Result<(&'i str, Option<Signature<'i>>), ParsingError> {
+        let name = self.parse_identifier()?;
+
+        Ok((name, None))
+    }
+
+    fn parse_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
+        let (name, _) = self.parse_procedure_declaration()?;
+
+        // let body = self.parse_body()?;
+        self.parse_newline()?;
+
+        Ok(Procedure {
+            name,
+            signature: None, // description: None
+                             // body: None
         })
     }
 }
