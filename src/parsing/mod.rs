@@ -2,6 +2,7 @@
 use std::path::Path;
 
 mod parser;
+mod scope;
 
 pub fn load(source: &Path) {
     // read source to a str
