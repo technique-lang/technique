@@ -26,9 +26,37 @@ impl Scope {
         }
     }
 
-    pub(crate) fn current(&self) -> &Layer {
+    pub(crate) fn current(&self) -> Layer {
         self.stack
             .last()
+            .copied()
             .unwrap()
+    }
+
+    pub(crate) fn push(&mut self, layer: Layer) {
+        self.stack
+            .push(layer);
+    }
+
+    pub(crate) fn pop(&mut self) -> Layer {
+        self.stack
+            .pop()
+            .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_stack_operations() {
+        let mut stack = Scope::new();
+
+        assert_eq!(stack.current(), Layer::Blank);
+
+        stack.push(Layer::Technique);
+
+        assert_eq!(stack.current(), Layer::Technique);
     }
 }
