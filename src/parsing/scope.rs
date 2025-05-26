@@ -1,9 +1,6 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use regex::Regex;
-use technique::language::*;
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Layer {
     Blank,       // beginning of input, before any state is encountered
@@ -15,4 +12,23 @@ pub enum Layer {
     StepItem,    // (sub)step within a procedure body
     CodeBlock,   // escape to a code mode
     Embedded,    // multi-line string of another language.
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Scope {
+    stack: Vec<Layer>,
+}
+
+impl Scope {
+    pub(crate) fn new() -> Scope {
+        Scope {
+            stack: vec![Layer::Blank],
+        }
+    }
+
+    pub(crate) fn current(&self) -> &Layer {
+        self.stack
+            .last()
+            .unwrap()
+    }
 }

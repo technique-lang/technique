@@ -4,7 +4,9 @@
 use regex::Regex;
 use technique::language::*;
 
-pub fn parse_via_string(content: &str) {
+use crate::parsing::scope::Scope;
+
+pub fn parse_via_scopes(content: &str) {
     let mut input = Parser::new();
     input.initialize(content);
 
@@ -34,21 +36,24 @@ impl From<ValidationError> for ParsingError {
 
 #[derive(Debug)]
 struct Parser<'i> {
+    scope: Scope,
     source: &'i str,
-    count: usize,
     offset: usize,
+    count: usize,
 }
 
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
+            scope: Scope::new(),
             source: "",
-            count: 0,
             offset: 0,
+            count: 0,
         }
     }
 
     fn initialize(&mut self, content: &'i str) {
+        self.scope = Scope::new();
         self.source = content;
         self.count = 0;
         self.offset = 0;
