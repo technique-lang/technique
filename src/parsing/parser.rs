@@ -4,7 +4,7 @@
 use regex::Regex;
 use technique::language::*;
 
-use crate::parsing::scope::Scope;
+use super::scope::*;
 
 pub fn parse_via_scopes(content: &str) {
     let mut input = Parser::new();

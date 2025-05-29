@@ -27,10 +27,13 @@ impl Scope {
     }
 
     pub(crate) fn current(&self) -> Layer {
-        self.stack
+        match self
+            .stack
             .last()
-            .copied()
-            .unwrap()
+        {
+            Some(layer) => *layer,
+            None => Layer::Blank,
+        }
     }
 
     pub(crate) fn push(&mut self, layer: Layer) {
@@ -39,9 +42,13 @@ impl Scope {
     }
 
     pub(crate) fn pop(&mut self) -> Layer {
-        self.stack
+        match self
+            .stack
             .pop()
-            .unwrap()
+        {
+            Some(layer) => layer,
+            None => Layer::Blank,
+        }
     }
 }
 
@@ -58,5 +65,11 @@ mod tests {
         stack.push(Layer::Technique);
 
         assert_eq!(stack.current(), Layer::Technique);
+
+        assert_eq!(stack.pop(), Layer::Technique);
+        assert_eq!(stack.pop(), Layer::Blank);
+
+        // and if we pop again, we're still Blank
+        assert_eq!(stack.pop(), Layer::Blank);
     }
 }
