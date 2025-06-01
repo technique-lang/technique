@@ -21,9 +21,7 @@ pub(crate) struct Scope {
 
 impl Scope {
     pub(crate) fn new() -> Scope {
-        Scope {
-            stack: vec![Layer::Blank],
-        }
+        Scope { stack: vec![] }
     }
 
     pub(crate) fn current(&self) -> Layer {
@@ -47,8 +45,13 @@ impl Scope {
             .pop()
         {
             Some(layer) => layer,
-            None => Layer::Blank,
+            None => Layer::Technique,
         }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.stack
+            .clear();
     }
 }
 
@@ -60,16 +63,43 @@ mod tests {
     fn check_stack_operations() {
         let mut stack = Scope::new();
 
-        assert_eq!(stack.current(), Layer::Blank);
+        let current1 = stack.current();
+        assert_eq!(current1, Layer::Blank);
 
         stack.push(Layer::Technique);
 
-        assert_eq!(stack.current(), Layer::Technique);
+        let current2 = stack.current();
+        assert_eq!(current2, Layer::Technique);
 
-        assert_eq!(stack.pop(), Layer::Technique);
-        assert_eq!(stack.pop(), Layer::Blank);
+        stack.push(Layer::Procedure);
 
-        // and if we pop again, we're still Blank
-        assert_eq!(stack.pop(), Layer::Blank);
+        let current3 = stack.current();
+        assert_eq!(current3, Layer::Procedure);
+
+        let popped1 = stack.pop();
+        assert_eq!(popped1, Layer::Procedure);
+
+        let current4 = stack.current();
+        assert_eq!(current4, Layer::Technique);
+
+        let popped2 = stack.pop();
+        assert_eq!(popped2, Layer::Technique);
+
+        // and if we pop again, we're still in Technique
+        let popped3 = stack.pop();
+        assert_eq!(popped3, Layer::Technique);
+
+        // now we try reset()
+
+        stack.reset();
+        let current5 = stack.current();
+        assert_eq!(current5, Layer::Blank);
+
+        // weird corner case; if you pop on a re-initialized stack you get
+        // Technique back. This shouldn't be problematic because you'd only be
+        // popping out after having parsed something and so you're in a file
+        // by definition.
+        let popped4 = stack.pop();
+        assert_eq!(popped4, Layer::Technique);
     }
 }
