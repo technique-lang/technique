@@ -3,8 +3,7 @@
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Layer {
-    Blank,       // beginning of input, before any state is encountered
-    Technique,   // within a technique file
+    Technique,   // within a technique file, by definition the base state
     Metadata,    // header lines
     Procedure,   // procedure function block
     Declaration, // procedure function signature
@@ -30,7 +29,7 @@ impl Scope {
             .last()
         {
             Some(layer) => *layer,
-            None => Layer::Blank,
+            None => Layer::Technique,
         }
     }
 
@@ -63,43 +62,47 @@ mod tests {
     fn check_stack_operations() {
         let mut stack = Scope::new();
 
-        let current1 = stack.current();
-        assert_eq!(current1, Layer::Blank);
+        let current = stack.current();
+        assert_eq!(current, Layer::Technique);
 
-        stack.push(Layer::Technique);
+        stack.push(Layer::Metadata);
 
-        let current2 = stack.current();
-        assert_eq!(current2, Layer::Technique);
+        let current = stack.current();
+        assert_eq!(current, Layer::Metadata);
+
+        let popped = stack.pop();
+        assert_eq!(popped, Layer::Metadata);
 
         stack.push(Layer::Procedure);
+        stack.push(Layer::Declaration);
+        let current = stack.current();
+        assert_eq!(current, Layer::Declaration);
 
-        let current3 = stack.current();
-        assert_eq!(current3, Layer::Procedure);
+        let popped = stack.pop();
+        assert_eq!(popped, Layer::Declaration);
 
-        let popped1 = stack.pop();
-        assert_eq!(popped1, Layer::Procedure);
+        let current = stack.current();
+        assert_eq!(current, Layer::Procedure);
 
-        let current4 = stack.current();
-        assert_eq!(current4, Layer::Technique);
-
-        let popped2 = stack.pop();
-        assert_eq!(popped2, Layer::Technique);
+        let popped = stack.pop();
+        assert_eq!(popped, Layer::Procedure);
 
         // and if we pop again, we're still in Technique
-        let popped3 = stack.pop();
-        assert_eq!(popped3, Layer::Technique);
+        let popped = stack.pop();
+        assert_eq!(popped, Layer::Technique);
+
+        stack.push(Layer::Description);
+        stack.push(Layer::CodeBlock);
+
+        // TODO get layers as tags in sorted order
 
         // now we try reset()
 
         stack.reset();
-        let current5 = stack.current();
-        assert_eq!(current5, Layer::Blank);
+        let current = stack.current();
+        assert_eq!(current, Layer::Technique);
 
-        // weird corner case; if you pop on a re-initialized stack you get
-        // Technique back. This shouldn't be problematic because you'd only be
-        // popping out after having parsed something and so you're in a file
-        // by definition.
-        let popped4 = stack.pop();
-        assert_eq!(popped4, Layer::Technique);
+        let popped = stack.pop();
+        assert_eq!(popped, Layer::Technique);
     }
 }
