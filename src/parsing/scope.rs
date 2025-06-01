@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Layer {
     Technique,   // within a technique file, by definition the base state
     Metadata,    // header lines
@@ -51,6 +51,20 @@ impl Scope {
     pub(crate) fn reset(&mut self) {
         self.stack
             .clear();
+    }
+
+    /// Iterate over the members of the stack and put them into a sorted list
+    /// suitable to be used as the tags for syntax highlighting.
+    pub(crate) fn tags(self) -> Vec<Layer> {
+        let mut copy = self
+            .stack
+            .clone();
+
+        copy.push(Layer::Technique);
+        copy.sort();
+        copy.dedup();
+
+        copy
     }
 }
 
@@ -104,5 +118,34 @@ mod tests {
 
         let popped = stack.pop();
         assert_eq!(popped, Layer::Technique);
+    }
+
+    #[test]
+    fn check_extract_tags_sorted() {
+        let mut stack = Scope::new();
+
+        stack.push(Layer::Procedure);
+        stack.push(Layer::StepItem);
+        stack.push(Layer::Description);
+        stack.push(Layer::StepItem);
+        stack.push(Layer::CodeBlock);
+        stack.push(Layer::Embedded);
+        stack.push(Layer::CodeBlock);
+
+        let result = stack.tags();
+        assert_eq!(
+            result,
+            vec![
+                Layer::Technique,
+                Layer::Procedure,
+                Layer::Description,
+                Layer::StepItem,
+                Layer::CodeBlock,
+                Layer::Embedded
+            ]
+        )
+
+        // which raises an interesting question about what happens when we
+        // nest. This will probably need changing.
     }
 }
