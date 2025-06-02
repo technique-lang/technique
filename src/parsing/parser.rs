@@ -19,6 +19,7 @@ pub fn parse_via_scopes(content: &str) {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ParsingError {
+    IllegalParserState,
     ZeroLengthToken,
     Unrecognized, // improve this
     InvalidHeader,
@@ -57,6 +58,20 @@ impl<'i> Parser<'i> {
         self.source = content;
         self.count = 0;
         self.offset = 0;
+    }
+
+    fn parse_from_start(&mut self) -> Result<(), ParsingError> {
+        let layer = self
+            .scope
+            .current();
+
+        match layer {
+            Layer::Technique => (), // this is where we should be
+            _ => return Err(ParsingError::IllegalParserState),
+        }
+
+        let header = self.parse_technique_header()?;
+        Ok(()) // FIXME
     }
 
     fn parse_newline(&mut self) -> Result<(), ParsingError> {
@@ -223,10 +238,10 @@ impl<'i> Parser<'i> {
         self.parse_newline()?;
 
         Ok(Technique {
-            version: version,
-            license: license,
-            copyright: copyright,
-            template: template,
+            version,
+            license,
+            copyright,
+            template,
         })
     }
 
