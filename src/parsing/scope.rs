@@ -69,11 +69,11 @@ impl Scope {
 }
 
 #[cfg(test)]
-mod tests {
+mod check {
     use super::*;
 
     #[test]
-    fn check_stack_operations() {
+    fn stack_operations() {
         let mut stack = Scope::new();
 
         let current = stack.current();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn check_extract_tags_sorted() {
+    fn extract_tags_sorted() {
         let mut stack = Scope::new();
 
         stack.push(Layer::Procedure);

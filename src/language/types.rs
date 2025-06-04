@@ -131,11 +131,11 @@ pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
 }
 
 #[cfg(test)]
-mod tests {
+mod check {
     use super::*;
 
     #[test]
-    fn check_identifier_rules() {
+    fn identifier_rules() {
         assert_eq!(validate_identifier("a"), Ok("a"));
         assert_eq!(validate_identifier("ab"), Ok("ab"));
         assert_eq!(validate_identifier("johnny5"), Ok("johnny5"));
@@ -154,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn check_forma_rules() {
+    fn forma_rules() {
         assert_eq!(validate_forma("A"), Ok(Forma { name: "A" }));
         assert_eq!(validate_forma("Beans"), Ok(Forma { name: "Beans" }));
         assert_eq!(validate_forma("lower"), Err(ValidationError::InvalidForma));
@@ -165,14 +165,14 @@ mod tests {
     }
 
     #[test]
-    fn check_license_rules() {
+    fn license_rules() {
         assert_eq!(validate_license("MIT"), Ok("MIT"));
         assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
         assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
     }
 
     #[test]
-    fn check_copyright_rules() {
+    fn copyright_rules() {
         assert_eq!(validate_copyright("ACME"), Ok("ACME"));
         assert_eq!(validate_copyright("lower"), Ok("lower"));
         assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn check_template_rules() {
+    fn template_rules() {
         assert_eq!(validate_template("checklist"), Ok("checklist"));
         assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn check_ast_construction() {
+    fn ast_construction() {
         let t1 = Technique {
             version: 1,
             license: None,

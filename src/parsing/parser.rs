@@ -272,11 +272,11 @@ impl<'i> Parser<'i> {
 }
 
 #[cfg(test)]
-mod tests {
+mod check {
     use super::*;
 
     #[test]
-    fn check_magic_line() {
+    fn magic_line() {
         let mut input = Parser::new();
 
         input.initialize("% technique v1");
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn check_header_spdx() {
+    fn header_spdx() {
         let mut input = Parser::new();
 
         input.initialize("! PD");
@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn check_header_template() {
+    fn header_template() {
         let mut input = Parser::new();
         input.initialize("& checklist");
         assert_eq!(input.parse_template_line(), Ok(Some("checklist")));
@@ -328,9 +328,14 @@ mod tests {
             Ok(Some("nasa-flight-plan,v4.0"))
         );
     }
+}
+
+#[cfg(test)]
+mod verify {
+    use super::*;
 
     #[test]
-    fn verify_technique_header() {
+    fn technique_header() {
         let mut input = Parser::new();
         input.initialize("% technique v1");
 
