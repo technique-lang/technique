@@ -227,7 +227,7 @@ impl<'i> Parser<'i> {
         Ok(one)
     }
 
-    fn parse_technique_header(&mut self) -> Result<Technique<'i>, ParsingError> {
+    fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
         self.parse_newline()?;
 
@@ -237,7 +237,7 @@ impl<'i> Parser<'i> {
         let template = self.parse_template_line()?;
         self.parse_newline()?;
 
-        Ok(Technique {
+        Ok(Metadata {
             version,
             license,
             copyright,
@@ -341,7 +341,7 @@ mod verify {
 
         assert_eq!(
             input.parse_technique_header(),
-            Ok(Technique {
+            Ok(Metadata {
                 version: 1,
                 license: None,
                 copyright: None,
@@ -358,7 +358,7 @@ mod verify {
         );
         assert_eq!(
             input.parse_technique_header(),
-            Ok(Technique {
+            Ok(Metadata {
                 version: 1,
                 license: Some("MIT"),
                 copyright: Some("ACME, Inc"),

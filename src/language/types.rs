@@ -3,16 +3,16 @@
 use regex::Regex;
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Technique<'i> {
+pub struct Metadata<'i> {
     pub version: u8,
     pub license: Option<&'i str>,
     pub copyright: Option<&'i str>,
     pub template: Option<&'i str>,
 }
 
-impl Default for Technique<'_> {
+impl Default for Metadata<'_> {
     fn default() -> Self {
-        Technique {
+        Metadata {
             version: 1,
             license: None,
             copyright: None,
@@ -186,8 +186,8 @@ mod check {
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
     }
 
-    fn maker<'i>() -> Technique<'i> {
-        let t1 = Technique {
+    fn maker<'i>() -> Metadata<'i> {
+        let t1 = Metadata {
             version: 1,
             license: None,
             copyright: None,
@@ -199,16 +199,16 @@ mod check {
 
     #[test]
     fn ast_construction() {
-        let t1 = Technique {
+        let t1 = Metadata {
             version: 1,
             license: None,
             copyright: None,
             template: None,
         };
 
-        assert_eq!(Technique::default(), t1);
+        assert_eq!(Metadata::default(), t1);
 
-        let t2 = Technique {
+        let t2 = Metadata {
             version: 1,
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
@@ -219,7 +219,7 @@ mod check {
 
         assert_eq!(t3, t1);
 
-        let t4 = Technique {
+        let t4 = Metadata {
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
             template: Some("checklist"),
