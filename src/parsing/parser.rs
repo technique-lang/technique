@@ -249,6 +249,30 @@ impl<'i> Parser<'i> {
         Ok("")
     }
 
+    fn parse_forma(&mut self) -> Result<Forma<'i>, ParsingError> {
+        let re = Regex::new(r"\s*(.+)").unwrap();
+
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::ZeroLengthToken),
+        };
+
+        let l = cap
+            .get(0)
+            .unwrap()
+            .end();
+
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::InvalidForma)?;
+
+        let one = validate_forma(one)?;
+
+        self.source = &self.source[l..];
+        Ok(one)
+    }
+
     fn parse_procedure_declaration(
         &mut self,
     ) -> Result<(&'i str, Option<Signature<'i>>), ParsingError> {
@@ -327,6 +351,13 @@ mod check {
             input.parse_template_line(),
             Ok(Some("nasa-flight-plan,v4.0"))
         );
+    }
+
+    #[test]
+    fn type_definitions() {
+        let mut input = Parser::new();
+        input.initialize("A");
+        assert_eq!(input.parse_forma(), Ok(Forma { name: "A" }));
     }
 }
 
