@@ -3,6 +3,12 @@
 use regex::Regex;
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct Technique<'i> {
+    pub header: Option<Metadata<'i>>,
+    pub body: Option<Vec<Procedure<'i>>>,
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub struct Metadata<'i> {
     pub version: u8,
     pub license: Option<&'i str>,
