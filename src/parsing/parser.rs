@@ -365,7 +365,15 @@ impl<'i> Parser<'i> {
                     .map(|v| v.as_str())
                     .ok_or(ParsingError::InvalidGenus)?;
 
-                let formas: Vec<Forma<'i>> = vec![];
+                // now split on , characters, and gather
+
+                let mut formas: Vec<Forma<'i>> = Vec::new();
+
+                for text in one.split(",") {
+                    let text = text.trim();
+                    let forma = validate_forma(text)?;
+                    formas.push(forma);
+                }
 
                 self.source = &self.source[l..];
                 self.offset += l;
@@ -529,6 +537,9 @@ mod check {
             input.parse_genus(),
             Ok(Genus::Tuple(vec![Forma { name: "A" }, Forma { name: "B" }]))
         );
+
+        // not actually sure whether we should be normalizing this? Probably
+        // not, because formatting and linting is a separate concern.
 
         input.initialize("(A)");
         assert_eq!(
