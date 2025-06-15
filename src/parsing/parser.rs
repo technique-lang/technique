@@ -313,17 +313,18 @@ impl<'i> Parser<'i> {
         self.trim_whitespace()?;
         self.ensure_nonempty()?;
 
-        let first = one
+        let first = self
+            .source
             .chars()
             .next()
             .unwrap();
 
-        let result = match first {
+        match first {
             '[' => {
                 // consume up to closing bracket
                 let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
 
-                let cap = match re.captures(one) {
+                let cap = match re.captures(self.source) {
                     Some(c) => c,
                     None => return Err(ParsingError::ZeroLengthToken),
                 };
@@ -340,22 +341,63 @@ impl<'i> Parser<'i> {
 
                 let forma = validate_forma(one)?;
 
-                Genus::List(forma)
+                self.source = &self.source[l..];
+                self.offset += l;
+
+                Ok(Genus::List(forma))
             }
             '(' => {
+                // first trim off the parenthesis and whitespace
+                let re = Regex::new(r"\(\s*(.+)\s*\)").unwrap();
+
+                let cap = match re.captures(self.source) {
+                    Some(c) => c,
+                    None => return Err(ParsingError::ZeroLengthToken),
+                };
+
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .end();
+
+                let one = cap
+                    .get(1)
+                    .map(|v| v.as_str())
+                    .ok_or(ParsingError::InvalidGenus)?;
+
                 let formas: Vec<Forma<'i>> = vec![];
-                Genus::Tuple(formas)
+
+                self.source = &self.source[l..];
+                self.offset += l;
+
+                Ok(Genus::Tuple(formas))
             }
             _ => {
+                let re = Regex::new(r"(.+)\s*").unwrap();
+
+                let cap = match re.captures(self.source) {
+                    Some(c) => c,
+                    None => return Err(ParsingError::ZeroLengthToken),
+                };
+
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .end();
+
+                let one = cap
+                    .get(1)
+                    .map(|v| v.as_str())
+                    .ok_or(ParsingError::InvalidGenus)?;
+
                 let forma = validate_forma(one)?;
-                Genus::Single(forma)
+
+                self.source = &self.source[l..];
+                self.offset += l;
+
+                Ok(Genus::Single(forma))
             }
-        };
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok(result)
+        }
     }
 
     fn parse_procedure_declaration(
@@ -462,7 +504,7 @@ mod check {
     }
 
     #[test]
-    fn single_type_definitions() {
+    fn single_genus_definitions() {
         let mut input = Parser::new();
         input.initialize("A");
         assert_eq!(input.parse_forma(), Ok(Forma { name: "A" }));
@@ -472,10 +514,27 @@ mod check {
     }
 
     #[test]
-    fn list_type_definitions() {
+    fn list_genus_definitions() {
         let mut input = Parser::new();
         input.initialize("[A]");
         assert_eq!(input.parse_genus(), Ok(Genus::List(Forma { name: "A" })));
+    }
+
+    #[test]
+    fn tuple_genus_definitions() {
+        let mut input = Parser::new();
+
+        input.initialize("(A, B)");
+        assert_eq!(
+            input.parse_genus(),
+            Ok(Genus::Tuple(vec![Forma { name: "A" }, Forma { name: "B" }]))
+        );
+
+        input.initialize("(A)");
+        assert_eq!(
+            input.parse_genus(),
+            Ok(Genus::Tuple(vec![Forma { name: "A" }]))
+        );
     }
 }
 
