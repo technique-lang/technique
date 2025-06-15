@@ -27,6 +27,7 @@ pub enum ParsingError {
     InvalidCharacter(char),
     UnexpectedEndOfInput,
     InvalidForma,
+    InvalidGenus,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -270,7 +271,71 @@ impl<'i> Parser<'i> {
         let one = validate_forma(one)?;
 
         self.source = &self.source[l..];
+        self.offset += l;
         Ok(one)
+    }
+
+    fn parse_genus(&mut self) -> Result<Genus<'i>, ParsingError> {
+        let re = Regex::new(r"\s*(.+)").unwrap();
+
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::ZeroLengthToken),
+        };
+
+        let l = cap
+            .get(0)
+            .unwrap()
+            .end();
+
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::InvalidForma)?;
+
+        let first = one
+            .chars()
+            .next()
+            .unwrap();
+
+        let result = match first {
+            '[' => {
+                // consume up to closing bracket
+                let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
+
+                let cap = match re.captures(one) {
+                    Some(c) => c,
+                    None => return Err(ParsingError::ZeroLengthToken),
+                };
+
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .end();
+
+                let one = cap
+                    .get(1)
+                    .map(|v| v.as_str())
+                    .ok_or(ParsingError::InvalidGenus)?;
+
+                let forma = validate_forma(one)?;
+
+                Genus::List(forma)
+            }
+            '(' => {
+                let formas: Vec<Forma<'i>> = vec![];
+                Genus::Tuple(formas)
+            }
+            _ => {
+                let forma = validate_forma(one)?;
+                Genus::Single(forma)
+            }
+        };
+
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        Ok(result)
     }
 
     fn parse_procedure_declaration(
@@ -354,10 +419,20 @@ mod check {
     }
 
     #[test]
-    fn type_definitions() {
+    fn single_type_definitions() {
         let mut input = Parser::new();
         input.initialize("A");
         assert_eq!(input.parse_forma(), Ok(Forma { name: "A" }));
+
+        input.initialize("A");
+        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma { name: "A" })));
+    }
+
+    #[test]
+    fn list_type_definitions() {
+        let mut input = Parser::new();
+        input.initialize("[A]");
+        assert_eq!(input.parse_genus(), Ok(Genus::List(Forma { name: "A" })));
     }
 }
 
