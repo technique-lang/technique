@@ -348,7 +348,7 @@ impl<'i> Parser<'i> {
             }
             '(' => {
                 // first trim off the parenthesis and whitespace
-                let re = Regex::new(r"\(\s*(.+)\s*\)").unwrap();
+                let re = Regex::new(r"\(\s*(.*)\s*\)").unwrap();
 
                 let cap = match re.captures(self.source) {
                     Some(c) => c,
@@ -364,6 +364,10 @@ impl<'i> Parser<'i> {
                     .get(1)
                     .map(|v| v.as_str())
                     .ok_or(ParsingError::InvalidGenus)?;
+
+                if one.len() == 0 {
+                    return Ok(Genus::Unit);
+                }
 
                 // now split on , characters, and gather
 
@@ -546,6 +550,11 @@ mod check {
             input.parse_genus(),
             Ok(Genus::Tuple(vec![Forma { name: "A" }]))
         );
+
+        // and now the special case of the unit type
+
+        input.initialize("()");
+        assert_eq!(input.parse_genus(), Ok(Genus::Unit));
     }
 }
 

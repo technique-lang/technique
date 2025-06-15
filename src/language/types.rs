@@ -50,6 +50,7 @@ pub struct Forma<'i> {
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum Genus<'i> {
+    Unit,
     Single(Forma<'i>),
     Tuple(Vec<Forma<'i>>),
     List(Forma<'i>),
