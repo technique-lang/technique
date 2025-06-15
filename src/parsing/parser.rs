@@ -275,23 +275,43 @@ impl<'i> Parser<'i> {
         Ok(one)
     }
 
+    fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
+        if self
+            .source
+            .len()
+            == 0
+        {
+            return Err(ParsingError::UnexpectedEndOfInput);
+        }
+        Ok(())
+    }
+
+    fn trim_whitespace(&mut self) -> Result<(), ParsingError> {
+        let mut l = 0;
+
+        for (i, c) in self
+            .source
+            .char_indices()
+        {
+            if c == '\n' {
+                break;
+            } else if c.is_ascii_whitespace() {
+                l = i + 1;
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        Ok(())
+    }
+
     fn parse_genus(&mut self) -> Result<Genus<'i>, ParsingError> {
-        let re = Regex::new(r"\s*(.+)").unwrap();
-
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::ZeroLengthToken),
-        };
-
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
-
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::InvalidForma)?;
+        self.trim_whitespace()?;
+        self.ensure_nonempty()?;
 
         let first = one
             .chars()
@@ -416,6 +436,29 @@ mod check {
             input.parse_template_line(),
             Ok(Some("nasa-flight-plan,v4.0"))
         );
+    }
+
+    // now we test incremental parsing
+
+    #[test]
+    fn check_not_eof() {
+        let mut input = Parser::new();
+        input.initialize("Hello World");
+        assert_eq!(input.ensure_nonempty(), Ok(()));
+
+        input.initialize("");
+        assert_eq!(
+            input.ensure_nonempty(),
+            Err(ParsingError::UnexpectedEndOfInput)
+        );
+    }
+
+    #[test]
+    fn consume_whitespace() {
+        let mut input = Parser::new();
+        input.initialize("  hello");
+        assert_eq!(input.trim_whitespace(), Ok(()));
+        assert_eq!(input.source, "hello")
     }
 
     #[test]
