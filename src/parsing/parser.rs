@@ -556,6 +556,11 @@ mod check {
             Ok(Genus::Tuple(vec![Forma { name: "A" }]))
         );
         assert_eq!(input.source, "");
+    }
+
+    #[test]
+    fn unit_genus_definitions() {
+        let mut input = Parser::new();
 
         // and now the special case of the unit type
 
