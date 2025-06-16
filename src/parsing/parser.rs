@@ -198,6 +198,7 @@ impl<'i> Parser<'i> {
         // Advance the parser state, and return.
 
         self.source = &self.source[l..];
+        self.offset += l;
 
         Ok((one, two))
     }
@@ -225,6 +226,8 @@ impl<'i> Parser<'i> {
         let one = Some(one);
 
         self.source = &self.source[l..];
+        self.offset += l;
+
         Ok(one)
     }
 
