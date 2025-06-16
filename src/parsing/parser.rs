@@ -366,6 +366,8 @@ impl<'i> Parser<'i> {
                     .ok_or(ParsingError::InvalidGenus)?;
 
                 if one.len() == 0 {
+                    self.source = &self.source[l..];
+                    self.offset += l;
                     return Ok(Genus::Unit);
                 }
 
@@ -512,7 +514,7 @@ mod check {
         let mut input = Parser::new();
         input.initialize("  hello");
         assert_eq!(input.trim_whitespace(), Ok(()));
-        assert_eq!(input.source, "hello")
+        assert_eq!(input.source, "hello");
     }
 
     #[test]
@@ -523,6 +525,7 @@ mod check {
 
         input.initialize("A");
         assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma { name: "A" })));
+        assert_eq!(input.source, "");
     }
 
     #[test]
@@ -530,6 +533,7 @@ mod check {
         let mut input = Parser::new();
         input.initialize("[A]");
         assert_eq!(input.parse_genus(), Ok(Genus::List(Forma { name: "A" })));
+        assert_eq!(input.source, "");
     }
 
     #[test]
@@ -541,6 +545,7 @@ mod check {
             input.parse_genus(),
             Ok(Genus::Tuple(vec![Forma { name: "A" }, Forma { name: "B" }]))
         );
+        assert_eq!(input.source, "");
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
@@ -550,11 +555,13 @@ mod check {
             input.parse_genus(),
             Ok(Genus::Tuple(vec![Forma { name: "A" }]))
         );
+        assert_eq!(input.source, "");
 
         // and now the special case of the unit type
 
         input.initialize("()");
         assert_eq!(input.parse_genus(), Ok(Genus::Unit));
+        assert_eq!(input.source, "")
     }
 }
 
