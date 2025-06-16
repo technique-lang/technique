@@ -39,9 +39,12 @@ pub enum ValidationError {
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Procedure<'i> {
-    pub name: &'i str,
+    pub name: Identifier<'i>,
     pub signature: Option<Signature<'i>>,
 }
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Identifier<'i>(&'i str);
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Forma<'i> {
@@ -67,14 +70,14 @@ pub struct Attribute<'i> {
     pub name: &'i str,
 }
 
-pub fn validate_identifier(input: &str) -> Result<&str, ValidationError> {
+pub fn validate_identifier(input: &str) -> Result<Identifier, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
     }
 
     let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
     if re.is_match(input) {
-        Ok(input)
+        Ok(Identifier(input))
     } else {
         Err(ValidationError::InvalidIdentifier)
     }
@@ -143,9 +146,9 @@ mod check {
 
     #[test]
     fn identifier_rules() {
-        assert_eq!(validate_identifier("a"), Ok("a"));
-        assert_eq!(validate_identifier("ab"), Ok("ab"));
-        assert_eq!(validate_identifier("johnny5"), Ok("johnny5"));
+        assert_eq!(validate_identifier("a"), Ok(Identifier("a")));
+        assert_eq!(validate_identifier("ab"), Ok(Identifier("ab")));
+        assert_eq!(validate_identifier("johnny5"), Ok(Identifier("johnny5")));
         assert_eq!(
             validate_identifier("Pizza"),
             Err(ValidationError::InvalidIdentifier)
@@ -155,7 +158,7 @@ mod check {
             Err(ValidationError::InvalidIdentifier)
         );
         assert!(validate_identifier("0trust").is_err());
-        assert_eq!(validate_identifier("make_dinner"), Ok("make_dinner"));
+        assert_eq!(validate_identifier("make_dinner"), Ok(Identifier("make_dinner")));
         assert!(validate_identifier("MakeDinner").is_err());
         assert!(validate_identifier("make-dinner").is_err());
     }
