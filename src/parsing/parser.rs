@@ -20,14 +20,18 @@ pub fn parse_via_scopes(content: &str) {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ParsingError {
     IllegalParserState,
+    Unimplemented,
     ZeroLengthToken,
     Unrecognized, // improve this
     InvalidHeader,
     ValidationFailure(ValidationError),
     InvalidCharacter(char),
     UnexpectedEndOfInput,
+    InvalidIdentifier,
     InvalidForma,
     InvalidGenus,
+    InvalidSignature,
+    InvalidDeclaration,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -249,8 +253,8 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn parse_identifier(&mut self) -> Result<&'i str, ParsingError> {
-        Ok("")
+    fn parse_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
+        Err(ParsingError::Unimplemented)
     }
 
     fn parse_forma(&mut self) -> Result<Forma<'i>, ParsingError> {
@@ -357,38 +361,77 @@ impl<'i> Parser<'i> {
         Ok(genus)
     }
 
-                let cap = match re.captures(self.source) {
-                    Some(c) => c,
-                    None => return Err(ParsingError::ZeroLengthToken),
-                };
+    fn parse_signature(&mut self) -> Result<Signature<'i>, ParsingError> {
+        let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
 
-                let l = cap
-                    .get(0)
-                    .unwrap()
-                    .end();
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::InvalidSignature),
+        };
 
-                let one = cap
-                    .get(1)
-                    .map(|v| v.as_str())
-                    .ok_or(ParsingError::InvalidGenus)?;
+        let l = cap
+            .get(0)
+            .unwrap()
+            .end();
 
-                let forma = validate_forma(one)?;
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::ZeroLengthToken)?;
 
-                self.source = &self.source[l..];
-                self.offset += l;
+        let two = cap
+            .get(2)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::ZeroLengthToken)?;
 
-                self.source = &self.source[l..];
-                self.offset += l;
+        let domain = validate_genus(one)?;
+        let range = validate_genus(two)?;
 
-                Ok(Genus::Single(forma))
-            }
-        }
+        Ok(Signature { domain, range })
     }
 
+    /// declarations are of the form
+    ///
+    ///     identifier : signature
+    ///
+    /// where signature is
+    ///
+    ///     genus -> genus
+    ///
     fn parse_procedure_declaration(
         &mut self,
-    ) -> Result<(&'i str, Option<Signature<'i>>), ParsingError> {
+    ) -> Result<(Identifier<'i>, Option<Signature<'i>>), ParsingError> {
+        // These capture groups use .+? to make "match more than one, but
+        // lazily" so that the subsequent grabs of whitespace and the all
+        // important ':' character are not absorbed.
+        let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::InvalidDeclaration),
+        };
+
+        let l = cap
+            .get(0)
+            .unwrap()
+            .end();
+
+        let one = cap
+            .get(1)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::ZeroLengthToken)?;
+
         let name = self.parse_identifier()?;
+
+        let two = cap
+            .get(2)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::ZeroLengthToken)?;
+
+        self.parse_signature()?;
+
+        self.source = &self.source[l..];
+        self.offset += l;
 
         Ok((name, None))
     }
@@ -536,6 +579,47 @@ mod check {
         assert_eq!(input.parse_genus(), Ok(Genus::Unit));
         assert_eq!(input.source, "")
     }
+
+    #[test]
+    fn signatures() {
+        let mut input = Parser::new();
+
+        input.initialize("A -> B");
+        assert_eq!(
+            input.parse_signature(),
+            Ok(Signature {
+                domain: Genus::Single(Forma("A")),
+                range: Genus::Single(Forma("B"))
+            })
+        );
+
+        input.initialize("Beans -> Coffee");
+        assert_eq!(
+            input.parse_signature(),
+            Ok(Signature {
+                domain: Genus::Single(Forma("Beans")),
+                range: Genus::Single(Forma("Coffee"))
+            })
+        );
+
+        input.initialize("[Bits] -> Bob");
+        assert_eq!(
+            input.parse_signature(),
+            Ok(Signature {
+                domain: Genus::List(Forma("Bits")),
+                range: Genus::Single(Forma("Bob"))
+            })
+        );
+
+        input.initialize("Complex -> (Real, Imaginary)");
+        assert_eq!(
+            input.parse_signature(),
+            Ok(Signature {
+                domain: Genus::Single(Forma("Complex")),
+                range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+            })
+        );
+    }
 }
 
 #[cfg(test)]
@@ -577,33 +661,12 @@ mod verify {
 }
 
 /*
-
-    #[test]
-    fn check_type_definitions() {
-        let f = grammar::formaParser::new();
-        let g = grammar::genusParser::new();
-
-        assert_eq!(
-            f.parse("A"),
-            Ok(Forma {
-                name: "A".to_owned()
-            })
-        );
-
-        assert_eq!(
-            g.parse("A"),
-            Ok(Genus::Single(Forma {
-                name: "A".to_owned()
-            }))
-        );
-    }
-
     #[test]
     fn check_procedure_signature() {
         let p = grammar::signatureParser::new();
 
         assert_eq!(
-            p.parse("A -> B"),
+            p.parse(""),
             Ok(Signature {
                 domain: Genus::Single(Forma {
                     name: "A".to_owned()
