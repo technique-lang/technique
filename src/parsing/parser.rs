@@ -322,75 +322,40 @@ impl<'i> Parser<'i> {
             .next()
             .unwrap();
 
-        match first {
+        let re = match first {
             '[' => {
                 // consume up to closing bracket
-                let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
-
-                let cap = match re.captures(self.source) {
-                    Some(c) => c,
-                    None => return Err(ParsingError::ZeroLengthToken),
-                };
-
-                let l = cap
-                    .get(0)
-                    .unwrap()
-                    .end();
-
-                let one = cap
-                    .get(1)
-                    .map(|v| v.as_str())
-                    .ok_or(ParsingError::InvalidGenus)?;
-
-                let forma = validate_forma(one)?;
-
-                self.source = &self.source[l..];
-                self.offset += l;
-
-                Ok(Genus::List(forma))
+                Regex::new(r"\[.+?\]").unwrap()
             }
             '(' => {
-                // first trim off the parenthesis and whitespace
-                let re = Regex::new(r"\(\s*(.*)\s*\)").unwrap();
-
-                let cap = match re.captures(self.source) {
-                    Some(c) => c,
-                    None => return Err(ParsingError::ZeroLengthToken),
-                };
-
-                let l = cap
-                    .get(0)
-                    .unwrap()
-                    .end();
-
-                let one = cap
-                    .get(1)
-                    .map(|v| v.as_str())
-                    .ok_or(ParsingError::InvalidGenus)?;
-
-                if one.len() == 0 {
-                    self.source = &self.source[l..];
-                    self.offset += l;
-                    return Ok(Genus::Unit);
-                }
-
-                // now split on , characters, and gather
-
-                let mut formas: Vec<Forma<'i>> = Vec::new();
-
-                for text in one.split(",") {
-                    let text = text.trim();
-                    let forma = validate_forma(text)?;
-                    formas.push(forma);
-                }
-
-                self.source = &self.source[l..];
-                self.offset += l;
-
-                Ok(Genus::Tuple(formas))
+                // consume up to closing parenthesis
+                Regex::new(r"\(.*?\)").unwrap()
             }
-            _ => {
-                let re = Regex::new(r"(.+)\s*").unwrap();
+            _ => Regex::new(r".+?").unwrap(),
+        };
+
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::InvalidGenus),
+        };
+
+        let l = cap
+            .get(0)
+            .unwrap()
+            .end();
+
+        let zero = cap
+            .get(0)
+            .map(|v| v.as_str())
+            .ok_or(ParsingError::ZeroLengthToken)?;
+
+        let genus = validate_genus(zero)?;
+
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        Ok(genus)
+    }
 
                 let cap = match re.captures(self.source) {
                     Some(c) => c,
@@ -408,6 +373,9 @@ impl<'i> Parser<'i> {
                     .ok_or(ParsingError::InvalidGenus)?;
 
                 let forma = validate_forma(one)?;
+
+                self.source = &self.source[l..];
+                self.offset += l;
 
                 self.source = &self.source[l..];
                 self.offset += l;
@@ -554,10 +522,7 @@ mod check {
         // not, because formatting and linting is a separate concern.
 
         input.initialize("(A)");
-        assert_eq!(
-            input.parse_genus(),
-            Ok(Genus::Tuple(vec![Forma("A")]))
-        );
+        assert_eq!(input.parse_genus(), Ok(Genus::Tuple(vec![Forma("A")])));
         assert_eq!(input.source, "");
     }
 

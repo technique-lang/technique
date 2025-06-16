@@ -35,6 +35,7 @@ pub enum ValidationError {
     InvalidTemplate,
     InvalidIdentifier,
     InvalidForma,
+    InvalidGenus,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -103,6 +104,82 @@ pub fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
     Ok(Forma(input))
 }
 
+/// This one copes with (and discards) any internal whitespace encountered.
+pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
+    let first = input
+        .chars()
+        .next()
+        .unwrap();
+
+    match first {
+        '[' => {
+            // consume up to closing bracket
+            let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
+
+            let cap = match re.captures(input) {
+                Some(c) => c,
+                None => return Err(ValidationError::ZeroLengthToken),
+            };
+
+            let one = cap
+                .get(1)
+                .map(|v| v.as_str())
+                .ok_or(ValidationError::InvalidGenus)?;
+
+            let forma = validate_forma(one)?;
+
+            Ok(Genus::List(forma))
+        }
+        '(' => {
+            // first trim off the parenthesis and whitespace
+            let re = Regex::new(r"\(\s*(.*)\s*\)").unwrap();
+
+            let cap = match re.captures(input) {
+                Some(c) => c,
+                None => return Err(ValidationError::ZeroLengthToken),
+            };
+
+            let one = cap
+                .get(1)
+                .map(|v| v.as_str())
+                .ok_or(ValidationError::InvalidGenus)?;
+
+            if one.len() == 0 {
+                return Ok(Genus::Unit);
+            }
+
+            // now split on , characters, and gather
+
+            let mut formas: Vec<Forma> = Vec::new();
+
+            for text in one.split(",") {
+                let text = text.trim();
+                let forma = validate_forma(text)?;
+                formas.push(forma);
+            }
+
+            Ok(Genus::Tuple(formas))
+        }
+        _ => {
+            let re = Regex::new(r"(.+)\s*").unwrap();
+
+            let cap = match re.captures(input) {
+                Some(c) => c,
+                None => return Err(ValidationError::ZeroLengthToken),
+            };
+
+            let one = cap
+                .get(1)
+                .map(|v| v.as_str())
+                .ok_or(ValidationError::InvalidGenus)?;
+
+            let forma = validate_forma(one)?;
+
+            Ok(Genus::Single(forma))
+        }
+    }
+}
+
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
 
@@ -154,7 +231,10 @@ mod check {
             Err(ValidationError::InvalidIdentifier)
         );
         assert!(validate_identifier("0trust").is_err());
-        assert_eq!(validate_identifier("make_dinner"), Ok(Identifier("make_dinner")));
+        assert_eq!(
+            validate_identifier("make_dinner"),
+            Ok(Identifier("make_dinner"))
+        );
         assert!(validate_identifier("MakeDinner").is_err());
         assert!(validate_identifier("make-dinner").is_err());
     }
@@ -170,6 +250,39 @@ mod check {
         );
     }
 
+    #[test]
+    fn genus_rules_single() {
+        assert_eq!(validate_genus("A"), Ok(Genus::Single(Forma("A"))));
+    }
+
+    #[test]
+    fn genus_rules_list() {
+        assert_eq!(validate_genus("[A]"), Ok(Genus::List(Forma("A"))));
+    }
+
+    #[test]
+    fn genus_rules_tuple() {
+        assert_eq!(
+            validate_genus("(A, B)"),
+            Ok(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("(Coffee, Tea)"),
+            Ok(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+        );
+
+        // not actually sure whether we should be normalizing this? Probably
+        // not, because formatting and linting is a separate concern.
+
+        assert_eq!(validate_genus("(A)"), Ok(Genus::Tuple(vec![Forma("A")])));
+    }
+
+    #[test]
+    fn genus_rules_unit() {
+        assert_eq!(validate_genus("()"), Ok(Genus::Unit));
+    }
+    
     #[test]
     fn license_rules() {
         assert_eq!(validate_license("MIT"), Ok("MIT"));
