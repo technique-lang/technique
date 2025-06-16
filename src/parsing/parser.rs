@@ -521,10 +521,10 @@ mod check {
     fn single_genus_definitions() {
         let mut input = Parser::new();
         input.initialize("A");
-        assert_eq!(input.parse_forma(), Ok(Forma { name: "A" }));
+        assert_eq!(input.parse_forma(), Ok(Forma("A")));
 
         input.initialize("A");
-        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma { name: "A" })));
+        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma("A"))));
         assert_eq!(input.source, "");
     }
 
@@ -532,7 +532,7 @@ mod check {
     fn list_genus_definitions() {
         let mut input = Parser::new();
         input.initialize("[A]");
-        assert_eq!(input.parse_genus(), Ok(Genus::List(Forma { name: "A" })));
+        assert_eq!(input.parse_genus(), Ok(Genus::List(Forma("A"))));
         assert_eq!(input.source, "");
     }
 
@@ -543,7 +543,7 @@ mod check {
         input.initialize("(A, B)");
         assert_eq!(
             input.parse_genus(),
-            Ok(Genus::Tuple(vec![Forma { name: "A" }, Forma { name: "B" }]))
+            Ok(Genus::Tuple(vec![Forma("A"), Forma("B")]))
         );
         assert_eq!(input.source, "");
 
@@ -553,7 +553,7 @@ mod check {
         input.initialize("(A)");
         assert_eq!(
             input.parse_genus(),
-            Ok(Genus::Tuple(vec![Forma { name: "A" }]))
+            Ok(Genus::Tuple(vec![Forma("A")]))
         );
         assert_eq!(input.source, "");
     }

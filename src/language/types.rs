@@ -44,12 +44,10 @@ pub struct Procedure<'i> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Identifier<'i>(&'i str);
+pub struct Identifier<'i>(pub &'i str);
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Forma<'i> {
-    pub name: &'i str,
-}
+pub struct Forma<'i>(pub &'i str);
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum Genus<'i> {
@@ -66,9 +64,7 @@ pub struct Signature<'i> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Attribute<'i> {
-    pub name: &'i str,
-}
+pub struct Attribute<'i>(pub &'i str);
 
 pub fn validate_identifier(input: &str) -> Result<Identifier, ValidationError> {
     if input.len() == 0 {
@@ -104,7 +100,7 @@ pub fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
         }
     }
 
-    Ok(Forma { name: input })
+    Ok(Forma(input))
 }
 
 // the validate functions all need to have start and end anchors, which seems
@@ -165,8 +161,8 @@ mod check {
 
     #[test]
     fn forma_rules() {
-        assert_eq!(validate_forma("A"), Ok(Forma { name: "A" }));
-        assert_eq!(validate_forma("Beans"), Ok(Forma { name: "Beans" }));
+        assert_eq!(validate_forma("A"), Ok(Forma("A")));
+        assert_eq!(validate_forma("Beans"), Ok(Forma("Beans")));
         assert_eq!(validate_forma("lower"), Err(ValidationError::InvalidForma));
         assert_eq!(
             validate_forma("0Degrees"),
