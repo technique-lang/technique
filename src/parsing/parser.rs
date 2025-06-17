@@ -613,6 +613,58 @@ mod check {
             })
         );
     }
+
+    #[test]
+    fn declarations_simple() {
+        let mut input = Parser::new();
+
+        input.initialize("making_coffee :");
+        assert_eq!(
+            input.parse_procedure_declaration(),
+            Ok((Identifier("making_coffee"), None))
+        );
+    }
+
+    #[test]
+    fn declarations_full() {
+        let mut input = Parser::new();
+
+        input.initialize("f : A -> B");
+        assert_eq!(
+            input.parse_procedure_declaration(),
+            Ok((
+                Identifier("f"),
+                Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                })
+            ))
+        );
+
+        input.initialize("making_coffee : Beans -> Coffee");
+        assert_eq!(
+            input.parse_procedure_declaration(),
+            Ok((
+                Identifier("making_coffee"),
+                Some(Signature {
+                    domain: Genus::Single(Forma("Beans")),
+                    range: Genus::Single(Forma("Coffee"))
+                })
+            ))
+        );
+
+        input.initialize("making_coffee : (Beans, Milk) -> Coffee");
+        assert_eq!(
+            input.parse_procedure_declaration(),
+            Ok((
+                Identifier("making_coffee"),
+                Some(Signature {
+                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                    range: Genus::Single(Forma("Coffee"))
+                })
+            ))
+        );
+    }
 }
 
 #[cfg(test)]
