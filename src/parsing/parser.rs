@@ -1,4 +1,3 @@
-#![allow(unused_variables)]
 #![allow(dead_code)]
 
 use regex::Regex;
@@ -112,12 +111,6 @@ impl<'i> Parser<'i> {
     // major versions then this will become a lot more complicated.
     fn parse_magic_line(&mut self) -> Result<u8, ParsingError> {
         let re = Regex::new(r"%\s*technique\s+v1").unwrap();
-
-        let line = self
-            .source
-            .lines()
-            .next()
-            .unwrap();
 
         let m = re
             .find(self.source)
@@ -394,7 +387,7 @@ impl<'i> Parser<'i> {
     ///
     ///     identifier : signature
     ///
-    /// where signature is
+    /// where the optional signature is
     ///
     ///     genus -> genus
     ///
