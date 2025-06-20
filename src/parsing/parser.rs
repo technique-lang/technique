@@ -525,13 +525,24 @@ mod check {
     }
 
     #[test]
-    fn single_genus_definitions() {
+    fn forma_rules() {
         let mut input = Parser::new();
         input.initialize("A");
         assert_eq!(input.parse_forma(), Ok(Forma("A")));
 
+        input.initialize("Apple");
+        assert_eq!(input.parse_forma(), Ok(Forma("Apple")));
+    }
+
+    #[test]
+    fn single_genus_definitions() {
+        let mut input = Parser::new();
         input.initialize("A");
         assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma("A"))));
+        assert_eq!(input.source, "");
+
+        input.initialize("Apple");
+        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma("Apple"))));
         assert_eq!(input.source, "");
     }
 
