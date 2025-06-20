@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::any::type_name;
+
 use regex::Regex;
 use technique::language::*;
 
@@ -22,6 +24,7 @@ pub enum ParsingError {
     Unimplemented,
     ZeroLengthToken,
     Unrecognized, // improve this
+    Expected(&'static str),
     InvalidHeader,
     ValidationFailure(ValidationError),
     InvalidCharacter(char),
@@ -62,6 +65,87 @@ impl<'i> Parser<'i> {
         self.source = content;
         self.count = 0;
         self.offset = 0;
+    }
+
+    fn using_string<A, F>(&mut self, f: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&'i str) -> Result<A, ParsingError>,
+    {
+        let l = self
+            .source
+            .len();
+
+        let result = f(self.source)?;
+
+        // advance the parser position
+        self.source = "";
+        self.offset += l;
+
+        // and return
+        Ok(result)
+    }
+
+    fn using_regex<A, F>(&mut self, re: regex::Regex, mut f: F) -> Result<A, ParsingError>
+    where
+        F: FnMut(&mut Parser<'i>, regex::Captures<'i>) -> Result<A, ParsingError>,
+    {
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Err(ParsingError::Expected(type_name::<A>())),
+        };
+
+        let zero = cap
+            .get(0)
+            .unwrap();
+
+        let l = zero.end();
+
+        let mut parser = Parser {
+            scope: self
+                .scope
+                .clone(),
+            source: zero.as_str(),
+            count: self.count,
+            offset: self.offset + zero.start(),
+        };
+
+        // this is effectively self.f(cap)
+        let result = f(&mut parser, cap)?;
+
+        // advance the parser position
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        // and return
+        Ok(result)
+    }
+
+    /// Given a regex Match, fork a copy of the parser state and run a nested
+    /// parser on that derivative. Does NOT advance the parent's parser state;
+    /// the caller needs to do that via one of the using_*() methods.
+
+    fn subparser_match<A, F>(
+        &mut self,
+        needle: regex::Match<'i>,
+        mut f: F,
+    ) -> Result<A, ParsingError>
+    where
+        F: FnMut(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let mut parser = Parser {
+            scope: self
+                .scope
+                .clone(),
+            source: needle.as_str(),
+            count: self.count,
+            offset: self.offset + needle.start(),
+        };
+
+        // this is effectively self.f()
+        let result = f(&mut parser)?;
+
+        // and return
+        Ok(result)
     }
 
     fn parse_from_start(&mut self) -> Result<(), ParsingError> {
@@ -247,32 +331,17 @@ impl<'i> Parser<'i> {
     }
 
     fn parse_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
-        Err(ParsingError::Unimplemented)
+        self.using_string(|text| {
+            let result = validate_identifier(text)?;
+            Ok(result)
+        })
     }
 
     fn parse_forma(&mut self) -> Result<Forma<'i>, ParsingError> {
-        let re = Regex::new(r"\s*(.+)").unwrap();
-
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::ZeroLengthToken),
-        };
-
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
-
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::InvalidForma)?;
-
-        let one = validate_forma(one)?;
-
-        self.source = &self.source[l..];
-        self.offset += l;
-        Ok(one)
+        self.using_string(|text| {
+            let result = validate_forma(text)?;
+            Ok(result)
+        })
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
@@ -328,57 +397,37 @@ impl<'i> Parser<'i> {
                 // consume up to closing parenthesis
                 Regex::new(r"\(.*?\)").unwrap()
             }
-            _ => Regex::new(r".+?").unwrap(),
+            _ => Regex::new(r".+").unwrap(),
         };
 
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::InvalidGenus),
-        };
-
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
-
-        let zero = cap
-            .get(0)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::ZeroLengthToken)?;
-
-        let genus = validate_genus(zero)?;
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok(genus)
+        self.using_regex(re, |outer, _| {
+            println!("{:?}", outer.source);
+            outer.using_string(|text| {
+                let result = validate_genus(text)?;
+                Ok(result)
+            })
+        })
     }
+
+    // idea: put the current Capture in the parser state?
 
     fn parse_signature(&mut self) -> Result<Signature<'i>, ParsingError> {
         let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
 
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::InvalidSignature),
-        };
+        let (domain, range) = self.using_regex(re, |outer, cap| {
+            let one = cap
+                .get(1)
+                .ok_or(ParsingError::Expected("a Genus for the domain"))?;
 
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
+            let two = cap
+                .get(2)
+                .ok_or(ParsingError::Expected("a Genus for the range"))?;
 
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::ZeroLengthToken)?;
+            let domain = outer.subparser_match(one, |inner| inner.parse_genus())?;
+            let range = outer.subparser_match(two, |inner| inner.parse_genus())?;
 
-        let two = cap
-            .get(2)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::ZeroLengthToken)?;
-
-        let domain = validate_genus(one)?;
-        let range = validate_genus(two)?;
+            Ok((domain, range))
+        })?;
 
         Ok(Signature { domain, range })
     }
@@ -399,47 +448,35 @@ impl<'i> Parser<'i> {
         // important ':' character are not absorbed.
         let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
 
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::InvalidDeclaration),
-        };
+        self.using_regex(re, |outer, cap| {
+            let name = match cap.get(1) {
+                Some(one) => outer.subparser_match(one, |inner| {
+                    let result = inner.parse_identifier()?;
+                    Ok(result)
+                }),
+                None => Err(ParsingError::Expected("an Identifier")),
+            }?;
 
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
+            let signature = match cap.get(2) {
+                Some(two) => outer.subparser_match(two, |inner| {
+                    // println!("{:?}", two);
+                    let result = inner.parse_signature()?;
+                    Ok(Some(result))
+                }),
+                None => Ok(None),
+            }?;
 
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::ZeroLengthToken)?;
-
-        let name = self.parse_identifier()?;
-
-        let two = cap
-            .get(2)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::ZeroLengthToken)?;
-
-        self.parse_signature()?;
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok((name, None))
+            Ok((name, signature))
+        })
     }
 
     fn parse_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        let (name, _) = self.parse_procedure_declaration()?;
+        let (name, signature) = self.parse_procedure_declaration()?;
 
         // let body = self.parse_body()?;
         self.parse_newline()?;
 
-        Ok(Procedure {
-            name,
-            signature: None, // description: None
-                             // body: None
-        })
+        Ok(Procedure { name, signature })
     }
 }
 
