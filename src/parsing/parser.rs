@@ -74,7 +74,7 @@ impl<'i> Parser<'i> {
             _ => return Err(ParsingError::IllegalParserState),
         }
 
-        let header = self.parse_technique_header()?;
+        let _header = self.parse_technique_header()?;
         Ok(()) // FIXME
     }
 
