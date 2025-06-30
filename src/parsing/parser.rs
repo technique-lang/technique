@@ -120,6 +120,45 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
+    fn try_using_regex<A, F>(
+        &mut self,
+        re: regex::Regex,
+        mut f: F,
+    ) -> Result<Option<A>, ParsingError>
+    where
+        F: FnMut(&mut Parser<'i>, regex::Captures<'i>) -> Result<A, ParsingError>,
+    {
+        let cap = match re.captures(self.source) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        let zero = cap
+            .get(0)
+            .unwrap();
+
+        let l = zero.end();
+
+        let mut parser = Parser {
+            scope: self
+                .scope
+                .clone(),
+            source: zero.as_str(),
+            count: self.count,
+            offset: self.offset + zero.start(),
+        };
+
+        // this is effectively self.f(cap)
+        let result = f(&mut parser, cap)?;
+
+        // advance the parser position
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        // and return
+        Ok(Some(result))
+    }
+
     /// Given a regex Match, fork a copy of the parser state and run a nested
     /// parser on that derivative. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the using_*() methods.
@@ -287,30 +326,20 @@ impl<'i> Parser<'i> {
     fn parse_template_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
         let re = Regex::new(r"&\s*(.+)").unwrap();
 
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Ok(None),
-        };
+        self.try_using_regex(re, |outer, cap| {
+            let one = cap
+                .get(1)
+                .ok_or(ParsingError::Expected("a template"))?;
 
-        let l = cap
-            .get(0)
-            .unwrap()
-            .end();
-
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::InvalidHeader)?;
-
-        let one = validate_template(one)?;
-
-        let one = Some(one);
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok(one)
+            outer.subparser_match(one, |inner| {
+                inner.using_string(|text| {
+                    let result = validate_template(text)?;
+                    Ok(result)
+                })
+            })
+        })
     }
+
 
     fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
