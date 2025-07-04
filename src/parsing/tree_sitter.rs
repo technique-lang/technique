@@ -148,4 +148,130 @@ brew_tea : Leaves -> Tea
         let tree = parse_tree(input);
         assert_no_error(&tree, input);
     }
+
+    #[test]
+    fn procedure_with_title_and_description() {
+        let input = trim(
+            r#"
+    my_proc:
+
+    # My Procedure Title
+
+    This is the first line of the description.
+    This is the second line.
+                "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn procedure_with_dependent_steps() {
+        let input = trim(
+            r#"
+    my_proc:
+        1. First step.
+        2. Second step.
+                "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn description_lines_with_periods_are_not_steps() {
+        let input = trim(
+            r#"
+    This is a line ending with one.
+    And another line but not a step.
+
+    one. is not a step
+    "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn numeric_and_alphabetic_steps_are_recognized() {
+        let input = trim(
+            r#"
+    1. This is a numeric step
+    a. This is an alphabetic step
+    i. This is also an alphabetic step
+    "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn mixed_description_and_steps() {
+        let input = trim(
+            r#"
+    This is a description.
+
+    a. First step
+    b. Second step
+
+    This is another paragraph.
+
+    1. Numeric step
+    2. Another numeric step
+    "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn step_like_text_in_description_is_not_step() {
+        let input = trim(
+            r#"
+    This is not a step a. is just a word here.
+    But this is a step
+    b. Now this is a step
+    "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn procedure_with_parallel_steps() {
+        let input = trim(
+            r#"
+    my_proc:
+        - A parallel step.
+        * Another parallel step.
+                "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn network_probe_procedure() {
+        let input = trim(
+            r#"
+    connectivity_check(e,s) : (LocalEnvironment, TargetService) -> NetworkHealth
+
+    # Network Connectivity Check
+
+    We check the health of the network path between a user's machine running
+    in a branch office and a service running in a datacenter by establishing
+    functionality at each layer between our device and the remote server.
+
+        1.  Local network connectivity
+        2.  Reachability of site border
+        3.  Check internet connectivity
+        4.  Reachability of away border
+        5.  Traversal of away-side load balancer
+        6.  Traversal of away-side local network
+        7.  Check response from remote service
+                "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
 }
