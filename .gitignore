@@ -3,3 +3,7 @@
 
 # rendered code fragments
 /*.pdf
+
+# generated Tree Sitter parser artifacts
+/src/grammar.json
+/src/node-types.json
