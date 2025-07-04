@@ -8,10 +8,10 @@ module.exports = grammar({
     // A source file: optional header_block (if present, must be first), then declarations.
     source_file: ($) =>
       seq(
-        optional(seq($.header_block, $.newline)),
-        $.procedure_declaration,
-        repeat(seq($.newline, $.procedure_declaration)),
-        optional($.newline),
+        optional($.header_block),
+        repeat($.newline),
+        repeat(seq($.procedure_declaration, $.newline, repeat($.newline))),
+        optional($.procedure_declaration),
       ),
 
     // Header block: magic line (required), then optional SPDX and template lines.

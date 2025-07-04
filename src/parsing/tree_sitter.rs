@@ -33,9 +33,19 @@ mod check {
             root.to_sexp()
         );
     }
+    #[test]
+    fn simple_declaration() {
+        let input = trim(
+            r#"
+make_coffee : Beans -> Coffee
+            "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
 
     #[test]
-    fn single_declaration() {
+    fn full_declaration() {
         let input = trim(
             r#"
 make_coffee : Beans -> Coffee
@@ -52,6 +62,28 @@ make_coffee : Beans -> Coffee
 make_coffee : Beans -> Coffee
 make_tea : Leaves -> Tea
 brew_chocolate : Powder -> Chocolate
+            "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn declaration_at_left_margin() {
+        let input = trim(
+            r#"
+    make_coffee : Beans -> Coffee
+            "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn declaration_with_leading_whitespace() {
+        let input = trim(
+            r#"
+        make_coffee : Beans -> Coffee
             "#,
         );
         let tree = parse_tree(input);
@@ -78,10 +110,34 @@ o : () -> A
     }
 
     #[test]
+    fn magic_only() {
+        let input = trim(
+            r#"
+% technique v1
+            "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
     fn header_block() {
         let input = trim(
             r#"
-% technique v42
+% technique v1
+! CC BY-SA 3.0 [IGO]; © 2024 ACME, Inc.
+& checklist-template
+            "#,
+        );
+        let tree = parse_tree(input);
+        assert_no_error(&tree, input);
+    }
+
+    #[test]
+    fn header_and_delcarations() {
+        let input = trim(
+            r#"
+% technique v1
 ! CC BY-SA 3.0 [IGO]; © 2024 ACME, Inc.
 & checklist-template
 
