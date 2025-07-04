@@ -1,0 +1,39 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "technique",
+      "camelcase": "Technique",
+      "title": "Technique",
+      "scope": "source.technique",
+      "file-types": [
+        "t"
+      ],
+      "injection-regex": "^technique$",
+      "class-name": "TreeSitterTechnique"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "The Technique Procedures Language.",
+    "authors": [
+      {
+        "name": "Andrew Cowie",
+        "email": "istathar@gmail.com"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/technique-lang/technique"
+    }
+  },
+  "bindings": {
+    "c": false,
+    "go": false,
+    "node": false,
+    "python": false,
+    "rust": true,
+    "swift": false,
+    "zig": false
+  }
+}
