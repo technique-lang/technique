@@ -16,16 +16,36 @@ module.exports = grammar({
 
     // Header block: magic line (required), then optional SPDX and template lines.
     header_block: ($) =>
-      seq(
-        $.magic_line,
-        optional($.spdx_line),
-        optional($.template_line)
-      ),
+      seq($.magic_line, optional($.spdx_line), optional($.template_line)),
 
     magic_line: ($) =>
-      seq("%", /[ \t]*/, "technique", /[ \t]+/, /v[0-9]+/, $.newline),
-    spdx_line: ($) => seq("!", /[^\n]+/, $.newline),
-    template_line: ($) => seq("&", /[^\n]+/, $.newline),
+      seq(
+        "%",
+        "technique",
+        /[ \t]+/,
+        "v",
+        field("version", $.version),
+        $.newline,
+      ),
+    version: ($) => /[0-9]+/,
+
+    spdx_line: ($) =>
+      seq(
+        "!",
+        field("license", $.license),
+        optional(
+          seq(
+            ";",
+            choice("(c)", "(C)", "©"),
+            field("copyright", $.copyright),
+          ),
+        ),
+        $.newline,
+      ),
+    license: ($) => /[^;\n]+/,
+    copyright: ($) => /[^\n]+/,
+    template_line: ($) => seq("&", field("template", $.template), $.newline),
+    template: ($) => /[^\n]+/,
 
     procedure_declaration: ($) =>
       seq(
