@@ -5,13 +5,27 @@ module.exports = grammar({
   extras: ($) => [/[ \t\r]/],
 
   rules: {
-    // A source file is one or more procedure declarations, separated by newlines.
+    // A source file: optional header_block (if present, must be first), then declarations.
     source_file: ($) =>
       seq(
+        optional(seq($.header_block, $.newline)),
         $.procedure_declaration,
         repeat(seq($.newline, $.procedure_declaration)),
         optional($.newline),
       ),
+
+    // Header block: magic line (required), then optional SPDX and template lines.
+    header_block: ($) =>
+      seq(
+        $.magic_line,
+        optional($.spdx_line),
+        optional($.template_line)
+      ),
+
+    magic_line: ($) =>
+      seq("%", /[ \t]*/, "technique", /[ \t]+/, /v[0-9]+/, $.newline),
+    spdx_line: ($) => seq("!", /[^\n]+/, $.newline),
+    template_line: ($) => seq("&", /[^\n]+/, $.newline),
 
     procedure_declaration: ($) =>
       seq(
