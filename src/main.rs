@@ -95,7 +95,6 @@ fn main() {
             debug!(filename);
 
             parsing::load(&Path::new(filename));
-            todo!();
         }
         Some(("format", submatches)) => {
             if submatches.contains_id("raw-control-chars") {
