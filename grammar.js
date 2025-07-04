@@ -5,40 +5,40 @@ module.exports = grammar({
   extras: ($) => [/[ \t\r]/],
 
   rules: {
-    // A source file is one or more lines of content.
+    // A source file is one or more procedure declarations, separated by newlines.
     source_file: ($) =>
       seq(
-        $.procedure_declaration_full_signature,
-        repeat(seq($.newline, $.procedure_declaration_full_signature)),
+        $.procedure_declaration,
+        repeat(seq($.newline, $.procedure_declaration)),
         optional($.newline),
       ),
 
-    // A line can be either a procedure declaration or a blank line.
-    _line: ($) =>
-      choice($.procedure_declaration_full_signature, $.blank_line),
-
-    // Procedure Declaration (full signature form)
-    procedure_declaration_full_signature: ($) =>
+    procedure_declaration: ($) =>
       seq(
         field("name", $.identifier),
-        $.colon,
-        field("parameters", $.identifier),
-        $.arrow,
-        field("return_type", $.identifier),
+        ":",
+        optional(
+          seq(
+            field("parameters", $.genus),
+            "->",
+            field("return_type", $.genus),
+          ),
+        ),
       ),
 
-    // A type is, for now, just a simple identifier.
-    type: ($) => $.identifier,
+    // Genus: Simple, List, or Tuple
+    genus: ($) => choice($.simple_genus, $.list_genus, $.tuple_genus),
+    simple_genus: ($) => $.forma,
+    list_genus: ($) => seq("[", $.forma, "]"),
+    tuple_genus: ($) => seq("(", $.forma, repeat(seq(",", $.forma)), ")"),
 
-    // An identifier is a standard C-style identifier.
+    // Forma: must start with uppercase letter, then letters or digits
+    forma: ($) => /[A-Z][a-zA-Z0-9]*/,
+
+    // Identifiers for procedure names
     identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,
 
-    // A blank line: only whitespace (or empty) followed by a newline.
-    blank_line: ($) => /[ \t\r]*\n/,
-
-    // --- Explicit Tokens ---
-    colon: ($) => ":",
-    arrow: ($) => "->",
+    // Newline as a literal
     newline: ($) => "\n",
   },
 });
