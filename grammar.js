@@ -26,8 +26,10 @@ module.exports = grammar({
         ),
       ),
 
-    // Genus: Simple, List, or Tuple
-    genus: ($) => choice($.simple_genus, $.list_genus, $.tuple_genus),
+    // Genus: Unit, Simple, List, or Tuple
+    genus: ($) =>
+      choice($.unit_genus, $.simple_genus, $.list_genus, $.tuple_genus),
+    unit_genus: ($) => seq("(", ")"),
     simple_genus: ($) => $.forma,
     list_genus: ($) => seq("[", $.forma, "]"),
     tuple_genus: ($) => seq("(", $.forma, repeat(seq(",", $.forma)), ")"),
