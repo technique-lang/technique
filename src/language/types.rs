@@ -161,19 +161,11 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
             Ok(Genus::Tuple(formas))
         }
         _ => {
-            let re = Regex::new(r"(.+)\s*").unwrap();
-
-            let cap = match re.captures(input) {
-                Some(c) => c,
-                None => return Err(ValidationError::ZeroLengthToken),
+            if input.len() == 0 {
+                return Err(ValidationError::ZeroLengthToken);
             };
 
-            let one = cap
-                .get(1)
-                .map(|v| v.as_str())
-                .ok_or(ValidationError::InvalidGenus)?;
-
-            let forma = validate_forma(one)?;
+            let forma = validate_forma(input)?;
 
             Ok(Genus::Single(forma))
         }
