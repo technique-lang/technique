@@ -610,65 +610,57 @@ mod check {
         assert_eq!(input.trim_whitespace(), Ok(()));
         assert_eq!(input.source, "hello");
     }
+    /*
+        #[test]
+        fn forma_rules() {
+            let mut input = Parser::new();
+            input.initialize("A");
+            assert_eq!(input.parse_forma(), Ok(Forma("A")));
 
-    #[test]
-    fn forma_rules() {
-        let mut input = Parser::new();
-        input.initialize("A");
-        assert_eq!(input.parse_forma(), Ok(Forma("A")));
-
-        input.initialize("Apple");
-        assert_eq!(input.parse_forma(), Ok(Forma("Apple")));
-    }
-
+            input.initialize("Apple");
+            assert_eq!(input.parse_forma(), Ok(Forma("Apple")));
+        }
+    */
     #[test]
     fn single_genus_definitions() {
-        let mut input = Parser::new();
-        input.initialize("A");
-        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma("A"))));
-        assert_eq!(input.source, "");
+        let input = "A";
+        let result = parse_genus(input);
+        assert_eq!(result, Ok(Parsed(Genus::Single(Forma("A")), 1)));
 
-        input.initialize("Apple");
-        assert_eq!(input.parse_genus(), Ok(Genus::Single(Forma("Apple"))));
-        assert_eq!(input.source, "");
+        let input = "Apple";
+        let result = parse_genus(input);
+        assert_eq!(result, Ok(Parsed(Genus::Single(Forma("Apple")), 5)));
     }
 
     #[test]
     fn list_genus_definitions() {
-        let mut input = Parser::new();
-        input.initialize("[A]");
-        assert_eq!(input.parse_genus(), Ok(Genus::List(Forma("A"))));
-        assert_eq!(input.source, "");
+        let input = "[A]";
+        let result = parse_genus(input);
+        assert_eq!(result, Ok(Parsed(Genus::List(Forma("A")), 3)))
     }
 
     #[test]
     fn tuple_genus_definitions() {
-        let mut input = Parser::new();
-
-        input.initialize("(A, B)");
+        let input = "(A, B)";
+        let result = parse_genus(input);
         assert_eq!(
-            input.parse_genus(),
-            Ok(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            result,
+            Ok(Parsed(Genus::Tuple(vec![Forma("A"), Forma("B")]), 6))
         );
-        assert_eq!(input.source, "");
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
-
-        input.initialize("(A)");
-        assert_eq!(input.parse_genus(), Ok(Genus::Tuple(vec![Forma("A")])));
-        assert_eq!(input.source, "");
+        let input = "(A)";
+        let result = parse_genus(input);
+        assert_eq!(result, Ok(Parsed(Genus::Tuple(vec![Forma("A")]), 3)));
     }
 
     #[test]
     fn unit_genus_definitions() {
-        let mut input = Parser::new();
-
         // and now the special case of the unit type
-
-        input.initialize("()");
-        assert_eq!(input.parse_genus(), Ok(Genus::Unit));
-        assert_eq!(input.source, "")
+        let input = "()";
+        let result = parse_genus(input);
+        assert_eq!(result, Ok(Parsed(Genus::Unit, 2)));
     }
 
     #[test]
