@@ -50,6 +50,10 @@ struct Parser<'i> {
     count: usize,
 }
 
+/// Wrap parse results with the width consumed.
+#[derive(Debug, PartialEq)]
+struct Parsed<A>(A, usize);
+
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
@@ -340,7 +344,6 @@ impl<'i> Parser<'i> {
         })
     }
 
-
     fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
         self.parse_newline()?;
@@ -356,20 +359,6 @@ impl<'i> Parser<'i> {
             license,
             copyright,
             template,
-        })
-    }
-
-    fn parse_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
-        self.using_string(|text| {
-            let result = validate_identifier(text)?;
-            Ok(result)
-        })
-    }
-
-    fn parse_forma(&mut self) -> Result<Forma<'i>, ParsingError> {
-        self.using_string(|text| {
-            let result = validate_forma(text)?;
-            Ok(result)
         })
     }
 
@@ -438,29 +427,6 @@ impl<'i> Parser<'i> {
         })
     }
 
-    // idea: put the current Capture in the parser state?
-
-    fn parse_signature(&mut self) -> Result<Signature<'i>, ParsingError> {
-        let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
-
-        let (domain, range) = self.using_regex(re, |outer, cap| {
-            let one = cap
-                .get(1)
-                .ok_or(ParsingError::Expected("a Genus for the domain"))?;
-
-            let two = cap
-                .get(2)
-                .ok_or(ParsingError::Expected("a Genus for the range"))?;
-
-            let domain = outer.subparser_match(one, |inner| inner.parse_genus())?;
-            let range = outer.subparser_match(two, |inner| inner.parse_genus())?;
-
-            Ok((domain, range))
-        })?;
-
-        Ok(Signature { domain, range })
-    }
-
     /// declarations are of the form
     ///
     ///     identifier : signature
@@ -507,6 +473,61 @@ impl<'i> Parser<'i> {
 
         Ok(Procedure { name, signature })
     }
+    */
+}
+fn parse_identifier(content: &str) -> Result<Parsed<Identifier>, ParsingError> {
+    let result = validate_identifier(content)?;
+    Ok(Parsed(result, content.len()))
+}
+
+fn parse_forma(content: &str) -> Result<Parsed<Forma>, ParsingError> {
+    let result = validate_forma(content)?;
+    Ok(Parsed(result, content.len()))
+}
+
+fn parse_genus(content: &str) -> Result<Parsed<Genus>, ParsingError> {
+    let result = validate_genus(content)?;
+    Ok(Parsed(result, content.len()))
+}
+
+/// A signature is of the form
+///
+/// genus -> genus
+///
+/// terminated by an end of line.
+
+fn is_signature(content: &str) -> bool {
+    let re = Regex::new(r"\s*.+?\s*->\s*.+?\s*$").unwrap();
+
+    re.is_match(content)
+}
+
+fn parse_signature(content: &str) -> Result<Parsed<Signature>, ParsingError> {
+    let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
+
+    let cap = match re.captures(content) {
+        Some(c) => c,
+        None => return Err(ParsingError::InvalidSignature),
+    };
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("a Genus for the domain"))?;
+
+    let two = cap
+        .get(2)
+        .ok_or(ParsingError::Expected("a Genus for the range"))?;
+
+    let domain = validate_genus(one.as_str())?;
+    let range = validate_genus(two.as_str())?;
+
+    let zero = cap
+        .get(0)
+        .unwrap();
+
+    let l = zero.end();
+
+    Ok(Parsed(Signature { domain, range }, l))
 }
 
 #[cfg(test)]
@@ -652,42 +673,56 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut input = Parser::new();
-
-        input.initialize("A -> B");
+        let input = "A -> B";
+        let result = parse_signature(input);
         assert_eq!(
-            input.parse_signature(),
-            Ok(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
-            })
+            result,
+            Ok(Parsed(
+                Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                },
+                6
+            ))
         );
 
-        input.initialize("Beans -> Coffee");
+        let input = "Beans -> Coffee";
+        let result = parse_signature(input);
         assert_eq!(
-            input.parse_signature(),
-            Ok(Signature {
-                domain: Genus::Single(Forma("Beans")),
-                range: Genus::Single(Forma("Coffee"))
-            })
+            result,
+            Ok(Parsed(
+                Signature {
+                    domain: Genus::Single(Forma("Beans")),
+                    range: Genus::Single(Forma("Coffee"))
+                },
+                15
+            ))
         );
 
-        input.initialize("[Bits] -> Bob");
+        let input = "[Bits] -> Bob";
+        let result = parse_signature(input);
         assert_eq!(
-            input.parse_signature(),
-            Ok(Signature {
-                domain: Genus::List(Forma("Bits")),
-                range: Genus::Single(Forma("Bob"))
-            })
+            result,
+            Ok(Parsed(
+                Signature {
+                    domain: Genus::List(Forma("Bits")),
+                    range: Genus::Single(Forma("Bob"))
+                },
+                13
+            ))
         );
 
-        input.initialize("Complex -> (Real, Imaginary)");
+        let input = "Complex -> (Real, Imaginary)";
+        let result = parse_signature(input);
         assert_eq!(
-            input.parse_signature(),
-            Ok(Signature {
-                domain: Genus::Single(Forma("Complex")),
-                range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
-            })
+            result,
+            Ok(Parsed(
+                Signature {
+                    domain: Genus::Single(Forma("Complex")),
+                    range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+                },
+                28
+            ))
         );
     }
 
