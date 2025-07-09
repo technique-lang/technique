@@ -427,43 +427,8 @@ impl<'i> Parser<'i> {
         })
     }
 
-    /// declarations are of the form
-    ///
-    ///     identifier : signature
-    ///
-    /// where the optional signature is
-    ///
-    ///     genus -> genus
-    ///
-    fn parse_procedure_declaration(
-        &mut self,
-    ) -> Result<(Identifier<'i>, Option<Signature<'i>>), ParsingError> {
-        // These capture groups use .+? to make "match more than one, but
-        // lazily" so that the subsequent grabs of whitespace and the all
-        // important ':' character are not absorbed.
-        let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+    /*
 
-        self.using_regex(re, |outer, cap| {
-            let name = match cap.get(1) {
-                Some(one) => outer.subparser_match(one, |inner| {
-                    let result = inner.parse_identifier()?;
-                    Ok(result)
-                }),
-                None => Err(ParsingError::Expected("an Identifier")),
-            }?;
-
-            let signature = match cap.get(2) {
-                Some(two) => outer.subparser_match(two, |inner| {
-                    // println!("{:?}", two);
-                    let result = inner.parse_signature()?;
-                    Ok(Some(result))
-                }),
-                None => Ok(None),
-            }?;
-
-            Ok((name, signature))
-        })
-    }
 
     fn parse_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
         let (name, signature) = self.parse_procedure_declaration()?;
@@ -528,6 +493,60 @@ fn parse_signature(content: &str) -> Result<Parsed<Signature>, ParsingError> {
     let l = zero.end();
 
     Ok(Parsed(Signature { domain, range }, l))
+}
+
+/// declarations are of the form
+///
+///     identifier : signature
+///
+/// where the optional signature is
+///
+///     genus -> genus
+///
+/// as above.
+
+fn is_procedure_declaration(input: &str) -> bool {
+    let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+
+    re.is_match(input)
+}
+
+fn parse_procedure_declaration(
+    content: &str,
+) -> Result<Parsed<(Identifier, Option<Signature>)>, ParsingError> {
+    // These capture groups use .+? to make "match more than one, but
+    // lazily" so that the subsequent grabs of whitespace and the all
+    // important ':' character are not absorbed.
+    let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidDeclaration)?;
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected(
+            "an Identifier for the procedure declaration",
+        ))?;
+
+    let name = validate_identifier(one.as_str())?;
+
+    let signature = match cap.get(2) {
+        Some(two) => {
+            let result = parse_signature(two.as_str())?;
+            let signature = result.0;
+            Some(signature)
+        }
+        None => None,
+    };
+
+    let zero = cap
+        .get(0)
+        .unwrap();
+
+    let l = zero.end();
+
+    Ok(Parsed((name, signature), l))
 }
 
 #[cfg(test)]
@@ -718,6 +737,22 @@ mod check {
         );
     }
 
+    fn trim(s: &str) -> &str {
+        s.strip_prefix('\n')
+            .unwrap_or(s)
+    }
+
+    #[test]
+    fn detect_declarations_simple() {
+        let input = trim(
+            r#"
+making_coffee :
+            "#,
+        );
+
+        assert!(is_procedure_declaration(input));
+    }
+    /*
     #[test]
     fn declarations_simple() {
         let mut input = Parser::new();
@@ -769,6 +804,7 @@ mod check {
             ))
         );
     }
+    */
 }
 
 #[cfg(test)]
