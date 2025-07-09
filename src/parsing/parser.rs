@@ -782,79 +782,83 @@ mod check {
         );
     }
 
+    #[test]
+    fn declaration_simple() {
+        let content = "making_coffee :";
+
+        assert!(is_procedure_declaration(content));
+
+        let result = parse_procedure_declaration(content);
+        assert_eq!(result, Ok(Parsed((Identifier("making_coffee"), None), 15)));
+    }
+
+    #[test]
+    fn declaration_full() {
+        let content = "f : A -> B";
+        assert!(is_procedure_declaration(content));
+
+        let result = parse_procedure_declaration(content);
+        assert_eq!(
+            result,
+            Ok(Parsed(
+                (
+                    Identifier("f"),
+                    Some(Signature {
+                        domain: Genus::Single(Forma("A")),
+                        range: Genus::Single(Forma("B"))
+                    })
+                ),
+                10
+            ))
+        );
+
+        let content = "making_coffee : (Beans, Milk) -> [Coffee]";
+        assert!(is_procedure_declaration(content));
+
+        let result = parse_procedure_declaration(content);
+        assert_eq!(
+            result,
+            Ok(Parsed(
+                (
+                    Identifier("making_coffee"),
+                    Some(Signature {
+                        domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                        range: Genus::List(Forma("Coffee"))
+                    })
+                ),
+                41
+            ))
+        );
+
+        let content = "f : B";
+        // it should detect a procedure is being declared
+        assert!(is_procedure_declaration(content));
+
+        // but it is invalid
+        let result = parse_procedure_declaration(content);
+        assert!(result.is_err());
+    }
+}
+
+#[cfg(test)]
+mod verify {
+    use super::*;
+
     fn trim(s: &str) -> &str {
         s.strip_prefix('\n')
             .unwrap_or(s)
     }
 
     #[test]
-    fn detect_declarations_simple() {
-        let input = trim(
+    fn detect_declarations() {
+        let content = trim(
             r#"
 making_coffee :
             "#,
         );
 
-        assert!(is_procedure_declaration(input));
+        assert!(is_procedure_declaration(content));
     }
-    /*
-    #[test]
-    fn declarations_simple() {
-        let mut input = Parser::new();
-
-        input.initialize("making_coffee :");
-        assert_eq!(
-            input.parse_procedure_declaration(),
-            Ok((Identifier("making_coffee"), None))
-        );
-    }
-
-    #[test]
-    fn declarations_full() {
-        let mut input = Parser::new();
-
-        input.initialize("f : A -> B");
-        assert_eq!(
-            input.parse_procedure_declaration(),
-            Ok((
-                Identifier("f"),
-                Some(Signature {
-                    domain: Genus::Single(Forma("A")),
-                    range: Genus::Single(Forma("B"))
-                })
-            ))
-        );
-
-        input.initialize("making_coffee : Beans -> Coffee");
-        assert_eq!(
-            input.parse_procedure_declaration(),
-            Ok((
-                Identifier("making_coffee"),
-                Some(Signature {
-                    domain: Genus::Single(Forma("Beans")),
-                    range: Genus::Single(Forma("Coffee"))
-                })
-            ))
-        );
-
-        input.initialize("making_coffee : (Beans, Milk) -> Coffee");
-        assert_eq!(
-            input.parse_procedure_declaration(),
-            Ok((
-                Identifier("making_coffee"),
-                Some(Signature {
-                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                    range: Genus::Single(Forma("Coffee"))
-                })
-            ))
-        );
-    }
-    */
-}
-
-#[cfg(test)]
-mod verify {
-    use super::*;
 
     #[test]
     fn technique_header() {
@@ -892,65 +896,6 @@ mod verify {
 
 /*
     #[test]
-    fn check_procedure_signature() {
-        let p = grammar::signatureParser::new();
-
-        assert_eq!(
-            p.parse(""),
-            Ok(Signature {
-                domain: Genus::Single(Forma {
-                    name: "A".to_owned()
-                }),
-                range: Genus::Single(Forma {
-                    name: "B".to_owned()
-                })
-            })
-        );
-        assert!(p
-            .parse("A ->")
-            .is_err());
-        assert!(p
-            .parse("A")
-            .is_err());
-    }
-
-    #[test]
-    fn check_procedure_declaration() {
-        let d = grammar::declarationParser::new();
-
-        assert_eq!(d.parse("making_coffee :"), Ok("making_coffee".to_owned()));
-
-        let p = grammar::declaration_lineParser::new();
-
-        assert_eq!(
-            p.parse("f :"),
-            Ok(Procedure {
-                name: "f".to_owned(),
-                signature: None
-            })
-        );
-
-        assert!(p
-            .parse("cook-pizza :B")
-            .is_err());
-
-        assert_eq!(
-            p.parse("f : A -> B"),
-            Ok(Procedure {
-                name: "f".to_owned(),
-                signature: Some(Signature {
-                    domain: Genus::Single(Forma {
-                        name: "A".to_owned()
-                    }),
-                    range: Genus::Single(Forma {
-                        name: "B".to_owned()
-                    })
-                })
-            })
-        );
-    }
-
-    #[test]
     fn check_attribute_role() {
         let a = grammar::attributeParser::new();
 
@@ -981,31 +926,4 @@ mod verify {
             ])
         );
     }
-
-    // the verify_*() functions are where we do verificaton of larger composite
-    // structures built up from the smaller pieces check_*()'d above.
-
-    /*
-        #[test]
-        fn check_procedure_declaration_explicit() {
-            let input = "making_coffee : Beans, Milk -> Coffee";
-
-            // let declaration = TechniqueParser::parse(Rule::declaration, &input)
-            //     .expect("Unsuccessful Parse")
-            //     .next()
-            //     .unwrap();
-
-            assert_eq!(
-                input, // FIXME
-                "making_coffee : Beans, Milk -> Coffee"
-            );
-
-            // assert_eq!(identifier.as_str(), "making_coffee");
-            // assert_eq!(identifier.as_rule(), Rule::identifier);
-
-            // assert_eq!(signature.as_str(), "Beans, Milk -> Coffee");
-            // assert_eq!(signature.as_rule(), Rule::signature);
-
-        }
-    */
 */
