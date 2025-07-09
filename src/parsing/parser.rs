@@ -629,17 +629,62 @@ mod check {
         assert_eq!(input.trim_whitespace(), Ok(()));
         assert_eq!(input.source, "hello");
     }
-    /*
-        #[test]
-        fn forma_rules() {
-            let mut input = Parser::new();
-            input.initialize("A");
-            assert_eq!(input.parse_forma(), Ok(Forma("A")));
 
-            input.initialize("Apple");
-            assert_eq!(input.parse_forma(), Ok(Forma("Apple")));
-        }
-    */
+    // It is not clear that we will ever actually need parse_identifier(),
+    // parse_forma(), parse_genus(), or parse_signature() as they are not
+    // called directly, but even though they are not used in composition of
+    // the parse_procedure_declartaion() parser, it is highly likely that
+    // someday we will need to be able to parse them individually, perhaps for
+    // a future language server or code highlighter. So we test them properly
+    // here; in any event it exercises the underlying validate_*() codepaths.
+
+    #[test]
+    fn identifier_rules() {
+        let input = "p";
+        let result = parse_identifier(input);
+        assert_eq!(result, Ok(Parsed(Identifier("p"), 1)));
+
+        let input = "pizza";
+        let result = parse_identifier(input);
+        assert_eq!(result, Ok(Parsed(Identifier("pizza"), 5)));
+
+        let input = "pizza0";
+        let result = parse_identifier(input);
+        assert_eq!(result, Ok(Parsed(Identifier("pizza0"), 6)));
+
+        let input = "0pizza";
+        let result = parse_forma(input);
+        assert!(result.is_err());
+
+        let input = "cook_pizza";
+        let result = parse_identifier(input);
+        assert_eq!(result, Ok(Parsed(Identifier("cook_pizza"), 10)));
+
+        let input = "cook-pizza";
+        let result = parse_forma(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn forma_rules() {
+        let input = "A";
+        let result = parse_forma(input);
+        assert_eq!(result, Ok(Parsed(Forma("A"), 1)));
+
+        let input = "Apple";
+        let result = parse_forma(input);
+        assert_eq!(result, Ok(Parsed(Forma("Apple"), 5)));
+
+        let input = "apple";
+        let result = parse_forma(input);
+        assert_eq!(
+            result,
+            Err(ParsingError::ValidationFailure(
+                ValidationError::InvalidForma
+            ))
+        );
+    }
+
     #[test]
     fn single_genus_definitions() {
         let input = "A";
