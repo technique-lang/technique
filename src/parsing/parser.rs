@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::any::type_name;
-
 use regex::Regex;
 use technique::language::*;
 
@@ -11,7 +9,7 @@ pub fn parse_via_scopes(content: &str) {
     let mut input = Parser::new();
     input.initialize(content);
 
-    let result = input.parse_technique_header();
+    let result = input.read_technique_header();
     println!("{:?}", result);
     println!("{:?}", input);
 
@@ -71,124 +69,15 @@ impl<'i> Parser<'i> {
         self.offset = 0;
     }
 
-    fn using_string<A, F>(&mut self, f: F) -> Result<A, ParsingError>
-    where
-        F: Fn(&'i str) -> Result<A, ParsingError>,
-    {
-        let l = self
-            .source
-            .len();
-
-        let result = f(self.source)?;
+    fn advance<A>(&mut self, parsed: Parsed<A>) -> A {
+        let result = parsed.0;
+        let width = parsed.1;
 
         // advance the parser position
-        self.source = "";
-        self.offset += l;
+        self.source = &self.source[width..];
+        self.offset += width;
 
-        // and return
-        Ok(result)
-    }
-
-    fn using_regex<A, F>(&mut self, re: regex::Regex, mut f: F) -> Result<A, ParsingError>
-    where
-        F: FnMut(&mut Parser<'i>, regex::Captures<'i>) -> Result<A, ParsingError>,
-    {
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Err(ParsingError::Expected(type_name::<A>())),
-        };
-
-        let zero = cap
-            .get(0)
-            .unwrap();
-
-        let l = zero.end();
-
-        let mut parser = Parser {
-            scope: self
-                .scope
-                .clone(),
-            source: zero.as_str(),
-            count: self.count,
-            offset: self.offset + zero.start(),
-        };
-
-        // this is effectively self.f(cap)
-        let result = f(&mut parser, cap)?;
-
-        // advance the parser position
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        // and return
-        Ok(result)
-    }
-
-    fn try_using_regex<A, F>(
-        &mut self,
-        re: regex::Regex,
-        mut f: F,
-    ) -> Result<Option<A>, ParsingError>
-    where
-        F: FnMut(&mut Parser<'i>, regex::Captures<'i>) -> Result<A, ParsingError>,
-    {
-        let cap = match re.captures(self.source) {
-            Some(c) => c,
-            None => return Ok(None),
-        };
-
-        let zero = cap
-            .get(0)
-            .unwrap();
-
-        let l = zero.end();
-
-        let mut parser = Parser {
-            scope: self
-                .scope
-                .clone(),
-            source: zero.as_str(),
-            count: self.count,
-            offset: self.offset + zero.start(),
-        };
-
-        // this is effectively self.f(cap)
-        let result = f(&mut parser, cap)?;
-
-        // advance the parser position
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        // and return
-        Ok(Some(result))
-    }
-
-    /// Given a regex Match, fork a copy of the parser state and run a nested
-    /// parser on that derivative. Does NOT advance the parent's parser state;
-    /// the caller needs to do that via one of the using_*() methods.
-
-    fn subparser_match<A, F>(
-        &mut self,
-        needle: regex::Match<'i>,
-        mut f: F,
-    ) -> Result<A, ParsingError>
-    where
-        F: FnMut(&mut Parser<'i>) -> Result<A, ParsingError>,
-    {
-        let mut parser = Parser {
-            scope: self
-                .scope
-                .clone(),
-            source: needle.as_str(),
-            count: self.count,
-            offset: self.offset + needle.start(),
-        };
-
-        // this is effectively self.f()
-        let result = f(&mut parser)?;
-
-        // and return
-        Ok(result)
+        result
     }
 
     fn parse_from_start(&mut self) -> Result<(), ParsingError> {
@@ -201,11 +90,11 @@ impl<'i> Parser<'i> {
             _ => return Err(ParsingError::IllegalParserState),
         }
 
-        let _header = self.parse_technique_header()?;
+        let _header = self.read_technique_header()?;
         Ok(()) // FIXME
     }
 
-    fn parse_newline(&mut self) -> Result<(), ParsingError> {
+    fn read_newline(&mut self) -> Result<(), ParsingError> {
         for (i, c) in self
             .source
             .char_indices()
@@ -231,18 +120,36 @@ impl<'i> Parser<'i> {
             .source
             .len();
         Ok(())
-        // Err(ParsingError::UnexpectedEndOfInput)
     }
 
-    fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
-        let version = self.parse_magic_line()?;
-        self.parse_newline()?;
+    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
+        let content = self.source;
 
-        let (license, copyright) = self.parse_spdx_line()?;
-        self.parse_newline()?;
+        let version = if is_magic_line(content) {
+            let result = self.advance(parse_magic_line(content)?);
+            self.read_newline()?;
+            result
+        } else {
+            return Err(ParsingError::Expected("The % symbol"));
+        };
 
-        let template = self.parse_template_line()?;
-        self.parse_newline()?;
+        let content = self.source;
+        let (license, copyright) = if is_spdx_line(content) {
+            let result = self.advance(parse_spdx_line(content)?);
+            self.read_newline()?;
+            result
+        } else {
+            (None, None)
+        };
+
+        let content = self.source;
+        let template = if is_template_line(content) {
+            let result = self.advance(parse_template_line(content)?);
+            self.read_newline()?;
+            result
+        } else {
+            None
+        };
 
         Ok(Metadata {
             version,
@@ -285,18 +192,8 @@ impl<'i> Parser<'i> {
 
         Ok(())
     }
-
-    /*
-    fn parse_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        let (name, signature) = self.parse_procedure_declaration()?;
-
-        // let body = self.parse_body()?;
-        self.parse_newline()?;
-
-        Ok(Procedure { name, signature })
-    }
-    */
 }
+
 fn parse_identifier(content: &str) -> Result<Parsed<Identifier>, ParsingError> {
     let result = validate_identifier(content)?;
     Ok(Parsed(result, content.len()))
@@ -822,8 +719,9 @@ making_coffee :
         let mut input = Parser::new();
         input.initialize("% technique v1");
 
+        let metadata = input.read_technique_header();
         assert_eq!(
-            input.parse_technique_header(),
+            metadata,
             Ok(Metadata {
                 version: 1,
                 license: None,
@@ -832,15 +730,17 @@ making_coffee :
             })
         );
 
-        input.initialize(
+        input.initialize(trim(
             r#"
 % technique v1
 ! MIT; (c) ACME, Inc
 & checklist
             "#,
-        );
+        ));
+
+        let metadata = input.read_technique_header();
         assert_eq!(
-            input.parse_technique_header(),
+            metadata,
             Ok(Metadata {
                 version: 1,
                 license: Some("MIT"),
