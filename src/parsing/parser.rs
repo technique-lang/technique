@@ -251,82 +251,6 @@ impl<'i> Parser<'i> {
         Ok(1)
     }
 
-    // This one is awkward because if a SPDX line is present, then it really needs
-    // to have a license, whereas the copyright part is optional.
-    fn parse_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError> {
-        // First establish we have a valid line.
-
-        if self
-            .source
-            .len()
-            == 0
-        {
-            return Ok((None, None));
-        }
-
-        let x = self
-            .source
-            .chars()
-            .next()
-            .unwrap();
-
-        if x != '!' {
-            return Err(ParsingError::InvalidHeader);
-        }
-
-        let mut lines = self
-            .source
-            .lines();
-        let line = lines
-            .next()
-            .unwrap();
-
-        let re = Regex::new(r"!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?").unwrap();
-
-        let cap = re
-            .captures(line)
-            .ok_or(ParsingError::Unrecognized)?;
-
-        // Get the length of the match as a whole so we can advance the parser
-        // state later.
-
-        let l = cap
-            .get(0)
-            .ok_or(ParsingError::Unrecognized)?
-            .end();
-
-        // Now to extracting the values we need. We get the license code from
-        // the first capture. It must be present otherwise we don't have a
-        // valid SPDX line (and we declared that we're on an SPDX line by the
-        // presence of the '!' character at the beginning of the line).
-
-        let one = cap
-            .get(1)
-            .map(|v| v.as_str())
-            .ok_or(ParsingError::InvalidHeader)?;
-
-        let one = validate_license(one)?;
-        let one = Some(one);
-
-        // Now dig out the copyright, if present:
-
-        let two = cap
-            .get(2)
-            .map(|v| v.as_str());
-
-        let two = match two {
-            Some(text) => Some(validate_copyright(text)?),
-            None => None,
-        };
-
-        // Advance the parser state, and return.
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok((one, two))
-    }
-
     fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
         self.parse_newline()?;
@@ -499,6 +423,46 @@ fn parse_procedure_declaration(
     Ok(Parsed((name, signature), l))
 }
 
+fn is_spdx_line(input: &str) -> bool {
+    let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
+
+    re.is_match(input)
+}
+
+// This one is awkward because if a SPDX line is present, then it really needs
+// to have a license, whereas the copyright part is optional.
+fn parse_spdx_line(content: &str) -> Result<Parsed<(Option<&str>, Option<&str>)>, ParsingError> {
+    let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidHeader)?;
+
+    // Now to extracting the values we need. We get the license code from
+    // the first capture. It must be present otherwise we don't have a
+    // valid SPDX line (and we declared that we're on an SPDX line by the
+    // presence of the '!' character at the beginning of the line).
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("the license name"))?;
+
+    let result = validate_license(one.as_str())?;
+    let license = Some(result);
+
+    // Now dig out the copyright, if present:
+
+    let copyright = match cap.get(2) {
+        Some(two) => {
+            let result = validate_copyright(two.as_str())?;
+            Some(result)
+        }
+        None => None,
+    };
+
+    Ok(Parsed((license, copyright), content.len()))
+}
+
 fn is_template_line(input: &str) -> bool {
     let re = Regex::new(r"&\s*.+").unwrap();
 
@@ -542,27 +506,37 @@ mod check {
 
     #[test]
     fn header_spdx() {
-        let mut input = Parser::new();
+        let content = "! PD";
+        assert!(is_spdx_line(content));
 
-        input.initialize("! PD");
-        assert_eq!(input.parse_spdx_line(), Ok((Some("PD"), None)));
+        let result = parse_spdx_line(content);
+        assert_eq!(result, Ok(Parsed((Some("PD"), None), 4)));
 
-        input.initialize("! MIT; (c) ACME, Inc.");
+        let content = "! MIT; (c) ACME, Inc.";
+        assert!(is_spdx_line(content));
+
+        let result = parse_spdx_line(content);
+        assert_eq!(result, Ok(Parsed((Some("MIT"), Some("ACME, Inc.")), 21)));
+
+        let content = "! MIT; (C) 2024 ACME, Inc.";
+        assert!(is_spdx_line(content));
+
+        let result = parse_spdx_line(content);
         assert_eq!(
-            input.parse_spdx_line(),
-            Ok((Some("MIT"), Some("ACME, Inc.")))
+            result,
+            Ok(Parsed((Some("MIT"), Some("2024 ACME, Inc.")), 26))
         );
 
-        input.initialize("! MIT; (C) 2024 ACME, Inc.");
-        assert_eq!(
-            input.parse_spdx_line(),
-            Ok((Some("MIT"), Some("2024 ACME, Inc.")))
-        );
+        let content = "! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.";
+        assert!(is_spdx_line(content));
 
-        input.initialize("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.");
+        let result = parse_spdx_line(content);
         assert_eq!(
-            input.parse_spdx_line(),
-            Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
+            result,
+            Ok(Parsed(
+                (Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")),
+                41
+            ))
         );
     }
 
