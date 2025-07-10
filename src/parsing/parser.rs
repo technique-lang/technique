@@ -396,40 +396,7 @@ impl<'i> Parser<'i> {
         Ok(())
     }
 
-    fn parse_genus(&mut self) -> Result<Genus<'i>, ParsingError> {
-        self.trim_whitespace()?;
-        self.ensure_nonempty()?;
-
-        let first = self
-            .source
-            .chars()
-            .next()
-            .unwrap();
-
-        let re = match first {
-            '[' => {
-                // consume up to closing bracket
-                Regex::new(r"\[.+?\]").unwrap()
-            }
-            '(' => {
-                // consume up to closing parenthesis
-                Regex::new(r"\(.*?\)").unwrap()
-            }
-            _ => Regex::new(r".+").unwrap(),
-        };
-
-        self.using_regex(re, |outer, _| {
-            println!("{:?}", outer.source);
-            outer.using_string(|text| {
-                let result = validate_genus(text)?;
-                Ok(result)
-            })
-        })
-    }
-
     /*
-
-
     fn parse_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
         let (name, signature) = self.parse_procedure_declaration()?;
 
@@ -633,7 +600,7 @@ mod check {
     // It is not clear that we will ever actually need parse_identifier(),
     // parse_forma(), parse_genus(), or parse_signature() as they are not
     // called directly, but even though they are not used in composition of
-    // the parse_procedure_declartaion() parser, it is highly likely that
+    // the parse_procedure_declaration() parser, it is highly likely that
     // someday we will need to be able to parse them individually, perhaps for
     // a future language server or code highlighter. So we test them properly
     // here; in any event it exercises the underlying validate_*() codepaths.
