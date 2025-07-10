@@ -95,19 +95,29 @@ impl<'i> Parser<'i> {
     }
 
     /// consume up to but not including newline (or end)
-    fn take_line(&mut self) -> Result<&'i str, ParsingError> {
+    fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&'i str) -> Result<A, ParsingError>,
+    {
         match self
             .source
             .split_once('\n')
         {
             Some((before, after)) => {
+                let result = f(before)?;
+
                 self.source = after;
-                Ok(before)
+                self.offset += before.len() + 1;
+                self.count += 1;
+                Ok(result)
             }
             None => {
                 let before = self.source;
+                let result = f(before)?;
+
                 self.source = "";
-                Ok(before)
+                self.offset += before.len() + 1;
+                Ok(result)
             }
         }
     }
@@ -142,30 +152,31 @@ impl<'i> Parser<'i> {
 
     fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         // Process magic line
-        let content = self.take_line()?;
-        let version = if is_magic_line(content) {
-            parse_magic_line(content)?.0
-        } else {
-            return Err(ParsingError::Expected("The % symbol"));
-        };
+        let version = self.take_line(|content| {
+            if is_magic_line(content) {
+                Ok(parse_magic_line(content)?.0)
+            } else {
+                Err(ParsingError::Expected("The % symbol"))
+            }
+        })?;
 
         // Process SPDX line
-        let content = self.take_line()?;
-        let (license, copyright) = {
+        let (license, copyright) = self.take_line(|content| {
             if is_spdx_line(content) {
-                parse_spdx_line(content)?.0
+                Ok(parse_spdx_line(content)?.0)
             } else {
-                (None, None)
+                Ok((None, None))
             }
-        };
+        })?;
 
         // Process template line
-        let content = self.take_line()?;
-        let template = if is_template_line(content) {
-            parse_template_line(content)?.0
-        } else {
-            None
-        };
+        let template = self.take_line(|content| {
+            if is_template_line(content) {
+                Ok(parse_template_line(content)?.0)
+            } else {
+                Ok(None)
+            }
+        })?;
 
         Ok(Metadata {
             version,
