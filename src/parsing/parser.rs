@@ -234,23 +234,6 @@ impl<'i> Parser<'i> {
         // Err(ParsingError::UnexpectedEndOfInput)
     }
 
-    // hard wire the version for now. If we ever grow to supporting multiple
-    // major versions then this will become a lot more complicated.
-    fn parse_magic_line(&mut self) -> Result<u8, ParsingError> {
-        let re = Regex::new(r"%\s*technique\s+v1").unwrap();
-
-        let m = re
-            .find(self.source)
-            .ok_or(ParsingError::Unrecognized)?;
-
-        let l = m.end();
-
-        self.source = &self.source[l..];
-        self.offset += l;
-
-        Ok(1)
-    }
-
     fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
         self.parse_newline()?;
@@ -379,10 +362,10 @@ fn parse_signature(content: &str) -> Result<Parsed<Signature>, ParsingError> {
 ///
 /// as above.
 
-fn is_procedure_declaration(input: &str) -> bool {
+fn is_procedure_declaration(content: &str) -> bool {
     let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
 
-    re.is_match(input)
+    re.is_match(content)
 }
 
 fn parse_procedure_declaration(
@@ -423,10 +406,29 @@ fn parse_procedure_declaration(
     Ok(Parsed((name, signature), l))
 }
 
-fn is_spdx_line(input: &str) -> bool {
+fn is_magic_line(content: &str) -> bool {
+    let re = Regex::new(r"%\s*technique").unwrap();
+
+    re.is_match(content)
+}
+
+// hard wire the version for now. If we ever grow to supporting multiple major
+// versions then this will be a lot more complicated than just dealing with a
+// different natural number here.
+fn parse_magic_line(content: &str) -> Result<Parsed<u8>, ParsingError> {
+    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+    if re.is_match(content) {
+        Ok(Parsed(1, content.len()))
+    } else {
+        Err(ParsingError::InvalidHeader)
+    }
+}
+
+fn is_spdx_line(content: &str) -> bool {
     let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
 
-    re.is_match(input)
+    re.is_match(content)
 }
 
 // This one is awkward because if a SPDX line is present, then it really needs
@@ -463,10 +465,10 @@ fn parse_spdx_line(content: &str) -> Result<Parsed<(Option<&str>, Option<&str>)>
     Ok(Parsed((license, copyright), content.len()))
 }
 
-fn is_template_line(input: &str) -> bool {
+fn is_template_line(content: &str) -> bool {
     let re = Regex::new(r"&\s*.+").unwrap();
 
-    re.is_match(input)
+    re.is_match(content)
 }
 
 fn parse_template_line(content: &str) -> Result<Parsed<Option<&str>>, ParsingError> {
@@ -491,17 +493,24 @@ mod check {
 
     #[test]
     fn magic_line() {
-        let mut input = Parser::new();
+        let content = "% technique v1";
+        assert!(is_magic_line(content));
 
-        input.initialize("% technique v1");
-        assert_eq!(input.parse_magic_line(), Ok(1));
+        let result = parse_magic_line(content);
+        assert_eq!(result, Ok(Parsed(1, 14)));
 
-        input.initialize("%technique v1");
-        assert_eq!(input.parse_magic_line(), Ok(1));
+        let content = "%technique v1";
+        assert!(is_magic_line(content));
+
+        let result = parse_magic_line(content);
+        assert_eq!(result, Ok(Parsed(1, 13)));
+
+        let content = "%techniquev1";
+        assert!(is_magic_line(content));
 
         // this is rejected because the technique keyword isn't present.
-        input.initialize("%techniquev1");
-        assert_eq!(input.parse_magic_line(), Err(ParsingError::Unrecognized));
+        let result = parse_magic_line(content);
+        assert!(result.is_err());
     }
 
     #[test]
