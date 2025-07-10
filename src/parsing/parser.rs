@@ -94,6 +94,24 @@ impl<'i> Parser<'i> {
         Ok(()) // FIXME
     }
 
+    /// consume up to but not including newline (or end)
+    fn take_line(&mut self) -> Result<&'i str, ParsingError> {
+        match self
+            .source
+            .split_once('\n')
+        {
+            Some((before, after)) => {
+                self.source = after;
+                Ok(before)
+            }
+            None => {
+                let before = self.source;
+                self.source = "";
+                Ok(before)
+            }
+        }
+    }
+
     fn read_newline(&mut self) -> Result<(), ParsingError> {
         for (i, c) in self
             .source
@@ -123,30 +141,28 @@ impl<'i> Parser<'i> {
     }
 
     fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
-        let content = self.source;
-
+        // Process magic line
+        let content = self.take_line()?;
         let version = if is_magic_line(content) {
-            let result = self.advance(parse_magic_line(content)?);
-            self.read_newline()?;
-            result
+            parse_magic_line(content)?.0
         } else {
             return Err(ParsingError::Expected("The % symbol"));
         };
 
-        let content = self.source;
-        let (license, copyright) = if is_spdx_line(content) {
-            let result = self.advance(parse_spdx_line(content)?);
-            self.read_newline()?;
-            result
-        } else {
-            (None, None)
+        // Process SPDX line
+        let content = self.take_line()?;
+        let (license, copyright) = {
+            if is_spdx_line(content) {
+                parse_spdx_line(content)?.0
+            } else {
+                (None, None)
+            }
         };
 
-        let content = self.source;
+        // Process template line
+        let content = self.take_line()?;
         let template = if is_template_line(content) {
-            let result = self.advance(parse_template_line(content)?);
-            self.read_newline()?;
-            result
+            parse_template_line(content)?.0
         } else {
             None
         };
