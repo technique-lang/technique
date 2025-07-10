@@ -327,23 +327,6 @@ impl<'i> Parser<'i> {
         Ok((one, two))
     }
 
-    fn parse_template_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
-        let re = Regex::new(r"&\s*(.+)").unwrap();
-
-        self.try_using_regex(re, |outer, cap| {
-            let one = cap
-                .get(1)
-                .ok_or(ParsingError::Expected("a template"))?;
-
-            outer.subparser_match(one, |inner| {
-                inner.using_string(|text| {
-                    let result = validate_template(text)?;
-                    Ok(result)
-                })
-            })
-        })
-    }
-
     fn parse_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         let version = self.parse_magic_line()?;
         self.parse_newline()?;
@@ -516,6 +499,28 @@ fn parse_procedure_declaration(
     Ok(Parsed((name, signature), l))
 }
 
+fn is_template_line(input: &str) -> bool {
+    let re = Regex::new(r"&\s*.+").unwrap();
+
+    re.is_match(input)
+}
+
+fn parse_template_line(content: &str) -> Result<Parsed<Option<&str>>, ParsingError> {
+    let re = Regex::new(r"^&\s*(.+)$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidHeader)?;
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("a template name"))?;
+
+    let result = validate_template(one.as_str())?;
+
+    Ok(Parsed(Some(result), content.len()))
+}
+
 #[cfg(test)]
 mod check {
     use super::*;
@@ -563,15 +568,17 @@ mod check {
 
     #[test]
     fn header_template() {
-        let mut input = Parser::new();
-        input.initialize("& checklist");
-        assert_eq!(input.parse_template_line(), Ok(Some("checklist")));
+        let content = "& checklist";
+        assert!(is_template_line(content));
 
-        input.initialize("& nasa-flight-plan,v4.0");
-        assert_eq!(
-            input.parse_template_line(),
-            Ok(Some("nasa-flight-plan,v4.0"))
-        );
+        let result = parse_template_line(content);
+        assert_eq!(result, Ok(Parsed(Some("checklist"), 11)));
+
+        let content = "& nasa-flight-plan,v4.0";
+        assert!(is_template_line(content));
+
+        let result = parse_template_line(content);
+        assert_eq!(result, Ok(Parsed(Some("nasa-flight-plan,v4.0"), 23)));
     }
 
     // now we test incremental parsing
