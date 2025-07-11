@@ -217,7 +217,7 @@ impl<'i> Parser<'i> {
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, content: &'i str) -> Parser<'i> {
-        let mut parser = Parser {
+        let parser = Parser {
             scope: self
                 .scope
                 .clone(),
@@ -226,7 +226,6 @@ impl<'i> Parser<'i> {
             offset: self.offset,
         };
 
-        parser.trim_whitespace();
         // and return
         parser
     }
@@ -300,15 +299,16 @@ impl<'i> Parser<'i> {
             is_procedure_declaration,
             is_procedure_declaration,
             |parser| {
-                parser.take_line(|subcontent| {
-                    if is_procedure_declaration(subcontent) {
-                        Ok(parse_procedure_declaration(subcontent)?)
-                    } else {
-                        Err(ParsingError::Expected(
-                            "Not sure what we expected, actually",
-                        ))
-                    }
-                })
+                let subcontent = parser
+                    .entire()
+                    .trim_start();
+                if is_procedure_declaration(subcontent) {
+                    Ok(parse_procedure_declaration(subcontent)?)
+                } else {
+                    Err(ParsingError::Expected(
+                        "Not sure what we expected, actually",
+                    ))
+                }
             },
         )?;
 
@@ -829,7 +829,7 @@ mod check {
 
         let result = input.take_block_chars('{', '}', |parser| {
             let text = parser.entire();
-            assert_eq!(text, "todo() ");
+            assert_eq!(text, " todo() ");
             Ok(true)
         });
         assert_eq!(result, Ok(true));
