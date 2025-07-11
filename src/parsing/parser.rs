@@ -121,6 +121,60 @@ impl<'i> Parser<'i> {
         }
     }
 
+    fn entire(&self) -> &'i str {
+        self.source
+    }
+
+    fn take_until<A, F, P>(&mut self, predicate: P, function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        P: Fn(&str) -> bool,
+    {
+        let mut i = 0;
+
+        for line in self
+            .source
+            .lines()
+        {
+            if predicate(line) {
+                // Found the predicate, include this line and stop
+                break;
+            }
+            i += line.len() + 1; // plus newline
+        }
+
+        // Extract the substring from start to the found position
+        let block = &self.source[..i];
+
+        let mut parser = self.subparser(block);
+
+        // Pass to closure for processing
+        let result = function(&mut parser)?;
+
+        // Advance parser state
+        self.source = &self.source[i..];
+        self.offset += i;
+
+        Ok(result)
+    }
+
+    /// Given a string, fork a copy of the parser state and run a nested
+    /// parser on that string. Does NOT advance the parent's parser state;
+    /// the caller needs to do that via one of the take_*() methods.
+    fn subparser(&self, content: &'i str) -> Parser<'i> {
+        let parser = Parser {
+            scope: self
+                .scope
+                .clone(),
+            source: content,
+            count: self.count,
+            offset: self.offset,
+        };
+
+        // and return
+        parser
+    }
+
     fn read_newline(&mut self) -> Result<(), ParsingError> {
         for (i, c) in self
             .source
@@ -183,6 +237,25 @@ impl<'i> Parser<'i> {
             copyright,
             template,
         })
+    }
+
+    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
+        let declaration = self.take_until(is_procedure_declaration, |parser| {
+            parser.take_line(|subcontent| {
+                if is_procedure_declaration(subcontent) {
+                    Ok(parse_procedure_declaration(subcontent)?)
+                } else {
+                    Err(ParsingError::Expected(
+                        "Not sure what we expected, actually",
+                    ))
+                }
+            })
+        })?;
+
+        let name = declaration.0;
+        let signature = declaration.1;
+
+        Ok(Procedure { name, signature })
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
