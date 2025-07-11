@@ -125,19 +125,30 @@ impl<'i> Parser<'i> {
         self.source
     }
 
-    fn take_until<A, F, P>(&mut self, predicate: P, function: F) -> Result<A, ParsingError>
+    fn take_block_lines<A, F, P1, P2>(
+        &mut self,
+        start_predicate: P1,
+        end_predicate: P2,
+        function: F,
+    ) -> Result<A, ParsingError>
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
-        P: Fn(&str) -> bool,
+        P1: Fn(&str) -> bool,
+        P2: Fn(&str) -> bool,
     {
         let mut i = 0;
+        let mut begun = false;
 
         for line in self
             .source
             .lines()
         {
-            if predicate(line) {
-                // Found the predicate, include this line and stop
+            if !begun && start_predicate(line) {
+                begun = true;
+                i += line.len();
+                continue;
+            } else if begun && end_predicate(line) {
+                // don't include this line
                 break;
             }
             i += line.len() + 1; // plus newline
@@ -158,11 +169,55 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
+    fn take_block_chars<A, F>(
+        &mut self,
+        start_char: char,
+        end_char: char,
+        function: F,
+    ) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let mut l = 0;
+        let mut begun = false;
+
+        for (i, c) in self
+            .source
+            .char_indices()
+        {
+            if !begun && c == start_char {
+                begun = true;
+            } else if begun && c == end_char {
+                l = i + 1; // add end character
+                break;
+            }
+        }
+        if !begun {
+            return Err(ParsingError::Expected("the start character"));
+        }
+        if l != 0 {
+            return Err(ParsingError::Expected("the end character"));
+        }
+
+        let block = &self.source[..l];
+
+        let mut parser = self.subparser(block);
+
+        // Pass to closure for processing
+        let result = function(&mut parser)?;
+
+        // Advance parser state
+        self.source = &self.source[l..];
+        self.offset += l;
+
+        Ok(result)
+    }
+
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, content: &'i str) -> Parser<'i> {
-        let parser = Parser {
+        let mut parser = Parser {
             scope: self
                 .scope
                 .clone(),
@@ -171,6 +226,7 @@ impl<'i> Parser<'i> {
             offset: self.offset,
         };
 
+        parser.trim_whitespace();
         // and return
         parser
     }
@@ -240,17 +296,21 @@ impl<'i> Parser<'i> {
     }
 
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        let declaration = self.take_until(is_procedure_declaration, |parser| {
-            parser.take_line(|subcontent| {
-                if is_procedure_declaration(subcontent) {
-                    Ok(parse_procedure_declaration(subcontent)?)
-                } else {
-                    Err(ParsingError::Expected(
-                        "Not sure what we expected, actually",
-                    ))
-                }
-            })
-        })?;
+        let declaration = self.take_block_lines(
+            is_procedure_declaration,
+            is_procedure_declaration,
+            |parser| {
+                parser.take_line(|subcontent| {
+                    if is_procedure_declaration(subcontent) {
+                        Ok(parse_procedure_declaration(subcontent)?)
+                    } else {
+                        Err(ParsingError::Expected(
+                            "Not sure what we expected, actually",
+                        ))
+                    }
+                })
+            },
+        )?;
 
         let name = declaration.0;
         let signature = declaration.1;
@@ -815,6 +875,66 @@ making_coffee :
                 license: Some("MIT"),
                 copyright: Some("ACME, Inc"),
                 template: Some("checklist")
+            })
+        );
+    }
+
+    #[test]
+    fn procedure_declaration_one() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+making_coffee : (Beans, Milk) -> Coffee
+
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("making_coffee"),
+                signature: Some(Signature {
+                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                    range: Genus::Single(Forma("Coffee"))
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn procedure_declaration_two() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+first : A -> B
+
+second : C -> D
+
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("first"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                })
+            })
+        );
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("second"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("C")),
+                    range: Genus::Single(Forma("D"))
+                })
             })
         );
     }
