@@ -269,17 +269,22 @@ impl<'i> Parser<'i> {
         Ok(())
     }
 
-    fn trim_whitespace(&mut self) -> Result<(), ParsingError> {
+    /// Trim any leading whitespace (space, tab, newline) from the front of
+    /// the current parser text.
+    fn trim_whitespace(&mut self) {
         let mut l = 0;
+        let mut n = 0;
 
-        for (i, c) in self
+        for c in self
             .source
-            .char_indices()
+            .chars()
         {
             if c == '\n' {
-                break;
+                n += 1;
+                l += 1;
+                continue;
             } else if c.is_ascii_whitespace() {
-                l = i + 1;
+                l += 1;
                 continue;
             } else {
                 break;
@@ -287,9 +292,8 @@ impl<'i> Parser<'i> {
         }
 
         self.source = &self.source[l..];
+        self.count += n;
         self.offset += l;
-
-        Ok(())
     }
 }
 
@@ -560,8 +564,14 @@ mod check {
     fn consume_whitespace() {
         let mut input = Parser::new();
         input.initialize("  hello");
-        assert_eq!(input.trim_whitespace(), Ok(()));
+        input.trim_whitespace();
         assert_eq!(input.source, "hello");
+
+        input.initialize("\n \nthere");
+        input.trim_whitespace();
+        assert_eq!(input.source, "there");
+        assert_eq!(input.count, 2);
+        assert_eq!(input.offset, 3);
     }
 
     // It is not clear that we will ever actually need parse_identifier(),
