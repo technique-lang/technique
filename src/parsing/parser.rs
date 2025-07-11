@@ -195,11 +195,11 @@ impl<'i> Parser<'i> {
         if !begun {
             return Err(ParsingError::Expected("the start character"));
         }
-        if l != 0 {
+        if l == 0 {
             return Err(ParsingError::Expected("the end character"));
         }
 
-        let block = &self.source[..l];
+        let block = &self.source[1..l - 1];
 
         let mut parser = self.subparser(block);
 
@@ -820,6 +820,31 @@ mod check {
         // but it is invalid
         let result = parse_procedure_declaration(content);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn character_delimited_blocks() {
+        let mut input = Parser::new();
+        input.initialize("{ todo() }");
+
+        let result = input.take_block_chars('{', '}', |parser| {
+            let text = parser.entire();
+            assert_eq!(text, "todo() ");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+
+        // this is somewhat contrived as we would not be using this to parse
+        // strings (We will need to preserve whitespace insside strings when
+        // we find ourselves parsing them, so subparser() won't work.
+        input.initialize("XhelloX world");
+
+        let result = input.take_block_chars('X', 'X', |parser| {
+            let text = parser.entire();
+            assert_eq!(text, "hello");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
     }
 }
 
