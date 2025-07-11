@@ -50,7 +50,7 @@ struct Parser<'i> {
 
 /// Wrap parse results with the width consumed.
 #[derive(Debug, PartialEq)]
-struct Parsed<A>(A, usize);
+struct Parsed<'i>(&'i str);
 
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
@@ -69,15 +69,14 @@ impl<'i> Parser<'i> {
         self.offset = 0;
     }
 
-    fn advance<A>(&mut self, parsed: Parsed<A>) -> A {
-        let result = parsed.0;
-        let width = parsed.1;
+    fn advance(&mut self, parsed: Parsed) {
+        let width = parsed
+            .0
+            .len();
 
         // advance the parser position
         self.source = &self.source[width..];
         self.offset += width;
-
-        result
     }
 
     fn parse_from_start(&mut self) -> Result<(), ParsingError> {
@@ -154,7 +153,7 @@ impl<'i> Parser<'i> {
         // Process magic line
         let version = self.take_line(|content| {
             if is_magic_line(content) {
-                Ok(parse_magic_line(content)?.0)
+                Ok(parse_magic_line(content)?)
             } else {
                 Err(ParsingError::Expected("The % symbol"))
             }
@@ -163,7 +162,7 @@ impl<'i> Parser<'i> {
         // Process SPDX line
         let (license, copyright) = self.take_line(|content| {
             if is_spdx_line(content) {
-                Ok(parse_spdx_line(content)?.0)
+                Ok(parse_spdx_line(content)?)
             } else {
                 Ok((None, None))
             }
@@ -172,7 +171,7 @@ impl<'i> Parser<'i> {
         // Process template line
         let template = self.take_line(|content| {
             if is_template_line(content) {
-                Ok(parse_template_line(content)?.0)
+                Ok(parse_template_line(content)?)
             } else {
                 Ok(None)
             }
@@ -221,19 +220,19 @@ impl<'i> Parser<'i> {
     }
 }
 
-fn parse_identifier(content: &str) -> Result<Parsed<Identifier>, ParsingError> {
+fn parse_identifier(content: &str) -> Result<Identifier, ParsingError> {
     let result = validate_identifier(content)?;
-    Ok(Parsed(result, content.len()))
+    Ok(result)
 }
 
-fn parse_forma(content: &str) -> Result<Parsed<Forma>, ParsingError> {
+fn parse_forma(content: &str) -> Result<Forma, ParsingError> {
     let result = validate_forma(content)?;
-    Ok(Parsed(result, content.len()))
+    Ok(result)
 }
 
-fn parse_genus(content: &str) -> Result<Parsed<Genus>, ParsingError> {
+fn parse_genus(content: &str) -> Result<Genus, ParsingError> {
     let result = validate_genus(content)?;
-    Ok(Parsed(result, content.len()))
+    Ok(result)
 }
 
 /// A signature is of the form
@@ -248,7 +247,7 @@ fn is_signature(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn parse_signature(content: &str) -> Result<Parsed<Signature>, ParsingError> {
+fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
     let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
 
     let cap = match re.captures(content) {
@@ -267,13 +266,7 @@ fn parse_signature(content: &str) -> Result<Parsed<Signature>, ParsingError> {
     let domain = validate_genus(one.as_str())?;
     let range = validate_genus(two.as_str())?;
 
-    let zero = cap
-        .get(0)
-        .unwrap();
-
-    let l = zero.end();
-
-    Ok(Parsed(Signature { domain, range }, l))
+    Ok(Signature { domain, range })
 }
 
 /// declarations are of the form
@@ -294,7 +287,7 @@ fn is_procedure_declaration(content: &str) -> bool {
 
 fn parse_procedure_declaration(
     content: &str,
-) -> Result<Parsed<(Identifier, Option<Signature>)>, ParsingError> {
+) -> Result<(Identifier, Option<Signature>), ParsingError> {
     // These capture groups use .+? to make "match more than one, but
     // lazily" so that the subsequent grabs of whitespace and the all
     // important ':' character are not absorbed.
@@ -315,19 +308,12 @@ fn parse_procedure_declaration(
     let signature = match cap.get(2) {
         Some(two) => {
             let result = parse_signature(two.as_str())?;
-            let signature = result.0;
-            Some(signature)
+            Some(result)
         }
         None => None,
     };
 
-    let zero = cap
-        .get(0)
-        .unwrap();
-
-    let l = zero.end();
-
-    Ok(Parsed((name, signature), l))
+    Ok((name, signature))
 }
 
 fn is_magic_line(content: &str) -> bool {
@@ -339,11 +325,11 @@ fn is_magic_line(content: &str) -> bool {
 // hard wire the version for now. If we ever grow to supporting multiple major
 // versions then this will be a lot more complicated than just dealing with a
 // different natural number here.
-fn parse_magic_line(content: &str) -> Result<Parsed<u8>, ParsingError> {
+fn parse_magic_line(content: &str) -> Result<u8, ParsingError> {
     let re = Regex::new(r"%\s*technique\s+v1").unwrap();
 
     if re.is_match(content) {
-        Ok(Parsed(1, content.len()))
+        Ok(1)
     } else {
         Err(ParsingError::InvalidHeader)
     }
@@ -357,7 +343,7 @@ fn is_spdx_line(content: &str) -> bool {
 
 // This one is awkward because if a SPDX line is present, then it really needs
 // to have a license, whereas the copyright part is optional.
-fn parse_spdx_line(content: &str) -> Result<Parsed<(Option<&str>, Option<&str>)>, ParsingError> {
+fn parse_spdx_line(content: &str) -> Result<(Option<&str>, Option<&str>), ParsingError> {
     let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
 
     let cap = re
@@ -386,7 +372,7 @@ fn parse_spdx_line(content: &str) -> Result<Parsed<(Option<&str>, Option<&str>)>
         None => None,
     };
 
-    Ok(Parsed((license, copyright), content.len()))
+    Ok((license, copyright))
 }
 
 fn is_template_line(content: &str) -> bool {
@@ -395,7 +381,7 @@ fn is_template_line(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn parse_template_line(content: &str) -> Result<Parsed<Option<&str>>, ParsingError> {
+fn parse_template_line(content: &str) -> Result<Option<&str>, ParsingError> {
     let re = Regex::new(r"^&\s*(.+)$").unwrap();
 
     let cap = re
@@ -408,7 +394,7 @@ fn parse_template_line(content: &str) -> Result<Parsed<Option<&str>>, ParsingErr
 
     let result = validate_template(one.as_str())?;
 
-    Ok(Parsed(Some(result), content.len()))
+    Ok(Some(result))
 }
 
 #[cfg(test)]
@@ -421,13 +407,13 @@ mod check {
         assert!(is_magic_line(content));
 
         let result = parse_magic_line(content);
-        assert_eq!(result, Ok(Parsed(1, 14)));
+        assert_eq!(result, Ok(1));
 
         let content = "%technique v1";
         assert!(is_magic_line(content));
 
         let result = parse_magic_line(content);
-        assert_eq!(result, Ok(Parsed(1, 13)));
+        assert_eq!(result, Ok(1));
 
         let content = "%techniquev1";
         assert!(is_magic_line(content));
@@ -443,22 +429,19 @@ mod check {
         assert!(is_spdx_line(content));
 
         let result = parse_spdx_line(content);
-        assert_eq!(result, Ok(Parsed((Some("PD"), None), 4)));
+        assert_eq!(result, Ok((Some("PD"), None)));
 
         let content = "! MIT; (c) ACME, Inc.";
         assert!(is_spdx_line(content));
 
         let result = parse_spdx_line(content);
-        assert_eq!(result, Ok(Parsed((Some("MIT"), Some("ACME, Inc.")), 21)));
+        assert_eq!(result, Ok((Some("MIT"), Some("ACME, Inc."))));
 
         let content = "! MIT; (C) 2024 ACME, Inc.";
         assert!(is_spdx_line(content));
 
         let result = parse_spdx_line(content);
-        assert_eq!(
-            result,
-            Ok(Parsed((Some("MIT"), Some("2024 ACME, Inc.")), 26))
-        );
+        assert_eq!(result, Ok((Some("MIT"), Some("2024 ACME, Inc."))));
 
         let content = "! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.";
         assert!(is_spdx_line(content));
@@ -466,10 +449,7 @@ mod check {
         let result = parse_spdx_line(content);
         assert_eq!(
             result,
-            Ok(Parsed(
-                (Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")),
-                41
-            ))
+            Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
         );
     }
 
@@ -479,13 +459,13 @@ mod check {
         assert!(is_template_line(content));
 
         let result = parse_template_line(content);
-        assert_eq!(result, Ok(Parsed(Some("checklist"), 11)));
+        assert_eq!(result, Ok(Some("checklist")));
 
         let content = "& nasa-flight-plan,v4.0";
         assert!(is_template_line(content));
 
         let result = parse_template_line(content);
-        assert_eq!(result, Ok(Parsed(Some("nasa-flight-plan,v4.0"), 23)));
+        assert_eq!(result, Ok(Some("nasa-flight-plan,v4.0")));
     }
 
     // now we test incremental parsing
@@ -523,15 +503,15 @@ mod check {
     fn identifier_rules() {
         let input = "p";
         let result = parse_identifier(input);
-        assert_eq!(result, Ok(Parsed(Identifier("p"), 1)));
+        assert_eq!(result, Ok(Identifier("p")));
 
         let input = "pizza";
         let result = parse_identifier(input);
-        assert_eq!(result, Ok(Parsed(Identifier("pizza"), 5)));
+        assert_eq!(result, Ok(Identifier("pizza")));
 
         let input = "pizza0";
         let result = parse_identifier(input);
-        assert_eq!(result, Ok(Parsed(Identifier("pizza0"), 6)));
+        assert_eq!(result, Ok(Identifier("pizza0")));
 
         let input = "0pizza";
         let result = parse_forma(input);
@@ -539,7 +519,7 @@ mod check {
 
         let input = "cook_pizza";
         let result = parse_identifier(input);
-        assert_eq!(result, Ok(Parsed(Identifier("cook_pizza"), 10)));
+        assert_eq!(result, Ok(Identifier("cook_pizza")));
 
         let input = "cook-pizza";
         let result = parse_forma(input);
@@ -550,11 +530,11 @@ mod check {
     fn forma_rules() {
         let input = "A";
         let result = parse_forma(input);
-        assert_eq!(result, Ok(Parsed(Forma("A"), 1)));
+        assert_eq!(result, Ok(Forma("A")));
 
         let input = "Apple";
         let result = parse_forma(input);
-        assert_eq!(result, Ok(Parsed(Forma("Apple"), 5)));
+        assert_eq!(result, Ok(Forma("Apple")));
 
         let input = "apple";
         let result = parse_forma(input);
@@ -570,34 +550,31 @@ mod check {
     fn single_genus_definitions() {
         let input = "A";
         let result = parse_genus(input);
-        assert_eq!(result, Ok(Parsed(Genus::Single(Forma("A")), 1)));
+        assert_eq!(result, Ok(Genus::Single(Forma("A"))));
 
         let input = "Apple";
         let result = parse_genus(input);
-        assert_eq!(result, Ok(Parsed(Genus::Single(Forma("Apple")), 5)));
+        assert_eq!(result, Ok(Genus::Single(Forma("Apple"))));
     }
 
     #[test]
     fn list_genus_definitions() {
         let input = "[A]";
         let result = parse_genus(input);
-        assert_eq!(result, Ok(Parsed(Genus::List(Forma("A")), 3)))
+        assert_eq!(result, Ok(Genus::List(Forma("A"))))
     }
 
     #[test]
     fn tuple_genus_definitions() {
         let input = "(A, B)";
         let result = parse_genus(input);
-        assert_eq!(
-            result,
-            Ok(Parsed(Genus::Tuple(vec![Forma("A"), Forma("B")]), 6))
-        );
+        assert_eq!(result, Ok(Genus::Tuple(vec![Forma("A"), Forma("B")])));
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
         let input = "(A)";
         let result = parse_genus(input);
-        assert_eq!(result, Ok(Parsed(Genus::Tuple(vec![Forma("A")]), 3)));
+        assert_eq!(result, Ok(Genus::Tuple(vec![Forma("A")])));
     }
 
     #[test]
@@ -605,7 +582,7 @@ mod check {
         // and now the special case of the unit type
         let input = "()";
         let result = parse_genus(input);
-        assert_eq!(result, Ok(Parsed(Genus::Unit, 2)));
+        assert_eq!(result, Ok(Genus::Unit));
     }
 
     #[test]
@@ -614,52 +591,40 @@ mod check {
         let result = parse_signature(input);
         assert_eq!(
             result,
-            Ok(Parsed(
-                Signature {
-                    domain: Genus::Single(Forma("A")),
-                    range: Genus::Single(Forma("B"))
-                },
-                6
-            ))
+            Ok(Signature {
+                domain: Genus::Single(Forma("A")),
+                range: Genus::Single(Forma("B"))
+            })
         );
 
         let input = "Beans -> Coffee";
         let result = parse_signature(input);
         assert_eq!(
             result,
-            Ok(Parsed(
-                Signature {
-                    domain: Genus::Single(Forma("Beans")),
-                    range: Genus::Single(Forma("Coffee"))
-                },
-                15
-            ))
+            Ok(Signature {
+                domain: Genus::Single(Forma("Beans")),
+                range: Genus::Single(Forma("Coffee"))
+            })
         );
 
         let input = "[Bits] -> Bob";
         let result = parse_signature(input);
         assert_eq!(
             result,
-            Ok(Parsed(
-                Signature {
-                    domain: Genus::List(Forma("Bits")),
-                    range: Genus::Single(Forma("Bob"))
-                },
-                13
-            ))
+            Ok(Signature {
+                domain: Genus::List(Forma("Bits")),
+                range: Genus::Single(Forma("Bob"))
+            })
         );
 
         let input = "Complex -> (Real, Imaginary)";
         let result = parse_signature(input);
         assert_eq!(
             result,
-            Ok(Parsed(
-                Signature {
-                    domain: Genus::Single(Forma("Complex")),
-                    range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
-                },
-                28
-            ))
+            Ok(Signature {
+                domain: Genus::Single(Forma("Complex")),
+                range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+            })
         );
     }
 
@@ -670,7 +635,7 @@ mod check {
         assert!(is_procedure_declaration(content));
 
         let result = parse_procedure_declaration(content);
-        assert_eq!(result, Ok(Parsed((Identifier("making_coffee"), None), 15)));
+        assert_eq!(result, Ok((Identifier("making_coffee"), None)));
     }
 
     #[test]
@@ -681,15 +646,12 @@ mod check {
         let result = parse_procedure_declaration(content);
         assert_eq!(
             result,
-            Ok(Parsed(
-                (
-                    Identifier("f"),
-                    Some(Signature {
-                        domain: Genus::Single(Forma("A")),
-                        range: Genus::Single(Forma("B"))
-                    })
-                ),
-                10
+            Ok((
+                Identifier("f"),
+                Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                })
             ))
         );
 
@@ -699,15 +661,12 @@ mod check {
         let result = parse_procedure_declaration(content);
         assert_eq!(
             result,
-            Ok(Parsed(
-                (
-                    Identifier("making_coffee"),
-                    Some(Signature {
-                        domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                        range: Genus::List(Forma("Coffee"))
-                    })
-                ),
-                41
+            Ok((
+                Identifier("making_coffee"),
+                Some(Signature {
+                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                    range: Genus::List(Forma("Coffee"))
+                })
             ))
         );
 
