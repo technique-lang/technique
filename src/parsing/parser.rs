@@ -478,14 +478,16 @@ fn parse_procedure_title(content: &str) -> Result<Option<&str>, ParsingError> {
     }
 }
 
+// I'm not sure about anchoring this one on start and end, seeing as how it
+// will be used when scanning.
 fn is_invocation(content: &str) -> bool {
-    let re = Regex::new(r"^\s*<.+?>\s*\(.*?\)\s*$").unwrap();
+    let re = Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap();
 
     re.is_match(content)
 }
 
 fn parse_invocation(content: &str) -> Result<Invocation, ParsingError> {
-    let re = Regex::new(r"^\s*(<.+?>\s*\(.*?\))\s*$").unwrap();
+    let re = Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap();
 
     let cap = re
         .captures(content)
@@ -893,6 +895,46 @@ mod check {
             Ok(true)
         });
         assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn invocations() {
+        let input = "<hello>";
+        assert!(is_invocation(input));
+        let result = parse_invocation(input);
+        assert_eq!(
+            result,
+            Ok(Invocation {
+                target: Identifier("hello"),
+                parameters: None
+            })
+        );
+
+        let input = "<world>()";
+        assert!(is_invocation(input));
+        let result = parse_invocation(input);
+        assert_eq!(
+            result,
+            Ok(Invocation {
+                target: Identifier("world"),
+                parameters: Some(vec![])
+            })
+        );
+
+        let input = "<greetings>(name, title, occupation)";
+        assert!(is_invocation(input));
+        let result = parse_invocation(input);
+        assert_eq!(
+            result,
+            Ok(Invocation {
+                target: Identifier("greetings"),
+                parameters: Some(vec![
+                    Identifier("name"),
+                    Identifier("title"),
+                    Identifier("occupation")
+                ])
+            })
+        );
     }
 }
 
