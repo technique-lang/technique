@@ -33,6 +33,7 @@ pub enum ParsingError {
     InvalidSignature,
     InvalidDeclaration,
     InvalidInvocation,
+    InvalidFunction,
     InvalidCodeBlock,
 }
 
@@ -327,8 +328,28 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression, ParsingError> {
-        let expression =
-            self.take_block_chars('{', '}', |outer| Ok(Expression::Value(Identifier("FIXME"))))?;
+        let expression = self.take_block_chars('{', '}', |outer| {
+            let content = outer
+                .entire()
+                .trim();
+
+            if content.starts_with("repeat") {
+                // TODO: implement outer.read_repeat_expression()
+                Err(ParsingError::Unimplemented)
+            } else if content.starts_with("foreach") {
+                // TODO: implement outer.read_foreach_expression()
+                Err(ParsingError::Unimplemented)
+            } else if is_invocation(content) {
+                let invocation = parse_invocation(content)?;
+                Ok(Expression::Application(invocation))
+            } else if is_function(content) {
+                let function = parse_function(content)?;
+                Ok(Expression::Execution(function))
+            } else {
+                let identifier = validate_identifier(content)?;
+                Ok(Expression::Value(identifier))
+            }
+        })?;
 
         Ok(expression)
     }
@@ -605,6 +626,43 @@ fn is_function(content: &str) -> bool {
     let re = Regex::new(r"^\s*.+?\(.*?\)").unwrap();
 
     re.is_match(content)
+}
+
+// note that we do not permit whitespace between function name and open
+// parenthesis, following the convention of most other programming languages.
+// This allows us to differentiate between function application and a bare
+// identifier used as a value.
+fn parse_function(content: &str) -> Result<Function, ParsingError> {
+    let re = Regex::new(r"^\s*(.+?)\((.*?)\)\s*$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidFunction)?;
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("one of the built-in function names"))?;
+
+    let target = validate_identifier(one.as_str())?;
+
+    let two = cap
+        .get(2)
+        .ok_or(ParsingError::Expected("function parameters"))?;
+
+    let mut parameters: Vec<Identifier> = Vec::new();
+    let texts = two
+        .as_str()
+        .trim();
+
+    if !texts.is_empty() {
+        for text in texts.split(",") {
+            let text = text.trim();
+            let parameter = validate_identifier(text)?;
+            parameters.push(parameter);
+        }
+    }
+
+    Ok(Function { target, parameters })
 }
 
 fn parse_expression(content: &str) -> Result<Expression, ParsingError> {
@@ -980,6 +1038,103 @@ mod check {
                 ])
             })
         );
+    }
+
+    #[test]
+    fn functions_simple() {
+        let input = "exec()";
+        assert!(is_function(input));
+        let result = parse_function(input);
+        assert_eq!(
+            result,
+            Ok(Function {
+                target: Identifier("exec"),
+                parameters: vec![]
+            })
+        );
+
+        let input = "exec( a )";
+        assert!(is_function(input));
+        let result = parse_function(input);
+        assert_eq!(
+            result,
+            Ok(Function {
+                target: Identifier("exec"),
+                parameters: vec![Identifier("a")]
+            })
+        );
+
+        // I'm not actually convinced we need to support multiple arguments to
+        // built-in functions; none of our current use cases require it, but
+        // it is not unreasoable to epect that someday we might need to. If this
+        // becomes problematic for parsing we can remove this mode.
+        let input = "consume(apple, banana, chocolate)";
+        assert!(is_function(input));
+        let result = parse_function(input);
+        assert_eq!(
+            result,
+            Ok(Function {
+                target: Identifier("consume"),
+                parameters: vec![
+                    Identifier("apple"),
+                    Identifier("banana"),
+                    Identifier("chocolate")
+                ]
+            })
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn functions_multiline_strings() {
+        // This, on the other hand, is trickier. We need to support passing
+        // delimited mutliline strings to functions, and so possibly this will
+        // need to move into the Parser impl.
+        let input = "exec(```bash ls -l```)";
+        assert!(is_function(input));
+        let result = parse_function(input);
+        assert_eq!(
+            result,
+            Ok(Function {
+                target: Identifier("exec"),
+                parameters: vec![]
+            })
+        );
+    }
+
+    #[test]
+    fn expressions() {
+        let input = "count";
+        let result = parse_expression(input);
+        assert_eq!(result, Ok(Expression::Value(Identifier("count"))));
+
+        let input = "<perform_greeting>";
+        let result = parse_expression(input);
+        assert_eq!(
+            result,
+            Ok(Expression::Application(Invocation {
+                target: Identifier("perform_greeting"),
+                parameters: None
+            }))
+        );
+
+        let input = "sum(count)";
+        let result = parse_expression(input);
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("sum"),
+                parameters: vec![Identifier("count")]
+            }))
+        );
+
+        let input = "repeat";
+        let result = parse_expression(input);
+        assert_eq!(result, Err(ParsingError::Unimplemented));
+
+        let input = "foreach";
+        let result = parse_expression(input);
+        assert_eq!(result, Err(ParsingError::Unimplemented));
     }
 }
 
