@@ -36,6 +36,7 @@ pub enum ValidationError {
     InvalidIdentifier,
     InvalidForma,
     InvalidGenus,
+    InvalidInvocation,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -64,6 +65,14 @@ pub enum Genus<'i> {
 pub struct Signature<'i> {
     pub domain: Genus<'i>,
     pub range: Genus<'i>,
+}
+
+// now types for procedure bodies
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Invocation<'i> {
+    pub target: Identifier<'i>,
+    pub parameters: Option<Vec<Identifier<'i>>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -125,10 +134,9 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             let one = cap
                 .get(1)
-                .map(|v| v.as_str())
                 .ok_or(ValidationError::InvalidGenus)?;
 
-            let forma = validate_forma(one)?;
+            let forma = validate_forma(one.as_str())?;
 
             Ok(Genus::List(forma))
         }
@@ -143,7 +151,6 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             let one = cap
                 .get(1)
-                .map(|v| v.as_str())
                 .ok_or(ValidationError::InvalidGenus)?;
 
             if one.len() == 0 {
@@ -154,7 +161,10 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             let mut formas: Vec<Forma> = Vec::new();
 
-            for text in one.split(",") {
+            for text in one
+                .as_str()
+                .split(",")
+            {
                 let text = text.trim();
                 let forma = validate_forma(text)?;
                 formas.push(forma);
@@ -205,6 +215,48 @@ pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
     } else {
         Err(ValidationError::InvalidTemplate)
     }
+}
+
+pub fn validate_invocation(input: &str) -> Result<Invocation, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::ZeroLengthToken);
+    }
+
+    let re = Regex::new(r"^<(.+?)>\s*(?:(\(.*?\)))?$").unwrap();
+
+    let cap = match re.captures(input) {
+        Some(c) => c,
+        None => return Err(ValidationError::InvalidInvocation),
+    };
+
+    let one = cap
+        .get(1)
+        .ok_or(ValidationError::InvalidInvocation)?;
+
+    let target = validate_identifier(one.as_str())?;
+
+    let parameters = match cap.get(2) {
+        Some(two) => {
+            let mut parameters: Vec<Identifier> = Vec::new();
+
+            // trim leading ( and trailing ) off
+            let body = two.as_str();
+            let texts = &body[1..body.len() - 1].trim();
+
+            if !texts.is_empty() {
+                for text in texts.split(",") {
+                    let text = text.trim();
+                    let parameter = validate_identifier(text)?;
+                    parameters.push(parameter);
+                }
+            }
+
+            Some(parameters)
+        }
+        None => None,
+    };
+
+    Ok(Invocation { target, parameters })
 }
 
 #[cfg(test)]
@@ -276,7 +328,7 @@ mod check {
     fn genus_rules_unit() {
         assert_eq!(validate_genus("()"), Ok(Genus::Unit));
     }
-    
+
     #[test]
     fn license_rules() {
         assert_eq!(validate_license("MIT"), Ok("MIT"));
@@ -297,6 +349,49 @@ mod check {
         assert_eq!(validate_template("checklist"), Ok("checklist"));
         assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
+    }
+
+    #[test]
+    fn invocation_rules() {
+        assert_eq!(
+            validate_invocation("<hello>"),
+            Ok(Invocation {
+                target: Identifier("hello"),
+                parameters: None
+            })
+        );
+
+        assert_eq!(
+            validate_invocation("<hello_world>"),
+            Ok(Invocation {
+                target: Identifier("hello_world"),
+                parameters: None
+            })
+        );
+
+        assert_eq!(
+            validate_invocation("<hello_world>()"),
+            Ok(Invocation {
+                target: Identifier("hello_world"),
+                parameters: Some(vec![])
+            })
+        );
+
+        assert_eq!(
+            validate_invocation("<greet>(name)"),
+            Ok(Invocation {
+                target: Identifier("greet"),
+                parameters: Some(vec![Identifier("name")])
+            })
+        );
+
+        assert_eq!(
+            validate_invocation("<start_finish>(alpha, omega)"),
+            Ok(Invocation {
+                target: Identifier("start_finish"),
+                parameters: Some(vec![Identifier("alpha"), Identifier("omega")])
+            })
+        );
     }
 
     fn maker<'i>() -> Metadata<'i> {

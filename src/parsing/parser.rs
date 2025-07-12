@@ -32,6 +32,7 @@ pub enum ParsingError {
     InvalidGenus,
     InvalidSignature,
     InvalidDeclaration,
+    InvalidInvocation,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -420,7 +421,7 @@ fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
 /// as above.
 
 fn is_procedure_declaration(content: &str) -> bool {
-    let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+    let re = Regex::new(r"^\s*(?:.+?)\s*:\s*(?:.+?)?\s*$").unwrap();
 
     re.is_match(content)
 }
@@ -475,6 +476,29 @@ fn parse_procedure_title(content: &str) -> Result<Option<&str>, ParsingError> {
         // we shouldn't have invoked this unless we have a title to parse!
         Err(ParsingError::IllegalParserState)
     }
+}
+
+fn is_invocation(content: &str) -> bool {
+    let re = Regex::new(r"^\s*<.+?>\s*\(.*?\)\s*$").unwrap();
+
+    re.is_match(content)
+}
+
+fn parse_invocation(content: &str) -> Result<Invocation, ParsingError> {
+    let re = Regex::new(r"^\s*(<.+?>\s*\(.*?\))\s*$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidInvocation)?;
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected(
+            "an Identifier for the procedure to be invoked",
+        ))?;
+
+    let invocation = validate_invocation(one.as_str())?;
+    Ok(invocation)
 }
 
 fn is_magic_line(content: &str) -> bool {
