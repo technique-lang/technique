@@ -33,6 +33,7 @@ pub enum ParsingError {
     InvalidSignature,
     InvalidDeclaration,
     InvalidInvocation,
+    InvalidCodeBlock,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -310,6 +311,9 @@ impl<'i> Parser<'i> {
                     },
                 )?;
 
+                // TODO now look for titles, steps, code blocks, and then
+                // descriptions
+
                 Ok(Procedure {
                     name: declaration.0,
                     signature: declaration.1,
@@ -320,6 +324,13 @@ impl<'i> Parser<'i> {
         )?;
 
         Ok(procedure)
+    }
+
+    fn read_code_block(&mut self) -> Result<Expression, ParsingError> {
+        let expression =
+            self.take_block_chars('{', '}', |outer| Ok(Expression::Value(Identifier("FIXME"))))?;
+
+        Ok(expression)
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
@@ -582,6 +593,40 @@ fn parse_invocation(content: &str) -> Result<Invocation, ParsingError> {
 
     let invocation = validate_invocation(one.as_str())?;
     Ok(invocation)
+}
+
+fn is_code_block(content: &str) -> bool {
+    let re = Regex::new(r"\s*{.*?}").unwrap();
+
+    re.is_match(content)
+}
+
+fn is_function(content: &str) -> bool {
+    let re = Regex::new(r"^\s*.+?\(.*?\)").unwrap();
+
+    re.is_match(content)
+}
+
+fn parse_expression(content: &str) -> Result<Expression, ParsingError> {
+    let text = content.trim_start();
+
+    if text.starts_with("repeat") {
+        // TODO: parse repeat expression properly
+        Err(ParsingError::Unimplemented)
+    } else if text.starts_with("foreach") {
+        // TODO: parse foreach expression properly
+        Err(ParsingError::Unimplemented)
+    } else if is_invocation(text) {
+        let invocation = parse_invocation(text)?;
+        Ok(Expression::Application(invocation))
+    } else if is_function(text) {
+        let function = parse_function(text)?;
+        Ok(Expression::Execution(function))
+    } else {
+        // Assume it's a simple identifier value
+        let identifier = validate_identifier(text)?;
+        Ok(Expression::Value(identifier))
+    }
 }
 
 #[cfg(test)]

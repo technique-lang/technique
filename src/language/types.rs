@@ -78,6 +78,23 @@ pub struct Invocation<'i> {
 #[derive(Eq, Debug, PartialEq)]
 pub struct Attribute<'i>(pub &'i str);
 
+// now types for code blocks
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Function<'i> {
+    pub target: Identifier<'i>,
+    pub parameters: Vec<Identifier<'i>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Expression<'i> {
+    Value(Identifier<'i>),
+    Repeat(Box<Expression<'i>>),
+    Foreach(Identifier<'i>, Box<Expression<'i>>),
+    Application(Invocation<'i>),
+    Execution(Function<'i>),
+}
+
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
 
