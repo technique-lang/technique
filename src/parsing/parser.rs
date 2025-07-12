@@ -458,6 +458,27 @@ fn parse_procedure_declaration(
     Ok((name, signature))
 }
 
+fn is_procedure_title(content: &str) -> bool {
+    content
+        .trim_start()
+        .starts_with('#')
+}
+
+fn parse_procedure_title(content: &str) -> Result<Option<&str>, ParsingError> {
+    let trimmed = content.trim_start();
+    if trimmed.starts_with('#') {
+        let title = trimmed[1..].trim();
+        if title.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(title))
+        }
+    } else {
+        // we shouldn't have invoked this unless we have a title to parse!
+        Err(ParsingError::IllegalParserState)
+    }
+}
+
 fn is_magic_line(content: &str) -> bool {
     let re = Regex::new(r"%\s*technique").unwrap();
 
