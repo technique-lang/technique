@@ -361,6 +361,87 @@ impl<'i> Parser<'i> {
     }
 }
 
+fn is_magic_line(content: &str) -> bool {
+    let re = Regex::new(r"%\s*technique").unwrap();
+
+    re.is_match(content)
+}
+
+// hard wire the version for now. If we ever grow to supporting multiple major
+// versions then this will be a lot more complicated than just dealing with a
+// different natural number here.
+fn parse_magic_line(content: &str) -> Result<u8, ParsingError> {
+    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+    if re.is_match(content) {
+        Ok(1)
+    } else {
+        Err(ParsingError::InvalidHeader)
+    }
+}
+
+fn is_spdx_line(content: &str) -> bool {
+    let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
+
+    re.is_match(content)
+}
+
+// This one is awkward because if a SPDX line is present, then it really needs
+// to have a license, whereas the copyright part is optional.
+fn parse_spdx_line(content: &str) -> Result<(Option<&str>, Option<&str>), ParsingError> {
+    let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidHeader)?;
+
+    // Now to extracting the values we need. We get the license code from
+    // the first capture. It must be present otherwise we don't have a
+    // valid SPDX line (and we declared that we're on an SPDX line by the
+    // presence of the '!' character at the beginning of the line).
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("the license name"))?;
+
+    let result = validate_license(one.as_str())?;
+    let license = Some(result);
+
+    // Now dig out the copyright, if present:
+
+    let copyright = match cap.get(2) {
+        Some(two) => {
+            let result = validate_copyright(two.as_str())?;
+            Some(result)
+        }
+        None => None,
+    };
+
+    Ok((license, copyright))
+}
+
+fn is_template_line(content: &str) -> bool {
+    let re = Regex::new(r"&\s*.+").unwrap();
+
+    re.is_match(content)
+}
+
+fn parse_template_line(content: &str) -> Result<Option<&str>, ParsingError> {
+    let re = Regex::new(r"^&\s*(.+)$").unwrap();
+
+    let cap = re
+        .captures(content)
+        .ok_or(ParsingError::InvalidHeader)?;
+
+    let one = cap
+        .get(1)
+        .ok_or(ParsingError::Expected("a template name"))?;
+
+    let result = validate_template(one.as_str())?;
+
+    Ok(Some(result))
+}
+
 fn parse_identifier(content: &str) -> Result<Identifier, ParsingError> {
     let result = validate_identifier(content)?;
     Ok(result)
@@ -501,87 +582,6 @@ fn parse_invocation(content: &str) -> Result<Invocation, ParsingError> {
 
     let invocation = validate_invocation(one.as_str())?;
     Ok(invocation)
-}
-
-fn is_magic_line(content: &str) -> bool {
-    let re = Regex::new(r"%\s*technique").unwrap();
-
-    re.is_match(content)
-}
-
-// hard wire the version for now. If we ever grow to supporting multiple major
-// versions then this will be a lot more complicated than just dealing with a
-// different natural number here.
-fn parse_magic_line(content: &str) -> Result<u8, ParsingError> {
-    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
-
-    if re.is_match(content) {
-        Ok(1)
-    } else {
-        Err(ParsingError::InvalidHeader)
-    }
-}
-
-fn is_spdx_line(content: &str) -> bool {
-    let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
-
-    re.is_match(content)
-}
-
-// This one is awkward because if a SPDX line is present, then it really needs
-// to have a license, whereas the copyright part is optional.
-fn parse_spdx_line(content: &str) -> Result<(Option<&str>, Option<&str>), ParsingError> {
-    let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidHeader)?;
-
-    // Now to extracting the values we need. We get the license code from
-    // the first capture. It must be present otherwise we don't have a
-    // valid SPDX line (and we declared that we're on an SPDX line by the
-    // presence of the '!' character at the beginning of the line).
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("the license name"))?;
-
-    let result = validate_license(one.as_str())?;
-    let license = Some(result);
-
-    // Now dig out the copyright, if present:
-
-    let copyright = match cap.get(2) {
-        Some(two) => {
-            let result = validate_copyright(two.as_str())?;
-            Some(result)
-        }
-        None => None,
-    };
-
-    Ok((license, copyright))
-}
-
-fn is_template_line(content: &str) -> bool {
-    let re = Regex::new(r"&\s*.+").unwrap();
-
-    re.is_match(content)
-}
-
-fn parse_template_line(content: &str) -> Result<Option<&str>, ParsingError> {
-    let re = Regex::new(r"^&\s*(.+)$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidHeader)?;
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("a template name"))?;
-
-    let result = validate_template(one.as_str())?;
-
-    Ok(Some(result))
 }
 
 #[cfg(test)]

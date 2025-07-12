@@ -78,6 +78,39 @@ pub struct Invocation<'i> {
 #[derive(Eq, Debug, PartialEq)]
 pub struct Attribute<'i>(pub &'i str);
 
+// the validate functions all need to have start and end anchors, which seems
+// like it should be abstracted away.
+
+pub fn validate_license(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidLicense)
+    }
+}
+
+pub fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidCopyright)
+    }
+}
+
+pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
+    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
+
+    if re.is_match(input) {
+        Ok(input)
+    } else {
+        Err(ValidationError::InvalidTemplate)
+    }
+}
+
 pub fn validate_identifier(input: &str) -> Result<Identifier, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
@@ -181,39 +214,6 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             Ok(Genus::Single(forma))
         }
-    }
-}
-
-// the validate functions all need to have start and end anchors, which seems
-// like it should be abstracted away.
-
-pub fn validate_license(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidLicense)
-    }
-}
-
-pub fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidCopyright)
-    }
-}
-
-pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
-
-    if re.is_match(input) {
-        Ok(input)
-    } else {
-        Err(ValidationError::InvalidTemplate)
     }
 }
 
