@@ -295,32 +295,30 @@ impl<'i> Parser<'i> {
     }
 
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        let declaration = self.take_block_lines(
+        let procedure = self.take_block_lines(
             is_procedure_declaration,
             is_procedure_declaration,
-            |parser| {
-                let subcontent = parser
-                    .entire()
-                    .trim_start();
-                if is_procedure_declaration(subcontent) {
-                    Ok(parse_procedure_declaration(subcontent)?)
-                } else {
-                    Err(ParsingError::Expected(
-                        "Not sure what we expected, actually",
-                    ))
-                }
+            |outer| {
+                // Extract the declaration, and parse it
+                let declaration = outer.take_block_lines(
+                    is_procedure_declaration,
+                    |content| !is_procedure_declaration(content),
+                    |inner| {
+                        let subcontent = inner.entire();
+                        Ok(parse_procedure_declaration(subcontent)?)
+                    },
+                )?;
+
+                Ok(Procedure {
+                    name: declaration.0,
+                    signature: declaration.1,
+                    title: None,
+                    description: None,
+                })
             },
         )?;
 
-        let name = declaration.0;
-        let signature = declaration.1;
-
-        Ok(Procedure { 
-            name, 
-            signature,
-            title: None,
-            description: None,
-        })
+        Ok(procedure)
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
