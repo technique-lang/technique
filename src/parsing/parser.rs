@@ -315,7 +315,12 @@ impl<'i> Parser<'i> {
         let name = declaration.0;
         let signature = declaration.1;
 
-        Ok(Procedure { name, signature })
+        Ok(Procedure { 
+            name, 
+            signature,
+            title: None,
+            description: None,
+        })
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
@@ -922,7 +927,9 @@ making_coffee : (Beans, Milk) -> Coffee
                 signature: Some(Signature {
                     domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
                     range: Genus::Single(Forma("Coffee"))
-                })
+                }),
+                title: None,
+                description: None,
             })
         );
     }
@@ -947,7 +954,9 @@ second : C -> D
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
-                })
+                }),
+                title: None,
+                description: None,
             })
         );
 
@@ -959,7 +968,9 @@ second : C -> D
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("C")),
                     range: Genus::Single(Forma("D"))
-                })
+                }),
+                title: None,
+                description: None,
             })
         );
     }

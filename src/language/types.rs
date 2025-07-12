@@ -42,6 +42,8 @@ pub enum ValidationError {
 pub struct Procedure<'i> {
     pub name: Identifier<'i>,
     pub signature: Option<Signature<'i>>,
+    pub title: Option<&'i str>,
+    pub description: Option<&'i str>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
