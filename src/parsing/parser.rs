@@ -216,6 +216,47 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
+    fn take_block_delimited<A, F>(
+        &mut self,
+        delimiter: &str,
+        function: F,
+    ) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let width = delimiter.len();
+
+        // Find the start delimiter
+        let start = self
+            .source
+            .find(delimiter)
+            .ok_or(ParsingError::Expected("a starting delimiter"))?;
+
+        // Look for the end delimiter after correcting for the starting one
+        let start = start + width;
+        let end = self.source[start..]
+            .find(delimiter)
+            .ok_or(ParsingError::Expected("the corresponding end delimiter"))?;
+
+        // Correct actual positions in input
+        let end = start + end;
+
+        // Extract the content between delimiters
+        let block = &self.source[start..end];
+
+        let mut parser = self.subparser(block);
+
+        // Pass to closure for processing
+        let result = function(&mut parser)?;
+
+        // Advance parser state past the entire delimited block
+        let end = end + width;
+        self.source = &self.source[end..];
+        self.offset += end;
+
+        Ok(result)
+    }
+
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
@@ -998,6 +1039,45 @@ mod check {
             Ok(true)
         });
         assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn string_delimited_blocks() {
+        let mut input = Parser::new();
+        input.initialize("```bash\nls -l\necho hello```");
+        assert_eq!(input.offset, 0);
+
+        let result = input.take_block_delimited("```", |parser| {
+            let text = parser.entire();
+            assert_eq!(text, "bash\nls -l\necho hello");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+        assert_eq!(input.source, "");
+        assert_eq!(input.offset, 27);
+
+        // Test with different delimiter
+        input.initialize("---start\ncontent here\nmore content---end");
+
+        let result = input.take_block_delimited("---", |parser| {
+            let text = parser.entire();
+            assert_eq!(text, "start\ncontent here\nmore content");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+
+        // Test with whitespace around delimiters
+        input.initialize("```  hello world  ``` and now goodbye");
+
+        let result = input.take_block_delimited("```", |parser| {
+            let text = parser.entire();
+            assert_eq!(text, "  hello world  ");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+        assert_eq!(input.source, " and now goodbye");
+        assert_eq!(input.offset, 21);
+
     }
 
     #[test]
