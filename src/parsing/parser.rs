@@ -384,6 +384,9 @@ impl<'i> Parser<'i> {
                 let invocation = parse_invocation(content)?;
                 Ok(Expression::Application(invocation))
             } else if is_function(content) {
+                // Parse function inline with access to outer for multiline strings
+                // For now, delegate to parse_function for basic cases
+                // TODO: Handle multiline strings using outer.take_block_delimited()
                 let function = parse_function(content)?;
                 Ok(Expression::Execution(function))
             } else {
@@ -690,7 +693,7 @@ fn parse_function(content: &str) -> Result<Function, ParsingError> {
         .get(2)
         .ok_or(ParsingError::Expected("function parameters"))?;
 
-    let mut parameters: Vec<Identifier> = Vec::new();
+    let mut parameters: Vec<Expression> = Vec::new();
     let texts = two
         .as_str()
         .trim();
@@ -699,7 +702,7 @@ fn parse_function(content: &str) -> Result<Function, ParsingError> {
         for text in texts.split(",") {
             let text = text.trim();
             let parameter = validate_identifier(text)?;
-            parameters.push(parameter);
+            parameters.push(Expression::Value(parameter));
         }
     }
 
@@ -1112,9 +1115,9 @@ mod check {
             Ok(Invocation {
                 target: Identifier("greetings"),
                 parameters: Some(vec![
-                    Identifier("name"),
-                    Identifier("title"),
-                    Identifier("occupation")
+                    Expression::Value(Identifier("name")),
+                    Expression::Value(Identifier("title")),
+                    Expression::Value(Identifier("occupation"))
                 ])
             })
         );
@@ -1140,7 +1143,7 @@ mod check {
             result,
             Ok(Function {
                 target: Identifier("exec"),
-                parameters: vec![Identifier("a")]
+                parameters: vec![Expression::Value(Identifier("a"))]
             })
         );
 
@@ -1156,9 +1159,9 @@ mod check {
             Ok(Function {
                 target: Identifier("consume"),
                 parameters: vec![
-                    Identifier("apple"),
-                    Identifier("banana"),
-                    Identifier("chocolate")
+                    Expression::Value(Identifier("apple")),
+                    Expression::Value(Identifier("banana")),
+                    Expression::Value(Identifier("chocolate"))
                 ]
             })
         );
@@ -1204,7 +1207,7 @@ mod check {
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("sum"),
-                parameters: vec![Identifier("count")]
+                parameters: vec![Expression::Value(Identifier("count"))]
             }))
         );
 

@@ -72,7 +72,7 @@ pub struct Signature<'i> {
 #[derive(Eq, Debug, PartialEq)]
 pub struct Invocation<'i> {
     pub target: Identifier<'i>,
-    pub parameters: Option<Vec<Identifier<'i>>>,
+    pub parameters: Option<Vec<Expression<'i>>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -83,12 +83,14 @@ pub struct Attribute<'i>(pub &'i str);
 #[derive(Eq, Debug, PartialEq)]
 pub struct Function<'i> {
     pub target: Identifier<'i>,
-    pub parameters: Vec<Identifier<'i>>,
+    pub parameters: Vec<Expression<'i>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expression<'i> {
     Value(Identifier<'i>),
+    Text(&'i str),
+    Multiline(&'i str),
     Repeat(Box<Expression<'i>>),
     Foreach(Identifier<'i>, Box<Expression<'i>>),
     Application(Invocation<'i>),
@@ -254,7 +256,7 @@ pub fn validate_invocation(input: &str) -> Result<Invocation, ValidationError> {
 
     let parameters = match cap.get(2) {
         Some(two) => {
-            let mut parameters: Vec<Identifier> = Vec::new();
+            let mut parameters: Vec<Expression> = Vec::new();
 
             // trim leading ( and trailing ) off
             let body = two.as_str();
@@ -264,7 +266,7 @@ pub fn validate_invocation(input: &str) -> Result<Invocation, ValidationError> {
                 for text in texts.split(",") {
                     let text = text.trim();
                     let parameter = validate_identifier(text)?;
-                    parameters.push(parameter);
+                    parameters.push(Expression::Value(parameter));
                 }
             }
 
@@ -398,7 +400,7 @@ mod check {
             validate_invocation("<greet>(name)"),
             Ok(Invocation {
                 target: Identifier("greet"),
-                parameters: Some(vec![Identifier("name")])
+                parameters: Some(vec![Expression::Value(Identifier("name"))])
             })
         );
 
@@ -406,7 +408,7 @@ mod check {
             validate_invocation("<start_finish>(alpha, omega)"),
             Ok(Invocation {
                 target: Identifier("start_finish"),
-                parameters: Some(vec![Identifier("alpha"), Identifier("omega")])
+                parameters: Some(vec![Expression::Value(Identifier("alpha")), Expression::Value(Identifier("omega"))])
             })
         );
     }
