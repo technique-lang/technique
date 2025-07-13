@@ -366,9 +366,8 @@ impl<'i> Parser<'i> {
 
     fn read_code_block(&mut self) -> Result<Expression, ParsingError> {
         let expression = self.take_block_chars('{', '}', |outer| {
-            let content = outer
-                .entire()
-                .trim();
+            outer.trim_whitespace();
+            let content = outer.entire();
 
             if content.starts_with("repeat") {
                 // TODO: implement outer.read_repeat_expression()
@@ -398,12 +397,12 @@ impl<'i> Parser<'i> {
     /// Consume an identifier. As with the other smaller read methods, we do a
     /// general scan of the range here to get the relevant, then call the more
     /// detailed validation function to actually determine if it's a match.
-    fn read_identifier(&mut self) -> Result<Identifier, ParsingError> {
+    fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
         self.trim_whitespace();
 
         let content = self.entire();
 
-        let possible = match content.find(" \t\n({") {
+        let possible = match content.find(" \t\n({,") {
             None => content,
             Some(i) => &content[0..i],
         };
@@ -413,6 +412,58 @@ impl<'i> Parser<'i> {
         self.advance(possible.len());
 
         Ok(identifier)
+    }
+
+    /// Consume parameters to an invocation or function. Specifically, look
+    /// for the form
+    ///
+    /// ( one, 2, "three", ```bash echo "four"``` )
+    ///
+    /// and return a Vec with an Epression for each parameter in the list. Most however,
+    /// will either be
+    ///
+    /// ( a, b, c )
+    ///
+    /// or
+    ///
+    /// ( ```lang some content``` )
+    ///
+    fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
+        self.take_block_chars('(', ')', |outer| {
+            let mut params: Vec<Expression> = Vec::new();
+
+            while outer
+                .entire()
+                .len()
+                > 0
+            {
+                let content = outer
+                    .entire()
+                    .trim_start();
+
+                if content.starts_with("```") {
+                    let raw = outer.take_block_delimited("```", |inner| Ok(inner.entire()))?;
+                    params.push(Expression::Multiline(raw));
+                } else if content.starts_with("\"") {
+                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
+                    params.push(Expression::Text(raw));
+                } else {
+                    let name = outer.read_identifier()?;
+                    params.push(Expression::Value(name));
+                }
+
+                outer.trim_whitespace();
+                if outer
+                    .entire()
+                    .starts_with(',')
+                {
+                    outer.advance(1);
+                    outer.trim_whitespace();
+                }
+            }
+
+            Ok(params)
+        })
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
@@ -689,10 +740,7 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
-// note that we do not permit whitespace between function name and open
-// parenthesis, following the convention of most other programming languages.
-// This allows us to differentiate between function application and a bare
-// identifier used as a value.
+#[deprecated]
 fn parse_function(content: &str) -> Result<Function, ParsingError> {
     let re = Regex::new(r"^\s*(.+?)\((.*?)\)\s*$").unwrap();
 
@@ -1097,7 +1145,6 @@ mod check {
         assert_eq!(result, Ok(true));
         assert_eq!(input.source, " and now goodbye");
         assert_eq!(input.offset, 21);
-
     }
 
     #[test]
