@@ -72,11 +72,7 @@ impl<'i> Parser<'i> {
         self.offset = 0;
     }
 
-    fn advance(&mut self, parsed: Parsed) {
-        let width = parsed
-            .0
-            .len();
-
+    fn advance(&mut self, width: usize) {
         // advance the parser position
         self.source = &self.source[width..];
         self.offset += width;
@@ -160,7 +156,7 @@ impl<'i> Parser<'i> {
         // Extract the substring from start to the found position
         let block = &self.source[..i];
 
-        let mut parser = self.subparser(block);
+        let mut parser = self.subparser(0, block);
 
         // Pass to closure for processing
         let result = function(&mut parser)?;
@@ -204,7 +200,7 @@ impl<'i> Parser<'i> {
 
         let block = &self.source[1..l - 1];
 
-        let mut parser = self.subparser(block);
+        let mut parser = self.subparser(1, block);
 
         // Pass to closure for processing
         let result = function(&mut parser)?;
@@ -244,7 +240,7 @@ impl<'i> Parser<'i> {
         // Extract the content between delimiters
         let block = &self.source[start..end];
 
-        let mut parser = self.subparser(block);
+        let mut parser = self.subparser(start, block);
 
         // Pass to closure for processing
         let result = function(&mut parser)?;
@@ -260,14 +256,14 @@ impl<'i> Parser<'i> {
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
-    fn subparser(&self, content: &'i str) -> Parser<'i> {
+    fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
             scope: self
                 .scope
                 .clone(),
             source: content,
             count: self.count,
-            offset: self.offset,
+            offset: indent + self.offset,
         };
 
         // and return
