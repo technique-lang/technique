@@ -452,16 +452,19 @@ impl<'i> Parser<'i> {
     ///
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
         self.take_block_chars('(', ')', |outer| {
-            let mut params: Vec<Expression> = Vec::new();
+            let mut params = Vec::new();
 
-            while outer
-                .entire()
-                .len()
-                > 0
-            {
-                let content = outer
+            loop {
+                outer.trim_whitespace();
+
+                if outer
                     .entire()
-                    .trim_start();
+                    .is_empty()
+                {
+                    break;
+                }
+
+                let content = outer.entire();
 
                 if content.starts_with("```") {
                     let raw = outer.take_block_delimited("```", |inner| Ok(inner.entire()))?;
@@ -474,13 +477,15 @@ impl<'i> Parser<'i> {
                     params.push(Expression::Value(name));
                 }
 
+                // Handle comma separation
                 outer.trim_whitespace();
                 if outer
                     .entire()
                     .starts_with(',')
                 {
                     outer.advance(1);
-                    outer.trim_whitespace();
+                } else {
+                    break;
                 }
             }
 
