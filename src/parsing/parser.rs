@@ -253,6 +253,28 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
+    fn take_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let content = self.source;
+        let end_pos = content
+            .find(pattern)
+            .unwrap_or(content.len());
+
+        let block = &content[..end_pos];
+        let mut parser = self.subparser(0, block);
+
+        // Pass to closure for processing
+        let result = function(&mut parser)?;
+
+        // Advance parser state
+        self.source = &self.source[end_pos..];
+        self.offset += end_pos;
+
+        Ok(result)
+    }
+
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
@@ -386,7 +408,7 @@ impl<'i> Parser<'i> {
                 let function = Function { target, parameters };
                 Ok(Expression::Execution(function))
             } else {
-                let identifier = validate_identifier(content)?;
+                let identifier = outer.read_identifier()?;
                 Ok(Expression::Value(identifier))
             }
         })?;
@@ -402,7 +424,7 @@ impl<'i> Parser<'i> {
 
         let content = self.entire();
 
-        let possible = match content.find(" \t\n({,") {
+        let possible = match content.find([' ', '\t', '\n', '(', '{', ',']) {
             None => content,
             Some(i) => &content[0..i],
         };
@@ -735,65 +757,9 @@ fn is_code_block(content: &str) -> bool {
 }
 
 fn is_function(content: &str) -> bool {
-    let re = Regex::new(r"^\s*.+?\(.*?\)").unwrap();
+    let re = Regex::new(r"^\s*.+?\(").unwrap();
 
     re.is_match(content)
-}
-
-#[deprecated]
-fn parse_function(content: &str) -> Result<Function, ParsingError> {
-    let re = Regex::new(r"^\s*(.+?)\((.*?)\)\s*$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidFunction)?;
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("one of the built-in function names"))?;
-
-    let target = validate_identifier(one.as_str())?;
-
-    let two = cap
-        .get(2)
-        .ok_or(ParsingError::Expected("function parameters"))?;
-
-    let mut parameters: Vec<Expression> = Vec::new();
-    let texts = two
-        .as_str()
-        .trim();
-
-    if !texts.is_empty() {
-        for text in texts.split(",") {
-            let text = text.trim();
-            let parameter = validate_identifier(text)?;
-            parameters.push(Expression::Value(parameter));
-        }
-    }
-
-    Ok(Function { target, parameters })
-}
-
-fn parse_expression(content: &str) -> Result<Expression, ParsingError> {
-    let text = content.trim_start();
-
-    if text.starts_with("repeat") {
-        // TODO: parse repeat expression properly
-        Err(ParsingError::Unimplemented)
-    } else if text.starts_with("foreach") {
-        // TODO: parse foreach expression properly
-        Err(ParsingError::Unimplemented)
-    } else if is_invocation(text) {
-        let invocation = parse_invocation(text)?;
-        Ok(Expression::Application(invocation))
-    } else if is_function(text) {
-        let function = parse_function(text)?;
-        Ok(Expression::Execution(function))
-    } else {
-        // Assume it's a simple identifier value
-        let identifier = validate_identifier(text)?;
-        Ok(Expression::Value(identifier))
-    }
 }
 
 #[cfg(test)]
@@ -1148,6 +1114,29 @@ mod check {
     }
 
     #[test]
+    fn taking_until() {
+        let mut input = Parser::new();
+
+        // Test take_until() with an identifier up to a limiting character
+        input.initialize("hello,world");
+        let result = input.take_until(&[','], |inner| inner.read_identifier());
+        assert_eq!(result, Ok(Identifier("hello")));
+        assert_eq!(input.source, ",world");
+
+        // Test take_until() with whitespace delimiters
+        input.initialize("test \t\nmore");
+        let result = input.take_until(&[' ', '\t', '\n'], |inner| inner.read_identifier());
+        assert_eq!(result, Ok(Identifier("test")));
+        assert_eq!(input.source, " \t\nmore");
+
+        // Test take_until() when no delimiter found (it should take everything)
+        input.initialize("onlytext");
+        let result = input.take_until(&[',', ';'], |inner| inner.read_identifier());
+        assert_eq!(result, Ok(Identifier("onlytext")));
+        assert_eq!(input.source, "");
+    }
+
+    #[test]
     fn invocations() {
         let input = "<hello>";
         assert!(is_invocation(input));
@@ -1188,85 +1177,17 @@ mod check {
     }
 
     #[test]
-    fn functions_simple() {
-        let input = "exec()";
-        assert!(is_function(input));
-        let result = parse_function(input);
-        assert_eq!(
-            result,
-            Ok(Function {
-                target: Identifier("exec"),
-                parameters: vec![]
-            })
-        );
+    fn code_blocks() {
+        let mut input = Parser::new();
 
-        let input = "exec( a )";
-        assert!(is_function(input));
-        let result = parse_function(input);
-        assert_eq!(
-            result,
-            Ok(Function {
-                target: Identifier("exec"),
-                parameters: vec![Expression::Value(Identifier("a"))]
-            })
-        );
-
-        // I'm not actually convinced we need to support multiple arguments to
-        // built-in functions; none of our current use cases require it, but
-        // it is not unreasoable to epect that someday we might need to. If this
-        // becomes problematic for parsing we can remove this mode.
-        let input = "consume(apple, banana, chocolate)";
-        assert!(is_function(input));
-        let result = parse_function(input);
-        assert_eq!(
-            result,
-            Ok(Function {
-                target: Identifier("consume"),
-                parameters: vec![
-                    Expression::Value(Identifier("apple")),
-                    Expression::Value(Identifier("banana")),
-                    Expression::Value(Identifier("chocolate"))
-                ]
-            })
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn functions_multiline_strings() {
-        // This, on the other hand, is trickier. We need to support passing
-        // delimited mutliline strings to functions, and so possibly this will
-        // need to move into the Parser impl.
-        let input = "exec(```bash ls -l```)";
-        assert!(is_function(input));
-        let result = parse_function(input);
-        assert_eq!(
-            result,
-            Ok(Function {
-                target: Identifier("exec"),
-                parameters: vec![]
-            })
-        );
-    }
-
-    #[test]
-    fn expressions() {
-        let input = "count";
-        let result = parse_expression(input);
+        // Test simple identifier in code block
+        input.initialize("{ count }");
+        let result = input.read_code_block();
         assert_eq!(result, Ok(Expression::Value(Identifier("count"))));
 
-        let input = "<perform_greeting>";
-        let result = parse_expression(input);
-        assert_eq!(
-            result,
-            Ok(Expression::Application(Invocation {
-                target: Identifier("perform_greeting"),
-                parameters: None
-            }))
-        );
-
-        let input = "sum(count)";
-        let result = parse_expression(input);
+        // Test function with simple parameter
+        input.initialize("{ sum(count) }");
+        let result = input.read_code_block();
         assert_eq!(
             result,
             Ok(Expression::Execution(Function {
@@ -1275,13 +1196,71 @@ mod check {
             }))
         );
 
-        let input = "repeat";
-        let result = parse_expression(input);
-        assert_eq!(result, Err(ParsingError::Unimplemented));
+        // Test function with multiple parameters
+        input.initialize("{ consume(apple, banana, chocolate) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("consume"),
+                parameters: vec![
+                    Expression::Value(Identifier("apple")),
+                    Expression::Value(Identifier("banana")),
+                    Expression::Value(Identifier("chocolate"))
+                ]
+            }))
+        );
 
-        let input = "foreach";
-        let result = parse_expression(input);
-        assert_eq!(result, Err(ParsingError::Unimplemented));
+        // Test function with text parameter
+        input.initialize("{ exec(\"Hello, World\") }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Text("Hello, World")]
+            }))
+        );
+
+        // Test function with multiline string parameter
+        input.initialize("{ exec(```bash\nls -l\necho \"Done\"```) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline("bash\nls -l\necho \"Done\"")]
+            }))
+        );
+    }
+
+    #[test]
+    fn reading_identifiers() {
+        let mut input = Parser::new();
+
+        // Parse a basic identifier
+        input.initialize("hello");
+        let result = input.read_identifier();
+        assert_eq!(result, Ok(Identifier("hello")));
+        assert_eq!(input.source, "");
+
+        // Parse an identifier with trailing content
+        input.initialize("count more");
+        let result = input.read_identifier();
+        assert_eq!(result, Ok(Identifier("count")));
+        assert_eq!(input.source, " more");
+
+        // Parse an identifier with leading whitespace and trailing content
+        input.initialize("  \t  test_name  after");
+        let result = input.read_identifier();
+        assert_eq!(result, Ok(Identifier("test_name")));
+        assert_eq!(input.source, "  after");
+
+        // PArse an identifier with various delimiters
+        input.initialize("name(param)");
+        let result = input.read_identifier();
+        assert_eq!(result, Ok(Identifier("name")));
+        assert_eq!(input.source, "(param)");
     }
 }
 
