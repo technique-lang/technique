@@ -377,13 +377,14 @@ impl<'i> Parser<'i> {
                 // TODO: implement outer.read_foreach_expression()
                 Err(ParsingError::Unimplemented)
             } else if is_invocation(content) {
+                // maybe we use the same double read as below?
                 let invocation = parse_invocation(content)?;
                 Ok(Expression::Application(invocation))
             } else if is_function(content) {
-                // Parse function inline with access to outer for multiline strings
-                // For now, delegate to parse_function for basic cases
-                // TODO: Handle multiline strings using outer.take_block_delimited()
-                let function = parse_function(content)?;
+                let target = outer.read_identifier()?;
+                let parameters = outer.read_parameters()?;
+
+                let function = Function { target, parameters };
                 Ok(Expression::Execution(function))
             } else {
                 let identifier = validate_identifier(content)?;
@@ -392,6 +393,26 @@ impl<'i> Parser<'i> {
         })?;
 
         Ok(expression)
+    }
+
+    /// Consume an identifier. As with the other smaller read methods, we do a
+    /// general scan of the range here to get the relevant, then call the more
+    /// detailed validation function to actually determine if it's a match.
+    fn read_identifier(&mut self) -> Result<Identifier, ParsingError> {
+        self.trim_whitespace();
+
+        let content = self.entire();
+
+        let possible = match content.find(" \t\n({") {
+            None => content,
+            Some(i) => &content[0..i],
+        };
+
+        let identifier = validate_identifier(possible)?;
+
+        self.advance(possible.len());
+
+        Ok(identifier)
     }
 
     fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
