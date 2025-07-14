@@ -89,7 +89,7 @@ pub struct Function<'i> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expression<'i> {
     Value(Identifier<'i>),
-    Text(&'i str),
+    String(&'i str),
     Multiline(&'i str),
     Repeat(Box<Expression<'i>>),
     Foreach(Identifier<'i>, Box<Expression<'i>>),

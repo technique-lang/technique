@@ -471,7 +471,7 @@ impl<'i> Parser<'i> {
                     params.push(Expression::Multiline(raw));
                 } else if content.starts_with("\"") {
                     let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
-                    params.push(Expression::Text(raw));
+                    params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Value(name));
@@ -1223,7 +1223,7 @@ mod check {
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("exec"),
-                parameters: vec![Expression::Text("Hello, World")]
+                parameters: vec![Expression::String("Hello, World")]
             }))
         );
 
