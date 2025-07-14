@@ -44,7 +44,9 @@ pub struct Procedure<'i> {
     pub name: Identifier<'i>,
     pub signature: Option<Signature<'i>>,
     pub title: Option<&'i str>,
-    pub description: Option<&'i str>,
+    pub description: Vec<Descriptive<'i>>,
+    pub attribute: Vec<Attribute<'i>>,
+    pub steps: Vec<Step<'i>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -75,10 +77,56 @@ pub struct Invocation<'i> {
     pub parameters: Option<Vec<Expression<'i>>>,
 }
 
-#[derive(Eq, Debug, PartialEq)]
-pub struct Attribute<'i>(pub &'i str);
+// types for descriptive content
 
-// now types for code blocks
+#[derive(Eq, Debug, PartialEq)]
+pub enum Descriptive<'i> {
+    Text(&'i str),
+    CodeBlock(Expression<'i>),
+    Application(Invocation<'i>),
+    Binding(Invocation<'i>, Identifier<'i>),
+    Enum(Enum<'i>),
+}
+
+// types for Steps within procedures
+
+#[derive(Eq, Debug, PartialEq)]
+pub enum Step<'i> {
+    Dependent {
+        number: &'i str,
+        content: Vec<Descriptive<'i>>,
+        attribute: Vec<Attribute<'i>>,
+        substeps: Vec<Step<'i>>,
+    },
+    Parallel {
+        content: Vec<Descriptive<'i>>,
+        attribute: Vec<Attribute<'i>>,
+        substeps: Vec<Step<'i>>,
+    },
+}
+
+// enum responses like 'Yes' | 'No'
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Enum<'i> {
+    pub options: Vec<Response<'i>>,
+}
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Response<'i> {
+    pub value: &'i str,
+    pub condition: Option<&'i str>,
+}
+
+// attributes like @chef
+
+#[derive(Eq, Debug, PartialEq)]
+pub enum Attribute<'i> {
+    Role(Identifier<'i>),
+    Place(Identifier<'i>),
+}
+
+// now types used within code blocks
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Function<'i> {
@@ -408,7 +456,10 @@ mod check {
             validate_invocation("<start_finish>(alpha, omega)"),
             Ok(Invocation {
                 target: Identifier("start_finish"),
-                parameters: Some(vec![Expression::Value(Identifier("alpha")), Expression::Value(Identifier("omega"))])
+                parameters: Some(vec![
+                    Expression::Value(Identifier("alpha")),
+                    Expression::Value(Identifier("omega"))
+                ])
             })
         );
     }

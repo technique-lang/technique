@@ -378,7 +378,9 @@ impl<'i> Parser<'i> {
                     name: declaration.0,
                     signature: declaration.1,
                     title: None,
-                    description: None,
+                    description: vec![],
+                    attribute: vec![],
+                    steps: vec![],
                 })
             },
         )?;
@@ -1345,7 +1347,9 @@ making_coffee : (Beans, Milk) -> Coffee
                     range: Genus::Single(Forma("Coffee"))
                 }),
                 title: None,
-                description: None,
+                description: vec![],
+                attribute: vec![],
+                steps: vec![],
             })
         );
     }
@@ -1372,7 +1376,9 @@ second : C -> D
                     range: Genus::Single(Forma("B"))
                 }),
                 title: None,
-                description: None,
+                description: vec![],
+                attribute: vec![],
+                steps: vec![],
             })
         );
 
@@ -1386,7 +1392,9 @@ second : C -> D
                     range: Genus::Single(Forma("D"))
                 }),
                 title: None,
-                description: None,
+                description: vec![],
+                attribute: vec![],
+                steps: vec![],
             })
         );
     }
