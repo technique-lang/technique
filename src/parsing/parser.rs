@@ -35,6 +35,7 @@ pub enum ParsingError {
     InvalidInvocation,
     InvalidFunction,
     InvalidCodeBlock,
+    InvalidStep,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -150,7 +151,15 @@ impl<'i> Parser<'i> {
                 // don't include this line
                 break;
             }
-            i += line.len() + 1; // plus newline
+
+            i += line.len() + 1;
+        }
+
+        if i > self
+            .source
+            .len()
+        {
+            i -= 1;
         }
 
         // Extract the substring from start to the found position
@@ -436,6 +445,104 @@ impl<'i> Parser<'i> {
         self.advance(possible.len());
 
         Ok(identifier)
+    }
+
+    /// Parse a step by trying dependent first, then parallel
+    fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
+        // Try parsing as dependent step first
+        if let Ok(step) = self.take_block_lines(is_dependent_step, is_dependent_step, |outer| {
+            let first_line = outer
+                .entire()
+                .lines()
+                .next()
+                .unwrap_or("");
+            let re = Regex::new(r"^\s*(\d+)\.\s+(.*)$").unwrap();
+            let cap = re
+                .captures(first_line)
+                .ok_or(ParsingError::Expected("dependent step format"))?;
+
+            let number = cap
+                .get(1)
+                .ok_or(ParsingError::Expected("step number"))?
+                .as_str();
+
+            // Skip past the step number and dot
+            let first_line_content = cap
+                .get(2)
+                .unwrap()
+                .as_str();
+            let prefix_len = first_line.len() - first_line_content.len();
+            outer.advance(prefix_len);
+
+            // Parse the remaining content
+            let content = outer.read_descriptive_content()?;
+
+            // TODO: Parse substeps and attributes
+            let attributes = vec![];
+            let substeps = vec![];
+
+            Ok(Step::Dependent {
+                number,
+                content,
+                attribute: attributes,
+                substeps,
+            })
+        }) {
+            return Ok(step);
+        }
+
+        // Try parsing as parallel step
+        if let Ok(step) = self.take_block_lines(is_parallel_step, is_parallel_step, |outer| {
+            let first_line = outer
+                .entire()
+                .lines()
+                .next()
+                .unwrap_or("");
+            let re = Regex::new(r"^\s*-\s+(.*)$").unwrap();
+            let cap = re
+                .captures(first_line)
+                .ok_or(ParsingError::Expected("parallel step format"))?;
+
+            // Skip past the dash and space
+            let first_line_content = cap
+                .get(1)
+                .unwrap()
+                .as_str();
+            let prefix_len = first_line.len() - first_line_content.len();
+            outer.advance(prefix_len);
+
+            // Parse the remaining content
+            let content = outer.read_descriptive_content()?;
+
+            // TODO: Parse substeps and attributes
+            let attributes = vec![];
+            let substeps = vec![];
+
+            Ok(Step::Parallel {
+                content,
+                attribute: attributes,
+                substeps,
+            })
+        }) {
+            return Ok(step);
+        }
+
+        // Neither dependent nor parallel step found
+        Err(ParsingError::InvalidStep)
+    }
+
+    /// Parse descriptive content within a step (placeholder for now)
+    fn read_descriptive_content(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
+        // For now, just consume all remaining content as text
+        let text = self
+            .entire()
+            .trim();
+        if text.is_empty() {
+            Ok(vec![])
+        } else {
+            self.advance(text.len());
+            Ok(vec![Descriptive::Text(text)])
+        }
     }
 
     /// Consume parameters to an invocation or function. Specifically, look
@@ -767,6 +874,26 @@ fn is_function(content: &str) -> bool {
     let re = Regex::new(r"^\s*.+?\(").unwrap();
 
     re.is_match(content)
+}
+
+fn is_dependent_step(input: &str) -> bool {
+    let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
+    re.is_match(input)
+}
+
+fn is_parallel_step(input: &str) -> bool {
+    let re = Regex::new(r"^\s*-\s+").unwrap();
+    re.is_match(input)
+}
+
+fn is_role_assignment(input: &str) -> bool {
+    let re = Regex::new(r"^\s*@[a-z][a-z0-9_]*").unwrap();
+    re.is_match(input)
+}
+
+fn is_enum_response(input: &str) -> bool {
+    let re = Regex::new(r"^\s*'.+?'").unwrap();
+    re.is_match(input)
 }
 
 #[cfg(test)]
@@ -1181,6 +1308,85 @@ mod check {
                 ])
             })
         );
+    }
+
+    #[test]
+    fn read_steps() {
+        let mut input = Parser::new();
+
+        // Test simple dependent step
+        input.initialize("1. First step");
+        let result = input.read_step();
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                number: "1",
+                content: vec![Descriptive::Text("First step")],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
+
+        // Test simple parallel step
+        input.initialize("- Parallel task");
+        let result = input.read_step();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![Descriptive::Text("Parallel task")],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
+
+        // Test multi-line dependent step
+        input.initialize("2. Check system status\nand verify connectivity");
+        let result = input.read_step();
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                number: "2",
+                content: vec![Descriptive::Text(
+                    "Check system status\nand verify connectivity"
+                )],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
+
+        // Test invalid step
+        input.initialize("Not a step");
+        let result = input.read_step();
+        assert_eq!(result, Err(ParsingError::InvalidStep));
+    }
+
+    #[test]
+    fn step_detection() {
+        // Test dependent steps
+        assert!(is_dependent_step("1. First step"));
+        assert!(is_dependent_step("  2. Second step"));
+        assert!(is_dependent_step("10. Tenth step"));
+        assert!(!is_dependent_step("1.No space"));
+        assert!(!is_dependent_step("a. Letter step"));
+
+        // Test parallel steps
+        assert!(is_parallel_step("- Parallel step"));
+        assert!(is_parallel_step("  - Indented parallel"));
+        assert!(!is_parallel_step("-No space"));
+        assert!(!is_parallel_step("* Different bullet"));
+
+        // Test role assignments
+        assert!(is_role_assignment("@surgeon"));
+        assert!(is_role_assignment("  @nursing_team"));
+        assert!(!is_role_assignment("surgeon"));
+        assert!(!is_role_assignment("@123invalid"));
+
+        // Test enum responses
+        assert!(is_enum_response("'Yes'"));
+        assert!(is_enum_response("  'No'"));
+        assert!(is_enum_response("'Not Applicable'"));
+        assert!(!is_enum_response("Yes"));
+        assert!(!is_enum_response("'unclosed"));
     }
 
     #[test]
