@@ -308,6 +308,10 @@ impl<'i> Parser<'i> {
         Ok(results)
     }
 
+    fn peek_next_char(&self) -> Option<char> {
+        self.source.chars().next()
+    }
+
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
