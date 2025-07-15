@@ -309,7 +309,9 @@ impl<'i> Parser<'i> {
     }
 
     fn peek_next_char(&self) -> Option<char> {
-        self.source.chars().next()
+        self.source
+            .chars()
+            .next()
     }
 
     /// Given a string, fork a copy of the parser state and run a nested
@@ -437,8 +439,7 @@ impl<'i> Parser<'i> {
                 // TODO: implement outer.read_foreach_expression()
                 Err(ParsingError::Unimplemented)
             } else if is_invocation(content) {
-                // maybe we use the same double read as below?
-                let invocation = parse_invocation(content)?;
+                let invocation = outer.read_invocation()?;
                 Ok(Expression::Application(invocation))
             } else if is_function(content) {
                 let target = outer.read_identifier()?;
@@ -473,6 +474,30 @@ impl<'i> Parser<'i> {
         self.advance(possible.len());
 
         Ok(identifier)
+    }
+
+    /// Parse a target like <procedure_name> or <https://example.com/proc>
+    fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
+        self.take_block_chars('<', '>', |inner| {
+            let content = inner.entire();
+            if content.starts_with("https://") {
+                Ok(Target::Remote(External(content)))
+            } else {
+                let identifier = inner.read_identifier()?;
+                Ok(Target::Local(identifier))
+            }
+        })
+    }
+
+    /// Parse a complete invocation like <procedure>(params)
+    fn read_invocation(&mut self) -> Result<Invocation<'i>, ParsingError> {
+        let target = self.read_target()?;
+        let parameters = if self.peek_next_char() == Some('(') {
+            Some(self.read_parameters()?)
+        } else {
+            None
+        };
+        Ok(Invocation { target, parameters })
     }
 
     /// Parse a step by trying dependent first, then parallel
@@ -883,23 +908,6 @@ fn is_invocation(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn parse_invocation(content: &str) -> Result<Invocation, ParsingError> {
-    let re = Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidInvocation)?;
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected(
-            "an Identifier for the procedure to be invoked",
-        ))?;
-
-    let invocation = validate_invocation(one.as_str())?;
-    Ok(invocation)
-}
-
 fn is_code_block(content: &str) -> bool {
     let re = Regex::new(r"\s*{.*?}").unwrap();
 
@@ -1307,41 +1315,56 @@ mod check {
     }
 
     #[test]
-    fn invocations() {
-        let input = "<hello>";
-        assert!(is_invocation(input));
-        let result = parse_invocation(input);
+    fn reading_invocations() {
+        let mut input = Parser::new();
+
+        // Test simple invocation without parameters
+        input.initialize("<hello>");
+        let result = input.read_invocation();
         assert_eq!(
             result,
             Ok(Invocation {
-                target: Identifier("hello"),
+                target: Target::Local(Identifier("hello")),
                 parameters: None
             })
         );
 
-        let input = "<world>()";
-        assert!(is_invocation(input));
-        let result = parse_invocation(input);
+        // Test invocation with empty parameters
+        input.initialize("<hello_world>()");
+        let result = input.read_invocation();
         assert_eq!(
             result,
             Ok(Invocation {
-                target: Identifier("world"),
+                target: Target::Local(Identifier("hello_world")),
                 parameters: Some(vec![])
             })
         );
 
-        let input = "<greetings>(name, title, occupation)";
-        assert!(is_invocation(input));
-        let result = parse_invocation(input);
+        // Test invocation with multiple parameters
+        input.initialize("<greetings>(name, title, occupation)");
+        let result = input.read_invocation();
         assert_eq!(
             result,
             Ok(Invocation {
-                target: Identifier("greetings"),
+                target: Target::Local(Identifier("greetings")),
                 parameters: Some(vec![
                     Expression::Value(Identifier("name")),
                     Expression::Value(Identifier("title")),
                     Expression::Value(Identifier("occupation"))
                 ])
+            })
+        );
+
+        // We don't have real support for this yet, but syntactically we will
+        // support the idea of invoking a procedure at an external URL, so we
+        // have this case as a placeholder.
+        input.initialize("<https://example.com/proc>");
+        let result = input.read_invocation();
+        assert_eq!(
+            result,
+            Ok(Invocation {
+                target: Target::Remote(External("https://example.com/proc")),
+                parameters: None
             })
         );
     }
