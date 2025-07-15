@@ -425,7 +425,7 @@ impl<'i> Parser<'i> {
                 // Extract content after declaration until a step is encountered
                 let (title, description) = outer.take_block_lines(
                     |_| true,
-                    |line| is_step_dependent(line) || is_step_parallel(line),
+                    |line| is_step_dependent(line),
                     |inner| {
                         let mut title = None;
                         let mut description = vec![];
@@ -460,7 +460,7 @@ impl<'i> Parser<'i> {
                         break;
                     }
 
-                    if is_step_dependent(outer.entire()) || is_step_parallel(outer.entire()) {
+                    if is_step_dependent(outer.entire()) {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
@@ -555,7 +555,7 @@ impl<'i> Parser<'i> {
         Ok(Invocation { target, parameters })
     }
 
-    /// Parse a step by trying dependent first, then parallel
+    /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
     fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
         // Try parsing as dependent step first
         if let Ok(step) = self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
@@ -1024,22 +1024,17 @@ fn is_function(content: &str) -> bool {
 }
 
 fn is_step_dependent(input: &str) -> bool {
-    let re = Regex::new(r"^(\d+|[a-z])\.\s+").unwrap();
+    let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
     re.is_match(input)
 }
 
 fn is_substep_dependent(input: &str) -> bool {
-    let re = Regex::new(r"^\s+(\d+|[a-z])\.\s+").unwrap();
-    re.is_match(input)
-}
-
-fn is_step_parallel(input: &str) -> bool {
-    let re = Regex::new(r"^-\s+").unwrap();
+    let re = Regex::new(r"^\s*[a-z]\.\s+").unwrap();
     re.is_match(input)
 }
 
 fn is_substep_parallel(input: &str) -> bool {
-    let re = Regex::new(r"^\s+-\s+").unwrap();
+    let re = Regex::new(r"^\s*-\s+").unwrap();
     re.is_match(input)
 }
 
@@ -1534,27 +1529,23 @@ mod check {
 
     #[test]
     fn step_detection() {
-        // Test main dependent steps
+        // Test main dependent steps (whitespace agnostic)
         assert!(is_step_dependent("1. First step"));
+        assert!(is_step_dependent("  1. Indented step"));
         assert!(is_step_dependent("10. Tenth step"));
-        assert!(is_step_dependent("a. Letter step"));
+        assert!(!is_step_dependent("a. Letter step"));
         assert!(!is_step_dependent("1.No space"));
-        assert!(!is_step_dependent("  2. Indented step"));
 
-        // Test dependent substeps
-        assert!(is_substep_dependent("  a. Substep"));
-        assert!(is_substep_dependent("    2. Indented substep"));
-        assert!(!is_substep_dependent("a. Not indented"));
+        // Test dependent substeps (whitespace agnostic)
+        assert!(is_substep_dependent("a. Substep"));
+        assert!(is_substep_dependent("  a. Indented substep"));
+        assert!(!is_substep_dependent("2. Substep can't have number"));
+        assert!(!is_substep_dependent("1. Not a substep"));
 
-        // Test main parallel steps
-        assert!(is_step_parallel("- Parallel step"));
-        assert!(!is_step_parallel("  - Indented parallel"));
-
-        // Test parallel substeps
+        // Test parallel substeps (whitespace agnostic, no main parallel steps)
+        assert!(is_substep_parallel("- Parallel substep"));
         assert!(is_substep_parallel("  - Indented parallel"));
         assert!(is_substep_parallel("    - Deeper indented"));
-        assert!(!is_step_parallel("-No space"));
-        assert!(!is_step_parallel("* Different bullet"));
         assert!(!is_substep_parallel("-No space"));
         assert!(!is_substep_parallel("* Different bullet"));
 
@@ -1974,6 +1965,134 @@ This is the first one.
                         content: vec![Descriptive::Text("Do the first thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "2",
+                        content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        attribute: vec![],
+                        substeps: vec![],
+                    }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn example_with_responses() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+first : A -> B
+
+# The First
+
+This is the first one.
+
+1. Have you done the first thing in the first one?
+        'Yes' | 'No' but I have an excuse
+2. Do the second thing in the first one.
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("first"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                }),
+                title: Some("The First"),
+                description: vec![Descriptive::Text("This is the first one.")],
+                attribute: vec![],
+                steps: vec![
+                    Step::Dependent {
+                        number: "1",
+                        content: vec![
+                            Descriptive::Text("Have you done the first thing in the first one?"),
+                            Descriptive::Responses(vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
+                                },
+                                Response {
+                                    value: "No",
+                                    condition: Some("but I have an excuse")
+                                }
+                            ])
+                        ],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "2",
+                        content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        attribute: vec![],
+                        substeps: vec![],
+                    }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn example_with_substeps() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+first : A -> B
+
+# The First
+
+This is the first one.
+
+1. Have you done the first thing in the first one?
+    a. Do the first thing. Then ask yourself if you are done:
+        'Yes' | 'No' but I have an excuse
+2. Do the second thing in the first one.
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("first"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                }),
+                title: Some("The First"),
+                description: vec![Descriptive::Text("This is the first one.")],
+                attribute: vec![],
+                steps: vec![
+                    Step::Dependent {
+                        number: "1",
+                        content: vec![Descriptive::Text(
+                            "Have you done the first thing in the first one?"
+                        )],
+                        attribute: vec![],
+                        substeps: vec![Step::Dependent {
+                            number: "a",
+                            content: vec![
+                                Descriptive::Text(
+                                    "Do the first thing. Then ask yourself if you are done:"
+                                ),
+                                Descriptive::Responses(vec![
+                                    Response {
+                                        value: "Yes",
+                                        condition: None
+                                    },
+                                    Response {
+                                        value: "No",
+                                        condition: Some("but I have an excuse")
+                                    }
+                                ])
+                            ],
+                            attribute: vec![],
+                            substeps: vec![]
+                        }]
                     },
                     Step::Dependent {
                         number: "2",
