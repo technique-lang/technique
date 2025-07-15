@@ -395,6 +395,16 @@ impl<'i> Parser<'i> {
         })
     }
 
+    fn read_procedure_title(&mut self) -> Result<&'i str, ParsingError> {
+        if self.peek_next_char() == Some('#') {
+            let title = self.take_line(|content| Ok(content[1..].trim()))?;
+            Ok(title)
+        } else {
+            // we shouldn't have invoked this unless we have a title to parse!
+            Err(ParsingError::IllegalParserState)
+        }
+    }
+
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
         let procedure = self.take_block_lines(
             is_procedure_declaration,
@@ -427,7 +437,7 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
-    fn read_code_block(&mut self) -> Result<Expression, ParsingError> {
+    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
         let expression = self.take_block_chars('{', '}', |outer| {
             outer.trim_whitespace();
             let content = outer.entire();
@@ -883,21 +893,6 @@ fn is_procedure_title(content: &str) -> bool {
     content
         .trim_start()
         .starts_with('#')
-}
-
-fn parse_procedure_title(content: &str) -> Result<Option<&str>, ParsingError> {
-    let trimmed = content.trim_start();
-    if trimmed.starts_with('#') {
-        let title = trimmed[1..].trim();
-        if title.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(title))
-        }
-    } else {
-        // we shouldn't have invoked this unless we have a title to parse!
-        Err(ParsingError::IllegalParserState)
-    }
 }
 
 // I'm not sure about anchoring this one on start and end, seeing as how it
