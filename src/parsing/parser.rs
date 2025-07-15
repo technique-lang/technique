@@ -1312,7 +1312,7 @@ mod check {
         assert_eq!(result, Ok(true));
 
         // this is somewhat contrived as we would not be using this to parse
-        // strings (We will need to preserve whitespace insside strings when
+        // strings (We will need to preserve whitespace inside strings when
         // we find ourselves parsing them, so subparser() won't work.
         input.initialize("XhelloX world");
 
@@ -1927,6 +1927,130 @@ This is the first one.
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
+                    }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn realistic_procedure() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+            before_anesthesia :
+
+            # Before induction of anaesthesia
+
+                1.  Has the patient confirmed his/her identity, site, procedure,
+                    and consent?
+                        'Yes'
+                2.  Is the site marked?
+                        'Yes' | 'Not Applicable'
+                3.  Is the anaesthesia machine and medication check complete?
+                        'Yes'
+                4.  Is the pulse oximeter on the patient and functioning?
+                        'Yes'
+                5.  Does the patient have a:
+                    - Known allergy?
+                            'No' | 'Yes'
+                    - Difficult airway or aspiration risk?
+                            'No' | 'Yes' and equipment/assistance available
+                    - Risk of blood loss > 500 mL?
+                            'No' | 'Yes' and two IVs planned and fluids available
+            "#,
+        ));
+        let procedure = input.read_procedure();
+
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("before_anesthesia"),
+                signature: None,
+                title: Some("Before induction of anaesthesia"),
+                description: vec![],
+                attribute: vec![],
+                steps: vec![
+                    Step::Dependent {
+                        number: "1",
+                        content: vec![
+                            Descriptive::Text("Has the patient confirmed his/her identity, site, procedure,\n                    and consent?"),
+                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                        ],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "2",
+                        content: vec![
+                            Descriptive::Text("Is the site marked?"),
+                            Descriptive::Responses(vec![
+                                Response { value: "Yes", condition: None },
+                                Response { value: "Not Applicable", condition: None }
+                            ])
+                        ],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "3",
+                        content: vec![
+                            Descriptive::Text("Is the anaesthesia machine and medication check complete?"),
+                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                        ],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "4",
+                        content: vec![
+                            Descriptive::Text("Is the pulse oximeter on the patient and functioning?"),
+                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                        ],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "5",
+                        content: vec![
+                            Descriptive::Text("Does the patient have a:")
+                        ],
+                        attribute: vec![],
+                        substeps: vec![
+                            Step::Parallel {
+                                content: vec![
+                                    Descriptive::Text("Known allergy?"),
+                                    Descriptive::Responses(vec![
+                                        Response { value: "No", condition: None },
+                                        Response { value: "Yes", condition: None }
+                                    ])
+                                ],
+                                attribute: vec![],
+                                substeps: vec![],
+                            },
+                            Step::Parallel {
+                                content: vec![
+                                    Descriptive::Text("Difficult airway or aspiration risk?"),
+                                    Descriptive::Responses(vec![
+                                        Response { value: "No", condition: None },
+                                        Response { value: "Yes", condition: Some("and equipment/assistance available") }
+                                    ])
+                                ],
+                                attribute: vec![],
+                                substeps: vec![],
+                            },
+                            Step::Parallel {
+                                content: vec![
+                                    Descriptive::Text("Risk of blood loss > 500 mL?"),
+                                    Descriptive::Responses(vec![
+                                        Response { value: "No", condition: None },
+                                        Response { value: "Yes", condition: Some("and two IVs planned and fluids available") }
+                                    ])
+                                ],
+                                attribute: vec![],
+                                substeps: vec![],
+                            }
+                        ],
                     }
                 ],
             })
