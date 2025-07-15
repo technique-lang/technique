@@ -284,6 +284,30 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
+    fn take_split_by<A, F>(&mut self, delimiter: char, function: F) -> Result<Vec<A>, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let content = self.entire();
+        let mut results = Vec::new();
+
+        for chunk in content.split(delimiter) {
+            let trimmed = chunk.trim();
+            if trimmed.is_empty() {
+                return Err(ParsingError::Expected(
+                    "non-empty content between delimiters",
+                ));
+            }
+            let mut parser = self.subparser(0, trimmed);
+            results.push(function(&mut parser)?);
+        }
+
+        // Advance parser past all consumed content
+        self.advance(content.len());
+
+        Ok(results)
+    }
+
     /// Given a string, fork a copy of the parser state and run a nested
     /// parser on that string. Does NOT advance the parent's parser state;
     /// the caller needs to do that via one of the take_*() methods.
@@ -1474,6 +1498,75 @@ mod check {
         let result = input.read_identifier();
         assert_eq!(result, Ok(Identifier("name")));
         assert_eq!(input.source, "(param)");
+    }
+
+    #[test]
+    fn splitting_by() {
+        let mut input = Parser::new();
+
+        // Test splitting simple comma-separated identifiers
+        input.initialize("apple, banana, cherry");
+        let result = input.take_split_by(',', |inner| inner.read_identifier());
+        assert_eq!(
+            result,
+            Ok(vec![
+                Identifier("apple"),
+                Identifier("banana"),
+                Identifier("cherry")
+            ])
+        );
+        assert_eq!(input.source, "");
+
+        // Test splitting with extra whitespace
+        input.initialize("  un  |  deux  |  trois  ");
+        let result = input.take_split_by('|', |inner| inner.read_identifier());
+        assert_eq!(
+            result,
+            Ok(vec![
+                Identifier("un"),
+                Identifier("deux"),
+                Identifier("trois")
+            ])
+        );
+
+        // Ensure a single item (no delimiter present in input) works
+        input.initialize("einzel");
+        let result = input.take_split_by(',', |inner| inner.read_identifier());
+        assert_eq!(result, Ok(vec![Identifier("einzel")]));
+
+        // an empty chunk causes an error
+        input.initialize("un,,trois");
+        let result = input.take_split_by(',', |inner| inner.read_identifier());
+        assert!(result.is_err());
+
+        // empty trailing chunk causes an error
+        input.initialize("un,deux,");
+        let result = input.take_split_by(',', |inner| inner.read_identifier());
+        assert!(result.is_err());
+
+        // different split character
+        input.initialize("'Yes'|'No'|'Maybe'");
+        let result = input.take_split_by('|', |inner| {
+            let content = inner.entire();
+            Ok(validate_response(content)?)
+        });
+        assert_eq!(
+            result,
+            Ok(vec![
+                Response {
+                    value: "Yes",
+                    condition: None
+                },
+                Response {
+                    value: "No",
+                    condition: None
+                },
+                Response {
+                    value: "Maybe",
+                    condition: None
+                }
+            ])
+        );
     }
 }
 
