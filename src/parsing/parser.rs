@@ -420,16 +420,41 @@ impl<'i> Parser<'i> {
                     },
                 )?;
 
-                // TODO now look for titles, steps, code blocks, and then
-                // descriptions
+                // Parse remaining content after declaration line by line
+                let mut title = None;
+                let mut description = vec![];
+                let mut steps = vec![];
+
+                while !outer
+                    .entire()
+                    .is_empty()
+                {
+                    outer.trim_whitespace();
+                    let content = outer.entire();
+
+                    if content.is_empty() {
+                        break;
+                    }
+
+                    if is_procedure_title(content) {
+                        title = Some(outer.read_procedure_title()?);
+                    } else if is_parallel_step(content) || is_dependent_step(content) {
+                        let step = outer.read_step()?;
+                        steps.push(step);
+                    } else {
+                        // Must be description content
+                        let descriptive = outer.read_descriptive_content()?;
+                        description.extend(descriptive);
+                    }
+                }
 
                 Ok(Procedure {
                     name: declaration.0,
                     signature: declaration.1,
-                    title: None,
-                    description: vec![],
-                    attribute: vec![],
-                    steps: vec![],
+                    title,
+                    description,
+                    attribute: vec![], // TODO: parse attributes
+                    steps,
                 })
             },
         )?;
