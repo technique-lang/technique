@@ -396,6 +396,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_procedure_title(&mut self) -> Result<&'i str, ParsingError> {
+        self.trim_whitespace();
         if self.peek_next_char() == Some('#') {
             let title = self.take_line(|content| Ok(content[1..].trim()))?;
             Ok(title)
@@ -413,38 +414,57 @@ impl<'i> Parser<'i> {
                 // Extract the declaration, and parse it
                 let declaration = outer.take_block_lines(
                     is_procedure_declaration,
-                    |content| !is_procedure_declaration(content),
+                    |line| !is_procedure_declaration(line),
                     |inner| {
-                        let subcontent = inner.entire();
-                        Ok(parse_procedure_declaration(subcontent)?)
+                        let content = inner.entire();
+                        Ok(parse_procedure_declaration(content)?)
+                    },
+                )?;
+                outer.read_newline()?;
+
+                // Extract content after declaration until a step is encountered
+                let (title, description) = outer.take_block_lines(
+                    |_| true,
+                    |line| is_dependent_step(line) || is_parallel_step(line),
+                    |inner| {
+                        let mut title = None;
+                        let mut description = vec![];
+
+                        let content = inner.entire();
+                        if is_procedure_title(content) {
+                            let text = inner.read_procedure_title()?;
+                            inner.read_newline()?;
+                            title = Some(text);
+                        }
+
+                        let content = inner.entire();
+                        if !content.is_empty() {
+                            description = inner.read_descriptive_content()?;
+                        }
+
+                        Ok((title, description))
                     },
                 )?;
 
-                // Parse remaining content after declaration line by line
-                let mut title = None;
-                let mut description = vec![];
+                // Parse remaining steps
                 let mut steps = vec![];
-
                 while !outer
                     .entire()
                     .is_empty()
                 {
                     outer.trim_whitespace();
-                    let content = outer.entire();
-
-                    if content.is_empty() {
+                    if outer
+                        .entire()
+                        .is_empty()
+                    {
                         break;
                     }
 
-                    if is_procedure_title(content) {
-                        title = Some(outer.read_procedure_title()?);
-                    } else if is_parallel_step(content) || is_dependent_step(content) {
+                    if is_dependent_step(outer.entire()) || is_parallel_step(outer.entire()) {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
-                        // Must be description content
-                        let descriptive = outer.read_descriptive_content()?;
-                        description.extend(descriptive);
+                        break;
                     }
                 }
 
@@ -650,7 +670,11 @@ impl<'i> Parser<'i> {
                 results.push(Descriptive::Responses(responses));
             } else {
                 // Parse regular text until we hit special characters
-                let text = self.take_until(&['{', '<', '\''], |inner| Ok(inner.entire()))?;
+                let text = self.take_until(&['{', '<', '\''], |inner| {
+                    Ok(inner
+                        .entire()
+                        .trim())
+                })?;
                 if !text.is_empty() {
                     results.push(Descriptive::Text(text));
                 }
@@ -1858,6 +1882,53 @@ second : C -> D
                 description: vec![],
                 attribute: vec![],
                 steps: vec![],
+            })
+        );
+    }
+
+    #[test]
+    fn example_procedure() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+first : A -> B
+
+# The First
+
+This is the first one.
+
+1. Do the first thing in the first one.
+2. Do the second thing in the first one.
+
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("first"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("A")),
+                    range: Genus::Single(Forma("B"))
+                }),
+                title: Some("The First"),
+                description: vec![Descriptive::Text("This is the first one.")],
+                attribute: vec![],
+                steps: vec![
+                    Step::Dependent {
+                        number: "1",
+                        content: vec![Descriptive::Text("Do the first thing in the first one.")],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        number: "2",
+                        content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        attribute: vec![],
+                        substeps: vec![],
+                    }
+                ],
             })
         );
     }
