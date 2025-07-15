@@ -569,6 +569,14 @@ impl<'i> Parser<'i> {
         }
     }
 
+    /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
+    fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
+        self.take_split_by('|', |inner| {
+            let content = inner.entire();
+            Ok(validate_response(content)?)
+        })
+    }
+
     /// Consume parameters to an invocation or function. Specifically, look
     /// for the form
     ///
@@ -1530,9 +1538,9 @@ mod check {
         );
 
         // Ensure a single item (no delimiter present in input) works
-        input.initialize("einzel");
+        input.initialize("seulement");
         let result = input.take_split_by(',', |inner| inner.read_identifier());
-        assert_eq!(result, Ok(vec![Identifier("einzel")]));
+        assert_eq!(result, Ok(vec![Identifier("seulement")]));
 
         // an empty chunk causes an error
         input.initialize("un,,trois");
@@ -1563,6 +1571,88 @@ mod check {
                 },
                 Response {
                     value: "Maybe",
+                    condition: None
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn reading_responses() {
+        let mut input = Parser::new();
+
+        // Test single response
+        input.initialize("'Yes'");
+        let result = input.read_responses();
+        assert_eq!(
+            result,
+            Ok(vec![Response {
+                value: "Yes",
+                condition: None
+            }])
+        );
+
+        // Test multiple responses
+        input.initialize("'Yes' | 'No'");
+        let result = input.read_responses();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Response {
+                    value: "Yes",
+                    condition: None
+                },
+                Response {
+                    value: "No",
+                    condition: None
+                }
+            ])
+        );
+
+        // Test three responses
+        input.initialize("'Yes' | 'No' | 'Not Applicable'");
+        let result = input.read_responses();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Response {
+                    value: "Yes",
+                    condition: None
+                },
+                Response {
+                    value: "No",
+                    condition: None
+                },
+                Response {
+                    value: "Not Applicable",
+                    condition: None
+                }
+            ])
+        );
+
+        // Test response with condition
+        input.initialize("'Yes' and equipment available");
+        let result = input.read_responses();
+        assert_eq!(
+            result,
+            Ok(vec![Response {
+                value: "Yes",
+                condition: Some("and equipment available")
+            }])
+        );
+
+        // Test responses with whitespace
+        input.initialize("  'Option A'  |  'Option B'  ");
+        let result = input.read_responses();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Response {
+                    value: "Option A",
+                    condition: None
+                },
+                Response {
+                    value: "Option B",
                     condition: None
                 }
             ])

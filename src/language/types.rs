@@ -37,6 +37,7 @@ pub enum ValidationError {
     InvalidForma,
     InvalidGenus,
     InvalidInvocation,
+    InvalidResponse,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -85,7 +86,7 @@ pub enum Descriptive<'i> {
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
     Binding(Invocation<'i>, Identifier<'i>),
-    Enum(Enum<'i>),
+    Responses(Vec<Response<'i>>),
 }
 
 // types for Steps within procedures
@@ -106,11 +107,6 @@ pub enum Step<'i> {
 }
 
 // enum responses like 'Yes' | 'No'
-
-#[derive(Eq, Debug, PartialEq)]
-pub struct Enum<'i> {
-    pub options: Vec<Response<'i>>,
-}
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Response<'i> {
@@ -324,6 +320,30 @@ pub fn validate_invocation(input: &str) -> Result<Invocation, ValidationError> {
     };
 
     Ok(Invocation { target, parameters })
+}
+
+pub fn validate_response(input: &str) -> Result<Response, ValidationError> {
+    if input.len() == 0 {
+        return Err(ValidationError::ZeroLengthToken);
+    }
+
+    // Handle conditions like 'Yes and equipment available'
+    let re = Regex::new(r"^'(.*?)'(?:\s+(.+))?$").unwrap();
+    let cap = re
+        .captures(input)
+        .ok_or(ValidationError::InvalidResponse)?;
+
+    let value = cap
+        .get(1)
+        .unwrap()
+        .as_str();
+
+    let condition = match cap.get(2) {
+        Some(two) => Some(two.as_str()),
+        None => None,
+    };
+
+    Ok(Response { value, condition })
 }
 
 #[cfg(test)]
