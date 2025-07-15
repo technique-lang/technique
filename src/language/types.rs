@@ -54,6 +54,15 @@ pub struct Procedure<'i> {
 pub struct Identifier<'i>(pub &'i str);
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct External<'i>(pub &'i str);
+
+#[derive(Eq, Debug, PartialEq)]
+pub enum Target<'i> {
+    Local(Identifier<'i>),
+    Remote(External<'i>),
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub struct Forma<'i>(pub &'i str);
 
 #[derive(Eq, Debug, PartialEq)]
@@ -74,7 +83,7 @@ pub struct Signature<'i> {
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Invocation<'i> {
-    pub target: Identifier<'i>,
+    pub target: Target<'i>,
     pub parameters: Option<Vec<Expression<'i>>>,
 }
 
