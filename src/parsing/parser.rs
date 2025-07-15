@@ -594,18 +594,45 @@ impl<'i> Parser<'i> {
         Err(ParsingError::InvalidStep)
     }
 
-    /// Parse descriptive content within a step (placeholder for now)
+    /// Parse descriptive content within a step
     fn read_descriptive_content(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
-        // For now, just consume all remaining content as text
-        let text = self
-            .entire()
-            .trim();
-        if text.is_empty() {
-            Ok(vec![])
-        } else {
-            self.advance(text.len());
-            Ok(vec![Descriptive::Text(text)])
+        let mut results = vec![];
+
+        while let Some(ch) = self.peek_next_char() {
+            self.trim_whitespace();
+            if self
+                .entire()
+                .is_empty()
+            {
+                break;
+            }
+
+            if ch == '{' {
+                let expression = self.read_code_block()?;
+                results.push(Descriptive::CodeBlock(expression));
+            } else if ch == '<' {
+                let invocation = self.read_invocation()?;
+                if self.peek_next_char() == Some('~') {
+                    self.advance(1); // consume '~'
+                    self.trim_whitespace();
+                    let variable = self.read_identifier()?;
+                    results.push(Descriptive::Binding(invocation, variable));
+                } else {
+                    results.push(Descriptive::Application(invocation));
+                }
+            } else if ch == '\'' {
+                let responses = self.read_responses()?;
+                results.push(Descriptive::Responses(responses));
+            } else {
+                // Parse regular text until we hit special characters
+                let text = self.take_until(&['{', '<', '\''], |inner| Ok(inner.entire()))?;
+                if !text.is_empty() {
+                    results.push(Descriptive::Text(text));
+                }
+            }
         }
+
+        Ok(results)
     }
 
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
