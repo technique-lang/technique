@@ -425,7 +425,7 @@ impl<'i> Parser<'i> {
                 // Extract content after declaration until a step is encountered
                 let (title, description) = outer.take_block_lines(
                     |_| true,
-                    |line| is_dependent_step(line) || is_parallel_step(line),
+                    |line| is_step_dependent(line) || is_step_parallel(line),
                     |inner| {
                         let mut title = None;
                         let mut description = vec![];
@@ -460,7 +460,7 @@ impl<'i> Parser<'i> {
                         break;
                     }
 
-                    if is_dependent_step(outer.entire()) || is_parallel_step(outer.entire()) {
+                    if is_step_dependent(outer.entire()) || is_step_parallel(outer.entire()) {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
@@ -558,7 +558,7 @@ impl<'i> Parser<'i> {
     /// Parse a step by trying dependent first, then parallel
     fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
         // Try parsing as dependent step first
-        if let Ok(step) = self.take_block_lines(is_dependent_step, is_dependent_step, |outer| {
+        if let Ok(step) = self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             let first_line = outer
                 .entire()
                 .lines()
@@ -585,9 +585,25 @@ impl<'i> Parser<'i> {
             // Parse the remaining content
             let content = outer.read_descriptive_content()?;
 
-            // TODO: Parse substeps and attributes
+            // Parse substeps
+            let mut substeps = vec![];
+            loop {
+                outer.trim_whitespace();
+                let content = outer.entire();
+
+                if content.is_empty() {
+                    break;
+                }
+
+                if is_substep_dependent(content) || is_substep_parallel(content) {
+                    substeps.push(outer.read_step()?);
+                } else {
+                    break;
+                }
+            }
+
+            // TODO: Parse attributes
             let attributes = vec![];
-            let substeps = vec![];
 
             Ok(Step::Dependent {
                 number,
@@ -600,7 +616,7 @@ impl<'i> Parser<'i> {
         }
 
         // Try parsing as parallel step
-        if let Ok(step) = self.take_block_lines(is_parallel_step, is_parallel_step, |outer| {
+        if let Ok(step) = self.take_block_lines(is_step_parallel, is_step_parallel, |outer| {
             let first_line = outer
                 .entire()
                 .lines()
@@ -622,9 +638,25 @@ impl<'i> Parser<'i> {
             // Parse the remaining content
             let content = outer.read_descriptive_content()?;
 
-            // TODO: Parse substeps and attributes
+            // Parse substeps
+            let mut substeps = vec![];
+            loop {
+                outer.trim_whitespace();
+                let content = outer.entire();
+
+                if content.is_empty() {
+                    break;
+                }
+
+                if is_substep_dependent(content) || is_substep_parallel(content) {
+                    substeps.push(outer.read_step()?);
+                } else {
+                    break;
+                }
+            }
+
+            // TODO: Parse attributes
             let attributes = vec![];
-            let substeps = vec![];
 
             Ok(Step::Parallel {
                 content,
@@ -991,13 +1023,23 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_dependent_step(input: &str) -> bool {
-    let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
+fn is_step_dependent(input: &str) -> bool {
+    let re = Regex::new(r"^(\d+|[a-z])\.\s+").unwrap();
     re.is_match(input)
 }
 
-fn is_parallel_step(input: &str) -> bool {
-    let re = Regex::new(r"^\s*-\s+").unwrap();
+fn is_substep_dependent(input: &str) -> bool {
+    let re = Regex::new(r"^\s+(\d+|[a-z])\.\s+").unwrap();
+    re.is_match(input)
+}
+
+fn is_step_parallel(input: &str) -> bool {
+    let re = Regex::new(r"^-\s+").unwrap();
+    re.is_match(input)
+}
+
+fn is_substep_parallel(input: &str) -> bool {
+    let re = Regex::new(r"^\s+-\s+").unwrap();
     re.is_match(input)
 }
 
@@ -1492,18 +1534,29 @@ mod check {
 
     #[test]
     fn step_detection() {
-        // Test dependent steps
-        assert!(is_dependent_step("1. First step"));
-        assert!(is_dependent_step("  2. Second step"));
-        assert!(is_dependent_step("10. Tenth step"));
-        assert!(!is_dependent_step("1.No space"));
-        assert!(!is_dependent_step("a. Letter step"));
+        // Test main dependent steps
+        assert!(is_step_dependent("1. First step"));
+        assert!(is_step_dependent("10. Tenth step"));
+        assert!(is_step_dependent("a. Letter step"));
+        assert!(!is_step_dependent("1.No space"));
+        assert!(!is_step_dependent("  2. Indented step"));
 
-        // Test parallel steps
-        assert!(is_parallel_step("- Parallel step"));
-        assert!(is_parallel_step("  - Indented parallel"));
-        assert!(!is_parallel_step("-No space"));
-        assert!(!is_parallel_step("* Different bullet"));
+        // Test dependent substeps
+        assert!(is_substep_dependent("  a. Substep"));
+        assert!(is_substep_dependent("    2. Indented substep"));
+        assert!(!is_substep_dependent("a. Not indented"));
+
+        // Test main parallel steps
+        assert!(is_step_parallel("- Parallel step"));
+        assert!(!is_step_parallel("  - Indented parallel"));
+
+        // Test parallel substeps
+        assert!(is_substep_parallel("  - Indented parallel"));
+        assert!(is_substep_parallel("    - Deeper indented"));
+        assert!(!is_step_parallel("-No space"));
+        assert!(!is_step_parallel("* Different bullet"));
+        assert!(!is_substep_parallel("-No space"));
+        assert!(!is_substep_parallel("* Different bullet"));
 
         // Test role assignments
         assert!(is_role_assignment("@surgeon"));
