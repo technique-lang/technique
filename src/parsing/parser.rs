@@ -125,6 +125,11 @@ impl<'i> Parser<'i> {
         self.source
     }
 
+    fn is_finished(&self) -> bool {
+        self.source
+            .is_empty()
+    }
+
     fn take_block_lines<A, F, P1, P2>(
         &mut self,
         start_predicate: P1,
@@ -446,25 +451,15 @@ impl<'i> Parser<'i> {
                     },
                 )?;
 
-                // Parse remaining steps
+                // Parse remaining content as steps
                 let mut steps = vec![];
-                while !outer
-                    .entire()
-                    .is_empty()
-                {
-                    outer.trim_whitespace();
-                    if outer
-                        .entire()
-                        .is_empty()
-                    {
-                        break;
-                    }
-
-                    if is_step(outer.entire()) {
+                while !outer.is_finished() {
+                    let content = outer.entire();
+                    if is_step(content) {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
-                        break;
+                        return Err(ParsingError::Unrecognized);
                     }
                 }
 
@@ -557,35 +552,106 @@ impl<'i> Parser<'i> {
 
     /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
     fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
-        // Try parsing as dependent step first
-        if let Ok(step) = self.take_block_lines(is_step, is_step, |outer| {
-            let first_line = outer
-                .entire()
-                .lines()
-                .next()
-                .unwrap_or("");
-            let re = Regex::new(r"^\s*(\d+)\.\s+(.*)$").unwrap();
+        self.take_block_lines(is_step, is_step, |outer| {
+            outer.trim_whitespace();
+            let content = outer.entire();
+
+            if content.is_empty() {
+                // FIXME do we even need this check?
+                return Err(ParsingError::ZeroLengthToken);
+            }
+
+            // Parse ordinal
+
+            let re = Regex::new(r"^\s*(\d+)\.\s+").unwrap();
             let cap = re
-                .captures(first_line)
-                .ok_or(ParsingError::Expected("dependent step format"))?;
+                .captures(content)
+                .ok_or(ParsingError::InvalidStep)?;
 
             let number = cap
                 .get(1)
-                .ok_or(ParsingError::Expected("step number"))?
+                .ok_or(ParsingError::Expected("the ordinal Step number"))?
                 .as_str();
 
-            // Skip past the step number and dot
-            let first_line_content = cap
-                .get(2)
+            let l = cap
+                .get(0)
                 .unwrap()
+                .len();
+
+            outer.advance(l);
+
+            let text = outer.read_descriptive_content()?;
+
+            // Parse substeps if present. They're either a set of dependent
+            // substeps or parallel substeps (but not a mix!).
+
+            let mut substeps = vec![];
+
+            // Only check for substeps if there's remaining content
+            if !outer.is_finished() {
+                let content = outer.entire();
+
+                if is_substep_dependent(content) {
+                    loop {
+                        outer.trim_whitespace();
+                        if outer.is_finished() {
+                            break;
+                        }
+                        let substep = outer.read_substep_dependent()?;
+                        substeps.push(substep);
+                    }
+                } else if is_substep_parallel(content) {
+                    loop {
+                        outer.trim_whitespace();
+                        if outer.is_finished() {
+                            break;
+                        }
+                        let substep = outer.read_substep_parallel()?;
+                        substeps.push(substep);
+                    }
+                } else {
+                    return Err(ParsingError::IllegalParserState);
+                }
+            }
+
+            // TODO: Parse attributes
+            let attributes = vec![];
+
+            return Ok(Step::Dependent {
+                ordinal: number,
+                content: text,
+                attribute: attributes,
+                substeps,
+            });
+        })
+    }
+
+    /// Parse a dependent substep (a., b., c., etc.)
+    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError> {
+        self.take_block_lines(is_substep_dependent, is_substep_dependent, |outer| {
+            let content = outer.entire();
+            let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
+            let cap = re
+                .captures(content)
+                .ok_or(ParsingError::InvalidStep)?;
+
+            let letter = cap
+                .get(1)
+                .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
                 .as_str();
-            let prefix_len = first_line.len() - first_line_content.len();
-            outer.advance(prefix_len);
+
+            // Skip past the letter, dot, and space
+            let l = cap
+                .get(0)
+                .unwrap()
+                .len();
+
+            outer.advance(l);
 
             // Parse the remaining content
-            let content = outer.read_descriptive_content()?;
+            let text = outer.read_descriptive_content()?;
 
-            // Parse substeps
+            // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
             loop {
                 outer.trim_whitespace();
@@ -595,8 +661,8 @@ impl<'i> Parser<'i> {
                     break;
                 }
 
-                if is_substep_dependent(content) || is_substep_parallel(content) {
-                    substeps.push(outer.read_step()?);
+                if is_subsubstep_dependent(content) {
+                    substeps = vec![]; // TODO
                 } else {
                     break;
                 }
@@ -606,39 +672,40 @@ impl<'i> Parser<'i> {
             let attributes = vec![];
 
             Ok(Step::Dependent {
-                number,
-                content,
+                ordinal: letter,
+                content: text,
                 attribute: attributes,
                 substeps,
             })
-        }) {
-            return Ok(step);
-        }
+        })
+    }
 
-        // Try parsing as parallel step
-        if let Ok(step) = self.take_block_lines(is_step_parallel, is_step_parallel, |outer| {
-            let first_line = outer
-                .entire()
-                .lines()
-                .next()
-                .unwrap_or("");
-            let re = Regex::new(r"^\s*-\s+(.*)$").unwrap();
+    /// Parse a parallel substep (-)
+    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError> {
+        self.take_block_lines(is_substep_dependent, is_substep_dependent, |outer| {
+            let content = outer.entire();
+            let re = Regex::new(r"^\s*-\s+").unwrap();
             let cap = re
-                .captures(first_line)
-                .ok_or(ParsingError::Expected("parallel step format"))?;
+                .captures(content)
+                .ok_or(ParsingError::InvalidStep)?;
 
-            // Skip past the dash and space
-            let first_line_content = cap
+            let letter = cap
                 .get(1)
-                .unwrap()
+                .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
                 .as_str();
-            let prefix_len = first_line.len() - first_line_content.len();
-            outer.advance(prefix_len);
+
+            // Skip past the letter, dot, and space
+            let l = cap
+                .get(0)
+                .unwrap()
+                .len();
+
+            outer.advance(l);
 
             // Parse the remaining content
-            let content = outer.read_descriptive_content()?;
+            let text = outer.read_descriptive_content()?;
 
-            // Parse substeps
+            // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
             loop {
                 outer.trim_whitespace();
@@ -648,8 +715,8 @@ impl<'i> Parser<'i> {
                     break;
                 }
 
-                if is_substep_dependent(content) || is_substep_parallel(content) {
-                    substeps.push(outer.read_step()?);
+                if is_subsubstep_dependent(content) {
+                    substeps = vec![]; // TODO
                 } else {
                     break;
                 }
@@ -658,17 +725,13 @@ impl<'i> Parser<'i> {
             // TODO: Parse attributes
             let attributes = vec![];
 
-            Ok(Step::Parallel {
-                content,
+            Ok(Step::Dependent {
+                ordinal: letter,
+                content: text,
                 attribute: attributes,
                 substeps,
             })
-        }) {
-            return Ok(step);
-        }
-
-        // Neither dependent nor parallel step found
-        Err(ParsingError::InvalidStep)
+        })
     }
 
     /// Parse descriptive content within a step
@@ -797,6 +860,13 @@ impl<'i> Parser<'i> {
     fn trim_whitespace(&mut self) {
         let mut l = 0;
         let mut n = 0;
+
+        if self
+            .source
+            .is_empty()
+        {
+            return;
+        }
 
         for c in self
             .source
@@ -1029,16 +1099,16 @@ fn is_step(input: &str) -> bool {
 }
 
 /// Recognize
-/// 
+///
 ///    a. First
 ///    b. Second
 ///    c. Third
-/// 
+///
 /// as sub-steps. This discriminator excludes the characters that would be
 /// used to compose a number below 40 in roman numerals, as those are
 /// sub-sub-steps.
 fn is_substep_dependent(input: &str) -> bool {
-    let re = Regex::new(r"^\s*[a-hj-uw-z]+\.\s+").unwrap();
+    let re = Regex::new(r"^\s*[a-hj-uw-z]\.\s+").unwrap();
     re.is_match(input)
 }
 
@@ -1501,7 +1571,7 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Dependent {
-                number: "1",
+                ordinal: "1",
                 content: vec![Descriptive::Text("First step")],
                 attribute: vec![],
                 substeps: vec![],
@@ -1526,7 +1596,7 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Dependent {
-                number: "2",
+                ordinal: "2",
                 content: vec![Descriptive::Text(
                     "Check system status\nand verify connectivity"
                 )],
@@ -1562,7 +1632,7 @@ mod check {
         assert!(is_substep_parallel("    - Deeper indented"));
         assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
         assert!(!is_substep_parallel("* Different bullet"));
-        
+
         // Test recognition of sub-sub-steps
         assert!(!is_subsubstep_dependent("i. One"));
         assert!(!is_subsubstep_dependent(" ii. Two"));
@@ -1985,13 +2055,13 @@ This is the first one.
                 attribute: vec![],
                 steps: vec![
                     Step::Dependent {
-                        number: "1",
+                        ordinal: "1",
                         content: vec![Descriptive::Text("Do the first thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "2",
+                        ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
@@ -2032,7 +2102,7 @@ This is the first one.
                 attribute: vec![],
                 steps: vec![
                     Step::Dependent {
-                        number: "1",
+                        ordinal: "1",
                         content: vec![
                             Descriptive::Text("Have you done the first thing in the first one?"),
                             Descriptive::Responses(vec![
@@ -2050,7 +2120,7 @@ This is the first one.
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "2",
+                        ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
@@ -2092,13 +2162,13 @@ This is the first one.
                 attribute: vec![],
                 steps: vec![
                     Step::Dependent {
-                        number: "1",
+                        ordinal: "1",
                         content: vec![Descriptive::Text(
                             "Have you done the first thing in the first one?"
                         )],
                         attribute: vec![],
                         substeps: vec![Step::Dependent {
-                            number: "a",
+                            ordinal: "a",
                             content: vec![
                                 Descriptive::Text(
                                     "Do the first thing. Then ask yourself if you are done:"
@@ -2119,7 +2189,7 @@ This is the first one.
                         }]
                     },
                     Step::Dependent {
-                        number: "2",
+                        ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         attribute: vec![],
                         substeps: vec![],
@@ -2168,7 +2238,7 @@ This is the first one.
                 attribute: vec![],
                 steps: vec![
                     Step::Dependent {
-                        number: "1",
+                        ordinal: "1",
                         content: vec![
                             Descriptive::Text("Has the patient confirmed his/her identity, site, procedure,\n                    and consent?"),
                             Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
@@ -2177,7 +2247,7 @@ This is the first one.
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "2",
+                        ordinal: "2",
                         content: vec![
                             Descriptive::Text("Is the site marked?"),
                             Descriptive::Responses(vec![
@@ -2189,7 +2259,7 @@ This is the first one.
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "3",
+                        ordinal: "3",
                         content: vec![
                             Descriptive::Text("Is the anaesthesia machine and medication check complete?"),
                             Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
@@ -2198,7 +2268,7 @@ This is the first one.
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "4",
+                        ordinal: "4",
                         content: vec![
                             Descriptive::Text("Is the pulse oximeter on the patient and functioning?"),
                             Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
@@ -2207,7 +2277,7 @@ This is the first one.
                         substeps: vec![],
                     },
                     Step::Dependent {
-                        number: "5",
+                        ordinal: "5",
                         content: vec![
                             Descriptive::Text("Does the patient have a:")
                         ],

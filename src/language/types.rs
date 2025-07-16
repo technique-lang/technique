@@ -103,7 +103,7 @@ pub enum Descriptive<'i> {
 #[derive(Eq, Debug, PartialEq)]
 pub enum Step<'i> {
     Dependent {
-        number: &'i str,
+        ordinal: &'i str,
         content: Vec<Descriptive<'i>>,
         attribute: Vec<Attribute<'i>>,
         substeps: Vec<Step<'i>>,
