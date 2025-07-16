@@ -785,7 +785,7 @@ impl<'i> Parser<'i> {
                     }
                 }
                 Ok(results)
-            }
+            },
         )
     }
 
@@ -1572,6 +1572,52 @@ mod check {
     }
 
     #[test]
+    fn step_detection() {
+        // Test main dependent steps (whitespace agnostic)
+        assert!(is_step("1. First step"));
+        assert!(is_step("  1. Indented step"));
+        assert!(is_step("10. Tenth step"));
+        assert!(!is_step("a. Letter step"));
+        assert!(!is_step("1.No space"));
+
+        // Test dependent substeps (whitespace agnostic)
+        assert!(is_substep_dependent("a. Substep"));
+        assert!(is_substep_dependent("  a. Indented substep"));
+        assert!(!is_substep_dependent("2. Substep can't have number"));
+        assert!(!is_substep_dependent("   1. Even if it is indented"));
+
+        // Test parallel substeps (whitespace agnostic, no main parallel steps)
+        assert!(is_substep_parallel("- Parallel substep"));
+        assert!(is_substep_parallel("  - Indented parallel"));
+        assert!(is_substep_parallel("    - Deeper indented"));
+        assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
+        assert!(!is_substep_parallel("* Different bullet"));
+
+        // Test recognition of sub-sub-steps
+        assert!(is_subsubstep_dependent("i. One"));
+        assert!(is_subsubstep_dependent(" ii. Two"));
+        assert!(is_subsubstep_dependent("v. Five"));
+        assert!(is_subsubstep_dependent("vi. Six"));
+        assert!(is_subsubstep_dependent("ix. Nine"));
+        assert!(is_subsubstep_dependent("x. Ten"));
+        assert!(is_subsubstep_dependent("xi. Eleven"));
+        assert!(is_subsubstep_dependent("xxxix. Thirty-nine"));
+
+        // Test role assignments
+        assert!(is_role_assignment("@surgeon"));
+        assert!(is_role_assignment("  @nursing_team"));
+        assert!(!is_role_assignment("surgeon"));
+        assert!(!is_role_assignment("@123invalid"));
+
+        // Test enum responses
+        assert!(is_enum_response("'Yes'"));
+        assert!(is_enum_response("  'No'"));
+        assert!(is_enum_response("'Not Applicable'"));
+        assert!(!is_enum_response("Yes"));
+        assert!(!is_enum_response("'unclosed"));
+    }
+
+    #[test]
     fn read_steps() {
         let mut input = Parser::new();
 
@@ -1583,18 +1629,6 @@ mod check {
             Ok(Step::Dependent {
                 ordinal: "1",
                 content: vec![Descriptive::Text("First step")],
-                attribute: vec![],
-                substeps: vec![],
-            })
-        );
-
-        // Test simple parallel step
-        input.initialize("- Parallel task");
-        let result = input.read_step();
-        assert_eq!(
-            result,
-            Ok(Step::Parallel {
-                content: vec![Descriptive::Text("Parallel task")],
                 attribute: vec![],
                 substeps: vec![],
             })
@@ -1622,49 +1656,33 @@ mod check {
     }
 
     #[test]
-    fn step_detection() {
-        // Test main dependent steps (whitespace agnostic)
-        assert!(is_step("1. First step"));
-        assert!(is_step("  1. Indented step"));
-        assert!(is_step("10. Tenth step"));
-        assert!(!is_step("a. Letter step"));
-        assert!(!is_step("1.No space"));
+    fn reading_substeps_basic() {
+        let mut input = Parser::new();
 
-        // Test dependent substeps (whitespace agnostic)
-        assert!(is_substep_dependent("a. Substep"));
-        assert!(is_substep_dependent("  a. Indented substep"));
-        assert!(!is_substep_dependent("2. Substep can't have number"));
-        assert!(!is_substep_dependent("   1. Even if it is indented"));
+        // Test simple dependent sub-step
+        input.initialize("a. First subordinate task");
+        let result = input.read_substep_dependent();
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "a",
+                content: vec![Descriptive::Text("First subordinate task")],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
 
-        // Test parallel substeps (whitespace agnostic, no main parallel steps)
-        assert!(is_substep_parallel("- Parallel substep"));
-        assert!(is_substep_parallel("  - Indented parallel"));
-        assert!(is_substep_parallel("    - Deeper indented"));
-        assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
-        assert!(!is_substep_parallel("* Different bullet"));
-
-        // Test recognition of sub-sub-steps
-        assert!(!is_subsubstep_dependent("i. One"));
-        assert!(!is_subsubstep_dependent(" ii. Two"));
-        assert!(!is_subsubstep_dependent("v. Five"));
-        assert!(!is_subsubstep_dependent("vi. Six"));
-        assert!(!is_subsubstep_dependent("ix. Nine"));
-        assert!(!is_subsubstep_dependent("x. Ten"));
-        assert!(!is_subsubstep_dependent("xi. Eleven"));
-        assert!(!is_subsubstep_dependent("xxxix. Thirty-nine"));
-
-        // Test role assignments
-        assert!(is_role_assignment("@surgeon"));
-        assert!(is_role_assignment("  @nursing_team"));
-        assert!(!is_role_assignment("surgeon"));
-        assert!(!is_role_assignment("@123invalid"));
-
-        // Test enum responses
-        assert!(is_enum_response("'Yes'"));
-        assert!(is_enum_response("  'No'"));
-        assert!(is_enum_response("'Not Applicable'"));
-        assert!(!is_enum_response("Yes"));
-        assert!(!is_enum_response("'unclosed"));
+        // Test simple parallel sub-step
+        input.initialize("- Parallel task");
+        let result = input.read_substep_parallel();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![Descriptive::Text("Parallel task")],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
     }
 
     #[test]
