@@ -425,7 +425,7 @@ impl<'i> Parser<'i> {
                 // Extract content after declaration until a step is encountered
                 let (title, description) = outer.take_block_lines(
                     |_| true,
-                    |line| is_step_dependent(line),
+                    |line| is_step(line),
                     |inner| {
                         let mut title = None;
                         let mut description = vec![];
@@ -460,7 +460,7 @@ impl<'i> Parser<'i> {
                         break;
                     }
 
-                    if is_step_dependent(outer.entire()) {
+                    if is_step(outer.entire()) {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
@@ -558,7 +558,7 @@ impl<'i> Parser<'i> {
     /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
     fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
         // Try parsing as dependent step first
-        if let Ok(step) = self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
+        if let Ok(step) = self.take_block_lines(is_step, is_step, |outer| {
             let first_line = outer
                 .entire()
                 .lines()
@@ -729,7 +729,7 @@ impl<'i> Parser<'i> {
     ///
     /// ( one, 2, "three", ```bash echo "four"``` )
     ///
-    /// and return a Vec with an Epression for each parameter in the list. Most however,
+    /// and return a Vec with an Expression for each parameter in the list. Most however,
     /// will either be
     ///
     /// ( a, b, c )
@@ -1023,18 +1023,32 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_step_dependent(input: &str) -> bool {
+fn is_step(input: &str) -> bool {
     let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
     re.is_match(input)
 }
 
+/// Recognize
+/// 
+///    a. First
+///    b. Second
+///    c. Third
+/// 
+/// as sub-steps. This discriminator excludes the characters that would be
+/// used to compose a number below 40 in roman numerals, as those are
+/// sub-sub-steps.
 fn is_substep_dependent(input: &str) -> bool {
-    let re = Regex::new(r"^\s*[a-z]\.\s+").unwrap();
+    let re = Regex::new(r"^\s*[a-hj-uw-z]+\.\s+").unwrap();
     re.is_match(input)
 }
 
 fn is_substep_parallel(input: &str) -> bool {
     let re = Regex::new(r"^\s*-\s+").unwrap();
+    re.is_match(input)
+}
+
+fn is_subsubstep_dependent(input: &str) -> bool {
+    let re = Regex::new(r"^\s*[ivx]+\.\s+").unwrap();
     re.is_match(input)
 }
 
@@ -1530,24 +1544,34 @@ mod check {
     #[test]
     fn step_detection() {
         // Test main dependent steps (whitespace agnostic)
-        assert!(is_step_dependent("1. First step"));
-        assert!(is_step_dependent("  1. Indented step"));
-        assert!(is_step_dependent("10. Tenth step"));
-        assert!(!is_step_dependent("a. Letter step"));
-        assert!(!is_step_dependent("1.No space"));
+        assert!(is_step("1. First step"));
+        assert!(is_step("  1. Indented step"));
+        assert!(is_step("10. Tenth step"));
+        assert!(!is_step("a. Letter step"));
+        assert!(!is_step("1.No space"));
 
         // Test dependent substeps (whitespace agnostic)
         assert!(is_substep_dependent("a. Substep"));
         assert!(is_substep_dependent("  a. Indented substep"));
         assert!(!is_substep_dependent("2. Substep can't have number"));
-        assert!(!is_substep_dependent("1. Not a substep"));
+        assert!(!is_substep_dependent("   1. Even if it is indented"));
 
         // Test parallel substeps (whitespace agnostic, no main parallel steps)
         assert!(is_substep_parallel("- Parallel substep"));
         assert!(is_substep_parallel("  - Indented parallel"));
         assert!(is_substep_parallel("    - Deeper indented"));
-        assert!(!is_substep_parallel("-No space"));
+        assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
         assert!(!is_substep_parallel("* Different bullet"));
+        
+        // Test recognition of sub-sub-steps
+        assert!(!is_subsubstep_dependent("i. One"));
+        assert!(!is_subsubstep_dependent(" ii. Two"));
+        assert!(!is_subsubstep_dependent("v. Five"));
+        assert!(!is_subsubstep_dependent("vi. Six"));
+        assert!(!is_subsubstep_dependent("ix. Nine"));
+        assert!(!is_subsubstep_dependent("x. Ten"));
+        assert!(!is_subsubstep_dependent("xi. Eleven"));
+        assert!(!is_subsubstep_dependent("xxxix. Thirty-nine"));
 
         // Test role assignments
         assert!(is_role_assignment("@surgeon"));
@@ -1643,7 +1667,7 @@ mod check {
         assert_eq!(result, Ok(Identifier("test_name")));
         assert_eq!(input.source, "  after");
 
-        // PArse an identifier with various delimiters
+        // Parse an identifier with various delimiters
         input.initialize("name(param)");
         let result = input.read_identifier();
         assert_eq!(result, Ok(Identifier("name")));
