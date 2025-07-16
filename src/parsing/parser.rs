@@ -685,20 +685,12 @@ impl<'i> Parser<'i> {
         self.take_block_lines(is_substep_parallel, is_substep_parallel, |outer| {
             let content = outer.entire();
             let re = Regex::new(r"^\s*-\s+").unwrap();
-            let cap = re
-                .captures(content)
+            let zero = re
+                .find(content)
                 .ok_or(ParsingError::InvalidStep)?;
 
-            let letter = cap
-                .get(1)
-                .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
-                .as_str();
-
-            // Skip past the letter, dot, and space
-            let l = cap
-                .get(0)
-                .unwrap()
-                .len();
+            // Skip past the dash and space
+            let l = zero.len();
 
             outer.advance(l);
 
@@ -725,8 +717,7 @@ impl<'i> Parser<'i> {
             // TODO: Parse attributes
             let attributes = vec![];
 
-            Ok(Step::Dependent {
-                ordinal: letter,
+            Ok(Step::Parallel {
                 content: text,
                 attribute: attributes,
                 substeps,
