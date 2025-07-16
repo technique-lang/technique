@@ -444,7 +444,7 @@ impl<'i> Parser<'i> {
 
                         let content = inner.entire();
                         if !content.is_empty() {
-                            description = inner.read_descriptive_content()?;
+                            description = inner.read_descriptive()?;
                         }
 
                         Ok((title, description))
@@ -580,7 +580,7 @@ impl<'i> Parser<'i> {
 
             outer.advance(l);
 
-            let text = outer.read_descriptive_content()?;
+            let text = outer.read_descriptive()?;
 
             // Parse substeps if present. They're either a set of dependent
             // substeps or parallel substeps (but not a mix!).
@@ -649,7 +649,7 @@ impl<'i> Parser<'i> {
             outer.advance(l);
 
             // Parse the remaining content
-            let text = outer.read_descriptive_content()?;
+            let text = outer.read_descriptive()?;
 
             // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
@@ -682,7 +682,7 @@ impl<'i> Parser<'i> {
 
     /// Parse a parallel substep (-)
     fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError> {
-        self.take_block_lines(is_substep_dependent, is_substep_dependent, |outer| {
+        self.take_block_lines(is_substep_parallel, is_substep_parallel, |outer| {
             let content = outer.entire();
             let re = Regex::new(r"^\s*-\s+").unwrap();
             let cap = re
@@ -703,7 +703,7 @@ impl<'i> Parser<'i> {
             outer.advance(l);
 
             // Parse the remaining content
-            let text = outer.read_descriptive_content()?;
+            let text = outer.read_descriptive()?;
 
             // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
@@ -734,49 +734,59 @@ impl<'i> Parser<'i> {
         })
     }
 
-    /// Parse descriptive content within a step
-    fn read_descriptive_content(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
-        let mut results = vec![];
+    fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
+        self.take_block_lines(
+            |_| true,
+            |line| {
+                is_step(line)
+                    || is_substep_dependent(line)
+                    || is_substep_parallel(line)
+                    || is_subsubstep_dependent(line)
+                    || is_role_assignment(line)
+                    || is_enum_response(line)
+            },
+            |outer| {
+                // now we scan through the block and dispatch on character
+                let mut results = vec![];
 
-        while let Some(ch) = self.peek_next_char() {
-            self.trim_whitespace();
-            if self
-                .entire()
-                .is_empty()
-            {
-                break;
-            }
+                while let Some(c) = outer.peek_next_char() {
+                    outer.trim_whitespace();
+                    if outer.is_finished() {
+                        break;
+                    }
 
-            if ch == '{' {
-                let expression = self.read_code_block()?;
-                results.push(Descriptive::CodeBlock(expression));
-            } else if ch == '<' {
-                let invocation = self.read_invocation()?;
-                if self.peek_next_char() == Some('~') {
-                    self.advance(1); // consume '~'
-                    self.trim_whitespace();
-                    let variable = self.read_identifier()?;
-                    results.push(Descriptive::Binding(invocation, variable));
-                } else {
-                    results.push(Descriptive::Application(invocation));
+                    if c == '{' {
+                        let expression = outer.read_code_block()?;
+                        results.push(Descriptive::CodeBlock(expression));
+                    } else if c == '<' {
+                        let invocation = outer.read_invocation()?;
+                        if outer.peek_next_char() == Some('~') {
+                            outer.advance(1); // consume '~'
+                            outer.trim_whitespace();
+                            let variable = outer.read_identifier()?;
+                            results.push(Descriptive::Binding(invocation, variable));
+                        } else {
+                            results.push(Descriptive::Application(invocation));
+                        }
+                    } else if c == '\'' {
+                        let responses = outer.read_responses()?;
+                        results.push(Descriptive::Responses(responses));
+                    } else {
+                        // Parse regular text until we hit one of the above
+                        // special characters, or end of input.
+                        let text = outer.take_until(&['{', '<', '\''], |inner| {
+                            Ok(inner
+                                .entire()
+                                .trim())
+                        })?;
+                        if !text.is_empty() {
+                            results.push(Descriptive::Text(text));
+                        }
+                    }
                 }
-            } else if ch == '\'' {
-                let responses = self.read_responses()?;
-                results.push(Descriptive::Responses(responses));
-            } else {
-                // Parse regular text until we hit special characters
-                let text = self.take_until(&['{', '<', '\''], |inner| {
-                    Ok(inner
-                        .entire()
-                        .trim())
-                })?;
-                if !text.is_empty() {
-                    results.push(Descriptive::Text(text));
-                }
+                Ok(results)
             }
-        }
-
-        Ok(results)
+        )
     }
 
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
