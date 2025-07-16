@@ -95,7 +95,6 @@ pub enum Descriptive<'i> {
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
     Binding(Invocation<'i>, Identifier<'i>),
-    Responses(Vec<Response<'i>>),
 }
 
 // types for Steps within procedures
@@ -105,11 +104,13 @@ pub enum Step<'i> {
     Dependent {
         ordinal: &'i str,
         content: Vec<Descriptive<'i>>,
+        responses: Vec<Response<'i>>,
         attribute: Vec<Attribute<'i>>,
         substeps: Vec<Step<'i>>,
     },
     Parallel {
         content: Vec<Descriptive<'i>>,
+        responses: Vec<Response<'i>>,
         attribute: Vec<Attribute<'i>>,
         substeps: Vec<Step<'i>>,
     },

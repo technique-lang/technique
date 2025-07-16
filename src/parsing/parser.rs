@@ -582,6 +582,15 @@ impl<'i> Parser<'i> {
 
             let text = outer.read_descriptive()?;
 
+            // Parse responses if present
+            let mut responses = vec![];
+            if !outer.is_finished() {
+                let content = outer.entire();
+                if is_enum_response(content) {
+                    responses = outer.read_responses()?;
+                }
+            }
+
             // Parse substeps if present. They're either a set of dependent
             // substeps or parallel substeps (but not a mix!).
 
@@ -620,6 +629,7 @@ impl<'i> Parser<'i> {
             return Ok(Step::Dependent {
                 ordinal: number,
                 content: text,
+                responses,
                 attribute: attributes,
                 substeps,
             });
@@ -651,6 +661,15 @@ impl<'i> Parser<'i> {
             // Parse the remaining content
             let text = outer.read_descriptive()?;
 
+            // Parse responses if present
+            let mut responses = vec![];
+            if !outer.is_finished() {
+                let content = outer.entire();
+                if is_enum_response(content) {
+                    responses = outer.read_responses()?;
+                }
+            }
+
             // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
             loop {
@@ -674,6 +693,7 @@ impl<'i> Parser<'i> {
             Ok(Step::Dependent {
                 ordinal: letter,
                 content: text,
+                responses,
                 attribute: attributes,
                 substeps,
             })
@@ -697,6 +717,15 @@ impl<'i> Parser<'i> {
             // Parse the remaining content
             let text = outer.read_descriptive()?;
 
+            // Parse responses if present
+            let mut responses = vec![];
+            if !outer.is_finished() {
+                let content = outer.entire();
+                if is_enum_response(content) {
+                    responses = outer.read_responses()?;
+                }
+            }
+
             // Parse nested sub-sub-steps if present.
             let mut substeps = vec![];
             loop {
@@ -719,6 +748,7 @@ impl<'i> Parser<'i> {
 
             Ok(Step::Parallel {
                 content: text,
+                responses,
                 attribute: attributes,
                 substeps,
             })
@@ -759,13 +789,10 @@ impl<'i> Parser<'i> {
                         } else {
                             results.push(Descriptive::Application(invocation));
                         }
-                    } else if c == '\'' {
-                        let responses = outer.read_responses()?;
-                        results.push(Descriptive::Responses(responses));
                     } else {
                         // Parse regular text until we hit one of the above
                         // special characters, or end of input.
-                        let text = outer.take_until(&['{', '<', '\''], |inner| {
+                        let text = outer.take_until(&['{', '<'], |inner| {
                             Ok(inner
                                 .entire()
                                 .trim())
@@ -1620,6 +1647,7 @@ mod check {
             Ok(Step::Dependent {
                 ordinal: "1",
                 content: vec![Descriptive::Text("First step")],
+                responses: vec![],
                 attribute: vec![],
                 substeps: vec![],
             })
@@ -1635,6 +1663,7 @@ mod check {
                 content: vec![Descriptive::Text(
                     "Check system status\nand verify connectivity"
                 )],
+                responses: vec![],
                 attribute: vec![],
                 substeps: vec![],
             })
@@ -1658,6 +1687,7 @@ mod check {
             Ok(Step::Dependent {
                 ordinal: "a",
                 content: vec![Descriptive::Text("First subordinate task")],
+                responses: vec![],
                 attribute: vec![],
                 substeps: vec![],
             })
@@ -1670,6 +1700,7 @@ mod check {
             result,
             Ok(Step::Parallel {
                 content: vec![Descriptive::Text("Parallel task")],
+                responses: vec![],
                 attribute: vec![],
                 substeps: vec![],
             })
@@ -2076,12 +2107,14 @@ This is the first one.
                     Step::Dependent {
                         ordinal: "1",
                         content: vec![Descriptive::Text("Do the first thing in the first one.")],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![],
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![],
                     }
@@ -2122,18 +2155,18 @@ This is the first one.
                 steps: vec![
                     Step::Dependent {
                         ordinal: "1",
-                        content: vec![
-                            Descriptive::Text("Have you done the first thing in the first one?"),
-                            Descriptive::Responses(vec![
-                                Response {
-                                    value: "Yes",
-                                    condition: None
-                                },
-                                Response {
-                                    value: "No",
-                                    condition: Some("but I have an excuse")
-                                }
-                            ])
+                        content: vec![Descriptive::Text(
+                            "Have you done the first thing in the first one?"
+                        )],
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None
+                            },
+                            Response {
+                                value: "No",
+                                condition: Some("but I have an excuse")
+                            }
                         ],
                         attribute: vec![],
                         substeps: vec![],
@@ -2141,6 +2174,7 @@ This is the first one.
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![],
                     }
@@ -2185,23 +2219,22 @@ This is the first one.
                         content: vec![Descriptive::Text(
                             "Have you done the first thing in the first one?"
                         )],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![Step::Dependent {
                             ordinal: "a",
-                            content: vec![
-                                Descriptive::Text(
-                                    "Do the first thing. Then ask yourself if you are done:"
-                                ),
-                                Descriptive::Responses(vec![
-                                    Response {
-                                        value: "Yes",
-                                        condition: None
-                                    },
-                                    Response {
-                                        value: "No",
-                                        condition: Some("but I have an excuse")
-                                    }
-                                ])
+                            content: vec![Descriptive::Text(
+                                "Do the first thing. Then ask yourself if you are done:"
+                            )],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
+                                },
+                                Response {
+                                    value: "No",
+                                    condition: Some("but I have an excuse")
+                                }
                             ],
                             attribute: vec![],
                             substeps: vec![]
@@ -2210,6 +2243,7 @@ This is the first one.
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![],
                     }
@@ -2259,20 +2293,21 @@ This is the first one.
                     Step::Dependent {
                         ordinal: "1",
                         content: vec![
-                            Descriptive::Text("Has the patient confirmed his/her identity, site, procedure,\n                    and consent?"),
-                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                            Descriptive::Text("Has the patient confirmed his/her identity, site, procedure,\n                    and consent?")
+
                         ],
+                        responses: vec![Response { value: "Yes", condition: None }],
                         attribute: vec![],
                         substeps: vec![],
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![
-                            Descriptive::Text("Is the site marked?"),
-                            Descriptive::Responses(vec![
-                                Response { value: "Yes", condition: None },
-                                Response { value: "Not Applicable", condition: None }
-                            ])
+                            Descriptive::Text("Is the site marked?")
+                        ],
+                        responses: vec![
+                            Response { value: "Yes", condition: None },
+                            Response { value: "Not Applicable", condition: None }
                         ],
                         attribute: vec![],
                         substeps: vec![],
@@ -2280,18 +2315,18 @@ This is the first one.
                     Step::Dependent {
                         ordinal: "3",
                         content: vec![
-                            Descriptive::Text("Is the anaesthesia machine and medication check complete?"),
-                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                            Descriptive::Text("Is the anaesthesia machine and medication check complete?")
                         ],
+                        responses: vec![Response { value: "Yes", condition: None }],
                         attribute: vec![],
                         substeps: vec![],
                     },
                     Step::Dependent {
                         ordinal: "4",
                         content: vec![
-                            Descriptive::Text("Is the pulse oximeter on the patient and functioning?"),
-                            Descriptive::Responses(vec![Response { value: "Yes", condition: None }])
+                            Descriptive::Text("Is the pulse oximeter on the patient and functioning?")
                         ],
+                        responses: vec![Response { value: "Yes", condition: None }],
                         attribute: vec![],
                         substeps: vec![],
                     },
@@ -2300,37 +2335,38 @@ This is the first one.
                         content: vec![
                             Descriptive::Text("Does the patient have a:")
                         ],
+                        responses: vec![],
                         attribute: vec![],
                         substeps: vec![
                             Step::Parallel {
                                 content: vec![
-                                    Descriptive::Text("Known allergy?"),
-                                    Descriptive::Responses(vec![
-                                        Response { value: "No", condition: None },
-                                        Response { value: "Yes", condition: None }
-                                    ])
+                                    Descriptive::Text("Known allergy?")
+                                ],
+                                responses: vec![
+                                    Response { value: "No", condition: None },
+                                    Response { value: "Yes", condition: None }
                                 ],
                                 attribute: vec![],
                                 substeps: vec![],
                             },
                             Step::Parallel {
                                 content: vec![
-                                    Descriptive::Text("Difficult airway or aspiration risk?"),
-                                    Descriptive::Responses(vec![
-                                        Response { value: "No", condition: None },
-                                        Response { value: "Yes", condition: Some("and equipment/assistance available") }
-                                    ])
+                                    Descriptive::Text("Difficult airway or aspiration risk?")
                                 ],
+                                responses: vec![
+                                Response { value: "No", condition: None },
+                                Response { value: "Yes", condition: Some("and equipment/assistance available") }
+                            ],
                                 attribute: vec![],
                                 substeps: vec![],
                             },
                             Step::Parallel {
                                 content: vec![
-                                    Descriptive::Text("Risk of blood loss > 500 mL?"),
-                                    Descriptive::Responses(vec![
-                                        Response { value: "No", condition: None },
-                                        Response { value: "Yes", condition: Some("and two IVs planned and fluids available") }
-                                    ])
+                                    Descriptive::Text("Risk of blood loss > 500 mL?")
+                                ],
+                                responses: vec![
+                                    Response { value: "No", condition: None },
+                                    Response { value: "Yes", condition: Some("and two IVs planned and fluids available") }
                                 ],
                                 attribute: vec![],
                                 substeps: vec![],
