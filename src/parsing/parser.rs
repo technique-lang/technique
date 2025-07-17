@@ -1117,9 +1117,9 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_step(input: &str) -> bool {
+fn is_step(content: &str) -> bool {
     let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
-    re.is_match(input)
+    re.is_match(content)
 }
 
 /// Recognize
@@ -1131,29 +1131,29 @@ fn is_step(input: &str) -> bool {
 /// as sub-steps. This discriminator excludes the characters that would be
 /// used to compose a number below 40 in roman numerals, as those are
 /// sub-sub-steps.
-fn is_substep_dependent(input: &str) -> bool {
+fn is_substep_dependent(content: &str) -> bool {
     let re = Regex::new(r"^\s*[a-hj-uw-z]\.\s+").unwrap();
-    re.is_match(input)
+    re.is_match(content)
 }
 
-fn is_substep_parallel(input: &str) -> bool {
+fn is_substep_parallel(content: &str) -> bool {
     let re = Regex::new(r"^\s*-\s+").unwrap();
-    re.is_match(input)
+    re.is_match(content)
 }
 
-fn is_subsubstep_dependent(input: &str) -> bool {
+fn is_subsubstep_dependent(content: &str) -> bool {
     let re = Regex::new(r"^\s*[ivx]+\.\s+").unwrap();
-    re.is_match(input)
+    re.is_match(content)
 }
 
-fn is_role_assignment(input: &str) -> bool {
-    let re = Regex::new(r"^\s*@[a-z][a-z0-9_]*").unwrap();
-    re.is_match(input)
+fn is_role_assignment(content: &str) -> bool {
+    let re = Regex::new(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*").unwrap();
+    re.is_match(content)
 }
 
-fn is_enum_response(input: &str) -> bool {
+fn is_enum_response(content: &str) -> bool {
     let re = Regex::new(r"^\s*'.+?'").unwrap();
-    re.is_match(input)
+    re.is_match(content)
 }
 
 #[cfg(test)]
