@@ -290,7 +290,6 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
     }
 }
 
-
 pub fn validate_response(input: &str) -> Result<Response, ValidationError> {
     if input.len() == 0 {
         return Err(ValidationError::ZeroLengthToken);
@@ -406,7 +405,6 @@ mod check {
         assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
         assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
     }
-
 
     fn maker<'i>() -> Metadata<'i> {
         let t1 = Metadata {

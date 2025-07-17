@@ -3,9 +3,7 @@
 use regex::Regex;
 use technique::language::*;
 
-use super::scope::*;
-
-pub fn parse_via_scopes(content: &str) {
+pub fn parse_via_taking(content: &str) {
     let mut input = Parser::new();
     input.initialize(content);
 
@@ -46,7 +44,6 @@ impl From<ValidationError> for ParsingError {
 
 #[derive(Debug)]
 struct Parser<'i> {
-    scope: Scope,
     source: &'i str,
     offset: usize,
     count: usize,
@@ -59,7 +56,6 @@ struct Parsed<'i>(&'i str);
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
-            scope: Scope::new(),
             source: "",
             offset: 0,
             count: 0,
@@ -67,7 +63,6 @@ impl<'i> Parser<'i> {
     }
 
     fn initialize(&mut self, content: &'i str) {
-        self.scope = Scope::new();
         self.source = content;
         self.count = 0;
         self.offset = 0;
@@ -80,15 +75,6 @@ impl<'i> Parser<'i> {
     }
 
     fn parse_from_start(&mut self) -> Result<(), ParsingError> {
-        let layer = self
-            .scope
-            .current();
-
-        match layer {
-            Layer::Technique => (), // this is where we should be
-            _ => return Err(ParsingError::IllegalParserState),
-        }
-
         let _header = self.read_technique_header()?;
         Ok(()) // FIXME
     }
@@ -324,9 +310,6 @@ impl<'i> Parser<'i> {
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
-            scope: self
-                .scope
-                .clone(),
             source: content,
             count: self.count,
             offset: indent + self.offset,
