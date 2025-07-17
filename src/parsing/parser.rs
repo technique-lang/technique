@@ -574,168 +574,109 @@ impl<'i> Parser<'i> {
                 }
             }
 
-            // Parse substeps if present. They're either a set of dependent
-            // substeps or parallel substeps (but not a mix!).
-
-            let mut substeps = vec![];
-
-            // Only check for substeps if there's remaining content
-            if !outer.is_finished() {
-                let content = outer.entire();
-
-                if is_substep_dependent(content) {
-                    loop {
-                        outer.trim_whitespace();
-                        if outer.is_finished() {
-                            break;
-                        }
-                        let substep = outer.read_substep_dependent()?;
-                        substeps.push(substep);
-                    }
-                } else if is_substep_parallel(content) {
-                    loop {
-                        outer.trim_whitespace();
-                        if outer.is_finished() {
-                            break;
-                        }
-                        let substep = outer.read_substep_parallel()?;
-                        substeps.push(substep);
-                    }
-                } else {
-                    return Err(ParsingError::IllegalParserState);
-                }
-            }
-
-            // TODO: Parse attributes
-            let attributes = vec![];
+            // Parse scopes (role assignments and substeps)
+            let scopes = outer.read_scopes()?;
 
             return Ok(Step::Dependent {
                 ordinal: number,
                 content: text,
                 responses,
-                attribute: attributes,
-                substeps,
+                scopes,
             });
         })
     }
 
     /// Parse a dependent substep (a., b., c., etc.)
     fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError> {
-        self.take_block_lines(is_substep_dependent, is_substep_dependent, |outer| {
-            let content = outer.entire();
-            let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
-            let cap = re
-                .captures(content)
-                .ok_or(ParsingError::InvalidStep)?;
-
-            let letter = cap
-                .get(1)
-                .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
-                .as_str();
-
-            // Skip past the letter, dot, and space
-            let l = cap
-                .get(0)
-                .unwrap()
-                .len();
-
-            outer.advance(l);
-
-            // Parse the remaining content
-            let text = outer.read_descriptive()?;
-
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
+        self.take_block_lines(
+            is_substep_dependent,
+            |line| is_substep_dependent(line) || is_role_assignment(line),
+            |outer| {
                 let content = outer.entire();
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
+                let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
+                let cap = re
+                    .captures(content)
+                    .ok_or(ParsingError::InvalidStep)?;
+
+                let letter = cap
+                    .get(1)
+                    .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
+                    .as_str();
+
+                // Skip past the letter, dot, and space
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .len();
+
+                outer.advance(l);
+
+                // Parse the remaining content
+                let text = outer.read_descriptive()?;
+
+                // Parse responses if present
+                let mut responses = vec![];
+                if !outer.is_finished() {
+                    let content = outer.entire();
+                    if is_enum_response(content) {
+                        responses = outer.read_responses()?;
+                    }
                 }
-            }
 
-            // Parse nested sub-sub-steps if present.
-            let mut substeps = vec![];
-            loop {
-                outer.trim_whitespace();
-                let content = outer.entire();
+                // Parse scopes (role assignments and substeps)
+                let scopes = outer.read_scopes()?;
 
-                if content.is_empty() {
-                    break;
-                }
-
-                if is_subsubstep_dependent(content) {
-                    substeps = vec![]; // TODO
-                } else {
-                    break;
-                }
-            }
-
-            // TODO: Parse attributes
-            let attributes = vec![];
-
-            Ok(Step::Dependent {
-                ordinal: letter,
-                content: text,
-                responses,
-                attribute: attributes,
-                substeps,
-            })
-        })
+                Ok(Step::Dependent {
+                    ordinal: letter,
+                    content: text,
+                    responses,
+                    scopes,
+                })
+            },
+        )
     }
 
     /// Parse a parallel substep (-)
     fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError> {
-        self.take_block_lines(is_substep_parallel, is_substep_parallel, |outer| {
-            let content = outer.entire();
-            let re = Regex::new(r"^\s*-\s+").unwrap();
-            let zero = re
-                .find(content)
-                .ok_or(ParsingError::InvalidStep)?;
-
-            // Skip past the dash and space
-            let l = zero.len();
-
-            outer.advance(l);
-
-            // Parse the remaining content
-            let text = outer.read_descriptive()?;
-
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
+        self.take_block_lines(
+            is_substep_parallel,
+            |line| {
+                is_substep_dependent(line) || is_substep_parallel(line) || is_role_assignment(line)
+            },
+            |outer| {
                 let content = outer.entire();
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
+                let re = Regex::new(r"^\s*-\s+").unwrap();
+                let zero = re
+                    .find(content)
+                    .ok_or(ParsingError::InvalidStep)?;
+
+                // Skip past the dash and space
+                let l = zero.len();
+
+                outer.advance(l);
+
+                // Parse the remaining content
+                let text = outer.read_descriptive()?;
+
+                // Parse responses if present
+                let mut responses = vec![];
+                if !outer.is_finished() {
+                    let content = outer.entire();
+                    if is_enum_response(content) {
+                        responses = outer.read_responses()?;
+                    }
                 }
-            }
 
-            // Parse nested sub-sub-steps if present.
-            let mut substeps = vec![];
-            loop {
-                outer.trim_whitespace();
-                let content = outer.entire();
+                // Parse scopes (role assignments and substeps)
+                let scopes = outer.read_scopes()?;
 
-                if content.is_empty() {
-                    break;
-                }
-
-                if is_subsubstep_dependent(content) {
-                    substeps = vec![]; // TODO
-                } else {
-                    break;
-                }
-            }
-
-            // TODO: Parse attributes
-            let attributes = vec![];
-
-            Ok(Step::Parallel {
-                content: text,
-                responses,
-                attribute: attributes,
-                substeps,
-            })
-        })
+                Ok(Step::Parallel {
+                    content: text,
+                    responses,
+                    scopes,
+                })
+            },
+        )
     }
 
     fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
@@ -898,6 +839,92 @@ impl<'i> Parser<'i> {
         self.source = &self.source[l..];
         self.count += n;
         self.offset += l;
+    }
+
+    /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
+    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError> {
+        self.take_line(|line| {
+            let mut attributes = Vec::new();
+
+            // Handle multiple roles separated by +
+            let role_parts: Vec<&str> = line
+                .split('+')
+                .collect();
+
+            for part in role_parts {
+                let re = Regex::new(r"^\s*@([a-z][a-z0-9_]*)\s*$").unwrap();
+                let cap = re
+                    .captures(part.trim())
+                    .ok_or(ParsingError::InvalidStep)?;
+
+                let role_name = cap
+                    .get(1)
+                    .ok_or(ParsingError::Expected("role name after @"))?
+                    .as_str();
+
+                let identifier = validate_identifier(role_name)?;
+                attributes.push(Attribute::Role(identifier));
+            }
+
+            Ok(attributes)
+        })
+    }
+
+    /// Parse scopes - role assignments with their substeps
+    fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError> {
+        let mut scopes = Vec::new();
+        let mut current_roles = Vec::new();
+        let mut current_substeps = Vec::new();
+
+        while !self.is_finished() {
+            self.trim_whitespace();
+            if self.is_finished() {
+                break;
+            }
+
+            let content = self.entire();
+
+            if is_role_assignment(content) {
+                // If we have accumulated substeps without roles, create a scope for them
+                if !current_substeps.is_empty() && current_roles.is_empty() {
+                    scopes.push(Scope {
+                        roles: Vec::new(),
+                        substeps: current_substeps,
+                    });
+                    current_substeps = Vec::new();
+                }
+
+                // If we have accumulated roles and substeps, create a scope for them
+                if !current_roles.is_empty() {
+                    scopes.push(Scope {
+                        roles: current_roles,
+                        substeps: current_substeps,
+                    });
+                    current_substeps = Vec::new();
+                }
+
+                // Parse the new role assignment
+                current_roles = self.read_role_assignments()?;
+            } else if is_substep_dependent(content) {
+                let substep = self.read_substep_dependent()?;
+                current_substeps.push(substep);
+            } else if is_substep_parallel(content) {
+                let substep = self.read_substep_parallel()?;
+                current_substeps.push(substep);
+            } else {
+                break;
+            }
+        }
+
+        // Handle any remaining roles and substeps
+        if !current_roles.is_empty() || !current_substeps.is_empty() {
+            scopes.push(Scope {
+                roles: current_roles,
+                substeps: current_substeps,
+            });
+        }
+
+        Ok(scopes)
     }
 }
 
@@ -1639,8 +1666,7 @@ mod check {
                 ordinal: "1",
                 content: vec![Descriptive::Text("First step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
 
@@ -1655,8 +1681,7 @@ mod check {
                     "Check system status\nand verify connectivity"
                 )],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
 
@@ -1679,8 +1704,7 @@ mod check {
                 ordinal: "a",
                 content: vec![Descriptive::Text("First subordinate task")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
 
@@ -1692,8 +1716,7 @@ mod check {
             Ok(Step::Parallel {
                 content: vec![Descriptive::Text("Parallel task")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
     }
@@ -1711,23 +1734,23 @@ mod check {
                 ordinal: "1",
                 content: vec![Descriptive::Text("Main step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![
-                    Step::Dependent {
-                        ordinal: "a",
-                        content: vec![Descriptive::Text("First substep")],
-                        responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "b",
-                        content: vec![Descriptive::Text("Second substep")],
-                        responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
-                    }
-                ],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![
+                        Step::Dependent {
+                            ordinal: "a",
+                            content: vec![Descriptive::Text("First substep")],
+                            responses: vec![],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "b",
+                            content: vec![Descriptive::Text("Second substep")],
+                            responses: vec![],
+                            scopes: vec![],
+                        },
+                    ],
+                }],
             })
         );
     }
@@ -1745,21 +1768,21 @@ mod check {
                 ordinal: "1",
                 content: vec![Descriptive::Text("Main step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![
-                    Step::Parallel {
-                        content: vec![Descriptive::Text("First substep")],
-                        responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
-                    },
-                    Step::Parallel {
-                        content: vec![Descriptive::Text("Second substep")],
-                        responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
-                    }
-                ],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![
+                        Step::Parallel {
+                            content: vec![Descriptive::Text("First substep")],
+                            responses: vec![],
+                            scopes: vec![],
+                        },
+                        Step::Parallel {
+                            content: vec![Descriptive::Text("Second substep")],
+                            responses: vec![],
+                            scopes: vec![],
+                        },
+                    ],
+                }],
             })
         );
     }
@@ -1778,13 +1801,14 @@ mod check {
                 ordinal: "1",
                 content: vec![Descriptive::Text("First step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![Step::Dependent {
-                    ordinal: "a",
-                    content: vec![Descriptive::Text("Substep")],
-                    responses: vec![],
-                    attribute: vec![],
-                    substeps: vec![],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![Step::Dependent {
+                        ordinal: "a",
+                        content: vec![Descriptive::Text("Substep")],
+                        responses: vec![],
+                        scopes: vec![],
+                    }],
                 }],
             })
         );
@@ -1795,8 +1819,7 @@ mod check {
                 ordinal: "2",
                 content: vec![Descriptive::Text("Second step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
     }
@@ -1814,22 +1837,23 @@ mod check {
                 ordinal: "1",
                 content: vec![Descriptive::Text("Main step")],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![Step::Dependent {
-                    ordinal: "a",
-                    content: vec![Descriptive::Text("Substep with response")],
-                    responses: vec![
-                        Response {
-                            value: "Yes",
-                            condition: None
-                        },
-                        Response {
-                            value: "No",
-                            condition: None
-                        }
-                    ],
-                    attribute: vec![],
-                    substeps: vec![],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![Step::Dependent {
+                        ordinal: "a",
+                        content: vec![Descriptive::Text("Substep with response")],
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None
+                            },
+                            Response {
+                                value: "No",
+                                condition: None
+                            }
+                        ],
+                        scopes: vec![],
+                    }],
                 }],
             })
         );
@@ -1872,24 +1896,25 @@ mod check {
                     "Have you done the first thing in the first one?"
                 )],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![Step::Dependent {
-                    ordinal: "a",
-                    content: vec![Descriptive::Text(
-                        "Do the first thing. Then ask yourself if you are done:"
-                    )],
-                    responses: vec![
-                        Response {
-                            value: "Yes",
-                            condition: None
-                        },
-                        Response {
-                            value: "No",
-                            condition: Some("but I have an excuse")
-                        }
-                    ],
-                    attribute: vec![],
-                    substeps: vec![],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![Step::Dependent {
+                        ordinal: "a",
+                        content: vec![Descriptive::Text(
+                            "Do the first thing. Then ask yourself if you are done:"
+                        )],
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None
+                            },
+                            Response {
+                                value: "No",
+                                condition: Some("but I have an excuse")
+                            }
+                        ],
+                        scopes: vec![]
+                    }],
                 }],
             })
         );
@@ -1914,8 +1939,7 @@ mod check {
                     "Have you done the first thing in the first one?"
                 )],
                 responses: vec![],
-                attribute: vec![],
-                substeps: vec![],
+                scopes: vec![],
             })
         );
 
@@ -2464,15 +2488,13 @@ This is the first one.
                         ordinal: "1",
                         content: vec![Descriptive::Text("Do the first thing in the first one.")],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     }
                 ],
             })
@@ -2524,15 +2546,13 @@ This is the first one.
                                 condition: Some("but I have an excuse")
                             }
                         ],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     }
                 ],
             })
@@ -2576,32 +2596,32 @@ This is the first one.
                             "Have you done the first thing in the first one?"
                         )],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![Step::Dependent {
-                            ordinal: "a",
-                            content: vec![Descriptive::Text(
-                                "Do the first thing. Then ask yourself if you are done:"
-                            )],
-                            responses: vec![
-                                Response {
-                                    value: "Yes",
-                                    condition: None
-                                },
-                                Response {
-                                    value: "No",
-                                    condition: Some("but I have an excuse")
-                                }
-                            ],
-                            attribute: vec![],
-                            substeps: vec![]
+                        scopes: vec![Scope {
+                            roles: vec![],
+                            substeps: vec![Step::Dependent {
+                                ordinal: "a",
+                                content: vec![Descriptive::Text(
+                                    "Do the first thing. Then ask yourself if you are done:"
+                                )],
+                                responses: vec![
+                                    Response {
+                                        value: "Yes",
+                                        condition: None
+                                    },
+                                    Response {
+                                        value: "No",
+                                        condition: Some("but I have an excuse")
+                                    }
+                                ],
+                                scopes: vec![]
+                            }]
                         }]
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     }
                 ],
             })
@@ -2653,8 +2673,7 @@ This is the first one.
 
                         ],
                         responses: vec![Response { value: "Yes", condition: None }],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "2",
@@ -2665,8 +2684,7 @@ This is the first one.
                             Response { value: "Yes", condition: None },
                             Response { value: "Not Applicable", condition: None }
                         ],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "3",
@@ -2674,8 +2692,7 @@ This is the first one.
                             Descriptive::Text("Is the anaesthesia machine and medication check complete?")
                         ],
                         responses: vec![Response { value: "Yes", condition: None }],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "4",
@@ -2683,8 +2700,7 @@ This is the first one.
                             Descriptive::Text("Is the pulse oximeter on the patient and functioning?")
                         ],
                         responses: vec![Response { value: "Yes", condition: None }],
-                        attribute: vec![],
-                        substeps: vec![],
+                        scopes: vec![],
                     },
                     Step::Dependent {
                         ordinal: "5",
@@ -2692,42 +2708,41 @@ This is the first one.
                             Descriptive::Text("Does the patient have a:")
                         ],
                         responses: vec![],
-                        attribute: vec![],
-                        substeps: vec![
-                            Step::Parallel {
-                                content: vec![
-                                    Descriptive::Text("Known allergy?")
-                                ],
-                                responses: vec![
+                        scopes: vec![Scope {
+                            roles: vec![],
+                            substeps: vec![
+                                Step::Parallel {
+                                    content: vec![
+                                        Descriptive::Text("Known allergy?")
+                                    ],
+                                    responses: vec![
+                                        Response { value: "No", condition: None },
+                                        Response { value: "Yes", condition: None }
+                                    ],
+                                    scopes: vec![],
+                                },
+                                Step::Parallel {
+                                    content: vec![
+                                        Descriptive::Text("Difficult airway or aspiration risk?")
+                                    ],
+                                    responses: vec![
                                     Response { value: "No", condition: None },
-                                    Response { value: "Yes", condition: None }
+                                    Response { value: "Yes", condition: Some("and equipment/assistance available") }
                                 ],
-                                attribute: vec![],
-                                substeps: vec![],
-                            },
-                            Step::Parallel {
-                                content: vec![
-                                    Descriptive::Text("Difficult airway or aspiration risk?")
-                                ],
-                                responses: vec![
-                                Response { value: "No", condition: None },
-                                Response { value: "Yes", condition: Some("and equipment/assistance available") }
-                            ],
-                                attribute: vec![],
-                                substeps: vec![],
-                            },
-                            Step::Parallel {
-                                content: vec![
-                                    Descriptive::Text("Risk of blood loss > 500 mL?")
-                                ],
-                                responses: vec![
-                                    Response { value: "No", condition: None },
-                                    Response { value: "Yes", condition: Some("and two IVs planned and fluids available") }
-                                ],
-                                attribute: vec![],
-                                substeps: vec![],
-                            }
-                        ],
+                                    scopes: vec![],
+                                },
+                                Step::Parallel {
+                                    content: vec![
+                                        Descriptive::Text("Risk of blood loss > 500 mL?")
+                                    ],
+                                    responses: vec![
+                                        Response { value: "No", condition: None },
+                                        Response { value: "Yes", condition: Some("and two IVs planned and fluids available") }
+                                    ],
+                                    scopes: vec![],
+                                }
+                            ]
+                        }],
                     }
                 ],
             })

@@ -100,19 +100,23 @@ pub enum Descriptive<'i> {
 // types for Steps within procedures
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct Scope<'i> {
+    pub roles: Vec<Attribute<'i>>, // empty for non-role scopes
+    pub substeps: Vec<Step<'i>>,
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub enum Step<'i> {
     Dependent {
         ordinal: &'i str,
         content: Vec<Descriptive<'i>>,
         responses: Vec<Response<'i>>,
-        attribute: Vec<Attribute<'i>>,
-        substeps: Vec<Step<'i>>,
+        scopes: Vec<Scope<'i>>,
     },
     Parallel {
         content: Vec<Descriptive<'i>>,
         responses: Vec<Response<'i>>,
-        attribute: Vec<Attribute<'i>>,
-        substeps: Vec<Step<'i>>,
+        scopes: Vec<Scope<'i>>,
     },
 }
 
