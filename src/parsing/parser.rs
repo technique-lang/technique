@@ -150,7 +150,7 @@ impl<'i> Parser<'i> {
         {
             if !begun && start_predicate(line) {
                 begun = true;
-                i += line.len();
+                i += line.len() + 1;
                 continue;
             } else if begun && end_predicate(line) {
                 // don't include this line
@@ -1056,10 +1056,13 @@ fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
 ///
 ///     genus -> genus
 ///
-/// as above.
+/// as above. Crucially, it must not match within a procedure body, for
+/// example it must not match " a. And now: do something" or "b. Proceed
+/// with:", which is why we had to duplicate the identifier validation rule
+/// here.
 
 fn is_procedure_declaration(content: &str) -> bool {
-    let re = Regex::new(r"^\s*(?:.+?)\s*:\s*(?:.+?)?\s*$").unwrap();
+    let re = Regex::new(r"^\s*[a-z][a-zA-Z0-9_]*\s*:\s*.*$").unwrap();
 
     re.is_match(content)
 }
