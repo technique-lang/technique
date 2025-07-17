@@ -1716,6 +1716,371 @@ mod check {
     }
 
     #[test]
+    fn single_step_with_dependent_substeps() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Main step\n    a. First substep\n    b. Second substep");
+        let result = input.read_step();
+
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text("Main step")],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![
+                    Step::Dependent {
+                        ordinal: "a",
+                        content: vec![Descriptive::Text("First substep")],
+                        responses: vec![],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Dependent {
+                        ordinal: "b",
+                        content: vec![Descriptive::Text("Second substep")],
+                        responses: vec![],
+                        attribute: vec![],
+                        substeps: vec![],
+                    }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn single_step_with_parallel_substeps() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Main step\n    - First substep\n    - Second substep");
+        let result = input.read_step();
+
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text("Main step")],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![
+                    Step::Parallel {
+                        content: vec![Descriptive::Text("First substep")],
+                        responses: vec![],
+                        attribute: vec![],
+                        substeps: vec![],
+                    },
+                    Step::Parallel {
+                        content: vec![Descriptive::Text("Second substep")],
+                        responses: vec![],
+                        attribute: vec![],
+                        substeps: vec![],
+                    }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn multiple_steps_with_substeps() {
+        let mut input = Parser::new();
+
+        input.initialize("1. First step\n    a. Substep\n2. Second step");
+        let first_result = input.read_step();
+        let second_result = input.read_step();
+
+        assert_eq!(
+            first_result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text("First step")],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![Step::Dependent {
+                    ordinal: "a",
+                    content: vec![Descriptive::Text("Substep")],
+                    responses: vec![],
+                    attribute: vec![],
+                    substeps: vec![],
+                }],
+            })
+        );
+
+        assert_eq!(
+            second_result,
+            Ok(Step::Dependent {
+                ordinal: "2",
+                content: vec![Descriptive::Text("Second step")],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
+    }
+
+    #[test]
+    fn substeps_with_responses() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Main step\n    a. Substep with response\n        'Yes' | 'No'");
+        let result = input.read_step();
+
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text("Main step")],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![Step::Dependent {
+                    ordinal: "a",
+                    content: vec![Descriptive::Text("Substep with response")],
+                    responses: vec![
+                        Response {
+                            value: "Yes",
+                            condition: None
+                        },
+                        Response {
+                            value: "No",
+                            condition: None
+                        }
+                    ],
+                    attribute: vec![],
+                    substeps: vec![],
+                }],
+            })
+        );
+    }
+
+    #[test]
+    fn is_step_with_failing_input() {
+        let test_input = "1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.";
+
+        // Test each line that should be a step
+        assert!(is_step(
+            "1. Have you done the first thing in the first one?"
+        ));
+        assert!(is_step("2. Do the second thing in the first one."));
+
+        // Test lines that should NOT be steps
+        assert!(!is_step(
+            "    a. Do the first thing. Then ask yourself if you are done:"
+        ));
+        assert!(!is_step("        'Yes' | 'No' but I have an excuse"));
+
+        // Finally, test content over multiple lines
+        assert!(is_step(test_input));
+    }
+
+    #[test]
+    fn read_step_with_complete_content() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.");
+
+        let result = input.read_step();
+
+        // Should parse the complete first step with substeps
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text(
+                    "Have you done the first thing in the first one?"
+                )],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![Step::Dependent {
+                    ordinal: "a",
+                    content: vec![Descriptive::Text(
+                        "Do the first thing. Then ask yourself if you are done:"
+                    )],
+                    responses: vec![
+                        Response {
+                            value: "Yes",
+                            condition: None
+                        },
+                        Response {
+                            value: "No",
+                            condition: Some("but I have an excuse")
+                        }
+                    ],
+                    attribute: vec![],
+                    substeps: vec![],
+                }],
+            })
+        );
+
+        assert_eq!(input.entire(), "2. Do the second thing in the first one.");
+    }
+
+    #[test]
+    fn read_step_with_incomplete_content() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Have you done the first thing in the first one?");
+
+        let result = input.read_step();
+
+        // Should parse only the step line, no substeps
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Text(
+                    "Have you done the first thing in the first one?"
+                )],
+                responses: vec![],
+                attribute: vec![],
+                substeps: vec![],
+            })
+        );
+
+        assert_eq!(input.entire(), "");
+    }
+
+    #[test]
+    fn read_procedure_step_isolation() {
+        let mut input = Parser::new();
+
+        input.initialize("first : A -> B\n\n# The First\n\nThis is the first one.\n\n1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.");
+
+        let result = input.read_procedure();
+
+        // This should pass if read_procedure correctly isolates step content
+        match result {
+            Ok(procedure) => {
+                assert_eq!(
+                    procedure
+                        .steps
+                        .len(),
+                    2
+                );
+            }
+            Err(_e) => {
+                panic!("read_procedure failed");
+            }
+        }
+    }
+
+    #[test]
+    fn take_block_lines_with_is_step() {
+        let mut input = Parser::new();
+
+        input.initialize("1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.");
+
+        let result = input.take_block_lines(is_step, is_step, |inner| Ok(inner.entire()));
+
+        match result {
+            Ok(content) => {
+                // Should isolate first step including substeps, stop at second step
+                assert!(content.contains("1. Have you done"));
+                assert!(content.contains("a. Do the first thing"));
+                assert!(!content.contains("2. Do the second thing"));
+
+                // Remaining should be the second step
+                assert_eq!(input.entire(), "2. Do the second thing in the first one.");
+            }
+            Err(_) => {
+                panic!("take_block_lines() failed");
+            }
+        }
+    }
+
+    #[test]
+    fn is_step_line_by_line() {
+        // Test is_step on each line of our test content
+        let lines = [
+            "1. Have you done the first thing in the first one?",
+            "    a. Do the first thing. Then ask yourself if you are done:",
+            "        'Yes' | 'No' but I have an excuse",
+            "2. Do the second thing in the first one.",
+        ];
+
+        for (i, line) in lines
+            .iter()
+            .enumerate()
+        {
+            let is_step_result = is_step(line);
+
+            match i {
+                0 => assert!(is_step_result, "First step line should match is_step"),
+                1 | 2 => assert!(
+                    !is_step_result,
+                    "Substep/response lines should NOT match is_step"
+                ),
+                3 => assert!(is_step_result, "Second step line should match is_step"),
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn take_block_lines_title_description_pattern() {
+        let mut input = Parser::new();
+
+        // Test the exact pattern used in read_procedure for title/description extraction
+        input.initialize("# The First\n\nThis is the first one.\n\n1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.");
+
+        let result = input.take_block_lines(
+            |_| true,             // start predicate (always true)
+            |line| is_step(line), // end predicate (stop at first step)
+            |inner| Ok(inner.entire()),
+        );
+
+        match result {
+            Ok(content) => {
+                // The isolated content should be title + description, stopping at first step
+                assert!(content.contains("# The First"));
+                assert!(content.contains("This is the first one."));
+                assert!(!content.contains("1. Have you done"));
+
+                // The remaining content should include ALL steps and substeps
+                let remaining = input
+                    .entire()
+                    .trim_start();
+                assert!(remaining.starts_with("1. Have you done"));
+                assert!(remaining.contains("a. Do the first thing"));
+                assert!(remaining.contains("2. Do the second thing"));
+            }
+            Err(_e) => {
+                panic!("take_block_lines failed");
+            }
+        }
+    }
+
+    #[test]
+    fn test_take_block_lines_procedure_wrapper() {
+        let mut input = Parser::new();
+
+        // Test the outer take_block_lines call that wraps read_procedure
+        input.initialize("first : A -> B\n\n# The First\n\nThis is the first one.\n\n1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.");
+
+        let result = input.take_block_lines(
+            is_procedure_declaration,
+            is_procedure_declaration,
+            |outer| Ok(outer.entire()),
+        );
+
+        match result {
+            Ok(isolated_content) => {
+                // Since there's only one procedure, the outer take_block_lines should capture everything
+                assert!(isolated_content.contains("first : A -> B"));
+                assert!(isolated_content.contains("# The First"));
+                assert!(isolated_content.contains("This is the first one."));
+                assert!(
+                    isolated_content.contains("1. Have you done the first thing in the first one?")
+                );
+                assert!(isolated_content.contains("a. Do the first thing"));
+                assert!(isolated_content.contains("2. Do the second thing"));
+            }
+            Err(_e) => {
+                panic!("take_block_lines failed");
+            }
+        }
+    }
+
+    #[test]
     fn code_blocks() {
         let mut input = Parser::new();
 
