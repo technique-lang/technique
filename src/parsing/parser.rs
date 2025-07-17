@@ -999,6 +999,11 @@ fn parse_template_line(content: &str) -> Result<Option<&str>, ParsingError> {
     Ok(Some(result))
 }
 
+fn is_identifier(content: &str) -> bool {
+    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    re.is_match(content)
+}
+
 fn parse_identifier(content: &str) -> Result<Identifier, ParsingError> {
     let result = validate_identifier(content)?;
     Ok(result)
@@ -1058,13 +1063,18 @@ fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
 ///
 /// as above. Crucially, it must not match within a procedure body, for
 /// example it must not match " a. And now: do something" or "b. Proceed
-/// with:", which is why we had to duplicate the identifier validation rule
-/// here.
+/// with:".
 
 fn is_procedure_declaration(content: &str) -> bool {
-    let re = Regex::new(r"^\s*[a-z][a-zA-Z0-9_]*\s*:\s*.*$").unwrap();
+    match content.split_once(':') {
+        Some((before, after)) => {
+            let before = before.trim();
+            let after = after.trim();
 
-    re.is_match(content)
+            is_identifier(before) && (after.is_empty() || is_signature(after))
+        }
+        None => false,
+    }
 }
 
 fn parse_procedure_declaration(
@@ -1443,12 +1453,7 @@ mod check {
         );
 
         let content = "f : B";
-        // it should detect a procedure is being declared
-        assert!(is_procedure_declaration(content));
-
-        // but it is invalid
-        let result = parse_procedure_declaration(content);
-        assert!(result.is_err());
+        assert!(!is_procedure_declaration(content));
     }
 
     #[test]
