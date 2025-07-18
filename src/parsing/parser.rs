@@ -1955,7 +1955,10 @@ and verify connectivity
             })
         );
 
-        assert_eq!(input.entire(), "2. Do the second thing in the first one.\n            ");
+        assert_eq!(
+            input.entire(),
+            "2. Do the second thing in the first one.\n            "
+        );
     }
 
     #[test]
@@ -2042,7 +2045,10 @@ This is the first one.
                 assert!(!content.contains("2. Do the second thing"));
 
                 // Remaining should be the second step
-                assert_eq!(input.entire(), "2. Do the second thing in the first one.\n            ");
+                assert_eq!(
+                    input.entire(),
+                    "2. Do the second thing in the first one.\n            "
+                );
             }
             Err(_) => {
                 panic!("take_block_lines() failed");
