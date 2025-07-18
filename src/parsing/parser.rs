@@ -3468,6 +3468,158 @@ This is the first one.
             })
         );
     }
+
+    #[test]
+    fn realistic_procedure_part3() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+before_leaving :
+
+# Before patient leaves operating room
+
+    1.  Verbally confirm:
+        -   The name of the surgical procedure(s).
+        -   Completion of instrument, sponge, and needle counts.
+        -   Specimen labelling
+                @nursing_team
+                    a.  Read specimen labels aloud, including patient
+                        name.
+        -   Whether there are any equipment problems to be addressed.
+    2.  Post-operative care:
+        @surgeon
+            a.  What are the key concerns for recovery and management
+                of this patient?
+        @anesthetist
+            b.  What are the key concerns for recovery and management
+                of this patient?
+        @nursing_team
+            c.  What are the key concerns for recovery and management
+                of this patient?
+            "#,
+        ));
+        let procedure = input.read_procedure();
+
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("before_leaving"),
+                signature: None,
+                title: Some("Before patient leaves operating room"),
+                description: vec![],
+                attribute: vec![],
+                steps: vec![
+                    Step::Dependent {
+                        ordinal: "1",
+                        content: vec![
+                            Descriptive::Text("Verbally confirm:")
+                        ],
+                        responses: vec![],
+                        scopes: vec![
+                            Scope {
+                                roles: vec![],
+                                substeps: vec![
+                                    Step::Parallel {
+                                        content: vec![
+                                            Descriptive::Text("The name of the surgical procedure(s).")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    },
+                                    Step::Parallel {
+                                        content: vec![
+                                            Descriptive::Text("Completion of instrument, sponge, and needle counts.")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    },
+                                    Step::Parallel {
+                                        content: vec![
+                                            Descriptive::Text("Specimen labelling")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    }
+                                ]
+                            },
+                            Scope {
+                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                                substeps: vec![
+                                    Step::Dependent {
+                                        ordinal: "a",
+                                        content: vec![
+                                            Descriptive::Text("Read specimen labels aloud, including patient\n                        name.")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![Scope {
+                                            roles: vec![],
+                                            substeps: vec![
+                                                Step::Parallel {
+                                                    content: vec![
+                                                        Descriptive::Text("Whether there are any equipment problems to be addressed.")
+                                                    ],
+                                                    responses: vec![],
+                                                    scopes: vec![],
+                                                }
+                                            ]
+                                        }],
+                                    }
+                                ]
+                            }
+                        ],
+                    },
+                    Step::Dependent {
+                        ordinal: "2",
+                        content: vec![
+                            Descriptive::Text("Post-operative care:")
+                        ],
+                        responses: vec![],
+                        scopes: vec![
+                            Scope {
+                                roles: vec![Attribute::Role(Identifier("surgeon"))],
+                                substeps: vec![
+                                    Step::Dependent {
+                                        ordinal: "a",
+                                        content: vec![
+                                            Descriptive::Text("What are the key concerns for recovery and management\n                of this patient?")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    }
+                                ]
+                            },
+                            Scope {
+                                roles: vec![Attribute::Role(Identifier("anesthetist"))],
+                                substeps: vec![
+                                    Step::Dependent {
+                                        ordinal: "b",
+                                        content: vec![
+                                            Descriptive::Text("What are the key concerns for recovery and management\n                of this patient?")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    }
+                                ]
+                            },
+                            Scope {
+                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                                substeps: vec![
+                                    Step::Dependent {
+                                        ordinal: "c",
+                                        content: vec![
+                                            Descriptive::Text("What are the key concerns for recovery and management\n                of this patient?")
+                                        ],
+                                        responses: vec![],
+                                        scopes: vec![],
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            })
+        );
+    }
 }
 
 /*
