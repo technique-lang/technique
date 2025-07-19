@@ -43,7 +43,6 @@ impl From<ValidationError> for ParsingError {
 struct Parser<'i> {
     source: &'i str,
     offset: usize,
-    count: usize,
 }
 
 /// Wrap parse results with the width consumed.
@@ -55,13 +54,11 @@ impl<'i> Parser<'i> {
         Parser {
             source: "",
             offset: 0,
-            count: 0,
         }
     }
 
     fn initialize(&mut self, content: &'i str) {
         self.source = content;
-        self.count = 0;
         self.offset = 0;
     }
 
@@ -123,7 +120,6 @@ impl<'i> Parser<'i> {
 
                 self.source = after;
                 self.offset += before.len() + 1;
-                self.count += 1;
                 Ok(result)
             }
             None => {
@@ -341,7 +337,6 @@ impl<'i> Parser<'i> {
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
             source: content,
-            count: self.count,
             offset: indent + self.offset,
         };
 
@@ -358,7 +353,6 @@ impl<'i> Parser<'i> {
 
             if c == '\n' {
                 self.source = &self.source[l..];
-                self.count += 1;
                 self.offset += l;
                 return Ok(());
             } else if c.is_ascii_whitespace() {
@@ -901,7 +895,6 @@ impl<'i> Parser<'i> {
     /// the current parser text.
     fn trim_whitespace(&mut self) {
         let mut l = 0;
-        let mut n = 0;
 
         if self
             .source
@@ -915,7 +908,6 @@ impl<'i> Parser<'i> {
             .chars()
         {
             if c == '\n' {
-                n += 1;
                 l += 1;
                 continue;
             } else if c.is_ascii_whitespace() {
@@ -927,7 +919,6 @@ impl<'i> Parser<'i> {
         }
 
         self.source = &self.source[l..];
-        self.count += n;
         self.offset += l;
     }
 
@@ -1494,7 +1485,6 @@ mod check {
         input.initialize("\n \nthere");
         input.trim_whitespace();
         assert_eq!(input.source, "there");
-        assert_eq!(input.count, 2);
         assert_eq!(input.offset, 3);
     }
 
