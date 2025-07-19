@@ -3,6 +3,7 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
+mod parsing;
 mod rendering;
 
 fn main() {
@@ -89,11 +90,12 @@ fn main() {
 
             let filename = submatches
                 .get_one::<String>("filename")
-                .unwrap(); // argument are required by definitin so always present
+                .unwrap(); // argument are required by definition so always present
 
             debug!(filename);
 
-            todo!();
+            parsing::load(&Path::new(filename));
+            // TODO continue with validation of the returned technique
         }
         Some(("format", submatches)) => {
             if submatches.contains_id("raw-control-chars") {
