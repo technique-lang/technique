@@ -410,29 +410,46 @@ impl<'i> Parser<'i> {
                 )?;
                 outer.read_newline()?;
 
-                // Extract content after declaration until a step is encountered
-                let (title, description) = outer.take_block_lines(
-                    |_| true,
-                    |line| is_step(line),
-                    |inner| {
-                        let mut title = None;
-                        let mut description = vec![];
+                // Read title, if present
 
-                        let content = inner.entire();
-                        if is_procedure_title(content) {
+                let content = outer.entire();
+                let title = if is_procedure_title(content) {
+                    let title = outer.take_block_lines(
+                        |_| true,
+                        |line| !line.starts_with('#'),
+                        |inner| {
                             let text = inner.read_procedure_title()?;
-                            inner.read_newline()?;
-                            title = Some(text);
-                        }
+                            Ok(Some(text))
+                        },
+                    )?;
 
-                        let content = inner.entire();
-                        if !content.is_empty() {
-                            description = inner.read_descriptive()?;
-                        }
+                    outer.read_newline()?;
+                    title
+                } else {
+                    None
+                };
 
-                        Ok((title, description))
-                    },
-                )?;
+                // Extract content after declaration until a step is encountered
+
+                let content = outer.entire();
+                let description = if !is_step(content) {
+                    outer.take_block_lines(
+                        |line| !is_step(line),
+                        |line| is_step(line),
+                        |inner| {
+                            let mut description = vec![];
+
+                            let content = inner.entire();
+                            if !content.is_empty() {
+                                description = inner.read_descriptive()?;
+                            }
+
+                            Ok(description)
+                        },
+                    )?
+                } else {
+                    vec![]
+                };
 
                 // Parse remaining content as steps
                 let mut steps = vec![];
@@ -3465,6 +3482,66 @@ This is the first one.
                         }],
                     }
                 ],
+            })
+        );
+    }
+
+    #[test]
+    fn realistic_procedure_part2() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+label_the_specimens :
+
+    1.  Specimen labelling
+                @nursing_team
+                    - Label blood tests
+                    - Label tissue samples
+                @admin_staff
+                    a. Prepare the envelopes
+            "#,
+        ));
+        let procedure = input.read_procedure();
+
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("label_the_specimens"),
+                signature: None,
+                title: None,
+                description: vec![],
+                attribute: vec![],
+                steps: vec![Step::Dependent {
+                    ordinal: "1",
+                    content: vec![Descriptive::Text("Specimen labelling")],
+                    responses: vec![],
+                    scopes: vec![
+                        Scope {
+                            roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                            substeps: vec![
+                                Step::Parallel {
+                                    content: vec![Descriptive::Text("Label blood tests")],
+                                    responses: vec![],
+                                    scopes: vec![],
+                                },
+                                Step::Parallel {
+                                    content: vec![Descriptive::Text("Label tissue samples")],
+                                    responses: vec![],
+                                    scopes: vec![],
+                                }
+                            ]
+                        },
+                        Scope {
+                            roles: vec![Attribute::Role(Identifier("admin_staff"))],
+                            substeps: vec![Step::Dependent {
+                                ordinal: "a",
+                                content: vec![Descriptive::Text("Prepare the envelopes")],
+                                responses: vec![],
+                                scopes: vec![],
+                            }]
+                        }
+                    ],
+                }],
             })
         );
     }
