@@ -3,15 +3,11 @@
 use regex::Regex;
 use technique::language::*;
 
-pub fn parse_via_taking(content: &str) {
+pub fn parse_via_taking(content: &str) -> Result<Technique, ParsingError> {
     let mut input = Parser::new();
     input.initialize(content);
 
-    let result = input.read_technique_header();
-    println!("{:?}", result);
-    println!("{:?}", input);
-
-    std::process::exit(0);
+    input.parse_from_start()
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -75,9 +71,35 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<(), ParsingError> {
-        let _header = self.read_technique_header()?;
-        Ok(()) // FIXME
+    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError> {
+        // Check if header is present by looking for magic line
+        let header = if is_magic_line(self.entire()) {
+            Some(self.read_technique_header()?)
+        } else {
+            None
+        };
+
+        // Parse zero or more procedures
+        let mut procedures = Vec::new();
+        while !self.is_finished() {
+            self.trim_whitespace();
+
+            let content = self.entire();
+            if is_procedure_declaration(content) {
+                let procedure = self.read_procedure()?;
+                procedures.push(procedure);
+            } else {
+                self.trim_whitespace();
+            }
+        }
+
+        let body = if procedures.is_empty() {
+            None
+        } else {
+            Some(procedures)
+        };
+
+        Ok(Technique { header, body })
     }
 
     /// consume up to but not including newline (or end)

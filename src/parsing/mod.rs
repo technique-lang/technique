@@ -8,5 +8,30 @@ pub fn load(source: &Path) {
     // read source to a str
     let content = std::fs::read_to_string(source).expect("Failed to read the source file");
 
-    parser::parse_via_taking(content.as_str());
+    let result = parser::parse_via_taking(content.as_str());
+
+    match result {
+        Ok(technique) => {
+            if let Some(procedures) = &technique.body {
+                println!("Found {} procedure(s):", procedures.len());
+                for procedure in procedures {
+                    println!(
+                        "  - {}",
+                        procedure
+                            .name
+                            .0
+                    );
+                }
+                println!();
+            } else {
+                println!("No procedures found");
+            }
+
+            println!("{:#?}", technique);
+        }
+        Err(error) => {
+            eprintln!("Parse error: {:?}", error);
+            std::process::exit(1);
+        }
+    };
 }
