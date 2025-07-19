@@ -488,7 +488,8 @@ impl<'i> Parser<'i> {
 
                 Ok(Procedure {
                     name: declaration.0,
-                    signature: declaration.1,
+                    parameters: declaration.1,
+                    signature: declaration.2,
                     title,
                     description,
                     attribute: vec![], // TODO: parse attributes
@@ -1189,7 +1190,7 @@ fn is_procedure_declaration(content: &str) -> bool {
 
 fn parse_procedure_declaration(
     content: &str,
-) -> Result<(Identifier, Option<Signature>), ParsingError> {
+) -> Result<(Identifier, Option<Vec<Identifier>>, Option<Signature>), ParsingError> {
     // These capture groups use .+? to make "match more than one, but
     // lazily" so that the subsequent grabs of whitespace and the all
     // important ':' character are not absorbed.
@@ -1206,13 +1207,31 @@ fn parse_procedure_declaration(
         ))?;
 
     let text = one.as_str();
-    let name = if let Some((name, _params)) = text.split_once('(') {
-        name // Extract just the identifier part before the parameters
-    } else {
-        text // No parameters, use the whole string
-    };
+    let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
+        let name = validate_identifier(before)?;
 
-    let name = validate_identifier(name)?;
+        // Extract parameters from parentheses
+        if !list.ends_with(')') {
+            return Err(ParsingError::InvalidDeclaration);
+        }
+        let list = &list[..list.len() - 1].trim();
+
+        let parameters = if list.is_empty() {
+            None
+        } else {
+            let mut params = Vec::new();
+            for item in list.split(',') {
+                let param = validate_identifier(item.trim())?;
+                params.push(param);
+            }
+            Some(params)
+        };
+
+        (name, parameters)
+    } else {
+        let name = validate_identifier(text)?;
+        (name, None)
+    };
 
     let signature = match cap.get(2) {
         Some(two) => {
@@ -1222,7 +1241,7 @@ fn parse_procedure_declaration(
         None => None,
     };
 
-    Ok((name, signature))
+    Ok((name, parameters, signature))
 }
 
 fn is_procedure_title(content: &str) -> bool {
@@ -1546,7 +1565,7 @@ mod check {
         assert!(is_procedure_declaration(content));
 
         let result = parse_procedure_declaration(content);
-        assert_eq!(result, Ok((Identifier("making_coffee"), None)));
+        assert_eq!(result, Ok((Identifier("making_coffee"), None, None)));
     }
 
     #[test]
@@ -1559,6 +1578,7 @@ mod check {
             result,
             Ok((
                 Identifier("f"),
+                None,
                 Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
@@ -1574,6 +1594,7 @@ mod check {
             result,
             Ok((
                 Identifier("making_coffee"),
+                None,
                 Some(Signature {
                     domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
                     range: Genus::List(Forma("Coffee"))
@@ -3315,6 +3336,7 @@ making_coffee : (Beans, Milk) -> Coffee
             procedure,
             Ok(Procedure {
                 name: Identifier("making_coffee"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
                     range: Genus::Single(Forma("Coffee"))
@@ -3322,7 +3344,7 @@ making_coffee : (Beans, Milk) -> Coffee
                 title: None,
                 description: vec![],
                 attribute: vec![],
-                steps: vec![],
+                steps: vec![]
             })
         );
     }
@@ -3344,6 +3366,7 @@ second : C -> D
             procedure,
             Ok(Procedure {
                 name: Identifier("first"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
@@ -3351,7 +3374,7 @@ second : C -> D
                 title: None,
                 description: vec![],
                 attribute: vec![],
-                steps: vec![],
+                steps: vec![]
             })
         );
 
@@ -3360,6 +3383,7 @@ second : C -> D
             procedure,
             Ok(Procedure {
                 name: Identifier("second"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("C")),
                     range: Genus::Single(Forma("D"))
@@ -3367,7 +3391,7 @@ second : C -> D
                 title: None,
                 description: vec![],
                 attribute: vec![],
-                steps: vec![],
+                steps: vec![]
             })
         );
     }
@@ -3387,6 +3411,7 @@ making_coffee(e) : Ingredients -> Coffee
             procedure,
             Ok(Procedure {
                 name: Identifier("making_coffee"),
+                parameters: Some(vec![Identifier("e")]),
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("Ingredients")),
                     range: Genus::Single(Forma("Coffee"))
@@ -3394,7 +3419,7 @@ making_coffee(e) : Ingredients -> Coffee
                 title: None,
                 description: vec![],
                 attribute: vec![],
-                steps: vec![],
+                steps: vec![]
             })
         );
     }
@@ -3421,6 +3446,7 @@ This is the first one.
             procedure,
             Ok(Procedure {
                 name: Identifier("first"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
@@ -3433,15 +3459,15 @@ This is the first one.
                         ordinal: "1",
                         content: vec![Descriptive::Text("Do the first thing in the first one.")],
                         responses: vec![],
-                        scopes: vec![],
+                        scopes: vec![]
                     },
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![Descriptive::Text("Do the second thing in the first one.")],
                         responses: vec![],
-                        scopes: vec![],
+                        scopes: vec![]
                     }
-                ],
+                ]
             })
         );
     }
@@ -3468,6 +3494,7 @@ This is the first one.
             procedure,
             Ok(Procedure {
                 name: Identifier("first"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
@@ -3527,6 +3554,7 @@ This is the first one.
             procedure,
             Ok(Procedure {
                 name: Identifier("first"),
+                parameters: None,
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
@@ -3606,6 +3634,7 @@ This is the first one.
             procedure,
             Ok(Procedure {
                 name: Identifier("before_anesthesia"),
+                parameters: None,
                 signature: None,
                 title: Some("Before induction of anaesthesia"),
                 description: vec![],
@@ -3715,6 +3744,7 @@ label_the_specimens :
             procedure,
             Ok(Procedure {
                 name: Identifier("label_the_specimens"),
+                parameters: None,
                 signature: None,
                 title: None,
                 description: vec![],
@@ -3790,6 +3820,7 @@ before_leaving :
             procedure,
             Ok(Procedure {
                 name: Identifier("before_leaving"),
+                parameters: None,
                 signature: None,
                 title: Some("Before patient leaves operating room"),
                 description: vec![],
