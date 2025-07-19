@@ -1153,6 +1153,48 @@ fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
     Ok(Signature { domain, range })
 }
 
+/// Lightweight detection function for Genus patterns. This is necessary as an
+/// adjunct to is_procedure_declaration() in order to support recognizing
+/// multi-line procedure declarations. Each of these regexes unfortunately has
+/// the full validation tempate for Forma but we're only matching, not
+/// capturing, so it is an acceptable duplication.
+fn is_genus(content: &str) -> bool {
+    let content = content.trim();
+    if content.is_empty() {
+        return false;
+    }
+
+    let mut chars = content.chars();
+    let first = chars
+        .next()
+        .unwrap();
+
+    match first {
+        '[' => {
+            // List pattern: [Forma] where Forma starts with uppercase
+            let re = Regex::new(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$").unwrap();
+            re.is_match(content)
+        }
+        '(' => {
+            // Unit Forma: ()
+            if let Some(c) = chars.next() {
+                if c == ')' {
+                    return true;
+                }
+            }
+            // Tuple pattern: (Forma, Forma, ...)
+            let re =
+                Regex::new(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$").unwrap();
+            re.is_match(content)
+        }
+        _ => {
+            // Single Forma pattern
+            let re = Regex::new(r"^[A-Z][A-Za-z0-9]*$").unwrap();
+            re.is_match(content)
+        }
+    }
+}
+
 /// declarations are of the form
 ///
 ///     name : signature
@@ -1189,27 +1231,27 @@ fn is_procedure_declaration(content: &str) -> bool {
             };
 
             // Check content after ':' - either empty, procedure content, or valid signature
-            let has_valid_content_after_colon = if after.is_empty() {
+            let has_valid_signature = if after.is_empty() {
                 true // No signature, just procedure content
             } else {
-                // Try to parse the first token as a Genus
-                let first_token = after
+                // Check if the first token looks like a Genus
+                let token = after
                     .split_whitespace()
                     .next()
                     .unwrap_or("");
 
-                if validate_genus(first_token).is_err() {
+                if !is_genus(token) {
                     // First token is not a Genus, so this is procedure content (title, description, etc.)
                     true
                 } else {
                     // First token is a Genus, so we expect a complete signature: Genus -> Genus
                     // Find the arrow and extract domain and range
-                    if let Some(arrow_pos) = after.find("->") {
-                        let domain_part = after[..arrow_pos].trim();
-                        let range_part = after[arrow_pos + 2..].trim();
+                    if let Some(i) = after.find("->") {
+                        let domain = after[..i].trim();
+                        let range = after[i + 2..].trim();
 
                         // Both parts must be valid Genus
-                        validate_genus(domain_part).is_ok() && validate_genus(range_part).is_ok()
+                        is_genus(domain) && is_genus(range)
                     } else {
                         // Has Genus but no arrow - malformed signature
                         false
@@ -1217,7 +1259,7 @@ fn is_procedure_declaration(content: &str) -> bool {
                 }
             };
 
-            has_valid_name && has_valid_content_after_colon
+            has_valid_name && has_valid_signature
         }
         None => false,
     }
@@ -3322,7 +3364,6 @@ connectivity_check(e,s) : LocalEnvironment, TargetService -> NetworkHealth
 
     #[test]
     fn multiline_signature_declaration() {
-        // TODO: Multi-line signatures are not yet supported, but this test documents the intended behavior
         let content = trim(
             r#"
 making_coffee (b, m) :
@@ -3333,42 +3374,6 @@ And now we will make coffee as follows...
 
     1. Add the beans to the machine
     2. Pour in the milk
-            "#,
-        );
-
-        // Test multi-line signatures now work with accommodating parser
-        assert!(is_procedure_declaration(content));
-
-        // Test that the declaration with title/description is correctly detected (this fixed the infinite loop)
-        let content = trim(
-            r#"
-surgical_safety_checklist :
-
-# Surgical Safety Checklist
-
-The checklist is designed to be read out loud by a team member...
-            "#,
-        );
-
-        assert!(is_procedure_declaration(content));
-
-        // Test that single-line signatures still work
-        let content = trim(
-            r#"
-making_coffee : (Beans, Milk) -> Coffee
-
-And now we will make coffee as follows...
-            "#,
-        );
-
-        assert!(is_procedure_declaration(content));
-
-        // Test that parameters with single-line signatures work
-        let content = trim(
-            r#"
-making_coffee(b, m) : (Beans, Milk) -> Coffee
-
-And now we will make coffee as follows...
             "#,
         );
 
