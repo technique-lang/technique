@@ -1147,9 +1147,17 @@ fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
 
 /// declarations are of the form
 ///
-///     identifier : signature
+///     name : signature
 ///
-/// where the optional signature is
+/// where the name is either
+///
+///     identifier
+///
+/// or
+///
+///     identifier(parameters)
+///
+/// and where the optional signature is
 ///
 ///     genus -> genus
 ///
@@ -1163,7 +1171,17 @@ fn is_procedure_declaration(content: &str) -> bool {
             let before = before.trim();
             let after = after.trim();
 
-            is_identifier(before) && (after.is_empty() || is_signature(after))
+            let has_valid_name = if let Some((name, params)) = before.split_once('(') {
+                // Has parameters: check name is identifier and params end with ')'
+                is_identifier(name) && params.ends_with(')')
+            } else {
+                // No parameters: just check if it's an identifier
+                is_identifier(before)
+            };
+
+            let has_valid_signature = after.is_empty() || is_signature(after);
+
+            has_valid_name && has_valid_signature
         }
         None => false,
     }
@@ -1187,7 +1205,14 @@ fn parse_procedure_declaration(
             "an Identifier for the procedure declaration",
         ))?;
 
-    let name = validate_identifier(one.as_str())?;
+    let text = one.as_str();
+    let name = if let Some((name, _params)) = text.split_once('(') {
+        name // Extract just the identifier part before the parameters
+    } else {
+        text // No parameters, use the whole string
+    };
+
+    let name = validate_identifier(name)?;
 
     let signature = match cap.get(2) {
         Some(two) => {
@@ -3220,6 +3245,23 @@ making_coffee :
         );
 
         assert!(is_procedure_declaration(content));
+
+        // Test procedure declaration with parameter names
+        let content_with_params = trim(
+            r#"
+making_coffee(e) : Ingredients -> Coffee
+            "#,
+        );
+
+        assert!(is_procedure_declaration(content_with_params));
+
+        let content_multiple_params = trim(
+            r#"
+connectivity_check(e,s) : LocalEnvironment, TargetService -> NetworkHealth
+            "#,
+        );
+
+        assert!(is_procedure_declaration(content_multiple_params));
     }
 
     #[test]
@@ -3321,6 +3363,33 @@ second : C -> D
                 signature: Some(Signature {
                     domain: Genus::Single(Forma("C")),
                     range: Genus::Single(Forma("D"))
+                }),
+                title: None,
+                description: vec![],
+                attribute: vec![],
+                steps: vec![],
+            })
+        );
+    }
+
+    #[test]
+    fn procedure_declaration_with_parameters() {
+        let mut input = Parser::new();
+        input.initialize(trim(
+            r#"
+making_coffee(e) : Ingredients -> Coffee
+
+            "#,
+        ));
+
+        let procedure = input.read_procedure();
+        assert_eq!(
+            procedure,
+            Ok(Procedure {
+                name: Identifier("making_coffee"),
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("Ingredients")),
+                    range: Genus::Single(Forma("Coffee"))
                 }),
                 title: None,
                 description: vec![],
