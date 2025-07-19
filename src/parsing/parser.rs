@@ -34,6 +34,7 @@ pub enum ParsingError {
     InvalidFunction,
     InvalidCodeBlock,
     InvalidStep,
+    InvalidForeach,
 }
 
 impl From<ValidationError> for ParsingError {
@@ -478,32 +479,74 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
-        let expression = self.take_block_chars('{', '}', |outer| {
-            outer.trim_whitespace();
-            let content = outer.entire();
+        self.take_block_chars('{', '}', |outer| outer.read_expression())
+    }
 
-            if content.starts_with("repeat") {
-                // TODO: implement outer.read_repeat_expression()
-                Err(ParsingError::Unimplemented)
-            } else if content.starts_with("foreach") {
-                // TODO: implement outer.read_foreach_expression()
-                Err(ParsingError::Unimplemented)
-            } else if is_invocation(content) {
-                let invocation = outer.read_invocation()?;
-                Ok(Expression::Application(invocation))
-            } else if is_function(content) {
-                let target = outer.read_identifier()?;
-                let parameters = outer.read_parameters()?;
+    fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        self.trim_whitespace();
+        let content = self.entire();
 
-                let function = Function { target, parameters };
-                Ok(Expression::Execution(function))
-            } else {
-                let identifier = outer.read_identifier()?;
-                Ok(Expression::Value(identifier))
-            }
-        })?;
+        if is_repeat_keyword(content) {
+            self.read_repeat_expression()
+        } else if is_foreach_keyword(content) {
+            self.read_foreach_expression()
+        } else if content
+            .trim()
+            .starts_with("foreach ")
+        {
+            // Malformed foreach expression
+            return Err(ParsingError::InvalidForeach);
+        } else if is_invocation(content) {
+            let invocation = self.read_invocation()?;
+            Ok(Expression::Application(invocation))
+        } else if is_function(content) {
+            let target = self.read_identifier()?;
+            let parameters = self.read_parameters()?;
 
-        Ok(expression)
+            let function = Function { target, parameters };
+            Ok(Expression::Execution(function))
+        } else {
+            let identifier = self.read_identifier()?;
+            Ok(Expression::Value(identifier))
+        }
+    }
+
+    fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        // Parse "foreach <identifier> in <expression>"
+        // Skip "foreach" keyword - we already know it's there from starts_with check
+        self.advance(7);
+        self.trim_whitespace();
+
+        let identifier = self.read_identifier()?;
+        self.trim_whitespace();
+
+        // Skip the "in" keyword
+        self.advance(2);
+        if !self
+            .peek_next_char()
+            .unwrap()
+            .is_ascii_whitespace()
+        {
+            return Err(ParsingError::InvalidForeach);
+        }
+        self.trim_whitespace();
+
+        let expression = self.read_expression()?;
+
+        Ok(Expression::Foreach(identifier, Box::new(expression)))
+    }
+
+    fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        // Parse "repeat <expression>"
+        self.advance(6);
+        self.trim_whitespace();
+
+        // obviously we don't want to ultimately find nested "repeat repeat"
+        // here but the compiler can sort that out later; this is still just
+        // parsing.
+        let expression = self.read_expression()?;
+
+        Ok(Expression::Repeat(Box::new(expression)))
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1151,6 +1194,18 @@ fn is_invocation(content: &str) -> bool {
 
 fn is_code_block(content: &str) -> bool {
     let re = Regex::new(r"\s*{.*?}").unwrap();
+
+    re.is_match(content)
+}
+
+fn is_foreach_keyword(content: &str) -> bool {
+    let re = Regex::new(r"^\s*foreach\s+\w+\s+in\s+").unwrap();
+
+    re.is_match(content)
+}
+
+fn is_repeat_keyword(content: &str) -> bool {
+    let re = Regex::new(r"^\s*repeat\s+").unwrap();
 
     re.is_match(content)
 }
@@ -2279,6 +2334,68 @@ echo "Done"```) }"#,
         let result = input.read_identifier();
         assert_eq!(result, Ok(Identifier("name")));
         assert_eq!(input.source, "(param)");
+    }
+
+    #[test]
+    fn test_foreach_expression() {
+        let mut input = Parser::new();
+        input.initialize("{ foreach item in items }");
+
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Foreach(
+                Identifier("item"),
+                Box::new(Expression::Value(Identifier("items")))
+            ))
+        );
+    }
+
+    #[test]
+    fn test_repeat_expression() {
+        let mut input = Parser::new();
+        input.initialize("{ repeat count }");
+
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Repeat(Box::new(Expression::Value(Identifier(
+                "count"
+            )))))
+        );
+    }
+
+    #[test]
+    fn test_foreach_keyword_boundary() {
+        // Test that "foreach" must be a complete word
+        let mut input = Parser::new();
+        input.initialize("{ foreachitem in items }");
+
+        let result = input.read_code_block();
+        // Should parse as identifier, not foreach
+        assert_eq!(result, Ok(Expression::Value(Identifier("foreachitem"))));
+    }
+
+    #[test]
+    fn test_repeat_keyword_boundary() {
+        // Test that "repeat" must be a complete word
+        let mut input = Parser::new();
+        input.initialize("{ repeater }");
+
+        let result = input.read_code_block();
+        // Should parse as identifier, not repeat
+        assert_eq!(result, Ok(Expression::Value(Identifier("repeater"))));
+    }
+
+    #[test]
+    fn test_foreach_in_keyword_boundary() {
+        // Test that "in" must be a complete word in foreach
+        let mut input = Parser::new();
+        input.initialize("{ foreach item instead items }");
+
+        let result = input.read_code_block();
+        // Should fail because "instead" doesn't match "in"
+        assert!(result.is_err());
     }
 
     #[test]
@@ -3559,6 +3676,7 @@ before_leaving :
         -   The name of the surgical procedure(s).
         -   Completion of instrument, sponge, and needle counts.
         -   Specimen labelling
+            { foreach specimen in specimens }
                 @nursing_team
                     a.  Read specimen labels aloud, including patient
                         name.
@@ -3612,7 +3730,11 @@ before_leaving :
                                     },
                                     Step::Parallel {
                                         content: vec![
-                                            Descriptive::Text("Specimen labelling")
+                                            Descriptive::Text("Specimen labelling"),
+                                            Descriptive::CodeBlock(Expression::Foreach(
+                                                Identifier("specimen"),
+                                                Box::new(Expression::Value(Identifier("specimens")))
+                                            ))
                                         ],
                                         responses: vec![],
                                         scopes: vec![],
@@ -3698,37 +3820,3 @@ before_leaving :
         );
     }
 }
-
-/*
-    #[test]
-    fn check_attribute_role() {
-        let a = grammar::attributeParser::new();
-
-        assert_eq!(
-            a.parse("@chef"),
-            Ok(Attribute {
-                name: "chef".to_owned()
-            })
-        );
-
-        let p = grammar::attribute_lineParser::new();
-
-        assert_eq!(
-            p.parse("@chef"),
-            Ok(vec![Attribute {
-                name: "chef".to_owned()
-            }])
-        );
-        assert_eq!(
-            p.parse("@chef + @sous"),
-            Ok(vec![
-                Attribute {
-                    name: "chef".to_owned()
-                },
-                Attribute {
-                    name: "sous".to_owned()
-                }
-            ])
-        );
-    }
-*/
