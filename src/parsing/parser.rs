@@ -17,7 +17,7 @@ pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
 
 fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
     // FIXME use a human readable Display of ParsingError
-    let message = format!("There was a parsing problem: {:?}", error);
+    let message = format!("{:?}", error);
     TechniqueError {
         problem: message,
         source: parser.original,
@@ -109,9 +109,8 @@ impl<'i> Parser<'i> {
                 let procedure = self.read_procedure()?;
                 procedures.push(procedure);
             } else {
-                // Skip unexpected content by consuming one line
-                // This prevents infinite loops on malformed input
-                self.read_newline()?;
+                // TODO: Handle unexpected content properly
+                return Err(ParsingError::Unrecognized);
             }
         }
 
