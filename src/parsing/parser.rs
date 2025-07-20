@@ -1,13 +1,29 @@
 #![allow(dead_code)]
 
 use regex::Regex;
+use technique::error::*;
 use technique::language::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Technique, ParsingError> {
+pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
     input.initialize(content);
 
-    input.parse_from_start()
+    let result = input.parse_from_start();
+    match result {
+        Ok(technique) => Ok(technique),
+        Err(error) => Err(make_error(input, error)),
+    }
+}
+
+fn make_error<'i>(parser: Parser<'i>, error: ParsingError) -> TechniqueError<'i> {
+    // FIXME use a human readable Display of ParsingError
+    let message = format!("There was a parsing problem: {:?}", error);
+    TechniqueError {
+        problem: message,
+        source: parser.source,
+        offset: parser.offset,
+        width: None,
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
