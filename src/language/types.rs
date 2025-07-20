@@ -154,6 +154,7 @@ pub enum Expression<'i> {
     Foreach(Identifier<'i>, Box<Expression<'i>>),
     Application(Invocation<'i>),
     Execution(Function<'i>),
+    Binding(Box<Expression<'i>>, Identifier<'i>),
 }
 
 // the validate functions all need to have start and end anchors, which seems

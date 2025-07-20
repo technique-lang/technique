@@ -532,7 +532,9 @@ impl<'i> Parser<'i> {
         self.trim_whitespace();
         let content = self.entire();
 
-        if is_repeat_keyword(content) {
+        if is_binding(content) {
+            self.read_binding_expression()
+        } else if is_repeat_keyword(content) {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
@@ -593,6 +595,17 @@ impl<'i> Parser<'i> {
         let expression = self.read_expression()?;
 
         Ok(Expression::Repeat(Box::new(expression)))
+    }
+
+    fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
+        // Parse the expression before the ~ operator
+        let expression = self.take_until(&['~'], |inner| inner.read_expression())?;
+
+        // Consume the ~ operator
+        self.advance(1); // consume '~'
+        self.trim_whitespace();
+        let variable = self.read_identifier()?;
+        Ok(Expression::Binding(Box::new(expression), variable))
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1374,6 +1387,12 @@ fn is_repeat_keyword(content: &str) -> bool {
 
 fn is_function(content: &str) -> bool {
     let re = Regex::new(r"^\s*.+?\(").unwrap();
+
+    re.is_match(content)
+}
+
+fn is_binding(content: &str) -> bool {
+    let re = Regex::new(r"~\s+\w+\s*$").unwrap();
 
     re.is_match(content)
 }
