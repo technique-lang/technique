@@ -16,7 +16,7 @@ impl<'i> fmt::Display for TechniqueError<'i> {
             .source
             .lines()
             .nth(n)
-            .unwrap_or("");
+            .unwrap_or("<NOT FOUND>");
 
         write!(f, "{}\n{}: {}", self.problem, n + 1, line)
     }

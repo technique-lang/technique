@@ -20,7 +20,7 @@ fn make_error<'i>(parser: Parser<'i>, error: ParsingError) -> TechniqueError<'i>
     let message = format!("There was a parsing problem: {:?}", error);
     TechniqueError {
         problem: message,
-        source: parser.source,
+        source: parser.original,
         offset: parser.offset,
         width: None,
     }
@@ -57,6 +57,7 @@ impl From<ValidationError> for ParsingError {
 
 #[derive(Debug)]
 struct Parser<'i> {
+    original: &'i str,
     source: &'i str,
     offset: usize,
 }
@@ -68,12 +69,14 @@ struct Parsed<'i>(&'i str);
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
+            original: "",
             source: "",
             offset: 0,
         }
     }
 
     fn initialize(&mut self, content: &'i str) {
+        self.original = content;
         self.source = content;
         self.offset = 0;
     }
@@ -352,6 +355,7 @@ impl<'i> Parser<'i> {
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
+            original: self.original,
             source: content,
             offset: indent + self.offset,
         };
