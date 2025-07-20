@@ -1261,6 +1261,12 @@ fn is_procedure_declaration(content: &str) -> bool {
                         let domain = after[..i].trim();
                         let range = after[i + 2..].trim();
 
+                        let range = if let Some(j) = range.find('\n') {
+                            &range[..j]
+                        } else {
+                            range
+                        };
+
                         // Both parts must be valid Genus
                         is_genus(domain) && is_genus(range)
                     } else {
