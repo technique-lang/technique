@@ -27,13 +27,13 @@ impl Default for Metadata<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ValidationError {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidationError<'i> {
     ZeroLengthToken,
     InvalidLicense,
     InvalidCopyright,
     InvalidTemplate,
-    InvalidIdentifier,
+    InvalidIdentifier(&'i str),
     InvalidForma,
     InvalidGenus,
     InvalidInvocation,
@@ -198,7 +198,7 @@ pub fn validate_identifier(input: &str) -> Result<Identifier, ValidationError> {
     if re.is_match(input) {
         Ok(Identifier(input))
     } else {
-        Err(ValidationError::InvalidIdentifier)
+        Err(ValidationError::InvalidIdentifier(input))
     }
 }
 
@@ -330,11 +330,11 @@ mod check {
         assert_eq!(validate_identifier("johnny5"), Ok(Identifier("johnny5")));
         assert_eq!(
             validate_identifier("Pizza"),
-            Err(ValidationError::InvalidIdentifier)
+            Err(ValidationError::InvalidIdentifier("Pizza"))
         );
         assert_eq!(
             validate_identifier("pizZa"),
-            Err(ValidationError::InvalidIdentifier)
+            Err(ValidationError::InvalidIdentifier("pizZa"))
         );
         assert!(validate_identifier("0trust").is_err());
         assert_eq!(

@@ -15,7 +15,7 @@ pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     }
 }
 
-fn make_error<'i>(parser: Parser<'i>, error: ParsingError) -> TechniqueError<'i> {
+fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
     // FIXME use a human readable Display of ParsingError
     let message = format!("There was a parsing problem: {:?}", error);
     TechniqueError {
@@ -26,18 +26,17 @@ fn make_error<'i>(parser: Parser<'i>, error: ParsingError) -> TechniqueError<'i>
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ParsingError {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParsingError<'i> {
     IllegalParserState,
     Unimplemented,
     ZeroLengthToken,
     Unrecognized, // improve this
     Expected(&'static str),
     InvalidHeader,
-    ValidationFailure(ValidationError),
+    ValidationFailure(ValidationError<'i>),
     InvalidCharacter(char),
     UnexpectedEndOfInput,
-    InvalidIdentifier,
     InvalidForma,
     InvalidGenus,
     InvalidSignature,
@@ -49,8 +48,8 @@ pub enum ParsingError {
     InvalidForeach,
 }
 
-impl From<ValidationError> for ParsingError {
-    fn from(error: ValidationError) -> Self {
+impl<'i> From<ValidationError<'i>> for ParsingError<'i> {
+    fn from(error: ValidationError<'i>) -> Self {
         ParsingError::ValidationFailure(error)
     }
 }
@@ -87,7 +86,7 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError> {
+    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
         let header = if is_magic_line(self.entire()) {
             Some(self.read_technique_header()?)
@@ -126,9 +125,9 @@ impl<'i> Parser<'i> {
     }
 
     /// consume up to but not including newline (or end)
-    fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError>
+    fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&'i str) -> Result<A, ParsingError>,
+        F: Fn(&'i str) -> Result<A, ParsingError<'i>>,
     {
         match self
             .source
@@ -166,9 +165,9 @@ impl<'i> Parser<'i> {
         start_predicate: P1,
         end_predicate: P2,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
         P1: Fn(&str) -> bool,
         P2: Fn(&str) -> bool,
     {
@@ -218,9 +217,9 @@ impl<'i> Parser<'i> {
         start_char: char,
         end_char: char,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let mut l = 0;
         let mut begun = false;
@@ -261,9 +260,9 @@ impl<'i> Parser<'i> {
         &mut self,
         delimiter: &str,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let width = delimiter.len();
 
@@ -298,9 +297,9 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
-    fn take_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError>
+    fn take_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let content = self.source;
         let end_pos = content
@@ -320,9 +319,13 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
-    fn take_split_by<A, F>(&mut self, delimiter: char, function: F) -> Result<Vec<A>, ParsingError>
+    fn take_split_by<A, F>(
+        &mut self,
+        delimiter: char,
+        function: F,
+    ) -> Result<Vec<A>, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let content = self.entire();
         let mut results = Vec::new();
@@ -364,7 +367,7 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    fn read_newline(&mut self) -> Result<(), ParsingError> {
+    fn read_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
             .source
             .char_indices()
@@ -391,7 +394,7 @@ impl<'i> Parser<'i> {
         Ok(())
     }
 
-    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
+    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError<'i>> {
         // Process magic line
         let version = self.take_line(|content| {
             if is_magic_line(content) {
@@ -427,7 +430,7 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn read_procedure_title(&mut self) -> Result<&'i str, ParsingError> {
+    fn read_procedure_title(&mut self) -> Result<&'i str, ParsingError<'i>> {
         self.trim_whitespace();
         if self.peek_next_char() == Some('#') {
             let title = self.take_line(|content| Ok(content[1..].trim()))?;
@@ -438,7 +441,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
+    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError<'i>> {
         let procedure = self.take_block_lines(
             is_procedure_declaration,
             is_procedure_declaration,
@@ -522,11 +525,11 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
-    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.take_block_chars('{', '}', |outer| outer.read_expression())
     }
 
-    fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.trim_whitespace();
         let content = self.entire();
 
@@ -555,7 +558,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         // Parse "foreach <identifier> in <expression>"
         // Skip "foreach" keyword - we already know it's there from starts_with check
         self.advance(7);
@@ -580,7 +583,7 @@ impl<'i> Parser<'i> {
         Ok(Expression::Foreach(identifier, Box::new(expression)))
     }
 
-    fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         // Parse "repeat <expression>"
         self.advance(6);
         self.trim_whitespace();
@@ -596,7 +599,7 @@ impl<'i> Parser<'i> {
     /// Consume an identifier. As with the other smaller read methods, we do a
     /// general scan of the range here to get the relevant, then call the more
     /// detailed validation function to actually determine if it's a match.
-    fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
+    fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError<'i>> {
         self.trim_whitespace();
 
         let content = self.entire();
@@ -614,7 +617,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
-    fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
+    fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
         self.take_block_chars('<', '>', |inner| {
             let content = inner.entire();
             if content.starts_with("https://") {
@@ -627,7 +630,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a complete invocation like <procedure>(params)
-    fn read_invocation(&mut self) -> Result<Invocation<'i>, ParsingError> {
+    fn read_invocation(&mut self) -> Result<Invocation<'i>, ParsingError<'i>> {
         let target = self.read_target()?;
         let parameters = if self.peek_next_char() == Some('(') {
             Some(self.read_parameters()?)
@@ -638,7 +641,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
-    fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_step(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step, is_step, |outer| {
             outer.trim_whitespace();
             let content = outer.entire();
@@ -691,7 +694,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a dependent substep (a., b., c., etc.)
-    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
             |line| is_substep_dependent(line) || is_role_assignment(line),
@@ -741,7 +744,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a parallel substep (-)
-    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_parallel,
             |line| {
@@ -783,7 +786,7 @@ impl<'i> Parser<'i> {
         )
     }
 
-    fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
+    fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError<'i>> {
         self.take_block_lines(
             |_| true,
             |line| {
@@ -836,7 +839,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
-    fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
+    fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError<'i>> {
         self.take_split_by('|', |inner| {
             let content = inner.entire();
             Ok(validate_response(content)?)
@@ -857,7 +860,7 @@ impl<'i> Parser<'i> {
     ///
     /// ( ```lang some content``` )
     ///
-    fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
+    fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError<'i>> {
         self.take_block_chars('(', ')', |outer| {
             let mut params = Vec::new();
 
@@ -900,7 +903,7 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
+    fn ensure_nonempty(&mut self) -> Result<(), ParsingError<'i>> {
         if self
             .source
             .len()
@@ -943,7 +946,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
-    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError> {
+    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
         self.take_line(|line| {
             let mut attributes = Vec::new();
 
@@ -972,7 +975,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse scopes - role assignments with their substeps
-    fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError> {
+    fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError<'i>> {
         let mut scopes = Vec::new();
         let mut current_roles = Vec::new();
         let mut current_substeps = Vec::new();
