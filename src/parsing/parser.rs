@@ -55,10 +55,6 @@ struct Parser<'i> {
     offset: usize,
 }
 
-/// Wrap parse results with the width consumed.
-#[derive(Debug, PartialEq)]
-struct Parsed<'i>(&'i str);
-
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
