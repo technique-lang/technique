@@ -366,7 +366,7 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    fn read_newline(&mut self) -> Result<(), ParsingError<'i>> {
+    fn require_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
             .source
             .char_indices()
@@ -454,14 +454,16 @@ impl<'i> Parser<'i> {
                         Ok(parse_procedure_declaration(content)?)
                     },
                 )?;
-                outer.read_newline()?;
 
                 // Read title, if present
 
                 let content = outer.entire();
                 let title = if is_procedure_title(content) {
                     let title = outer.take_block_lines(
-                        |_| true,
+                        |line| {
+                            line.trim_start()
+                                .starts_with('#')
+                        },
                         |line| !line.starts_with('#'),
                         |inner| {
                             let text = inner.read_procedure_title()?;
@@ -469,7 +471,6 @@ impl<'i> Parser<'i> {
                         },
                     )?;
 
-                    outer.read_newline()?;
                     title
                 } else {
                     None
