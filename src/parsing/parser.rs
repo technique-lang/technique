@@ -48,12 +48,6 @@ pub enum ParsingError<'i> {
     InvalidForeach,
 }
 
-impl<'i> From<ValidationError<'i>> for ParsingError<'i> {
-    fn from(error: ValidationError<'i>) -> Self {
-        ParsingError::ValidationFailure(error)
-    }
-}
-
 #[derive(Debug)]
 struct Parser<'i> {
     original: &'i str,
