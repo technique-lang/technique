@@ -1,67 +1,121 @@
 #![allow(dead_code)]
 
 use regex::Regex;
+use technique::error::*;
 use technique::language::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Technique, ParsingError> {
+pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
     input.initialize(content);
 
-    input.parse_from_start()
+    let result = input.parse_from_start();
+    match result {
+        Ok(technique) => Ok(technique),
+        Err(error) => Err(make_error(input, error)),
+    }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ParsingError {
-    IllegalParserState,
-    Unimplemented,
-    ZeroLengthToken,
-    Unrecognized, // improve this
-    Expected(&'static str),
-    InvalidHeader,
-    ValidationFailure(ValidationError),
-    InvalidCharacter(char),
-    UnexpectedEndOfInput,
-    InvalidIdentifier,
-    InvalidForma,
-    InvalidGenus,
-    InvalidSignature,
-    InvalidDeclaration,
-    InvalidInvocation,
-    InvalidFunction,
-    InvalidCodeBlock,
-    InvalidStep,
-    InvalidForeach,
+fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
+    TechniqueError {
+        problem: error.message(),
+        source: parser.original,
+        offset: error.offset(),
+        width: None,
+    }
 }
 
-impl From<ValidationError> for ParsingError {
-    fn from(error: ValidationError) -> Self {
-        ParsingError::ValidationFailure(error)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParsingError<'i> {
+    IllegalParserState(usize),
+    Unimplemented(usize),
+    ZeroLengthToken(usize),
+    Unrecognized(usize), // improve this
+    Expected(usize, &'static str),
+    InvalidHeader(usize),
+    InvalidCharacter(usize, char),
+    UnexpectedEndOfInput(usize),
+    InvalidIdentifier(usize, &'i str),
+    InvalidForma(usize),
+    InvalidGenus(usize),
+    InvalidSignature(usize),
+    InvalidDeclaration(usize),
+    InvalidInvocation(usize),
+    InvalidFunction(usize),
+    InvalidCodeBlock(usize),
+    InvalidStep(usize),
+    InvalidForeach(usize),
+    InvalidResponse(usize),
+}
+
+impl<'i> ParsingError<'i> {
+    fn offset(&self) -> usize {
+        match self {
+            ParsingError::IllegalParserState(offset) => *offset,
+            ParsingError::Unimplemented(offset) => *offset,
+            ParsingError::ZeroLengthToken(offset) => *offset,
+            ParsingError::Unrecognized(offset) => *offset,
+            ParsingError::Expected(offset, _) => *offset,
+            ParsingError::InvalidHeader(offset) => *offset,
+            ParsingError::InvalidCharacter(offset, _) => *offset,
+            ParsingError::UnexpectedEndOfInput(offset) => *offset,
+            ParsingError::InvalidIdentifier(offset, _) => *offset,
+            ParsingError::InvalidForma(offset) => *offset,
+            ParsingError::InvalidGenus(offset) => *offset,
+            ParsingError::InvalidSignature(offset) => *offset,
+            ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidInvocation(offset) => *offset,
+            ParsingError::InvalidFunction(offset) => *offset,
+            ParsingError::InvalidCodeBlock(offset) => *offset,
+            ParsingError::InvalidStep(offset) => *offset,
+            ParsingError::InvalidForeach(offset) => *offset,
+            ParsingError::InvalidResponse(offset) => *offset,
+        }
+    }
+
+    fn message(&self) -> String {
+        match self {
+            ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
+            ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
+            ParsingError::ZeroLengthToken(_) => "zero length input".to_string(),
+            ParsingError::Unrecognized(_) => "unrecognized".to_string(),
+            ParsingError::Expected(_, value) => format!("expected {}", value),
+            ParsingError::InvalidHeader(_) => "invalid header".to_string(),
+            ParsingError::InvalidCharacter(_, c) => format!("invalid character '{}'", c),
+            ParsingError::UnexpectedEndOfInput(_) => "unexpected end of input".to_string(),
+            ParsingError::InvalidIdentifier(_, _) => "invalid identifier".to_string(),
+            ParsingError::InvalidForma(_) => "invalid forma".to_string(),
+            ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
+            ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
+            ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
+            ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
+            ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
+            ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
+            ParsingError::InvalidStep(_) => "invalid step".to_string(),
+            ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
+            ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
+        }
     }
 }
 
 #[derive(Debug)]
 struct Parser<'i> {
+    original: &'i str,
     source: &'i str,
     offset: usize,
-    count: usize,
 }
-
-/// Wrap parse results with the width consumed.
-#[derive(Debug, PartialEq)]
-struct Parsed<'i>(&'i str);
 
 impl<'i> Parser<'i> {
     fn new() -> Parser<'i> {
         Parser {
+            original: "",
             source: "",
             offset: 0,
-            count: 0,
         }
     }
 
     fn initialize(&mut self, content: &'i str) {
+        self.original = content;
         self.source = content;
-        self.count = 0;
         self.offset = 0;
     }
 
@@ -71,7 +125,7 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError> {
+    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
         let header = if is_magic_line(self.entire()) {
             Some(self.read_technique_header()?)
@@ -94,9 +148,8 @@ impl<'i> Parser<'i> {
                 let procedure = self.read_procedure()?;
                 procedures.push(procedure);
             } else {
-                // Skip unexpected content by consuming one line
-                // This prevents infinite loops on malformed input
-                self.read_newline()?;
+                // TODO: Handle unexpected content properly
+                return Err(ParsingError::Unrecognized(self.offset));
             }
         }
 
@@ -110,31 +163,13 @@ impl<'i> Parser<'i> {
     }
 
     /// consume up to but not including newline (or end)
-    fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError>
+    fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&'i str) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
-        match self
-            .source
-            .split_once('\n')
-        {
-            Some((before, after)) => {
-                let result = f(before)?;
-
-                self.source = after;
-                self.offset += before.len() + 1;
-                self.count += 1;
-                Ok(result)
-            }
-            None => {
-                let before = self.source;
-                let result = f(before)?;
-
-                self.source = "";
-                self.offset += before.len() + 1;
-                Ok(result)
-            }
-        }
+        let result = self.take_until(&['\n'], f);
+        self.require_newline()?;
+        result
     }
 
     fn entire(&self) -> &'i str {
@@ -151,9 +186,9 @@ impl<'i> Parser<'i> {
         start_predicate: P1,
         end_predicate: P2,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
         P1: Fn(&str) -> bool,
         P2: Fn(&str) -> bool,
     {
@@ -203,9 +238,9 @@ impl<'i> Parser<'i> {
         start_char: char,
         end_char: char,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let mut l = 0;
         let mut begun = false;
@@ -222,10 +257,10 @@ impl<'i> Parser<'i> {
             }
         }
         if !begun {
-            return Err(ParsingError::Expected("the start character"));
+            return Err(ParsingError::Expected(self.offset, "the start character"));
         }
         if l == 0 {
-            return Err(ParsingError::Expected("the end character"));
+            return Err(ParsingError::Expected(self.offset, "the end character"));
         }
 
         let block = &self.source[1..l - 1];
@@ -246,9 +281,9 @@ impl<'i> Parser<'i> {
         &mut self,
         delimiter: &str,
         function: F,
-    ) -> Result<A, ParsingError>
+    ) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let width = delimiter.len();
 
@@ -256,13 +291,16 @@ impl<'i> Parser<'i> {
         let start = self
             .source
             .find(delimiter)
-            .ok_or(ParsingError::Expected("a starting delimiter"))?;
+            .ok_or(ParsingError::Expected(self.offset, "a starting delimiter"))?;
 
         // Look for the end delimiter after correcting for the starting one
         let start = start + width;
         let end = self.source[start..]
             .find(delimiter)
-            .ok_or(ParsingError::Expected("the corresponding end delimiter"))?;
+            .ok_or(ParsingError::Expected(
+                self.offset,
+                "the corresponding end delimiter",
+            ))?;
 
         // Correct actual positions in input
         let end = start + end;
@@ -283,9 +321,9 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
-    fn take_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError>
+    fn take_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let content = self.source;
         let end_pos = content
@@ -305,9 +343,13 @@ impl<'i> Parser<'i> {
         Ok(result)
     }
 
-    fn take_split_by<A, F>(&mut self, delimiter: char, function: F) -> Result<Vec<A>, ParsingError>
+    fn take_split_by<A, F>(
+        &mut self,
+        delimiter: char,
+        function: F,
+    ) -> Result<Vec<A>, ParsingError<'i>>
     where
-        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
         let content = self.entire();
         let mut results = Vec::new();
@@ -316,6 +358,7 @@ impl<'i> Parser<'i> {
             let trimmed = chunk.trim();
             if trimmed.is_empty() {
                 return Err(ParsingError::Expected(
+                    self.offset,
                     "non-empty content between delimiters",
                 ));
             }
@@ -340,8 +383,8 @@ impl<'i> Parser<'i> {
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
+            original: self.original,
             source: content,
-            count: self.count,
             offset: indent + self.offset,
         };
 
@@ -349,7 +392,9 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    fn read_newline(&mut self) -> Result<(), ParsingError> {
+    // because test cases and trivial sinlge-line examples might omit an
+    // ending newline, this also returns Ok if end of input is reached.
+    fn require_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
             .source
             .char_indices()
@@ -358,13 +403,12 @@ impl<'i> Parser<'i> {
 
             if c == '\n' {
                 self.source = &self.source[l..];
-                self.count += 1;
                 self.offset += l;
                 return Ok(());
             } else if c.is_ascii_whitespace() {
                 continue;
             } else {
-                return Err(ParsingError::InvalidCharacter(c));
+                return Err(ParsingError::InvalidCharacter(self.offset, c));
             }
         }
 
@@ -377,33 +421,99 @@ impl<'i> Parser<'i> {
         Ok(())
     }
 
-    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
-        // Process magic line
-        let version = self.take_line(|content| {
-            if is_magic_line(content) {
-                Ok(parse_magic_line(content)?)
+    // hard wire the version for now. If we ever grow to supporting multiple major
+    // versions then this will be a lot more complicated than just dealing with a
+    // different natural number here.
+    fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
+        self.take_line(|inner| {
+            let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+
+            if re.is_match(inner.source) {
+                Ok(1)
             } else {
-                Err(ParsingError::Expected("The % symbol"))
+                Err(ParsingError::InvalidHeader(0))
             }
-        })?;
+        })
+    }
+
+    // This one is awkward because if a SPDX line is present, then it really needs
+    // to have a license, whereas the copyright part is optional.
+    fn read_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError<'i>> {
+        self.take_line(|inner| {
+            let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
+
+            let cap = re
+                .captures(inner.source)
+                .ok_or(ParsingError::InvalidHeader(0))?;
+
+            // Now to extracting the values we need. We get the license code from
+            // the first capture. It must be present otherwise we don't have a
+            // valid SPDX line (and we declared that we're on an SPDX line by the
+            // presence of the '!' character at the beginning of the line).
+
+            let one = cap
+                .get(1)
+                .ok_or(ParsingError::Expected(inner.offset, "the license name"))?;
+
+            let result =
+                validate_license(one.as_str()).ok_or(ParsingError::InvalidHeader(inner.offset))?;
+            let license = Some(result);
+
+            // Now dig out the copyright, if present:
+
+            let copyright = match cap.get(2) {
+                Some(two) => {
+                    let result = validate_copyright(two.as_str())
+                        .ok_or(ParsingError::InvalidHeader(inner.offset))?;
+                    Some(result)
+                }
+                None => None,
+            };
+
+            Ok((license, copyright))
+        })
+    }
+
+    fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError<'i>> {
+        self.take_line(|inner| {
+            let re = Regex::new(r"^&\s*(.+)$").unwrap();
+
+            let cap = re
+                .captures(inner.source)
+                .ok_or(ParsingError::InvalidHeader(inner.offset))?;
+
+            let one = cap
+                .get(1)
+                .ok_or(ParsingError::Expected(inner.offset, "a template name"))?;
+
+            let result =
+                validate_template(one.as_str()).ok_or(ParsingError::InvalidHeader(inner.offset))?;
+            Ok(Some(result))
+        })
+    }
+
+    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError<'i>> {
+        // Process magic line
+        let version = if is_magic_line(self.source) {
+            self.read_magic_line()?
+        } else {
+            Err(ParsingError::Expected(0, "The % symbol"))?
+        };
 
         // Process SPDX line
-        let (license, copyright) = self.take_line(|content| {
-            if is_spdx_line(content) {
-                Ok(parse_spdx_line(content)?)
-            } else {
-                Ok((None, None))
-            }
-        })?;
+
+        let (license, copyright) = if is_spdx_line(self.source) {
+            self.read_spdx_line()?
+        } else {
+            (None, None)
+        };
 
         // Process template line
-        let template = self.take_line(|content| {
-            if is_template_line(content) {
-                Ok(parse_template_line(content)?)
-            } else {
-                Ok(None)
-            }
-        })?;
+        let template = if is_template_line(self.source) {
+            self.read_template_line()?
+        } else {
+            None
+        };
 
         Ok(Metadata {
             version,
@@ -413,18 +523,115 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn read_procedure_title(&mut self) -> Result<&'i str, ParsingError> {
+    fn read_signature(&mut self) -> Result<Signature<'i>, ParsingError<'i>> {
+        let content = self.entire();
+
+        let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
+
+        let cap = match re.captures(content) {
+            Some(c) => c,
+            None => return Err(ParsingError::InvalidSignature(self.offset)),
+        };
+
+        let one = cap
+            .get(1)
+            .ok_or(ParsingError::Expected(
+                self.offset,
+                "a Genus for the domain",
+            ))?;
+
+        let two = cap
+            .get(2)
+            .ok_or(ParsingError::Expected(self.offset, "a Genus for the range"))?;
+
+        let domain = validate_genus(one.as_str()).ok_or(ParsingError::InvalidGenus(self.offset))?;
+        let range = validate_genus(two.as_str()).ok_or(ParsingError::InvalidGenus(self.offset))?;
+
+        Ok(Signature { domain, range })
+    }
+
+    fn parse_procedure_declaration(
+        &mut self,
+    ) -> Result<
+        (
+            Identifier<'i>,
+            Option<Vec<Identifier<'i>>>,
+            Option<Signature<'i>>,
+        ),
+        ParsingError<'i>,
+    > {
+        // These capture groups use .+? to make "match more than one, but
+        // lazily" so that the subsequent grabs of whitespace and the all
+        // important ':' character are not absorbed.
+        let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+
+        let cap = re
+            .captures(self.source)
+            .ok_or(ParsingError::InvalidDeclaration(self.offset))?;
+
+        let one = cap
+            .get(1)
+            .ok_or(ParsingError::Expected(
+                self.offset,
+                "an Identifier for the procedure declaration",
+            ))?;
+
+        let text = one.as_str();
+        let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
+            let name = validate_identifier(before)
+                .ok_or(ParsingError::InvalidIdentifier(self.offset, before))?;
+
+            // Extract parameters from parentheses
+            if !list.ends_with(')') {
+                return Err(ParsingError::InvalidDeclaration(self.offset));
+            }
+            let list = &list[..list.len() - 1].trim();
+
+            let parameters = if list.is_empty() {
+                None
+            } else {
+                let mut params = Vec::new();
+                for item in list.split(',') {
+                    let param = validate_identifier(item.trim())
+                        .ok_or(ParsingError::Unrecognized(self.offset))?;
+                    params.push(param);
+                }
+                Some(params)
+            };
+
+            (name, parameters)
+        } else {
+            let name = validate_identifier(text)
+                .ok_or(ParsingError::InvalidIdentifier(self.offset, text))?;
+            (name, None)
+        };
+
+        let signature = match cap.get(2) {
+            Some(two) => {
+                let mut inner = self.subparser(0, two.as_str());
+                let result = inner.read_signature()?;
+                Some(result)
+            }
+            None => None,
+        };
+
+        Ok((name, parameters, signature))
+    }
+
+    // assumes we've set up the precondition that indeed there is a # present.
+    fn parse_procedure_title(&mut self) -> Result<&'i str, ParsingError<'i>> {
         self.trim_whitespace();
+
         if self.peek_next_char() == Some('#') {
-            let title = self.take_line(|content| Ok(content[1..].trim()))?;
+            let title = self.source[1..].trim();
             Ok(title)
         } else {
             // we shouldn't have invoked this unless we have a title to parse!
-            Err(ParsingError::IllegalParserState)
+            Err(ParsingError::IllegalParserState(self.offset))
         }
     }
 
-    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
+    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError<'i>> {
         let procedure = self.take_block_lines(
             is_procedure_declaration,
             is_procedure_declaration,
@@ -433,27 +640,25 @@ impl<'i> Parser<'i> {
                 let declaration = outer.take_block_lines(
                     is_procedure_declaration,
                     |line| !is_procedure_declaration(line),
-                    |inner| {
-                        let content = inner.entire();
-                        Ok(parse_procedure_declaration(content)?)
-                    },
+                    |inner| inner.parse_procedure_declaration(),
                 )?;
-                outer.read_newline()?;
 
                 // Read title, if present
 
                 let content = outer.entire();
                 let title = if is_procedure_title(content) {
                     let title = outer.take_block_lines(
-                        |_| true,
+                        |line| {
+                            line.trim_start()
+                                .starts_with('#')
+                        },
                         |line| !line.starts_with('#'),
                         |inner| {
-                            let text = inner.read_procedure_title()?;
+                            let text = inner.parse_procedure_title()?;
                             Ok(Some(text))
                         },
                     )?;
 
-                    outer.read_newline()?;
                     title
                 } else {
                     None
@@ -489,7 +694,7 @@ impl<'i> Parser<'i> {
                         let step = outer.read_step()?;
                         steps.push(step);
                     } else {
-                        return Err(ParsingError::Unrecognized);
+                        return Err(ParsingError::Unrecognized(outer.offset));
                     }
                 }
 
@@ -508,15 +713,17 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
-    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.take_block_chars('{', '}', |outer| outer.read_expression())
     }
 
-    fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.trim_whitespace();
         let content = self.entire();
 
-        if is_repeat_keyword(content) {
+        if is_binding(content) {
+            self.read_binding_expression()
+        } else if is_repeat_keyword(content) {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
@@ -525,7 +732,13 @@ impl<'i> Parser<'i> {
             .starts_with("foreach ")
         {
             // Malformed foreach expression
-            return Err(ParsingError::InvalidForeach);
+            return Err(ParsingError::InvalidForeach(self.offset));
+        } else if content
+            .trim()
+            .starts_with('[')
+        {
+            // Data structure syntax - not yet implemented
+            return Err(ParsingError::Unimplemented(self.offset));
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -541,7 +754,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         // Parse "foreach <identifier> in <expression>"
         // Skip "foreach" keyword - we already know it's there from starts_with check
         self.advance(7);
@@ -557,7 +770,7 @@ impl<'i> Parser<'i> {
             .unwrap()
             .is_ascii_whitespace()
         {
-            return Err(ParsingError::InvalidForeach);
+            return Err(ParsingError::InvalidForeach(self.offset));
         }
         self.trim_whitespace();
 
@@ -566,7 +779,7 @@ impl<'i> Parser<'i> {
         Ok(Expression::Foreach(identifier, Box::new(expression)))
     }
 
-    fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         // Parse "repeat <expression>"
         self.advance(6);
         self.trim_whitespace();
@@ -579,10 +792,21 @@ impl<'i> Parser<'i> {
         Ok(Expression::Repeat(Box::new(expression)))
     }
 
+    fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
+        // Parse the expression before the ~ operator
+        let expression = self.take_until(&['~'], |inner| inner.read_expression())?;
+
+        // Consume the ~ operator
+        self.advance(1); // consume '~'
+        self.trim_whitespace();
+        let variable = self.read_identifier()?;
+        Ok(Expression::Binding(Box::new(expression), variable))
+    }
+
     /// Consume an identifier. As with the other smaller read methods, we do a
     /// general scan of the range here to get the relevant, then call the more
     /// detailed validation function to actually determine if it's a match.
-    fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError> {
+    fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError<'i>> {
         self.trim_whitespace();
 
         let content = self.entire();
@@ -592,7 +816,8 @@ impl<'i> Parser<'i> {
             Some(i) => &content[0..i],
         };
 
-        let identifier = validate_identifier(possible)?;
+        let identifier = validate_identifier(possible)
+            .ok_or(ParsingError::InvalidIdentifier(self.offset, possible))?;
 
         self.advance(possible.len());
 
@@ -600,7 +825,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
-    fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
+    fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
         self.take_block_chars('<', '>', |inner| {
             let content = inner.entire();
             if content.starts_with("https://") {
@@ -613,7 +838,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a complete invocation like <procedure>(params)
-    fn read_invocation(&mut self) -> Result<Invocation<'i>, ParsingError> {
+    fn read_invocation(&mut self) -> Result<Invocation<'i>, ParsingError<'i>> {
         let target = self.read_target()?;
         let parameters = if self.peek_next_char() == Some('(') {
             Some(self.read_parameters()?)
@@ -624,14 +849,14 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
-    fn read_step(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_step(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step, is_step, |outer| {
             outer.trim_whitespace();
             let content = outer.entire();
 
             if content.is_empty() {
                 // FIXME do we even need this check?
-                return Err(ParsingError::ZeroLengthToken);
+                return Err(ParsingError::ZeroLengthToken(outer.offset));
             }
 
             // Parse ordinal
@@ -639,11 +864,14 @@ impl<'i> Parser<'i> {
             let re = Regex::new(r"^\s*(\d+)\.\s+").unwrap();
             let cap = re
                 .captures(content)
-                .ok_or(ParsingError::InvalidStep)?;
+                .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
             let number = cap
                 .get(1)
-                .ok_or(ParsingError::Expected("the ordinal Step number"))?
+                .ok_or(ParsingError::Expected(
+                    outer.offset,
+                    "the ordinal Step number",
+                ))?
                 .as_str();
 
             let l = cap
@@ -677,7 +905,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a dependent substep (a., b., c., etc.)
-    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
             |line| is_substep_dependent(line) || is_role_assignment(line),
@@ -686,11 +914,14 @@ impl<'i> Parser<'i> {
                 let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
                 let cap = re
                     .captures(content)
-                    .ok_or(ParsingError::InvalidStep)?;
+                    .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
                 let letter = cap
                     .get(1)
-                    .ok_or(ParsingError::Expected("the ordinal Sub-Step letter"))?
+                    .ok_or(ParsingError::Expected(
+                        outer.offset,
+                        "the ordinal Sub-Step letter",
+                    ))?
                     .as_str();
 
                 // Skip past the letter, dot, and space
@@ -727,7 +958,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a parallel substep (-)
-    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError> {
+    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_parallel,
             |line| {
@@ -738,7 +969,7 @@ impl<'i> Parser<'i> {
                 let re = Regex::new(r"^\s*-\s+").unwrap();
                 let zero = re
                     .find(content)
-                    .ok_or(ParsingError::InvalidStep)?;
+                    .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
                 // Skip past the dash and space
                 let l = zero.len();
@@ -769,7 +1000,7 @@ impl<'i> Parser<'i> {
         )
     }
 
-    fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError> {
+    fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError<'i>> {
         self.take_block_lines(
             |_| true,
             |line| {
@@ -822,10 +1053,10 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
-    fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
+    fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError<'i>> {
         self.take_split_by('|', |inner| {
             let content = inner.entire();
-            Ok(validate_response(content)?)
+            validate_response(content).ok_or(ParsingError::InvalidResponse(inner.offset))
         })
     }
 
@@ -843,7 +1074,7 @@ impl<'i> Parser<'i> {
     ///
     /// ( ```lang some content``` )
     ///
-    fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
+    fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError<'i>> {
         self.take_block_chars('(', ')', |outer| {
             let mut params = Vec::new();
 
@@ -886,13 +1117,13 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn ensure_nonempty(&mut self) -> Result<(), ParsingError> {
+    fn ensure_nonempty(&mut self) -> Result<(), ParsingError<'i>> {
         if self
             .source
             .len()
             == 0
         {
-            return Err(ParsingError::UnexpectedEndOfInput);
+            return Err(ParsingError::UnexpectedEndOfInput(self.offset));
         }
         Ok(())
     }
@@ -901,7 +1132,6 @@ impl<'i> Parser<'i> {
     /// the current parser text.
     fn trim_whitespace(&mut self) {
         let mut l = 0;
-        let mut n = 0;
 
         if self
             .source
@@ -915,7 +1145,6 @@ impl<'i> Parser<'i> {
             .chars()
         {
             if c == '\n' {
-                n += 1;
                 l += 1;
                 continue;
             } else if c.is_ascii_whitespace() {
@@ -927,14 +1156,15 @@ impl<'i> Parser<'i> {
         }
 
         self.source = &self.source[l..];
-        self.count += n;
         self.offset += l;
     }
 
     /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
-    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError> {
-        self.take_line(|line| {
+    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
+        self.take_line(|inner| {
             let mut attributes = Vec::new();
+
+            let line = inner.source;
 
             // Handle multiple roles separated by +
             let role_parts: Vec<&str> = line
@@ -945,14 +1175,15 @@ impl<'i> Parser<'i> {
                 let re = Regex::new(r"^\s*@([a-z][a-z0-9_]*)\s*$").unwrap();
                 let cap = re
                     .captures(part.trim())
-                    .ok_or(ParsingError::InvalidStep)?;
+                    .ok_or(ParsingError::InvalidStep(inner.offset))?;
 
                 let role_name = cap
                     .get(1)
-                    .ok_or(ParsingError::Expected("role name after @"))?
+                    .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
                     .as_str();
 
-                let identifier = validate_identifier(role_name)?;
+                let identifier = validate_identifier(role_name)
+                    .ok_or(ParsingError::InvalidIdentifier(inner.offset, role_name))?;
                 attributes.push(Attribute::Role(identifier));
             }
 
@@ -961,7 +1192,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse scopes - role assignments with their substeps
-    fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError> {
+    fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError<'i>> {
         let mut scopes = Vec::new();
         let mut current_roles = Vec::new();
         let mut current_substeps = Vec::new();
@@ -1024,57 +1255,10 @@ fn is_magic_line(content: &str) -> bool {
     re.is_match(content)
 }
 
-// hard wire the version for now. If we ever grow to supporting multiple major
-// versions then this will be a lot more complicated than just dealing with a
-// different natural number here.
-fn parse_magic_line(content: &str) -> Result<u8, ParsingError> {
-    let re = Regex::new(r"%\s*technique\s+v1").unwrap();
-
-    if re.is_match(content) {
-        Ok(1)
-    } else {
-        Err(ParsingError::InvalidHeader)
-    }
-}
-
 fn is_spdx_line(content: &str) -> bool {
     let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
 
     re.is_match(content)
-}
-
-// This one is awkward because if a SPDX line is present, then it really needs
-// to have a license, whereas the copyright part is optional.
-fn parse_spdx_line(content: &str) -> Result<(Option<&str>, Option<&str>), ParsingError> {
-    let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidHeader)?;
-
-    // Now to extracting the values we need. We get the license code from
-    // the first capture. It must be present otherwise we don't have a
-    // valid SPDX line (and we declared that we're on an SPDX line by the
-    // presence of the '!' character at the beginning of the line).
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("the license name"))?;
-
-    let result = validate_license(one.as_str())?;
-    let license = Some(result);
-
-    // Now dig out the copyright, if present:
-
-    let copyright = match cap.get(2) {
-        Some(two) => {
-            let result = validate_copyright(two.as_str())?;
-            Some(result)
-        }
-        None => None,
-    };
-
-    Ok((license, copyright))
 }
 
 fn is_template_line(content: &str) -> bool {
@@ -1083,40 +1267,9 @@ fn is_template_line(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn parse_template_line(content: &str) -> Result<Option<&str>, ParsingError> {
-    let re = Regex::new(r"^&\s*(.+)$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidHeader)?;
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("a template name"))?;
-
-    let result = validate_template(one.as_str())?;
-
-    Ok(Some(result))
-}
-
 fn is_identifier(content: &str) -> bool {
     let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
     re.is_match(content)
-}
-
-fn parse_identifier(content: &str) -> Result<Identifier, ParsingError> {
-    let result = validate_identifier(content)?;
-    Ok(result)
-}
-
-fn parse_forma(content: &str) -> Result<Forma, ParsingError> {
-    let result = validate_forma(content)?;
-    Ok(result)
-}
-
-fn parse_genus(content: &str) -> Result<Genus, ParsingError> {
-    let result = validate_genus(content)?;
-    Ok(result)
 }
 
 /// A signature is of the form
@@ -1129,28 +1282,6 @@ fn is_signature(content: &str) -> bool {
     let re = Regex::new(r"\s*.+?\s*->\s*.+?\s*$").unwrap();
 
     re.is_match(content)
-}
-
-fn parse_signature(content: &str) -> Result<Signature, ParsingError> {
-    let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
-
-    let cap = match re.captures(content) {
-        Some(c) => c,
-        None => return Err(ParsingError::InvalidSignature),
-    };
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected("a Genus for the domain"))?;
-
-    let two = cap
-        .get(2)
-        .ok_or(ParsingError::Expected("a Genus for the range"))?;
-
-    let domain = validate_genus(one.as_str())?;
-    let range = validate_genus(two.as_str())?;
-
-    Ok(Signature { domain, range })
 }
 
 /// Lightweight detection function for Genus patterns. This is necessary as an
@@ -1250,6 +1381,12 @@ fn is_procedure_declaration(content: &str) -> bool {
                         let domain = after[..i].trim();
                         let range = after[i + 2..].trim();
 
+                        let range = if let Some(j) = range.find('\n') {
+                            &range[..j]
+                        } else {
+                            range
+                        };
+
                         // Both parts must be valid Genus
                         is_genus(domain) && is_genus(range)
                     } else {
@@ -1263,62 +1400,6 @@ fn is_procedure_declaration(content: &str) -> bool {
         }
         None => false,
     }
-}
-
-fn parse_procedure_declaration(
-    content: &str,
-) -> Result<(Identifier, Option<Vec<Identifier>>, Option<Signature>), ParsingError> {
-    // These capture groups use .+? to make "match more than one, but
-    // lazily" so that the subsequent grabs of whitespace and the all
-    // important ':' character are not absorbed.
-    let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
-
-    let cap = re
-        .captures(content)
-        .ok_or(ParsingError::InvalidDeclaration)?;
-
-    let one = cap
-        .get(1)
-        .ok_or(ParsingError::Expected(
-            "an Identifier for the procedure declaration",
-        ))?;
-
-    let text = one.as_str();
-    let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
-        let name = validate_identifier(before)?;
-
-        // Extract parameters from parentheses
-        if !list.ends_with(')') {
-            return Err(ParsingError::InvalidDeclaration);
-        }
-        let list = &list[..list.len() - 1].trim();
-
-        let parameters = if list.is_empty() {
-            None
-        } else {
-            let mut params = Vec::new();
-            for item in list.split(',') {
-                let param = validate_identifier(item.trim())?;
-                params.push(param);
-            }
-            Some(params)
-        };
-
-        (name, parameters)
-    } else {
-        let name = validate_identifier(text)?;
-        (name, None)
-    };
-
-    let signature = match cap.get(2) {
-        Some(two) => {
-            let result = parse_signature(two.as_str())?;
-            Some(result)
-        }
-        None => None,
-    };
-
-    Ok((name, parameters, signature))
 }
 
 fn is_procedure_title(content: &str) -> bool {
@@ -1355,6 +1436,12 @@ fn is_repeat_keyword(content: &str) -> bool {
 
 fn is_function(content: &str) -> bool {
     let re = Regex::new(r"^\s*.+?\(").unwrap();
+
+    re.is_match(content)
+}
+
+fn is_binding(content: &str) -> bool {
+    let re = Regex::new(r"~\s+\w+\s*$").unwrap();
 
     re.is_match(content)
 }
@@ -1404,50 +1491,52 @@ mod check {
 
     #[test]
     fn magic_line() {
-        let content = "% technique v1";
-        assert!(is_magic_line(content));
+        let mut input = Parser::new();
+        input.initialize("% technique v1");
+        assert!(is_magic_line(input.source));
 
-        let result = parse_magic_line(content);
+        let result = input.read_magic_line();
         assert_eq!(result, Ok(1));
 
-        let content = "%technique v1";
-        assert!(is_magic_line(content));
+        input.initialize("%technique v1");
+        assert!(is_magic_line(input.source));
 
-        let result = parse_magic_line(content);
+        let result = input.read_magic_line();
         assert_eq!(result, Ok(1));
 
-        let content = "%techniquev1";
-        assert!(is_magic_line(content));
+        input.initialize("%techniquev1");
+        assert!(is_magic_line(input.source));
 
         // this is rejected because the technique keyword isn't present.
-        let result = parse_magic_line(content);
+        let result = input.read_magic_line();
         assert!(result.is_err());
     }
 
     #[test]
     fn header_spdx() {
-        let content = "! PD";
-        assert!(is_spdx_line(content));
+        let mut input = Parser::new();
+        input.initialize("! PD");
+        assert!(is_spdx_line(input.source));
 
-        let result = parse_spdx_line(content);
+        let result = input.read_spdx_line();
         assert_eq!(result, Ok((Some("PD"), None)));
 
-        let content = "! MIT; (c) ACME, Inc.";
-        assert!(is_spdx_line(content));
+        input.initialize("! MIT; (c) ACME, Inc.");
+        assert!(is_spdx_line(input.source));
 
-        let result = parse_spdx_line(content);
+        let result = input.read_spdx_line();
         assert_eq!(result, Ok((Some("MIT"), Some("ACME, Inc."))));
 
-        let content = "! MIT; (C) 2024 ACME, Inc.";
-        assert!(is_spdx_line(content));
+        input.initialize("! MIT; (C) 2024 ACME, Inc.");
+        assert!(is_spdx_line(input.source));
 
-        let result = parse_spdx_line(content);
+        let result = input.read_spdx_line();
         assert_eq!(result, Ok((Some("MIT"), Some("2024 ACME, Inc."))));
 
-        let content = "! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.";
-        assert!(is_spdx_line(content));
+        input.initialize("! CC BY-SA 3.0 [IGO]; (c) 2024 ACME, Inc.");
+        assert!(is_spdx_line(input.source));
 
-        let result = parse_spdx_line(content);
+        let result = input.read_spdx_line();
         assert_eq!(
             result,
             Ok((Some("CC BY-SA 3.0 [IGO]"), Some("2024 ACME, Inc.")))
@@ -1456,16 +1545,17 @@ mod check {
 
     #[test]
     fn header_template() {
-        let content = "& checklist";
-        assert!(is_template_line(content));
+        let mut input = Parser::new();
+        input.initialize("& checklist");
+        assert!(is_template_line(input.source));
 
-        let result = parse_template_line(content);
+        let result = input.read_template_line();
         assert_eq!(result, Ok(Some("checklist")));
 
-        let content = "& nasa-flight-plan,v4.0";
-        assert!(is_template_line(content));
+        input.initialize("& nasa-flight-plan,v4.0");
+        assert!(is_template_line(input.source));
 
-        let result = parse_template_line(content);
+        let result = input.read_template_line();
         assert_eq!(result, Ok(Some("nasa-flight-plan,v4.0")));
     }
 
@@ -1480,7 +1570,7 @@ mod check {
         input.initialize("");
         assert_eq!(
             input.ensure_nonempty(),
-            Err(ParsingError::UnexpectedEndOfInput)
+            Err(ParsingError::UnexpectedEndOfInput(input.offset))
         );
     }
 
@@ -1494,7 +1584,6 @@ mod check {
         input.initialize("\n \nthere");
         input.trim_whitespace();
         assert_eq!(input.source, "there");
-        assert_eq!(input.count, 2);
         assert_eq!(input.offset, 3);
     }
 
@@ -1508,94 +1597,25 @@ mod check {
 
     #[test]
     fn identifier_rules() {
-        let input = "p";
-        let result = parse_identifier(input);
+        let mut input = Parser::new();
+        input.initialize("p");
+        let result = input.read_identifier();
         assert_eq!(result, Ok(Identifier("p")));
 
-        let input = "pizza";
-        let result = parse_identifier(input);
-        assert_eq!(result, Ok(Identifier("pizza")));
-
-        let input = "pizza0";
-        let result = parse_identifier(input);
-        assert_eq!(result, Ok(Identifier("pizza0")));
-
-        let input = "0pizza";
-        let result = parse_forma(input);
-        assert!(result.is_err());
-
-        let input = "cook_pizza";
-        let result = parse_identifier(input);
+        input.initialize("cook_pizza");
+        let result = input.read_identifier();
         assert_eq!(result, Ok(Identifier("cook_pizza")));
 
-        let input = "cook-pizza";
-        let result = parse_forma(input);
+        input.initialize("cook-pizza");
+        let result = input.read_identifier();
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn forma_rules() {
-        let input = "A";
-        let result = parse_forma(input);
-        assert_eq!(result, Ok(Forma("A")));
-
-        let input = "Apple";
-        let result = parse_forma(input);
-        assert_eq!(result, Ok(Forma("Apple")));
-
-        let input = "apple";
-        let result = parse_forma(input);
-        assert_eq!(
-            result,
-            Err(ParsingError::ValidationFailure(
-                ValidationError::InvalidForma
-            ))
-        );
-    }
-
-    #[test]
-    fn single_genus_definitions() {
-        let input = "A";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::Single(Forma("A"))));
-
-        let input = "Apple";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::Single(Forma("Apple"))));
-    }
-
-    #[test]
-    fn list_genus_definitions() {
-        let input = "[A]";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::List(Forma("A"))))
-    }
-
-    #[test]
-    fn tuple_genus_definitions() {
-        let input = "(A, B)";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::Tuple(vec![Forma("A"), Forma("B")])));
-
-        // not actually sure whether we should be normalizing this? Probably
-        // not, because formatting and linting is a separate concern.
-        let input = "(A)";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::Tuple(vec![Forma("A")])));
-    }
-
-    #[test]
-    fn unit_genus_definitions() {
-        // and now the special case of the unit type
-        let input = "()";
-        let result = parse_genus(input);
-        assert_eq!(result, Ok(Genus::Unit));
     }
 
     #[test]
     fn signatures() {
-        let input = "A -> B";
-        let result = parse_signature(input);
+        let mut input = Parser::new();
+        input.initialize("A -> B");
+        let result = input.read_signature();
         assert_eq!(
             result,
             Ok(Signature {
@@ -1604,8 +1624,8 @@ mod check {
             })
         );
 
-        let input = "Beans -> Coffee";
-        let result = parse_signature(input);
+        input.initialize("Beans -> Coffee");
+        let result = input.read_signature();
         assert_eq!(
             result,
             Ok(Signature {
@@ -1614,8 +1634,8 @@ mod check {
             })
         );
 
-        let input = "[Bits] -> Bob";
-        let result = parse_signature(input);
+        input.initialize("[Bits] -> Bob");
+        let result = input.read_signature();
         assert_eq!(
             result,
             Ok(Signature {
@@ -1624,8 +1644,8 @@ mod check {
             })
         );
 
-        let input = "Complex -> (Real, Imaginary)";
-        let result = parse_signature(input);
+        input.initialize("Complex -> (Real, Imaginary)");
+        let result = input.read_signature();
         assert_eq!(
             result,
             Ok(Signature {
@@ -1637,20 +1657,22 @@ mod check {
 
     #[test]
     fn declaration_simple() {
-        let content = "making_coffee :";
+        let mut input = Parser::new();
+        input.initialize("making_coffee :");
 
-        assert!(is_procedure_declaration(content));
+        assert!(is_procedure_declaration(input.source));
 
-        let result = parse_procedure_declaration(content);
+        let result = input.parse_procedure_declaration();
         assert_eq!(result, Ok((Identifier("making_coffee"), None, None)));
     }
 
     #[test]
     fn declaration_full() {
-        let content = "f : A -> B";
-        assert!(is_procedure_declaration(content));
+        let mut input = Parser::new();
+        input.initialize("f : A -> B");
+        assert!(is_procedure_declaration(input.source));
 
-        let result = parse_procedure_declaration(content);
+        let result = input.parse_procedure_declaration();
         assert_eq!(
             result,
             Ok((
@@ -1663,10 +1685,10 @@ mod check {
             ))
         );
 
-        let content = "making_coffee : (Beans, Milk) -> [Coffee]";
-        assert!(is_procedure_declaration(content));
+        input.initialize("making_coffee : (Beans, Milk) -> [Coffee]");
+        assert!(is_procedure_declaration(input.source));
 
-        let result = parse_procedure_declaration(content);
+        let result = input.parse_procedure_declaration();
         assert_eq!(
             result,
             Ok((
@@ -1910,7 +1932,7 @@ and verify connectivity
         // Test invalid step
         input.initialize("Not a step");
         let result = input.read_step();
-        assert_eq!(result, Err(ParsingError::InvalidStep));
+        assert_eq!(result, Err(ParsingError::InvalidStep(0)));
     }
 
     #[test]
@@ -2590,8 +2612,7 @@ echo "Done"```) }"#,
         // different split character
         input.initialize("'Yes'|'No'|'Maybe'");
         let result = input.take_split_by('|', |inner| {
-            let content = inner.entire();
-            Ok(validate_response(content)?)
+            validate_response(inner.source).ok_or(ParsingError::IllegalParserState(inner.offset))
         });
         assert_eq!(
             result,

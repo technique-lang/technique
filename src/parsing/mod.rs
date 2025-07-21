@@ -30,7 +30,7 @@ pub fn load(source: &Path) {
             println!("{:#?}", technique);
         }
         Err(error) => {
-            eprintln!("Parse error: {:?}", error);
+            eprintln!("error: {}", error);
             std::process::exit(1);
         }
     };

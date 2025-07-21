@@ -27,19 +27,6 @@ impl Default for Metadata<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ValidationError {
-    ZeroLengthToken,
-    InvalidLicense,
-    InvalidCopyright,
-    InvalidTemplate,
-    InvalidIdentifier,
-    InvalidForma,
-    InvalidGenus,
-    InvalidInvocation,
-    InvalidResponse,
-}
-
 #[derive(Eq, Debug, PartialEq)]
 pub struct Procedure<'i> {
     pub name: Identifier<'i>,
@@ -154,57 +141,58 @@ pub enum Expression<'i> {
     Foreach(Identifier<'i>, Box<Expression<'i>>),
     Application(Invocation<'i>),
     Execution(Function<'i>),
+    Binding(Box<Expression<'i>>, Identifier<'i>),
 }
 
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
 
-pub fn validate_license(input: &str) -> Result<&str, ValidationError> {
+pub fn validate_license(input: &str) -> Option<&str> {
     let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
 
     if re.is_match(input) {
-        Ok(input)
+        Some(input)
     } else {
-        Err(ValidationError::InvalidLicense)
+        None
     }
 }
 
-pub fn validate_copyright(input: &str) -> Result<&str, ValidationError> {
+pub fn validate_copyright(input: &str) -> Option<&str> {
     let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
 
     if re.is_match(input) {
-        Ok(input)
+        Some(input)
     } else {
-        Err(ValidationError::InvalidCopyright)
+        None
     }
 }
 
-pub fn validate_template(input: &str) -> Result<&str, ValidationError> {
+pub fn validate_template(input: &str) -> Option<&str> {
     let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
 
     if re.is_match(input) {
-        Ok(input)
+        Some(input)
     } else {
-        Err(ValidationError::InvalidTemplate)
+        None
     }
 }
 
-pub fn validate_identifier(input: &str) -> Result<Identifier, ValidationError> {
+pub fn validate_identifier(input: &str) -> Option<Identifier> {
     if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
+        return None;
     }
 
     let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
     if re.is_match(input) {
-        Ok(Identifier(input))
+        Some(Identifier(input))
     } else {
-        Err(ValidationError::InvalidIdentifier)
+        None
     }
 }
 
-pub fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
+pub fn validate_forma(input: &str) -> Option<Forma> {
     if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
+        return None;
     }
 
     let mut cs = input.chars();
@@ -214,20 +202,20 @@ pub fn validate_forma(input: &str) -> Result<Forma, ValidationError> {
         .unwrap()
         .is_ascii_uppercase()
     {
-        return Err(ValidationError::InvalidForma);
+        return None;
     }
 
     for c in cs {
         if !(c.is_ascii_uppercase() || c.is_ascii_lowercase() || c.is_ascii_digit()) {
-            return Err(ValidationError::InvalidForma);
+            return None;
         }
     }
 
-    Ok(Forma(input))
+    Some(Forma(input))
 }
 
 /// This one copes with (and discards) any internal whitespace encountered.
-pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
+pub fn validate_genus(input: &str) -> Option<Genus> {
     let first = input
         .chars()
         .next()
@@ -240,16 +228,14 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             let cap = match re.captures(input) {
                 Some(c) => c,
-                None => return Err(ValidationError::ZeroLengthToken),
+                None => return None,
             };
 
-            let one = cap
-                .get(1)
-                .ok_or(ValidationError::InvalidGenus)?;
+            let one = cap.get(1)?;
 
             let forma = validate_forma(one.as_str())?;
 
-            Ok(Genus::List(forma))
+            Some(Genus::List(forma))
         }
         '(' => {
             // first trim off the parenthesis and whitespace
@@ -257,15 +243,13 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
 
             let cap = match re.captures(input) {
                 Some(c) => c,
-                None => return Err(ValidationError::ZeroLengthToken),
+                None => return None,
             };
 
-            let one = cap
-                .get(1)
-                .ok_or(ValidationError::InvalidGenus)?;
+            let one = cap.get(1)?;
 
             if one.len() == 0 {
-                return Ok(Genus::Unit);
+                return Some(Genus::Unit);
             }
 
             // now split on , characters, and gather
@@ -281,30 +265,28 @@ pub fn validate_genus(input: &str) -> Result<Genus, ValidationError> {
                 formas.push(forma);
             }
 
-            Ok(Genus::Tuple(formas))
+            Some(Genus::Tuple(formas))
         }
         _ => {
             if input.len() == 0 {
-                return Err(ValidationError::ZeroLengthToken);
+                return None;
             };
 
             let forma = validate_forma(input)?;
 
-            Ok(Genus::Single(forma))
+            Some(Genus::Single(forma))
         }
     }
 }
 
-pub fn validate_response(input: &str) -> Result<Response, ValidationError> {
+pub fn validate_response(input: &str) -> Option<Response> {
     if input.len() == 0 {
-        return Err(ValidationError::ZeroLengthToken);
+        return None;
     }
 
     // Handle conditions like 'Yes and equipment available'
     let re = Regex::new(r"^'(.*?)'(?:\s+(.+))?$").unwrap();
-    let cap = re
-        .captures(input)
-        .ok_or(ValidationError::InvalidResponse)?;
+    let cap = re.captures(input)?;
 
     let value = cap
         .get(1)
@@ -316,7 +298,7 @@ pub fn validate_response(input: &str) -> Result<Response, ValidationError> {
         None => None,
     };
 
-    Ok(Response { value, condition })
+    Some(Response { value, condition })
 }
 
 #[cfg(test)]
@@ -325,90 +307,86 @@ mod check {
 
     #[test]
     fn identifier_rules() {
-        assert_eq!(validate_identifier("a"), Ok(Identifier("a")));
-        assert_eq!(validate_identifier("ab"), Ok(Identifier("ab")));
-        assert_eq!(validate_identifier("johnny5"), Ok(Identifier("johnny5")));
-        assert_eq!(
-            validate_identifier("Pizza"),
-            Err(ValidationError::InvalidIdentifier)
-        );
-        assert_eq!(
-            validate_identifier("pizZa"),
-            Err(ValidationError::InvalidIdentifier)
-        );
-        assert!(validate_identifier("0trust").is_err());
+        assert_eq!(validate_identifier("a"), Some(Identifier("a")));
+        assert_eq!(validate_identifier("ab"), Some(Identifier("ab")));
+        assert_eq!(validate_identifier("johnny5"), Some(Identifier("johnny5")));
+        assert_eq!(validate_identifier("Pizza"), None);
+        assert_eq!(validate_identifier("pizZa"), None);
+        assert!(validate_identifier("0trust").is_none());
         assert_eq!(
             validate_identifier("make_dinner"),
-            Ok(Identifier("make_dinner"))
+            Some(Identifier("make_dinner"))
         );
-        assert!(validate_identifier("MakeDinner").is_err());
-        assert!(validate_identifier("make-dinner").is_err());
+        assert!(validate_identifier("MakeDinner").is_none());
+        assert!(validate_identifier("make-dinner").is_none());
     }
 
     #[test]
     fn forma_rules() {
-        assert_eq!(validate_forma("A"), Ok(Forma("A")));
-        assert_eq!(validate_forma("Beans"), Ok(Forma("Beans")));
-        assert_eq!(validate_forma("lower"), Err(ValidationError::InvalidForma));
-        assert_eq!(
-            validate_forma("0Degrees"),
-            Err(ValidationError::InvalidForma)
-        );
+        assert_eq!(validate_forma("A"), Some(Forma("A")));
+        assert_eq!(validate_forma("Beans"), Some(Forma("Beans")));
+        assert_eq!(validate_forma("lower"), None);
     }
 
     #[test]
     fn genus_rules_single() {
-        assert_eq!(validate_genus("A"), Ok(Genus::Single(Forma("A"))));
+        assert_eq!(validate_genus("A"), Some(Genus::Single(Forma("A"))));
     }
 
     #[test]
     fn genus_rules_list() {
-        assert_eq!(validate_genus("[A]"), Ok(Genus::List(Forma("A"))));
+        assert_eq!(validate_genus("[A]"), Some(Genus::List(Forma("A"))));
     }
 
     #[test]
     fn genus_rules_tuple() {
         assert_eq!(
             validate_genus("(A, B)"),
-            Ok(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
         );
 
         assert_eq!(
             validate_genus("(Coffee, Tea)"),
-            Ok(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+            Some(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
         );
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
 
-        assert_eq!(validate_genus("(A)"), Ok(Genus::Tuple(vec![Forma("A")])));
+        assert_eq!(validate_genus("(A)"), Some(Genus::Tuple(vec![Forma("A")])));
     }
 
     #[test]
     fn genus_rules_unit() {
-        assert_eq!(validate_genus("()"), Ok(Genus::Unit));
+        assert_eq!(validate_genus("()"), Some(Genus::Unit));
     }
 
     #[test]
     fn license_rules() {
-        assert_eq!(validate_license("MIT"), Ok("MIT"));
-        assert_eq!(validate_license("Public Domain"), Ok("Public Domain"));
-        assert_eq!(validate_license("CC BY-SA 3.0 IGO"), Ok("CC BY-SA 3.0 IGO"));
+        assert_eq!(validate_license("MIT"), Some("MIT"));
+        assert_eq!(validate_license("Public Domain"), Some("Public Domain"));
+        assert_eq!(
+            validate_license("CC BY-SA 3.0 IGO"),
+            Some("CC BY-SA 3.0 IGO")
+        );
     }
 
     #[test]
     fn copyright_rules() {
-        assert_eq!(validate_copyright("ACME"), Ok("ACME"));
-        assert_eq!(validate_copyright("lower"), Ok("lower"));
-        assert_eq!(validate_copyright("ACME, Inc"), Ok("ACME, Inc"));
-        assert_eq!(validate_copyright("2024 ACME, Inc."), Ok("2024 ACME, Inc."));
+        assert_eq!(validate_copyright("ACME"), Some("ACME"));
+        assert_eq!(validate_copyright("lower"), Some("lower"));
+        assert_eq!(validate_copyright("ACME, Inc"), Some("ACME, Inc"));
+        assert_eq!(
+            validate_copyright("2024 ACME, Inc."),
+            Some("2024 ACME, Inc.")
+        );
     }
 
     #[test]
     fn template_rules() {
-        assert_eq!(validate_template("checklist"), Ok("checklist"));
-        assert_eq!(validate_template("checklist,v1"), Ok("checklist,v1"));
-        assert_eq!(validate_template("checklist-v1.0"), Ok("checklist-v1.0"));
+        assert_eq!(validate_template("checklist"), Some("checklist"));
+        assert_eq!(validate_template("checklist,v1"), Some("checklist,v1"));
+        assert_eq!(validate_template("checklist-v1.0"), Some("checklist-v1.0"));
     }
 
     fn maker<'i>() -> Metadata<'i> {
