@@ -392,7 +392,7 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    // because test cases and trivial sinlge-line examples might omit an
+    // because test cases and trivial single-line examples might omit an
     // ending newline, this also returns Ok if end of input is reached.
     fn require_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
@@ -1026,23 +1026,36 @@ impl<'i> Parser<'i> {
                         results.push(Descriptive::CodeBlock(expression));
                     } else if c == '<' {
                         let invocation = outer.read_invocation()?;
+                        outer.trim_whitespace();
                         if outer.peek_next_char() == Some('~') {
                             outer.advance(1); // consume '~'
                             outer.trim_whitespace();
                             let variable = outer.read_identifier()?;
-                            results.push(Descriptive::Binding(invocation, variable));
+                            results.push(Descriptive::Binding(
+                                Box::new(Descriptive::Application(invocation)),
+                                variable,
+                            ));
                         } else {
                             results.push(Descriptive::Application(invocation));
                         }
                     } else {
                         // Parse regular text until we hit one of the above
                         // special characters, or end of input.
-                        let text = outer.take_until(&['{', '<'], |inner| {
+                        let text = outer.take_until(&['{', '<', '~'], |inner| {
                             Ok(inner
                                 .entire()
                                 .trim())
                         })?;
-                        if !text.is_empty() {
+                        if outer.peek_next_char() == Some('~') {
+                            // This is a naked binding: text ~ variable
+                            outer.advance(1); // consume '~'
+                            outer.trim_whitespace();
+                            let variable = outer.read_identifier()?;
+                            results.push(Descriptive::Binding(
+                                Box::new(Descriptive::Text(text)),
+                                variable,
+                            ));
+                        } else {
                             results.push(Descriptive::Text(text));
                         }
                     }
@@ -1287,7 +1300,7 @@ fn is_signature(content: &str) -> bool {
 /// Lightweight detection function for Genus patterns. This is necessary as an
 /// adjunct to is_procedure_declaration() in order to support recognizing
 /// multi-line procedure declarations. Each of these regexes unfortunately has
-/// the full validation tempate for Forma but we're only matching, not
+/// the full validation template for Forma but we're only matching, not
 /// capturing, so it is an acceptable duplication.
 fn is_genus(content: &str) -> bool {
     let content = content.trim();
@@ -4055,6 +4068,61 @@ before_leaving :
                     }
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn naked_bindings() {
+        let mut input = Parser::new();
+
+        // Test simple naked binding: text ~ variable
+        input.initialize("What is the result? ~ answer");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![Descriptive::Binding(
+                Box::new(Descriptive::Text("What is the result?")),
+                Identifier("answer")
+            )])
+        );
+
+        // Test naked binding followed by more text. This is probably not a
+        // valid usage, but it's good that it parses cleanly.
+        input.initialize("Enter your name ~ name\nContinue with next step");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![
+                Descriptive::Binding(
+                    Box::new(Descriptive::Text("Enter your name")),
+                    Identifier("name")
+                ),
+                Descriptive::Text("Continue with next step")
+            ])
+        );
+
+        // Test mixed content with function call binding and naked binding.
+        // This likewise may turn out to be something that fails compilation,
+        // but it's important that it parses right so that the users gets
+        // appropriate feedback.
+        input.initialize("First <do_something> ~ result then describe the outcome ~ description");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![
+                Descriptive::Text("First"),
+                Descriptive::Binding(
+                    Box::new(Descriptive::Application(Invocation {
+                        target: Target::Local(Identifier("do_something")),
+                        parameters: None
+                    })),
+                    Identifier("result")
+                ),
+                Descriptive::Binding(
+                    Box::new(Descriptive::Text("then describe the outcome")),
+                    Identifier("description")
+                )
+            ])
         );
     }
 }

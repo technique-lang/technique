@@ -82,7 +82,7 @@ pub enum Descriptive<'i> {
     Text(&'i str),
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
-    Binding(Invocation<'i>, Identifier<'i>),
+    Binding(Box<Descriptive<'i>>, Identifier<'i>),
 }
 
 // types for Steps within procedures
