@@ -116,28 +116,11 @@ impl<'i> Parser<'i> {
     /// consume up to but not including newline (or end)
     fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError<'i>>
     where
-        F: Fn(&'i str) -> Result<A, ParsingError<'i>>,
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
-        match self
-            .source
-            .split_once('\n')
-        {
-            Some((before, after)) => {
-                let result = f(before)?;
-
-                self.source = after;
-                self.offset += before.len() + 1;
-                Ok(result)
-            }
-            None => {
-                let before = self.source;
-                let result = f(before)?;
-
-                self.source = "";
-                self.offset += before.len() + 1;
-                Ok(result)
-            }
-        }
+        let result = self.take_until(&['\n'], f);
+        self.require_newline()?;
+        result
     }
 
     fn entire(&self) -> &'i str {
@@ -356,6 +339,8 @@ impl<'i> Parser<'i> {
         parser
     }
 
+    // because test cases and trivial sinlge-line examples might omit an
+    // ending newline, this also returns Ok if end of input is reached.
     fn require_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
             .source
