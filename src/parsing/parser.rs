@@ -16,12 +16,10 @@ pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
 }
 
 fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
-    // FIXME use a human readable Display of ParsingError
-    let message = format!("{:?}", error);
     TechniqueError {
-        problem: message,
+        problem: error.message(),
         source: parser.original,
-        offset: parser.offset,
+        offset: error.offset(),
         width: None,
     }
 }
@@ -47,6 +45,56 @@ pub enum ParsingError<'i> {
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
+}
+
+impl<'i> ParsingError<'i> {
+    fn offset(&self) -> usize {
+        match self {
+            ParsingError::IllegalParserState(offset) => *offset,
+            ParsingError::Unimplemented(offset) => *offset,
+            ParsingError::ZeroLengthToken(offset) => *offset,
+            ParsingError::Unrecognized(offset) => *offset,
+            ParsingError::Expected(offset, _) => *offset,
+            ParsingError::InvalidHeader(offset) => *offset,
+            ParsingError::InvalidCharacter(offset, _) => *offset,
+            ParsingError::UnexpectedEndOfInput(offset) => *offset,
+            ParsingError::InvalidIdentifier(offset, _) => *offset,
+            ParsingError::InvalidForma(offset) => *offset,
+            ParsingError::InvalidGenus(offset) => *offset,
+            ParsingError::InvalidSignature(offset) => *offset,
+            ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidInvocation(offset) => *offset,
+            ParsingError::InvalidFunction(offset) => *offset,
+            ParsingError::InvalidCodeBlock(offset) => *offset,
+            ParsingError::InvalidStep(offset) => *offset,
+            ParsingError::InvalidForeach(offset) => *offset,
+            ParsingError::InvalidResponse(offset) => *offset,
+        }
+    }
+
+    fn message(&self) -> String {
+        match self {
+            ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
+            ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
+            ParsingError::ZeroLengthToken(_) => "zero length input".to_string(),
+            ParsingError::Unrecognized(_) => "unrecognized".to_string(),
+            ParsingError::Expected(_, value) => format!("expected {}", value),
+            ParsingError::InvalidHeader(_) => "invalid header".to_string(),
+            ParsingError::InvalidCharacter(_, c) => format!("invalid character '{}'", c),
+            ParsingError::UnexpectedEndOfInput(_) => "unexpected end of input".to_string(),
+            ParsingError::InvalidIdentifier(_, _) => "invalid identifier".to_string(),
+            ParsingError::InvalidForma(_) => "invalid forma".to_string(),
+            ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
+            ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
+            ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
+            ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
+            ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
+            ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
+            ParsingError::InvalidStep(_) => "invalid step".to_string(),
+            ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
+            ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
+        }
+    }
 }
 
 #[derive(Debug)]
