@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::sync::OnceLock;
+
 use regex::Regex;
 use technique::error::*;
 use technique::language::*;
@@ -96,6 +98,36 @@ impl<'i> ParsingError<'i> {
         }
     }
 }
+
+static MAGIC_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static SPDX_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static TEMPLATE_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static SIGNATURE: OnceLock<regex::Regex> = OnceLock::new();
+static PROCEDURE_DECLARATION: OnceLock<regex::Regex> = OnceLock::new();
+static STEP_ORDINAL: OnceLock<regex::Regex> = OnceLock::new();
+static SUBSTEP_ORDINAL: OnceLock<regex::Regex> = OnceLock::new();
+static SUBSTEP_PARALLEL: OnceLock<regex::Regex> = OnceLock::new();
+
+static IS_MAGIC_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_SPDX_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_TEMPLATE_LINE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_IDENTIFIER: OnceLock<regex::Regex> = OnceLock::new();
+static IS_SIGNATURE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_GENUS_LIST: OnceLock<regex::Regex> = OnceLock::new();
+static IS_GENUS_TUPLE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_GENUS_SINGLE: OnceLock<regex::Regex> = OnceLock::new();
+static IS_CODE_BLOCK: OnceLock<regex::Regex> = OnceLock::new();
+static IS_FOREACH_KEYWORD: OnceLock<regex::Regex> = OnceLock::new();
+static IS_REPEAT_KEYWORD: OnceLock<regex::Regex> = OnceLock::new();
+static IS_INVOCATION: OnceLock<regex::Regex> = OnceLock::new();
+static IS_FUNCTION: OnceLock<regex::Regex> = OnceLock::new();
+static IS_BINDING: OnceLock<regex::Regex> = OnceLock::new();
+static IS_STEP: OnceLock<regex::Regex> = OnceLock::new();
+static IS_SUBSTEP_DEPENDENT: OnceLock<regex::Regex> = OnceLock::new();
+static IS_SUBSTEP_PARALLEL: OnceLock<regex::Regex> = OnceLock::new();
+static IS_SUBSUBSTEP_DEPENDENT: OnceLock<regex::Regex> = OnceLock::new();
+static IS_ROLE_ASSIGNMENT: OnceLock<regex::Regex> = OnceLock::new();
+static IS_ENUM_RESPONSE: OnceLock<regex::Regex> = OnceLock::new();
 
 #[derive(Debug)]
 struct Parser<'i> {
@@ -426,7 +458,7 @@ impl<'i> Parser<'i> {
     // different natural number here.
     fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+            let re = MAGIC_LINE.get_or_init(|| Regex::new(r"%\s*technique\s+v1").unwrap());
 
             if re.is_match(inner.source) {
                 Ok(1)
@@ -440,7 +472,9 @@ impl<'i> Parser<'i> {
     // to have a license, whereas the copyright part is optional.
     fn read_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
+            let re = SPDX_LINE.get_or_init(|| {
+                Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap()
+            });
 
             let cap = re
                 .captures(inner.source)
@@ -476,7 +510,7 @@ impl<'i> Parser<'i> {
 
     fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"^&\s*(.+)$").unwrap();
+            let re = TEMPLATE_LINE.get_or_init(|| Regex::new(r"^&\s*(.+)$").unwrap());
 
             let cap = re
                 .captures(inner.source)
@@ -526,7 +560,7 @@ impl<'i> Parser<'i> {
     fn read_signature(&mut self) -> Result<Signature<'i>, ParsingError<'i>> {
         let content = self.entire();
 
-        let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
+        let re = SIGNATURE.get_or_init(|| Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap());
 
         let cap = match re.captures(content) {
             Some(c) => c,
@@ -563,7 +597,8 @@ impl<'i> Parser<'i> {
         // These capture groups use .+? to make "match more than one, but
         // lazily" so that the subsequent grabs of whitespace and the all
         // important ':' character are not absorbed.
-        let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+        let re = PROCEDURE_DECLARATION
+            .get_or_init(|| Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap());
 
         let cap = re
             .captures(self.source)
@@ -861,7 +896,7 @@ impl<'i> Parser<'i> {
 
             // Parse ordinal
 
-            let re = Regex::new(r"^\s*(\d+)\.\s+").unwrap();
+            let re = STEP_ORDINAL.get_or_init(|| Regex::new(r"^\s*(\d+)\.\s+").unwrap());
             let cap = re
                 .captures(content)
                 .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -911,7 +946,8 @@ impl<'i> Parser<'i> {
             |line| is_substep_dependent(line) || is_role_assignment(line),
             |outer| {
                 let content = outer.entire();
-                let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
+                let re =
+                    SUBSTEP_ORDINAL.get_or_init(|| Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap());
                 let cap = re
                     .captures(content)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -966,7 +1002,7 @@ impl<'i> Parser<'i> {
             },
             |outer| {
                 let content = outer.entire();
-                let re = Regex::new(r"^\s*-\s+").unwrap();
+                let re = SUBSTEP_PARALLEL.get_or_init(|| Regex::new(r"^\s*-\s+").unwrap());
                 let zero = re
                     .find(content)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -1263,25 +1299,25 @@ impl<'i> Parser<'i> {
 }
 
 fn is_magic_line(content: &str) -> bool {
-    let re = Regex::new(r"%\s*technique").unwrap();
+    let re = IS_MAGIC_LINE.get_or_init(|| Regex::new(r"%\s*technique").unwrap());
 
     re.is_match(content)
 }
 
 fn is_spdx_line(content: &str) -> bool {
-    let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
+    let re = IS_SPDX_LINE.get_or_init(|| Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap());
 
     re.is_match(content)
 }
 
 fn is_template_line(content: &str) -> bool {
-    let re = Regex::new(r"&\s*.+").unwrap();
+    let re = IS_TEMPLATE_LINE.get_or_init(|| Regex::new(r"&\s*.+").unwrap());
 
     re.is_match(content)
 }
 
 fn is_identifier(content: &str) -> bool {
-    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    let re = IS_IDENTIFIER.get_or_init(|| Regex::new(r"^[a-z][a-z0-9_]*$").unwrap());
     re.is_match(content)
 }
 
@@ -1292,7 +1328,7 @@ fn is_identifier(content: &str) -> bool {
 /// terminated by an end of line.
 
 fn is_signature(content: &str) -> bool {
-    let re = Regex::new(r"\s*.+?\s*->\s*.+?\s*$").unwrap();
+    let re = IS_SIGNATURE.get_or_init(|| Regex::new(r"\s*.+?\s*->\s*.+?\s*$").unwrap());
 
     re.is_match(content)
 }
@@ -1316,7 +1352,8 @@ fn is_genus(content: &str) -> bool {
     match first {
         '[' => {
             // List pattern: [Forma] where Forma starts with uppercase
-            let re = Regex::new(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$").unwrap();
+            let re =
+                IS_GENUS_LIST.get_or_init(|| Regex::new(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$").unwrap());
             re.is_match(content)
         }
         '(' => {
@@ -1327,13 +1364,14 @@ fn is_genus(content: &str) -> bool {
                 }
             }
             // Tuple pattern: (Forma, Forma, ...)
-            let re =
-                Regex::new(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$").unwrap();
+            let re = IS_GENUS_TUPLE.get_or_init(|| {
+                Regex::new(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$").unwrap()
+            });
             re.is_match(content)
         }
         _ => {
             // Single Forma pattern
-            let re = Regex::new(r"^[A-Z][A-Za-z0-9]*$").unwrap();
+            let re = IS_GENUS_SINGLE.get_or_init(|| Regex::new(r"^[A-Z][A-Za-z0-9]*$").unwrap());
             re.is_match(content)
         }
     }
@@ -1424,43 +1462,43 @@ fn is_procedure_title(content: &str) -> bool {
 // I'm not sure about anchoring this one on start and end, seeing as how it
 // will be used when scanning.
 fn is_invocation(content: &str) -> bool {
-    let re = Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap();
+    let re = IS_INVOCATION.get_or_init(|| Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap());
 
     re.is_match(content)
 }
 
 fn is_code_block(content: &str) -> bool {
-    let re = Regex::new(r"\s*{.*?}").unwrap();
+    let re = IS_CODE_BLOCK.get_or_init(|| Regex::new(r"\s*{.*?}").unwrap());
 
     re.is_match(content)
 }
 
 fn is_foreach_keyword(content: &str) -> bool {
-    let re = Regex::new(r"^\s*foreach\s+\w+\s+in\s+").unwrap();
+    let re = IS_FOREACH_KEYWORD.get_or_init(|| Regex::new(r"^\s*foreach\s+\w+\s+in\s+").unwrap());
 
     re.is_match(content)
 }
 
 fn is_repeat_keyword(content: &str) -> bool {
-    let re = Regex::new(r"^\s*repeat\s+").unwrap();
+    let re = IS_REPEAT_KEYWORD.get_or_init(|| Regex::new(r"^\s*repeat\s+").unwrap());
 
     re.is_match(content)
 }
 
 fn is_function(content: &str) -> bool {
-    let re = Regex::new(r"^\s*.+?\(").unwrap();
+    let re = IS_FUNCTION.get_or_init(|| Regex::new(r"^\s*.+?\(").unwrap());
 
     re.is_match(content)
 }
 
 fn is_binding(content: &str) -> bool {
-    let re = Regex::new(r"~\s+\w+\s*$").unwrap();
+    let re = IS_BINDING.get_or_init(|| Regex::new(r"~\s+\w+\s*$").unwrap());
 
     re.is_match(content)
 }
 
 fn is_step(content: &str) -> bool {
-    let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
+    let re = IS_STEP.get_or_init(|| Regex::new(r"^\s*\d+\.\s+").unwrap());
     re.is_match(content)
 }
 
@@ -1474,27 +1512,28 @@ fn is_step(content: &str) -> bool {
 /// used to compose a number below 40 in roman numerals, as those are
 /// sub-sub-steps.
 fn is_substep_dependent(content: &str) -> bool {
-    let re = Regex::new(r"^\s*[a-hj-uw-z]\.\s+").unwrap();
+    let re = IS_SUBSTEP_DEPENDENT.get_or_init(|| Regex::new(r"^\s*[a-hj-uw-z]\.\s+").unwrap());
     re.is_match(content)
 }
 
 fn is_substep_parallel(content: &str) -> bool {
-    let re = Regex::new(r"^\s*-\s+").unwrap();
+    let re = IS_SUBSTEP_PARALLEL.get_or_init(|| Regex::new(r"^\s*-\s+").unwrap());
     re.is_match(content)
 }
 
 fn is_subsubstep_dependent(content: &str) -> bool {
-    let re = Regex::new(r"^\s*[ivx]+\.\s+").unwrap();
+    let re = IS_SUBSUBSTEP_DEPENDENT.get_or_init(|| Regex::new(r"^\s*[ivx]+\.\s+").unwrap());
     re.is_match(content)
 }
 
 fn is_role_assignment(content: &str) -> bool {
-    let re = Regex::new(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*").unwrap();
+    let re = IS_ROLE_ASSIGNMENT
+        .get_or_init(|| Regex::new(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*").unwrap());
     re.is_match(content)
 }
 
 fn is_enum_response(content: &str) -> bool {
-    let re = Regex::new(r"^\s*'.+?'").unwrap();
+    let re = IS_ENUM_RESPONSE.get_or_init(|| Regex::new(r"^\s*'.+?'").unwrap());
     re.is_match(content)
 }
 
