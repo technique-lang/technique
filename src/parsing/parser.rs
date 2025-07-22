@@ -4,6 +4,14 @@ use regex::Regex;
 use technique::error::*;
 use technique::language::*;
 
+macro_rules! regex {
+    ($pattern:expr) => {{
+        use std::sync::OnceLock;
+        static REGEX: OnceLock<regex::Regex> = OnceLock::new();
+        REGEX.get_or_init(|| regex::Regex::new($pattern).unwrap_or_else(|e| panic!("{}", e)))
+    }};
+}
+
 pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
     input.initialize(content);
@@ -392,7 +400,7 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    // because test cases and trivial sinlge-line examples might omit an
+    // because test cases and trivial single-line examples might omit an
     // ending newline, this also returns Ok if end of input is reached.
     fn require_newline(&mut self) -> Result<(), ParsingError<'i>> {
         for (i, c) in self
@@ -426,7 +434,7 @@ impl<'i> Parser<'i> {
     // different natural number here.
     fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"%\s*technique\s+v1").unwrap();
+            let re = regex!(r"%\s*technique\s+v1");
 
             if re.is_match(inner.source) {
                 Ok(1)
@@ -440,7 +448,7 @@ impl<'i> Parser<'i> {
     // to have a license, whereas the copyright part is optional.
     fn read_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$").unwrap();
+            let re = regex!(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$");
 
             let cap = re
                 .captures(inner.source)
@@ -476,7 +484,7 @@ impl<'i> Parser<'i> {
 
     fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError<'i>> {
         self.take_line(|inner| {
-            let re = Regex::new(r"^&\s*(.+)$").unwrap();
+            let re = regex!(r"^&\s*(.+)$");
 
             let cap = re
                 .captures(inner.source)
@@ -526,7 +534,7 @@ impl<'i> Parser<'i> {
     fn read_signature(&mut self) -> Result<Signature<'i>, ParsingError<'i>> {
         let content = self.entire();
 
-        let re = Regex::new(r"\s*(.+?)\s*->\s*(.+?)\s*$").unwrap();
+        let re = regex!(r"\s*(.+?)\s*->\s*(.+?)\s*$");
 
         let cap = match re.captures(content) {
             Some(c) => c,
@@ -563,7 +571,7 @@ impl<'i> Parser<'i> {
         // These capture groups use .+? to make "match more than one, but
         // lazily" so that the subsequent grabs of whitespace and the all
         // important ':' character are not absorbed.
-        let re = Regex::new(r"^\s*(.+?)\s*:\s*(.+?)?\s*$").unwrap();
+        let re = regex!(r"^\s*(.+?)\s*:\s*(.+?)?\s*$");
 
         let cap = re
             .captures(self.source)
@@ -861,7 +869,7 @@ impl<'i> Parser<'i> {
 
             // Parse ordinal
 
-            let re = Regex::new(r"^\s*(\d+)\.\s+").unwrap();
+            let re = regex!(r"^\s*(\d+)\.\s+");
             let cap = re
                 .captures(content)
                 .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -911,7 +919,7 @@ impl<'i> Parser<'i> {
             |line| is_substep_dependent(line) || is_role_assignment(line),
             |outer| {
                 let content = outer.entire();
-                let re = Regex::new(r"^\s*([a-hj-uw-z])\.\s+").unwrap();
+                let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
                 let cap = re
                     .captures(content)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -966,7 +974,7 @@ impl<'i> Parser<'i> {
             },
             |outer| {
                 let content = outer.entire();
-                let re = Regex::new(r"^\s*-\s+").unwrap();
+                let re = regex!(r"^\s*-\s+");
                 let zero = re
                     .find(content)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
@@ -1026,23 +1034,36 @@ impl<'i> Parser<'i> {
                         results.push(Descriptive::CodeBlock(expression));
                     } else if c == '<' {
                         let invocation = outer.read_invocation()?;
+                        outer.trim_whitespace();
                         if outer.peek_next_char() == Some('~') {
                             outer.advance(1); // consume '~'
                             outer.trim_whitespace();
                             let variable = outer.read_identifier()?;
-                            results.push(Descriptive::Binding(invocation, variable));
+                            results.push(Descriptive::Binding(
+                                Box::new(Descriptive::Application(invocation)),
+                                variable,
+                            ));
                         } else {
                             results.push(Descriptive::Application(invocation));
                         }
                     } else {
                         // Parse regular text until we hit one of the above
                         // special characters, or end of input.
-                        let text = outer.take_until(&['{', '<'], |inner| {
+                        let text = outer.take_until(&['{', '<', '~'], |inner| {
                             Ok(inner
                                 .entire()
                                 .trim())
                         })?;
-                        if !text.is_empty() {
+                        if outer.peek_next_char() == Some('~') {
+                            // This is a naked binding: text ~ variable
+                            outer.advance(1); // consume '~'
+                            outer.trim_whitespace();
+                            let variable = outer.read_identifier()?;
+                            results.push(Descriptive::Binding(
+                                Box::new(Descriptive::Text(text)),
+                                variable,
+                            ));
+                        } else {
                             results.push(Descriptive::Text(text));
                         }
                     }
@@ -1250,25 +1271,25 @@ impl<'i> Parser<'i> {
 }
 
 fn is_magic_line(content: &str) -> bool {
-    let re = Regex::new(r"%\s*technique").unwrap();
+    let re = regex!(r"%\s*technique");
 
     re.is_match(content)
 }
 
 fn is_spdx_line(content: &str) -> bool {
-    let re = Regex::new(r"!\s*[^;]+(?:;\s*.+)?").unwrap();
+    let re = regex!(r"!\s*[^;]+(?:;\s*.+)?");
 
     re.is_match(content)
 }
 
 fn is_template_line(content: &str) -> bool {
-    let re = Regex::new(r"&\s*.+").unwrap();
+    let re = regex!(r"&\s*.+");
 
     re.is_match(content)
 }
 
 fn is_identifier(content: &str) -> bool {
-    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    let re = regex!(r"^[a-z][a-z0-9_]*$");
     re.is_match(content)
 }
 
@@ -1279,7 +1300,7 @@ fn is_identifier(content: &str) -> bool {
 /// terminated by an end of line.
 
 fn is_signature(content: &str) -> bool {
-    let re = Regex::new(r"\s*.+?\s*->\s*.+?\s*$").unwrap();
+    let re = regex!(r"\s*.+?\s*->\s*.+?\s*$");
 
     re.is_match(content)
 }
@@ -1287,7 +1308,7 @@ fn is_signature(content: &str) -> bool {
 /// Lightweight detection function for Genus patterns. This is necessary as an
 /// adjunct to is_procedure_declaration() in order to support recognizing
 /// multi-line procedure declarations. Each of these regexes unfortunately has
-/// the full validation tempate for Forma but we're only matching, not
+/// the full validation template for Forma but we're only matching, not
 /// capturing, so it is an acceptable duplication.
 fn is_genus(content: &str) -> bool {
     let content = content.trim();
@@ -1303,7 +1324,7 @@ fn is_genus(content: &str) -> bool {
     match first {
         '[' => {
             // List pattern: [Forma] where Forma starts with uppercase
-            let re = Regex::new(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$").unwrap();
+            let re = regex!(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$");
             re.is_match(content)
         }
         '(' => {
@@ -1314,13 +1335,12 @@ fn is_genus(content: &str) -> bool {
                 }
             }
             // Tuple pattern: (Forma, Forma, ...)
-            let re =
-                Regex::new(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$").unwrap();
+            let re = regex!(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$");
             re.is_match(content)
         }
         _ => {
             // Single Forma pattern
-            let re = Regex::new(r"^[A-Z][A-Za-z0-9]*$").unwrap();
+            let re = regex!(r"^[A-Z][A-Za-z0-9]*$");
             re.is_match(content)
         }
     }
@@ -1411,43 +1431,43 @@ fn is_procedure_title(content: &str) -> bool {
 // I'm not sure about anchoring this one on start and end, seeing as how it
 // will be used when scanning.
 fn is_invocation(content: &str) -> bool {
-    let re = Regex::new(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$").unwrap();
+    let re = regex!(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$");
 
     re.is_match(content)
 }
 
 fn is_code_block(content: &str) -> bool {
-    let re = Regex::new(r"\s*{.*?}").unwrap();
+    let re = regex!(r"\s*{.*?}");
 
     re.is_match(content)
 }
 
 fn is_foreach_keyword(content: &str) -> bool {
-    let re = Regex::new(r"^\s*foreach\s+\w+\s+in\s+").unwrap();
+    let re = regex!(r"^\s*foreach\s+\w+\s+in\s+");
 
     re.is_match(content)
 }
 
 fn is_repeat_keyword(content: &str) -> bool {
-    let re = Regex::new(r"^\s*repeat\s+").unwrap();
+    let re = regex!(r"^\s*repeat\s+");
 
     re.is_match(content)
 }
 
 fn is_function(content: &str) -> bool {
-    let re = Regex::new(r"^\s*.+?\(").unwrap();
+    let re = regex!(r"^\s*.+?\(");
 
     re.is_match(content)
 }
 
 fn is_binding(content: &str) -> bool {
-    let re = Regex::new(r"~\s+\w+\s*$").unwrap();
+    let re = regex!(r"~\s+\w+\s*$");
 
     re.is_match(content)
 }
 
 fn is_step(content: &str) -> bool {
-    let re = Regex::new(r"^\s*\d+\.\s+").unwrap();
+    let re = regex!(r"^\s*\d+\.\s+");
     re.is_match(content)
 }
 
@@ -1461,27 +1481,27 @@ fn is_step(content: &str) -> bool {
 /// used to compose a number below 40 in roman numerals, as those are
 /// sub-sub-steps.
 fn is_substep_dependent(content: &str) -> bool {
-    let re = Regex::new(r"^\s*[a-hj-uw-z]\.\s+").unwrap();
+    let re = regex!(r"^\s*[a-hj-uw-z]\.\s+");
     re.is_match(content)
 }
 
 fn is_substep_parallel(content: &str) -> bool {
-    let re = Regex::new(r"^\s*-\s+").unwrap();
+    let re = regex!(r"^\s*-\s+");
     re.is_match(content)
 }
 
 fn is_subsubstep_dependent(content: &str) -> bool {
-    let re = Regex::new(r"^\s*[ivx]+\.\s+").unwrap();
+    let re = regex!(r"^\s*[ivx]+\.\s+");
     re.is_match(content)
 }
 
 fn is_role_assignment(content: &str) -> bool {
-    let re = Regex::new(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*").unwrap();
+    let re = regex!(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*");
     re.is_match(content)
 }
 
 fn is_enum_response(content: &str) -> bool {
-    let re = Regex::new(r"^\s*'.+?'").unwrap();
+    let re = regex!(r"^\s*'.+?'");
     re.is_match(content)
 }
 
@@ -4055,6 +4075,61 @@ before_leaving :
                     }
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn naked_bindings() {
+        let mut input = Parser::new();
+
+        // Test simple naked binding: text ~ variable
+        input.initialize("What is the result? ~ answer");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![Descriptive::Binding(
+                Box::new(Descriptive::Text("What is the result?")),
+                Identifier("answer")
+            )])
+        );
+
+        // Test naked binding followed by more text. This is probably not a
+        // valid usage, but it's good that it parses cleanly.
+        input.initialize("Enter your name ~ name\nContinue with next step");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![
+                Descriptive::Binding(
+                    Box::new(Descriptive::Text("Enter your name")),
+                    Identifier("name")
+                ),
+                Descriptive::Text("Continue with next step")
+            ])
+        );
+
+        // Test mixed content with function call binding and naked binding.
+        // This likewise may turn out to be something that fails compilation,
+        // but it's important that it parses right so that the users gets
+        // appropriate feedback.
+        input.initialize("First <do_something> ~ result then describe the outcome ~ description");
+        let descriptive = input.read_descriptive();
+        assert_eq!(
+            descriptive,
+            Ok(vec![
+                Descriptive::Text("First"),
+                Descriptive::Binding(
+                    Box::new(Descriptive::Application(Invocation {
+                        target: Target::Local(Identifier("do_something")),
+                        parameters: None
+                    })),
+                    Identifier("result")
+                ),
+                Descriptive::Binding(
+                    Box::new(Descriptive::Text("then describe the outcome")),
+                    Identifier("description")
+                )
+            ])
         );
     }
 }
