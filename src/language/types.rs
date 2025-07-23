@@ -137,12 +137,33 @@ pub struct Function<'i> {
 pub enum Expression<'i> {
     Value(Identifier<'i>),
     String(&'i str),
+    Number(Numeric<'i>),
     Multiline(Option<&'i str>, Vec<&'i str>),
     Repeat(Box<Expression<'i>>),
     Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>),
     Application(Invocation<'i>),
     Execution(Function<'i>),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Numeric<'i> {
+    Integral(i64),
+    Scientific(Quantity<'i>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Quantity<'i> {
+    pub mantissa: Decimal,
+    pub uncertainty: Option<Decimal>,
+    pub magnitude: Option<i8>,
+    pub symbol: &'i str,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Decimal {
+    pub value: i64,
+    pub precision: u8,
 }
 
 // the validate functions all need to have start and end anchors, which seems
