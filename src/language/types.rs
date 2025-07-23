@@ -83,6 +83,7 @@ pub enum Descriptive<'i> {
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
     Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
+    Paragraph(Vec<Descriptive<'i>>),
 }
 
 // types for Steps within procedures
