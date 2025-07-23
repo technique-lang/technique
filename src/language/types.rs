@@ -214,6 +214,18 @@ pub fn validate_forma(input: &str) -> Option<Forma> {
     Some(Forma(input))
 }
 
+fn parse_tuple(input: &str) -> Option<Genus> {
+    let mut formas: Vec<Forma> = Vec::new();
+
+    for text in input.split(",") {
+        let text = text.trim();
+        let forma = validate_forma(text)?;
+        formas.push(forma);
+    }
+
+    Some(Genus::Tuple(formas))
+}
+
 /// This one copes with (and discards) any internal whitespace encountered.
 pub fn validate_genus(input: &str) -> Option<Genus> {
     let first = input
@@ -256,25 +268,25 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
 
             let mut formas: Vec<Forma> = Vec::new();
 
-            for text in one
-                .as_str()
-                .split(",")
-            {
-                let text = text.trim();
-                let forma = validate_forma(text)?;
-                formas.push(forma);
+            if content.is_empty() {
+                return Some(Genus::Unit);
             }
 
-            Some(Genus::Tuple(formas))
+            parse_tuple(content)
         }
         _ => {
             if input.len() == 0 {
                 return None;
             };
 
-            let forma = validate_forma(input)?;
+            // Check if this is a bare tuple (comma-separated but non-parenthesized)
+            if input.contains(',') {
+                parse_tuple(input)
+            } else {
+                let forma = validate_forma(input)?;
 
-            Some(Genus::Single(forma))
+                Some(Genus::Single(forma))
+            }
         }
     }
 }
@@ -339,7 +351,7 @@ mod check {
     }
 
     #[test]
-    fn genus_rules_tuple() {
+    fn genus_rules_tuple_parens() {
         assert_eq!(
             validate_genus("(A, B)"),
             Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
@@ -354,6 +366,49 @@ mod check {
         // not, because formatting and linting is a separate concern.
 
         assert_eq!(validate_genus("(A)"), Some(Genus::Tuple(vec![Forma("A")])));
+    }
+
+    #[test]
+    fn genus_rules_tuple_bare() {
+        assert_eq!(
+            validate_genus("A, B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("Coffee, Tea"),
+            Some(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+        );
+
+        assert_eq!(
+            validate_genus("Input, Data, Config"),
+            Some(Genus::Tuple(vec![
+                Forma("Input"),
+                Forma("Data"),
+                Forma("Config")
+            ]))
+        );
+
+        assert_eq!(
+            validate_genus("A,B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("A , B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        // Test edge cases with whitespace
+        assert_eq!(
+            validate_genus("  A  ,  B  "),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("\tA\t,\tB\t"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
     }
 
     #[test]
