@@ -256,17 +256,44 @@ impl<'i> Parser<'i> {
         let mut l = 0;
         let mut begun = false;
 
-        for (i, c) in self
-            .source
-            .char_indices()
-        {
-            if !begun && c == start_char {
-                begun = true;
-            } else if begun && c == end_char {
-                l = i + 1; // add end character
-                break;
+        if start_char == end_char {
+            // Simple case: same character for start and end (like X...X)
+            for (i, c) in self
+                .source
+                .char_indices()
+            {
+                if !begun && c == start_char {
+                    begun = true;
+                } else if begun && c == end_char {
+                    l = i + 1; // add end character
+                    break;
+                }
+            }
+        } else {
+            // Nesting case: different characters for start and end (like (...))
+            let mut depth = 0;
+
+            for (i, c) in self
+                .source
+                .char_indices()
+            {
+                if !begun && c == start_char {
+                    begun = true;
+                    depth = 1;
+                } else if begun {
+                    if c == start_char {
+                        depth += 1;
+                    } else if c == end_char {
+                        depth -= 1;
+                        if depth == 0 {
+                            l = i + 1; // add end character
+                            break;
+                        }
+                    }
+                }
             }
         }
+
         if !begun {
             return Err(ParsingError::Expected(self.offset, "the start character"));
         }
@@ -1230,6 +1257,11 @@ impl<'i> Parser<'i> {
             }
 
             result.push(after)
+        }
+
+        // Remove trailing empty line if it's just from the closing ``` delimiter
+        if !result.is_empty() && result[result.len() - 1].is_empty() {
+            result.pop();
         }
 
         Ok((lang, result))
@@ -2668,6 +2700,159 @@ echo "Done"```) }"#,
                 parameters: vec![Expression::Multiline(
                     Some("bash"),
                     vec!["ls -l", "echo \"Done\""]
+                )]
+            }))
+        );
+    }
+
+    #[test]
+    fn multiline() {
+        let mut input = Parser::new();
+
+        // Test multiline with consistent indentation that should be trimmed
+        input.initialize(
+            r#"{ exec(```bash
+        ./stuff
+
+        if [ true ]
+        then
+            ./other args
+        fi```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec![
+                        "./stuff",
+                        "",
+                        "if [ true ]",
+                        "then",
+                        "    ./other args",
+                        "fi"
+                    ]
+                )]
+            }))
+        );
+
+        // Test multiline without language tag
+        input.initialize(
+            r#"{ exec(```
+ls -l
+echo "Done"```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(None, vec!["ls -l", "echo \"Done\""])]
+            }))
+        );
+
+        // Test multiline with intentional empty lines in the middle
+        input.initialize(
+            r#"{ exec(```shell
+echo "Starting"
+
+echo "Middle section"
+
+
+echo "Ending"```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("shell"),
+                    vec![
+                        "echo \"Starting\"",
+                        "",
+                        "echo \"Middle section\"",
+                        "",
+                        "",
+                        "echo \"Ending\""
+                    ]
+                )]
+            }))
+        );
+
+        // Test that internal indentation relative to the base is preserved,
+        // and also that nested parenthesis don't break the enclosing
+        // take_block_chars() used to capture the input to the function.
+        input.initialize(
+            r#"{ exec(```python
+    def hello():
+        print("Hello")
+        if True:
+            print("World")
+
+    hello()```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("python"),
+                    vec![
+                        "def hello():",
+                        "    print(\"Hello\")",
+                        "    if True:",
+                        "        print(\"World\")",
+                        "",
+                        "hello()"
+                    ]
+                )]
+            }))
+        );
+
+        // Test that a trailing empty line from the closing delimiter is removed
+        input.initialize(
+            r#"{ exec(```
+echo test
+```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(None, vec!["echo test"])]
+            }))
+        );
+
+        // Test various indentation edge cases
+        input.initialize(
+            r#"{ exec(```yaml
+  name: test
+  items:
+    - item1
+    - item2
+  config:
+    enabled: true```) }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("yaml"),
+                    vec![
+                        "name: test",
+                        "items:",
+                        "  - item1",
+                        "  - item2",
+                        "config:",
+                        "  enabled: true"
+                    ]
                 )]
             }))
         );
