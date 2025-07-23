@@ -137,7 +137,7 @@ pub struct Function<'i> {
 pub enum Expression<'i> {
     Value(Identifier<'i>),
     String(&'i str),
-    Multiline(&'i str),
+    Multiline(Option<&'i str>, Vec<&'i str>),
     Repeat(Box<Expression<'i>>),
     Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>),
     Application(Invocation<'i>),

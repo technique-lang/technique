@@ -50,6 +50,7 @@ pub enum ParsingError<'i> {
     InvalidInvocation(usize),
     InvalidFunction(usize),
     InvalidCodeBlock(usize),
+    InvalidMultiline(usize),
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
@@ -74,6 +75,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidInvocation(offset) => *offset,
             ParsingError::InvalidFunction(offset) => *offset,
             ParsingError::InvalidCodeBlock(offset) => *offset,
+            ParsingError::InvalidMultiline(offset) => *offset,
             ParsingError::InvalidStep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
@@ -98,6 +100,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
             ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
             ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
+            ParsingError::InvalidMultiline(_) => "invalid multi-line string".to_string(),
             ParsingError::InvalidStep(_) => "invalid step".to_string(),
             ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
             ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
@@ -1182,6 +1185,56 @@ impl<'i> Parser<'i> {
         })
     }
 
+    fn parse_multiline_content(
+        &mut self,
+    ) -> Result<(Option<&'i str>, Vec<&'i str>), ParsingError<'i>> {
+        let mut lines: Vec<&str> = self
+            .source
+            .lines()
+            .collect();
+
+        if lines.is_empty() {
+            return Ok((None, vec![]));
+        }
+
+        // Extract language hint from first line if present
+        let first = lines[0].trim();
+        let lang = if !first.is_empty() { Some(first) } else { None };
+        lines.remove(0);
+
+        let second = lines[0];
+
+        // We let the indentation of the first line govern the rest of the block
+        let indent = second.len()
+            - second
+                .trim_start()
+                .len();
+
+        // Trim consistent leading whitespace while preserving internal indentation
+        let mut result = Vec::with_capacity(lines.len());
+
+        for line in lines {
+            // the final line with ``` will be likely shorter, irrespective of
+            // anything else going on.
+            let i = indent.min(line.len());
+
+            // now grab the text after the designated indent point. We check
+            // to make sure there's nothing before that point, otherwise we
+            // would have truncated the user's text. That's not allowed!
+            let (before, after) = line.split_at(i);
+            if !before
+                .trim()
+                .is_empty()
+            {
+                return Err(ParsingError::InvalidMultiline(self.offset));
+            }
+
+            result.push(after)
+        }
+
+        Ok((lang, result))
+    }
+
     /// Consume parameters to an invocation or function. Specifically, look
     /// for the form
     ///
@@ -1213,8 +1266,9 @@ impl<'i> Parser<'i> {
                 let content = outer.entire();
 
                 if content.starts_with("```") {
-                    let raw = outer.take_block_delimited("```", |inner| Ok(inner.entire()))?;
-                    params.push(Expression::Multiline(raw));
+                    let (lang, lines) = outer
+                        .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
+                    params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
                     let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
                     params.push(Expression::String(raw));
@@ -2611,7 +2665,10 @@ echo "Done"```) }"#,
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("exec"),
-                parameters: vec![Expression::Multiline("bash\nls -l\necho \"Done\"")]
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec!["ls -l", "echo \"Done\""]
+                )]
             }))
         );
     }
