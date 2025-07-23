@@ -82,7 +82,7 @@ pub enum Descriptive<'i> {
     Text(&'i str),
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
-    Binding(Box<Descriptive<'i>>, Identifier<'i>),
+    Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
 }
 
 // types for Steps within procedures
@@ -138,10 +138,10 @@ pub enum Expression<'i> {
     String(&'i str),
     Multiline(&'i str),
     Repeat(Box<Expression<'i>>),
-    Foreach(Identifier<'i>, Box<Expression<'i>>),
+    Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>),
     Application(Invocation<'i>),
     Execution(Function<'i>),
-    Binding(Box<Expression<'i>>, Identifier<'i>),
+    Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
 }
 
 // the validate functions all need to have start and end anchors, which seems
@@ -214,6 +214,18 @@ pub fn validate_forma(input: &str) -> Option<Forma> {
     Some(Forma(input))
 }
 
+fn parse_tuple(input: &str) -> Option<Genus> {
+    let mut formas: Vec<Forma> = Vec::new();
+
+    for text in input.split(",") {
+        let text = text.trim();
+        let forma = validate_forma(text)?;
+        formas.push(forma);
+    }
+
+    Some(Genus::Tuple(formas))
+}
+
 /// This one copes with (and discards) any internal whitespace encountered.
 pub fn validate_genus(input: &str) -> Option<Genus> {
     let first = input
@@ -224,57 +236,47 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
     match first {
         '[' => {
             // consume up to closing bracket
-            let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
+            if !input.ends_with(']') {
+                return None;
+            }
 
-            let cap = match re.captures(input) {
-                Some(c) => c,
-                None => return None,
-            };
+            let content = &input[1..input.len() - 1].trim();
 
-            let one = cap.get(1)?;
+            if content.is_empty() {
+                return None;
+            }
 
-            let forma = validate_forma(one.as_str())?;
+            let forma = validate_forma(content)?;
 
             Some(Genus::List(forma))
         }
         '(' => {
             // first trim off the parenthesis and whitespace
-            let re = Regex::new(r"\(\s*(.*)\s*\)").unwrap();
+            if !input.ends_with(')') {
+                return None;
+            }
 
-            let cap = match re.captures(input) {
-                Some(c) => c,
-                None => return None,
-            };
+            let content = &input[1..input.len() - 1].trim();
 
-            let one = cap.get(1)?;
-
-            if one.len() == 0 {
+            if content.is_empty() {
                 return Some(Genus::Unit);
             }
 
-            // now split on , characters, and gather
-
-            let mut formas: Vec<Forma> = Vec::new();
-
-            for text in one
-                .as_str()
-                .split(",")
-            {
-                let text = text.trim();
-                let forma = validate_forma(text)?;
-                formas.push(forma);
-            }
-
-            Some(Genus::Tuple(formas))
+            parse_tuple(content)
         }
         _ => {
             if input.len() == 0 {
                 return None;
             };
 
-            let forma = validate_forma(input)?;
+            // Check if this is a bare tuple (comma-separated but non-parenthesized)
+            if input.contains(',') {
+                parse_tuple(input)
+            } else {
+                let forma = validate_forma(input)?;
 
-            Some(Genus::Single(forma))
+                Some(Genus::Single(forma))
+            }
         }
     }
 }
@@ -336,10 +338,25 @@ mod check {
     #[test]
     fn genus_rules_list() {
         assert_eq!(validate_genus("[A]"), Some(Genus::List(Forma("A"))));
+
+        // Test list with whitespace
+        assert_eq!(
+            validate_genus("[ Input ]"),
+            Some(Genus::List(Forma("Input")))
+        );
+
+        assert_eq!(
+            validate_genus("[\tOutput\t]"),
+            Some(Genus::List(Forma("Output")))
+        );
+
+        // Test malformed lists
+        assert_eq!(validate_genus("[Input"), None);
+        assert_eq!(validate_genus("Input]"), None);
     }
 
     #[test]
-    fn genus_rules_tuple() {
+    fn genus_rules_tuple_parens() {
         assert_eq!(
             validate_genus("(A, B)"),
             Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
@@ -354,13 +371,83 @@ mod check {
         // not, because formatting and linting is a separate concern.
 
         assert_eq!(validate_genus("(A)"), Some(Genus::Tuple(vec![Forma("A")])));
+
+        // Test parenthesized tuples with whitespace
+        assert_eq!(
+            validate_genus("( A , B )"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("(\tA\t,\tB\t)"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        // Test malformed tuples
+        assert_eq!(validate_genus("(Input"), None);
+        assert_eq!(validate_genus("Input)"), None);
+    }
+
+    #[test]
+    fn genus_rules_tuple_bare() {
+        assert_eq!(
+            validate_genus("A, B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("Coffee, Tea"),
+            Some(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+        );
+
+        assert_eq!(
+            validate_genus("Input, Data, Config"),
+            Some(Genus::Tuple(vec![
+                Forma("Input"),
+                Forma("Data"),
+                Forma("Config")
+            ]))
+        );
+
+        assert_eq!(
+            validate_genus("A,B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("A , B"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        // Test edge cases with whitespace
+        assert_eq!(
+            validate_genus("  A  ,  B  "),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("\tA\t,\tB\t"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
     }
 
     #[test]
     fn genus_rules_unit() {
         assert_eq!(validate_genus("()"), Some(Genus::Unit));
+
+        // Test unit with whitespace
+        assert_eq!(validate_genus("(   )"), Some(Genus::Unit));
+        assert_eq!(validate_genus("(\t)"), Some(Genus::Unit));
     }
 
+    #[test]
+    fn genus_rules_malformed() {
+        // Test malformed brackets/parens
+        assert_eq!(validate_genus("[Input"), None);
+        assert_eq!(validate_genus("Input]"), None);
+        assert_eq!(validate_genus("(Input"), None);
+        assert_eq!(validate_genus("Input)"), None);
+    }
     #[test]
     fn license_rules() {
         assert_eq!(validate_license("MIT"), Some("MIT"));
