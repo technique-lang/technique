@@ -763,12 +763,16 @@ impl<'i> Parser<'i> {
     }
 
     fn read_foreach_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        // Parse "foreach <identifier> in <expression>"
+        // Parse "foreach <pattern> in <expression>" where pattern is either:
+        // - identifier
+        // - (identifier, identifier, ...)
+
         // Skip "foreach" keyword - we already know it's there from starts_with check
         self.advance(7);
         self.trim_whitespace();
 
-        let identifier = self.read_identifier()?;
+        let identifiers = self.read_identifiers()?;
+
         self.trim_whitespace();
 
         // Skip the "in" keyword
@@ -784,7 +788,54 @@ impl<'i> Parser<'i> {
 
         let expression = self.read_expression()?;
 
-        Ok(Expression::Foreach(identifier, Box::new(expression)))
+        Ok(Expression::Foreach(identifiers, Box::new(expression)))
+    }
+
+    fn read_identifiers(&mut self) -> Result<Vec<Identifier<'i>>, ParsingError<'i>> {
+        if self
+            .entire()
+            .starts_with('(')
+        {
+            // Parse parenthesized list: (id1, id2, ...)
+            self.take_block_chars('(', ')', |outer| {
+                let mut identifiers = Vec::new();
+
+                loop {
+                    outer.trim_whitespace();
+
+                    if outer
+                        .entire()
+                        .is_empty()
+                    {
+                        break;
+                    }
+
+                    let name = outer.read_identifier()?;
+                    identifiers.push(name);
+
+                    // Handle comma separation
+                    outer.trim_whitespace();
+                    if outer
+                        .entire()
+                        .starts_with(',')
+                    {
+                        outer.advance(1);
+                    } else {
+                        break;
+                    }
+                }
+
+                if identifiers.is_empty() {
+                    return Err(ParsingError::InvalidForeach(outer.offset));
+                }
+
+                Ok(identifiers)
+            })
+        } else {
+            // Parse single identifier
+            let name = self.read_identifier()?;
+            Ok(vec![name])
+        }
     }
 
     fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
@@ -807,8 +858,10 @@ impl<'i> Parser<'i> {
         // Consume the ~ operator
         self.advance(1); // consume '~'
         self.trim_whitespace();
-        let variable = self.read_identifier()?;
-        Ok(Expression::Binding(Box::new(expression), variable))
+
+        let identifiers = self.read_identifiers()?;
+
+        Ok(Expression::Binding(Box::new(expression), identifiers))
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1041,7 +1094,7 @@ impl<'i> Parser<'i> {
                             let variable = outer.read_identifier()?;
                             results.push(Descriptive::Binding(
                                 Box::new(Descriptive::Application(invocation)),
-                                variable,
+                                vec![variable],
                             ));
                         } else {
                             results.push(Descriptive::Application(invocation));
@@ -1061,7 +1114,7 @@ impl<'i> Parser<'i> {
                             let variable = outer.read_identifier()?;
                             results.push(Descriptive::Binding(
                                 Box::new(Descriptive::Text(text)),
-                                variable,
+                                vec![variable],
                             ));
                         } else {
                             results.push(Descriptive::Text(text));
@@ -1443,7 +1496,9 @@ fn is_code_block(content: &str) -> bool {
 }
 
 fn is_foreach_keyword(content: &str) -> bool {
-    let re = regex!(r"^\s*foreach\s+\w+\s+in\s+");
+    let re = regex!(
+        r"^\s*foreach\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s+in\s+"
+    );
 
     re.is_match(content)
 }
@@ -1461,7 +1516,7 @@ fn is_function(content: &str) -> bool {
 }
 
 fn is_binding(content: &str) -> bool {
-    let re = regex!(r"~\s+\w+\s*$");
+    let re = regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*$");
 
     re.is_match(content)
 }
@@ -2532,8 +2587,65 @@ echo "Done"```) }"#,
         assert_eq!(
             result,
             Ok(Expression::Foreach(
-                Identifier("item"),
+                vec![Identifier("item")],
                 Box::new(Expression::Value(Identifier("items")))
+            ))
+        );
+    }
+
+    #[test]
+    fn foreach_tuple_pattern() {
+        let mut input = Parser::new();
+        input.initialize("{ foreach (design, component) in zip(designs, components) }");
+
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Foreach(
+                vec![Identifier("design"), Identifier("component")],
+                Box::new(Expression::Execution(Function {
+                    target: Identifier("zip"),
+                    parameters: vec![
+                        Expression::Value(Identifier("designs")),
+                        Expression::Value(Identifier("components"))
+                    ]
+                }))
+            ))
+        );
+
+        input.initialize("{ foreach (a, b, c) in zip(list1, list2, list3) }");
+
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Foreach(
+                vec![Identifier("a"), Identifier("b"), Identifier("c")],
+                Box::new(Expression::Execution(Function {
+                    target: Identifier("zip"),
+                    parameters: vec![
+                        Expression::Value(Identifier("list1")),
+                        Expression::Value(Identifier("list2")),
+                        Expression::Value(Identifier("list3"))
+                    ]
+                }))
+            ))
+        );
+    }
+
+    #[test]
+    fn tuple_binding_expression() {
+        let mut input = Parser::new();
+        input.initialize("{ <get_coordinates>() ~ (x, y) }");
+
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Binding(
+                Box::new(Expression::Application(Invocation {
+                    target: Target::Local(Identifier("get_coordinates")),
+                    parameters: Some(vec![])
+                })),
+                vec![Identifier("x"), Identifier("y")]
             ))
         );
     }
@@ -3990,7 +4102,7 @@ before_leaving :
                                         content: vec![
                                             Descriptive::Text("Specimen labelling"),
                                             Descriptive::CodeBlock(Expression::Foreach(
-                                                Identifier("specimen"),
+                                                vec![Identifier("specimen")],
                                                 Box::new(Expression::Value(Identifier("specimens")))
                                             ))
                                         ],
@@ -4089,7 +4201,7 @@ before_leaving :
             descriptive,
             Ok(vec![Descriptive::Binding(
                 Box::new(Descriptive::Text("What is the result?")),
-                Identifier("answer")
+                vec![Identifier("answer")]
             )])
         );
 
@@ -4102,7 +4214,7 @@ before_leaving :
             Ok(vec![
                 Descriptive::Binding(
                     Box::new(Descriptive::Text("Enter your name")),
-                    Identifier("name")
+                    vec![Identifier("name")]
                 ),
                 Descriptive::Text("Continue with next step")
             ])
@@ -4121,13 +4233,13 @@ before_leaving :
                 Descriptive::Binding(
                     Box::new(Descriptive::Application(Invocation {
                         target: Target::Local(Identifier("do_something")),
-                        parameters: None
+                        parameters: None,
                     })),
-                    Identifier("result")
+                    vec![Identifier("result")]
                 ),
                 Descriptive::Binding(
                     Box::new(Descriptive::Text("then describe the outcome")),
-                    Identifier("description")
+                    vec![Identifier("description")]
                 )
             ])
         );

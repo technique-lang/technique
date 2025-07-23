@@ -82,7 +82,7 @@ pub enum Descriptive<'i> {
     Text(&'i str),
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
-    Binding(Box<Descriptive<'i>>, Identifier<'i>),
+    Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
 }
 
 // types for Steps within procedures
@@ -138,10 +138,10 @@ pub enum Expression<'i> {
     String(&'i str),
     Multiline(&'i str),
     Repeat(Box<Expression<'i>>),
-    Foreach(Identifier<'i>, Box<Expression<'i>>),
+    Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>),
     Application(Invocation<'i>),
     Execution(Function<'i>),
-    Binding(Box<Expression<'i>>, Identifier<'i>),
+    Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
 }
 
 // the validate functions all need to have start and end anchors, which seems
@@ -440,6 +440,14 @@ mod check {
         assert_eq!(validate_genus("(\t)"), Some(Genus::Unit));
     }
 
+    #[test]
+    fn genus_rules_malformed() {
+        // Test malformed brackets/parens
+        assert_eq!(validate_genus("[Input"), None);
+        assert_eq!(validate_genus("Input]"), None);
+        assert_eq!(validate_genus("(Input"), None);
+        assert_eq!(validate_genus("Input)"), None);
+    }
     #[test]
     fn license_rules() {
         assert_eq!(validate_license("MIT"), Some("MIT"));
