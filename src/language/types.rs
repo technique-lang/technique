@@ -236,37 +236,27 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
     match first {
         '[' => {
             // consume up to closing bracket
-            let re = Regex::new(r"\[\s*(.+)\s*\]").unwrap();
+            if !input.ends_with(']') {
+                return None;
+            }
 
-            let cap = match re.captures(input) {
-                Some(c) => c,
-                None => return None,
-            };
+            let content = &input[1..input.len() - 1].trim();
 
-            let one = cap.get(1)?;
+            if content.is_empty() {
+                return None;
+            }
 
-            let forma = validate_forma(one.as_str())?;
+            let forma = validate_forma(content)?;
 
             Some(Genus::List(forma))
         }
         '(' => {
             // first trim off the parenthesis and whitespace
-            let re = Regex::new(r"\(\s*(.*)\s*\)").unwrap();
-
-            let cap = match re.captures(input) {
-                Some(c) => c,
-                None => return None,
-            };
-
-            let one = cap.get(1)?;
-
-            if one.len() == 0 {
-                return Some(Genus::Unit);
+            if !input.ends_with(')') {
+                return None;
             }
 
-            // now split on , characters, and gather
-
-            let mut formas: Vec<Forma> = Vec::new();
+            let content = &input[1..input.len() - 1].trim();
 
             if content.is_empty() {
                 return Some(Genus::Unit);
@@ -348,6 +338,21 @@ mod check {
     #[test]
     fn genus_rules_list() {
         assert_eq!(validate_genus("[A]"), Some(Genus::List(Forma("A"))));
+
+        // Test list with whitespace
+        assert_eq!(
+            validate_genus("[ Input ]"),
+            Some(Genus::List(Forma("Input")))
+        );
+
+        assert_eq!(
+            validate_genus("[\tOutput\t]"),
+            Some(Genus::List(Forma("Output")))
+        );
+
+        // Test malformed lists
+        assert_eq!(validate_genus("[Input"), None);
+        assert_eq!(validate_genus("Input]"), None);
     }
 
     #[test]
@@ -366,6 +371,21 @@ mod check {
         // not, because formatting and linting is a separate concern.
 
         assert_eq!(validate_genus("(A)"), Some(Genus::Tuple(vec![Forma("A")])));
+
+        // Test parenthesized tuples with whitespace
+        assert_eq!(
+            validate_genus("( A , B )"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        assert_eq!(
+            validate_genus("(\tA\t,\tB\t)"),
+            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+        );
+
+        // Test malformed tuples
+        assert_eq!(validate_genus("(Input"), None);
+        assert_eq!(validate_genus("Input)"), None);
     }
 
     #[test]
@@ -414,6 +434,10 @@ mod check {
     #[test]
     fn genus_rules_unit() {
         assert_eq!(validate_genus("()"), Some(Genus::Unit));
+
+        // Test unit with whitespace
+        assert_eq!(validate_genus("(   )"), Some(Genus::Unit));
+        assert_eq!(validate_genus("(\t)"), Some(Genus::Unit));
     }
 
     #[test]
