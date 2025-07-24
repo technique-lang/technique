@@ -46,6 +46,7 @@ pub enum ParsingError<'i> {
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
+    InvalidNumeric(usize),
 }
 
 impl<'i> ParsingError<'i> {
@@ -71,6 +72,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
+            ParsingError::InvalidNumeric(offset) => *offset,
         }
     }
 
@@ -96,6 +98,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(_) => "invalid step".to_string(),
             ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
             ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
+            ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
         }
     }
 }
@@ -790,8 +793,10 @@ impl<'i> Parser<'i> {
             .trim()
             .starts_with('[')
         {
-            // Data structure syntax - not yet implemented
-            return Err(ParsingError::Unimplemented(self.offset));
+            self.read_tablet_expression()
+        } else if is_numeric(content) {
+            let numeric = self.read_numeric()?;
+            Ok(Expression::Number(numeric))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -928,6 +933,21 @@ impl<'i> Parser<'i> {
         self.advance(possible.len());
 
         Ok(identifier)
+    }
+
+    /// Parse a numeric literal (integer or quantity)
+    fn read_numeric(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        self.trim_whitespace();
+
+        let content = self.entire();
+
+        // Parser is whitespace agnostic - consume entire remaining content
+        // The outer take_*() methods have already isolated the numeric content
+        let numeric = validate_numeric(content).ok_or(ParsingError::InvalidNumeric(self.offset))?;
+
+        self.advance(content.len());
+
+        Ok(numeric)
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
@@ -1684,6 +1704,13 @@ fn is_role_assignment(content: &str) -> bool {
 fn is_enum_response(content: &str) -> bool {
     let re = regex!(r"^\s*'.+?'");
     re.is_match(content)
+}
+
+fn is_numeric(content: &str) -> bool {
+    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
+    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°μ]|\s*±|\s*×|\s*x\s*10)");
+
+    integral.is_match(content) || scientific.is_match(content)
 }
 
 #[cfg(test)]
@@ -2848,6 +2875,26 @@ echo test
                 )]
             }))
         );
+    }
+
+    #[test]
+    fn numeric_literals() {
+        let mut input = Parser::new();
+
+        // Test simple integer
+        input.initialize("{ 42 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(42))));
+
+        // Test negative integer
+        input.initialize("{ -123 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(-123))));
+
+        // Test zero
+        input.initialize("{ 0 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(0))));
     }
 
     #[test]

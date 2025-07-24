@@ -149,22 +149,52 @@ pub enum Expression<'i> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Numeric<'i> {
     Integral(i64),
-    Scientific(Quantity<'i>),
+    // Scientific(Quantity<'i>), // TODO implement parsing for Quanity
+    Scientific(&'i str), // temporary placeholder
 }
 
+// A Quantiy is an amount, possibly with uncertainty, at the magnitude if
+// given, of the units specified.
+//
+// Valid Quantities include:
+//
+// 149 kg
+// 5.9722 × 10²⁴ kg"
+// 5.9722 ± 0.0006 kg
+// 5.9722 ± 0.0006 × 10²⁴ kg
+//
+// More conventional ASCII symbol characters are also supported when writing
+// Quantiy values in a Technique file:
+//
+// 5.9722 * 10^24 kg"
+// 5.9722 +/- 0.0006 kg
+// 5.9722 +/- 0.0006 × 10^24 kg
+//
+// so the parser and validation code has to have considerable flexibility.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Quantity<'i> {
     pub mantissa: Decimal,
     pub uncertainty: Option<Decimal>,
     pub magnitude: Option<i8>,
-    pub symbol: &'i str,
+    pub symbol: Symbol<'i>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+// A decimal number with a fixed point resolution. The resolution (number of
+// decimal places) is arbitrary within the available range. This isn't really
+// for numerical analysis. It is for carrying information.
+//
+// Internally this is a floating point where the mantissa is 19 characters
+// wide (the width of a 64-bit int in base 10). Thus the biggest number
+// representable is 9223372036854775807 and the smallest is
+// 0.0000000000000000001. We could change this be arbitrary precision but meh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Decimal {
-    pub value: i64,
+    pub number: i64,
     pub precision: u8,
 }
+
+#[derive(Eq, Debug, PartialEq)]
+pub struct Symbol<'i>(pub &'i str);
 
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
@@ -323,6 +353,28 @@ pub fn validate_response(input: &str) -> Option<Response> {
     };
 
     Some(Response { value, condition })
+}
+
+fn _validate_decimal(_input: &str) -> Option<Numeric> {
+    // Test the regex macro availability within types.rs
+    let _decimal_regex = regex!(r"^\s*-?[0-9]+\.[0-9]+\s*$");
+    // For now, just return None since we removed Decimal variant
+    None
+}
+
+pub fn validate_numeric(input: &str) -> Option<Numeric> {
+    if input.is_empty() {
+        return None;
+    }
+
+    let input = input.trim();
+
+    // Try to parse as a simple Integral
+    if let Ok(amount) = input.parse::<i64>() {
+        return Some(Numeric::Integral(amount));
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -508,6 +560,19 @@ mod check {
 
         t1
     }
+
+    #[test]
+    fn numeric_rules() {
+        // Test simple integers
+        assert_eq!(validate_numeric("42"), Some(Numeric::Integral(42)));
+        assert_eq!(validate_numeric("0"), Some(Numeric::Integral(0)));
+        assert_eq!(validate_numeric("-123"), Some(Numeric::Integral(-123)));
+        assert_eq!(
+            validate_numeric("9223372036854775807"),
+            Some(Numeric::Integral(9223372036854775807))
+        );
+    }
+
 
     #[test]
     fn ast_construction() {
