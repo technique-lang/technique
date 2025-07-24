@@ -46,6 +46,7 @@ pub enum ParsingError<'i> {
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
+    UnsupportedTopLevel(usize),
     InvalidNumeric(usize),
 }
 
@@ -72,6 +73,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
+            ParsingError::UnsupportedTopLevel(offset) => *offset,
             ParsingError::InvalidNumeric(offset) => *offset,
         }
     }
@@ -98,6 +100,27 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(_) => "invalid step".to_string(),
             ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
             ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
+            ParsingError::UnsupportedTopLevel(_) => r#"
+The top-level steps in a procedure can't be parallel. Either:
+
+use dependent steps if they should actually be done in order,
+
+    1.
+    2.
+    3.
+
+place the parallel steps underneath a single dependent one, or
+
+    1.
+        -
+        -
+       
+place the parallel steps within a role assignment:
+
+    @role
+        -
+        -
+"#.trim_start().to_string(),
             ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
         }
     }
@@ -723,10 +746,10 @@ impl<'i> Parser<'i> {
                 // Extract content after declaration until a step is encountered
 
                 let content = outer.entire();
-                let description = if !is_step(content) {
+                let description = if !is_step(content) && !is_substep_parallel(content) {
                     outer.take_block_lines(
-                        |line| !is_step(line),
-                        |line| is_step(line),
+                        |line| !is_step(line) && !is_substep_parallel(line),
+                        |line| is_step(line) || is_substep_parallel(line),
                         |inner| {
                             let mut description = vec![];
 
@@ -749,6 +772,8 @@ impl<'i> Parser<'i> {
                     if is_step(content) {
                         let step = outer.read_step()?;
                         steps.push(step);
+                    } else if is_substep_parallel(content) {
+                        return Err(ParsingError::UnsupportedTopLevel(outer.offset));
                     } else {
                         return Err(ParsingError::Unrecognized(outer.offset));
                     }
