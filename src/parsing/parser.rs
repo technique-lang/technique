@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use technique::error::*;
-use technique::language::*;
-use technique::regex::*;
+use crate::error::*;
+use crate::language::*;
+use crate::regex::*;
 
 pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
