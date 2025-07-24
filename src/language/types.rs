@@ -134,8 +134,14 @@ pub struct Function<'i> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct Pair<'i> {
+    pub label: &'i str,
+    pub value: Expression<'i>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expression<'i> {
-    Value(Identifier<'i>),
+    Variable(Identifier<'i>),
     String(&'i str),
     Number(Numeric<'i>),
     Multiline(Option<&'i str>, Vec<&'i str>),
@@ -144,6 +150,7 @@ pub enum Expression<'i> {
     Application(Invocation<'i>),
     Execution(Function<'i>),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
+    Tablet(Vec<Pair<'i>>),
 }
 
 #[derive(Debug, PartialEq, Eq)]

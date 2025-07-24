@@ -808,7 +808,7 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
-            Ok(Expression::Value(identifier))
+            Ok(Expression::Variable(identifier))
         }
     }
 
@@ -1318,7 +1318,7 @@ impl<'i> Parser<'i> {
                     params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
-                    params.push(Expression::Value(name));
+                    params.push(Expression::Variable(name));
                 }
 
                 // Handle comma separation
@@ -2053,9 +2053,9 @@ mod check {
             Ok(Invocation {
                 target: Target::Local(Identifier("greetings")),
                 parameters: Some(vec![
-                    Expression::Value(Identifier("name")),
-                    Expression::Value(Identifier("title")),
-                    Expression::Value(Identifier("occupation"))
+                    Expression::Variable(Identifier("name")),
+                    Expression::Variable(Identifier("title")),
+                    Expression::Variable(Identifier("occupation"))
                 ])
             })
         );
@@ -2666,7 +2666,7 @@ This is the first one.
         // Test simple identifier in code block
         input.initialize("{ count }");
         let result = input.read_code_block();
-        assert_eq!(result, Ok(Expression::Value(Identifier("count"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("count"))));
 
         // Test function with simple parameter
         input.initialize("{ sum(count) }");
@@ -2675,7 +2675,7 @@ This is the first one.
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("sum"),
-                parameters: vec![Expression::Value(Identifier("count"))]
+                parameters: vec![Expression::Variable(Identifier("count"))]
             }))
         );
 
@@ -2687,9 +2687,9 @@ This is the first one.
             Ok(Expression::Execution(Function {
                 target: Identifier("consume"),
                 parameters: vec![
-                    Expression::Value(Identifier("apple")),
-                    Expression::Value(Identifier("banana")),
-                    Expression::Value(Identifier("chocolate"))
+                    Expression::Variable(Identifier("apple")),
+                    Expression::Variable(Identifier("banana")),
+                    Expression::Variable(Identifier("chocolate"))
                 ]
             }))
         );
@@ -2936,7 +2936,7 @@ echo test
             result,
             Ok(Expression::Foreach(
                 vec![Identifier("item")],
-                Box::new(Expression::Value(Identifier("items")))
+                Box::new(Expression::Variable(Identifier("items")))
             ))
         );
     }
@@ -2954,8 +2954,8 @@ echo test
                 Box::new(Expression::Execution(Function {
                     target: Identifier("zip"),
                     parameters: vec![
-                        Expression::Value(Identifier("designs")),
-                        Expression::Value(Identifier("components"))
+                        Expression::Variable(Identifier("designs")),
+                        Expression::Variable(Identifier("components"))
                     ]
                 }))
             ))
@@ -2971,9 +2971,9 @@ echo test
                 Box::new(Expression::Execution(Function {
                     target: Identifier("zip"),
                     parameters: vec![
-                        Expression::Value(Identifier("list1")),
-                        Expression::Value(Identifier("list2")),
-                        Expression::Value(Identifier("list3"))
+                        Expression::Variable(Identifier("list1")),
+                        Expression::Variable(Identifier("list2")),
+                        Expression::Variable(Identifier("list3"))
                     ]
                 }))
             ))
@@ -3006,7 +3006,7 @@ echo test
         let result = input.read_code_block();
         assert_eq!(
             result,
-            Ok(Expression::Repeat(Box::new(Expression::Value(Identifier(
+            Ok(Expression::Repeat(Box::new(Expression::Variable(Identifier(
                 "count"
             )))))
         );
@@ -3020,7 +3020,7 @@ echo test
 
         let result = input.read_code_block();
         // Should parse as identifier, not foreach
-        assert_eq!(result, Ok(Expression::Value(Identifier("foreachitem"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("foreachitem"))));
     }
 
     #[test]
@@ -3031,7 +3031,7 @@ echo test
 
         let result = input.read_code_block();
         // Should parse as identifier, not repeat
-        assert_eq!(result, Ok(Expression::Value(Identifier("repeater"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("repeater"))));
     }
 
     #[test]
@@ -4576,7 +4576,7 @@ before_leaving :
                                             Descriptive::Text("Specimen labelling"),
                                             Descriptive::CodeBlock(Expression::Foreach(
                                                 vec![Identifier("specimen")],
-                                                Box::new(Expression::Value(Identifier("specimens")))
+                                                Box::new(Expression::Variable(Identifier("specimens")))
                                             )),
                                         ])],
                                         responses: vec![],
