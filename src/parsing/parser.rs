@@ -46,7 +46,6 @@ pub enum ParsingError<'i> {
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
-    UnsupportedTopLevel(usize),
     InvalidNumeric(usize),
 }
 
@@ -73,7 +72,6 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
-            ParsingError::UnsupportedTopLevel(offset) => *offset,
             ParsingError::InvalidNumeric(offset) => *offset,
         }
     }
@@ -100,27 +98,6 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(_) => "invalid step".to_string(),
             ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
             ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
-            ParsingError::UnsupportedTopLevel(_) => r#"
-The top-level steps in a procedure can't be parallel. Either:
-
-use dependent steps if they should actually be done in order,
-
-    1.
-    2.
-    3.
-
-place the parallel steps underneath a single dependent one, or
-
-    1.
-        -
-        -
-       
-place the parallel steps within a role assignment:
-
-    @role
-        -
-        -
-"#.trim_start().to_string(),
             ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
         }
     }
@@ -746,10 +723,10 @@ impl<'i> Parser<'i> {
                 // Extract content after declaration until a step is encountered
 
                 let content = outer.entire();
-                let description = if !is_step(content) && !is_substep_parallel(content) {
+                let description = if !is_step(content) {
                     outer.take_block_lines(
-                        |line| !is_step(line) && !is_substep_parallel(line),
-                        |line| is_step(line) || is_substep_parallel(line),
+                        |line| !is_step(line),
+                        |line| is_step(line),
                         |inner| {
                             let mut description = vec![];
 
@@ -769,11 +746,12 @@ impl<'i> Parser<'i> {
                 let mut steps = vec![];
                 while !outer.is_finished() {
                     let content = outer.entire();
-                    if is_step(content) {
-                        let step = outer.read_step()?;
+                    if is_step_dependent(content) {
+                        let step = outer.read_step_dependent()?;
                         steps.push(step);
-                    } else if is_substep_parallel(content) {
-                        return Err(ParsingError::UnsupportedTopLevel(outer.offset));
+                    } else if is_step_parallel(content) {
+                        let step = outer.read_step_parallel()?;
+                        steps.push(step);
                     } else {
                         return Err(ParsingError::Unrecognized(outer.offset));
                     }
@@ -1061,9 +1039,9 @@ impl<'i> Parser<'i> {
         Ok(Invocation { target, parameters })
     }
 
-    /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
-    fn read_step(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
-        self.take_block_lines(is_step, is_step, |outer| {
+    /// Parse top-level ordered step
+    fn read_step_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
             let content = outer.entire();
 
@@ -1073,7 +1051,6 @@ impl<'i> Parser<'i> {
             }
 
             // Parse ordinal
-
             let re = regex!(r"^\s*(\d+)\.\s+");
             let cap = re
                 .captures(content)
@@ -1110,6 +1087,44 @@ impl<'i> Parser<'i> {
 
             return Ok(Step::Dependent {
                 ordinal: number,
+                content: text,
+                responses,
+                scopes,
+            });
+        })
+    }
+
+    /// Parse a top-level concurrent step
+    fn read_step_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_step, is_step, |outer| {
+            outer.trim_whitespace();
+            let content = outer.source;
+
+            if content.is_empty() {
+                return Err(ParsingError::ZeroLengthToken(outer.offset));
+            }
+
+            // Parse bullet
+            if !outer.source.starts_with('-') {
+                return Err(ParsingError::IllegalParserState(outer.offset));
+            }
+            outer.advance(1); // skip over '-'
+            outer.trim_whitespace();
+
+            let text = outer.read_descriptive()?;
+
+            // Parse responses if present
+            let mut responses = vec![];
+            if !outer.is_finished() {
+                let content = outer.source;
+                if is_enum_response(content) {
+                    responses = outer.read_responses()?;
+                }
+            }
+
+            let scopes = outer.read_scopes()?;
+
+            return Ok(Step::Parallel {
                 content: text,
                 responses,
                 scopes,
@@ -1217,7 +1232,7 @@ impl<'i> Parser<'i> {
         self.take_block_lines(
             |_| true,
             |line| {
-                is_step(line)
+                is_step_dependent(line)
                     || is_substep_dependent(line)
                     || is_substep_parallel(line)
                     || is_subsubstep_dependent(line)
@@ -1762,9 +1777,18 @@ fn is_binding(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_step(content: &str) -> bool {
+fn is_step_dependent(content: &str) -> bool {
     let re = regex!(r"^\s*\d+\.\s+");
     re.is_match(content)
+}
+
+fn is_step_parallel(content: &str) -> bool {
+    let re = regex!(r"^\s*-\s+");
+    re.is_match(content)
+}
+
+fn is_step(content: &str) -> bool {
+    is_step_dependent(content) || is_step_parallel(content)
 }
 
 /// Recognize
@@ -2177,11 +2201,11 @@ mod check {
     #[test]
     fn step_detection() {
         // Test main dependent steps (whitespace agnostic)
-        assert!(is_step("1. First step"));
-        assert!(is_step("  1. Indented step"));
-        assert!(is_step("10. Tenth step"));
-        assert!(!is_step("a. Letter step"));
-        assert!(!is_step("1.No space"));
+        assert!(is_step_dependent("1. First step"));
+        assert!(is_step_dependent("  1. Indented step"));
+        assert!(is_step_dependent("10. Tenth step"));
+        assert!(!is_step_dependent("a. Letter step"));
+        assert!(!is_step_dependent("1.No space"));
 
         // Test dependent substeps (whitespace agnostic)
         assert!(is_substep_dependent("a. Substep"));
@@ -2226,7 +2250,7 @@ mod check {
 
         // Test simple dependent step
         input.initialize("1. First step");
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(
             result,
             Ok(Step::Dependent {
@@ -2245,7 +2269,7 @@ mod check {
     1.  Have you done the first thing in the first one?
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(
             result,
             Ok(Step::Dependent {
@@ -2260,7 +2284,7 @@ mod check {
 
         // Test invalid step
         input.initialize("Not a step");
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(result, Err(ParsingError::InvalidStep(0)));
     }
 
@@ -2309,7 +2333,7 @@ mod check {
     b. Second substep
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2353,7 +2377,7 @@ mod check {
     - Second substep
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2395,8 +2419,8 @@ mod check {
 2. Second step
             "#,
         );
-        let first_result = input.read_step();
-        let second_result = input.read_step();
+        let first_result = input.read_step_dependent();
+        let second_result = input.read_step_dependent();
 
         assert_eq!(
             first_result,
@@ -2442,7 +2466,7 @@ mod check {
         'Yes' | 'No'
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2479,19 +2503,19 @@ mod check {
         let test_input = "1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.";
 
         // Test each line that should be a step
-        assert!(is_step(
+        assert!(is_step_dependent(
             "1. Have you done the first thing in the first one?"
         ));
-        assert!(is_step("2. Do the second thing in the first one."));
+        assert!(is_step_dependent("2. Do the second thing in the first one."));
 
         // Test lines that should NOT be steps
-        assert!(!is_step(
+        assert!(!is_step_dependent(
             "    a. Do the first thing. Then ask yourself if you are done:"
         ));
-        assert!(!is_step("        'Yes' | 'No' but I have an excuse"));
+        assert!(!is_step_dependent("        'Yes' | 'No' but I have an excuse"));
 
         // Finally, test content over multiple lines
-        assert!(is_step(test_input));
+        assert!(is_step_dependent(test_input));
     }
 
     #[test]
@@ -2507,7 +2531,7 @@ mod check {
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         // Should parse the complete first step with substeps
         assert_eq!(
@@ -2553,7 +2577,7 @@ mod check {
 
         input.initialize("1. Have you done the first thing in the first one?");
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         // Should parse only the step line, no substeps
         assert_eq!(
@@ -2621,7 +2645,7 @@ This is the first one.
             "#,
         );
 
-        let result = input.take_block_lines(is_step, is_step, |inner| Ok(inner.entire()));
+        let result = input.take_block_lines(is_step_dependent, is_step_dependent, |inner| Ok(inner.entire()));
 
         match result {
             Ok(content) => {
@@ -2656,7 +2680,7 @@ This is the first one.
             .iter()
             .enumerate()
         {
-            let is_step_result = is_step(line);
+            let is_step_result = is_step_dependent(line);
 
             match i {
                 0 => assert!(is_step_result, "First step line should match is_step"),
@@ -2690,7 +2714,7 @@ This is the first one.
 
         let result = input.take_block_lines(
             |_| true,             // start predicate (always true)
-            |line| is_step(line), // end predicate (stop at first step)
+            |line| is_step_dependent(line), // end predicate (stop at first step)
             |inner| Ok(inner.entire()),
         );
 
@@ -3467,7 +3491,7 @@ echo test
         @nurse
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3508,7 +3532,7 @@ echo test
             a. Check ID
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3553,7 +3577,7 @@ echo test
             - Check readings
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3599,7 +3623,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3633,7 +3657,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3686,7 +3710,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3757,7 +3781,7 @@ echo test
         @nurse
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3785,7 +3809,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3883,7 +3907,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3964,7 +3988,7 @@ echo test
         c. File report
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
