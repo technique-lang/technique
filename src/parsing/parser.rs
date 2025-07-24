@@ -775,7 +775,9 @@ impl<'i> Parser<'i> {
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.trim_whitespace();
-        let content = self.entire();
+        let content = self
+            .source
+            .trim_start();
 
         if is_binding(content) {
             self.read_binding_expression()
@@ -783,20 +785,17 @@ impl<'i> Parser<'i> {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
-        } else if content
-            .trim()
-            .starts_with("foreach ")
-        {
+        } else if content.starts_with("foreach ") {
             // Malformed foreach expression
             return Err(ParsingError::InvalidForeach(self.offset));
-        } else if content
-            .trim()
-            .starts_with('[')
-        {
+        } else if content.starts_with('[') {
             self.read_tablet_expression()
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             Ok(Expression::Number(numeric))
+        } else if is_string_literal(content) {
+            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
+            Ok(Expression::String(raw))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -912,6 +911,69 @@ impl<'i> Parser<'i> {
         let identifiers = self.read_identifiers()?;
 
         Ok(Expression::Binding(Box::new(expression), identifiers))
+    }
+
+    fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
+        self.take_block_chars('[', ']', |outer| {
+            let mut pairs = Vec::new();
+
+            loop {
+                outer.trim_whitespace();
+
+                if outer
+                    .entire()
+                    .is_empty()
+                {
+                    break;
+                }
+
+                // Parse quoted key
+                if !outer
+                    .entire()
+                    .starts_with('"')
+                {
+                    return Err(ParsingError::Expected(
+                        outer.offset,
+                        "a string label for the field, in double-quotes",
+                    ));
+                }
+
+                let label = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+
+                // Skip whitespace and expect '='
+                outer.trim_whitespace();
+                if !outer
+                    .source
+                    .starts_with('=')
+                {
+                    return Err(ParsingError::Expected(
+                        outer.offset,
+                        "a '=' after the field name to indicate what value is to be assigned to it",
+                    ));
+                }
+                outer.advance(1); // consume '='
+                outer.trim_whitespace();
+
+                // Parse value - take everything up to newline or end
+                let value = outer.take_line(|inner| {
+                    inner.trim_whitespace();
+
+                    let content = inner.source;
+                    if content.is_empty() {
+                        return Err(ParsingError::Expected(inner.offset, "value expression"));
+                    };
+
+                    inner.read_expression()
+                })?;
+
+                pairs.push(Pair { label, value });
+
+                // Skip any remaining whitespace/newlines
+                outer.trim_whitespace();
+            }
+
+            Ok(Expression::Tablet(pairs))
+        })
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1547,19 +1609,27 @@ fn is_genus(content: &str) -> bool {
 
 /// declarations are of the form
 ///
-///     name : signature
+/// ```text
+/// name : signature
+/// ```
 ///
 /// where the name is either
 ///
-///     identifier
+/// ```text
+/// identifier
+/// ```
 ///
 /// or
 ///
-///     identifier(parameters)
+/// ```text
+/// identifier(parameters)
+/// ```
 ///
 /// and where the optional signature is
 ///
-///     genus -> genus
+/// ```text
+/// genus -> genus
+/// ```
 ///
 /// as above. Crucially, it must not match within a procedure body, for
 /// example it must not match " a. And now: do something" or "b. Proceed
@@ -1711,6 +1781,11 @@ fn is_numeric(content: &str) -> bool {
     let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°μ]|\s*±|\s*×|\s*x\s*10)");
 
     integral.is_match(content) || scientific.is_match(content)
+}
+
+fn is_string_literal(content: &str) -> bool {
+    let re = regex!(r#"^\s*".*"\s*$"#);
+    re.is_match(content)
 }
 
 #[cfg(test)]
@@ -2878,6 +2953,101 @@ echo test
     }
 
     #[test]
+    fn tablets() {
+        let mut input = Parser::new();
+
+        // Test simple single-entry tablet
+        input.initialize(r#"{ ["name" = "Johannes Grammerly"] }"#);
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![Pair {
+                label: "name",
+                value: Expression::String("Johannes Grammerly")
+            }]))
+        );
+
+        // Test multiline tablet with string values
+        input.initialize(
+            r#"{ [
+    "name" = "Alice of Chains"
+    "age" = "29"
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "name",
+                    value: Expression::String("Alice of Chains")
+                },
+                Pair {
+                    label: "age",
+                    value: Expression::String("29")
+                }
+            ]))
+        );
+
+        // Test tablet with mixed value types
+        input.initialize(
+            r#"{ [
+    "answer" = 42
+    "message" = msg
+    "timestamp" = now()
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42))
+                },
+                Pair {
+                    label: "message",
+                    value: Expression::Variable(Identifier("msg"))
+                },
+                Pair {
+                    label: "timestamp",
+                    value: Expression::Execution(Function {
+                        target: Identifier("now"),
+                        parameters: vec![]
+                    })
+                }
+            ]))
+        );
+
+        // Test empty tablet
+        input.initialize("{ [ ] }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Tablet(vec![])));
+
+        // Test tablet with interpolated string values
+        input.initialize(
+            r#"{ [
+    "context" = "Details about the thing"
+    "status" = active
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "context",
+                    value: Expression::String("Details about the thing")
+                },
+                Pair {
+                    label: "status",
+                    value: Expression::Variable(Identifier("active"))
+                }
+            ]))
+        );
+    }
+
+    #[test]
     fn numeric_literals() {
         let mut input = Parser::new();
 
@@ -3006,9 +3176,9 @@ echo test
         let result = input.read_code_block();
         assert_eq!(
             result,
-            Ok(Expression::Repeat(Box::new(Expression::Variable(Identifier(
-                "count"
-            )))))
+            Ok(Expression::Repeat(Box::new(Expression::Variable(
+                Identifier("count")
+            ))))
         );
     }
 
