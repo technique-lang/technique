@@ -1,6 +1,6 @@
-// Abstract Syntax Trees for the Technique language
+//! Types representing an Abstract Syntax Tree for the Technique language
 
-use regex::Regex;
+use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Technique<'i> {
@@ -170,7 +170,7 @@ pub struct Decimal {
 // like it should be abstracted away.
 
 pub fn validate_license(input: &str) -> Option<&str> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+    let re = regex!(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$");
 
     if re.is_match(input) {
         Some(input)
@@ -180,7 +180,7 @@ pub fn validate_license(input: &str) -> Option<&str> {
 }
 
 pub fn validate_copyright(input: &str) -> Option<&str> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$").unwrap();
+    let re = regex!(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$");
 
     if re.is_match(input) {
         Some(input)
@@ -190,7 +190,7 @@ pub fn validate_copyright(input: &str) -> Option<&str> {
 }
 
 pub fn validate_template(input: &str) -> Option<&str> {
-    let re = Regex::new(r"^[A-Za-z0-9.,\-]+$").unwrap();
+    let re = regex!(r"^[A-Za-z0-9.,\-]+$");
 
     if re.is_match(input) {
         Some(input)
@@ -204,7 +204,7 @@ pub fn validate_identifier(input: &str) -> Option<Identifier> {
         return None;
     }
 
-    let re = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    let re = regex!(r"^[a-z][a-z0-9_]*$");
     if re.is_match(input) {
         Some(Identifier(input))
     } else {
@@ -309,7 +309,7 @@ pub fn validate_response(input: &str) -> Option<Response> {
     }
 
     // Handle conditions like 'Yes and equipment available'
-    let re = Regex::new(r"^'(.*?)'(?:\s+(.+))?$").unwrap();
+    let re = regex!(r"^'(.*?)'(?:\s+(.+))?$");
     let cap = re.captures(input)?;
 
     let value = cap

@@ -1,16 +1,8 @@
 #![allow(dead_code)]
 
-use regex::Regex;
 use technique::error::*;
 use technique::language::*;
-
-macro_rules! regex {
-    ($pattern:expr) => {{
-        use std::sync::OnceLock;
-        static REGEX: OnceLock<regex::Regex> = OnceLock::new();
-        REGEX.get_or_init(|| regex::Regex::new($pattern).unwrap_or_else(|e| panic!("{}", e)))
-    }};
-}
+use technique::regex::*;
 
 pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
@@ -1380,7 +1372,7 @@ impl<'i> Parser<'i> {
                 .collect();
 
             for part in role_parts {
-                let re = Regex::new(r"^\s*@([a-z][a-z0-9_]*)\s*$").unwrap();
+                let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
                 let cap = re
                     .captures(part.trim())
                     .ok_or(ParsingError::InvalidStep(inner.offset))?;
