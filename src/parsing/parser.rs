@@ -1557,6 +1557,17 @@ impl<'i> Parser<'i> {
             } else if is_substep_parallel(content) {
                 let substep = self.read_substep_parallel()?;
                 current_substeps.push(substep);
+            } else if is_code_block(content) {
+                // As with procedures as a whole, code blocks can be the
+                // entire content of a scope or step. If it is here, then
+                // treat it as (the only) parallel step.
+                let code_block = self.read_code_block()?;
+                let step = Step::Parallel {
+                    content: vec![Descriptive::CodeBlock(code_block)],
+                    responses: vec![],
+                    scopes: vec![],
+                };
+                current_substeps.push(step);
             } else {
                 break;
             }
@@ -1749,7 +1760,7 @@ fn is_invocation(content: &str) -> bool {
 }
 
 fn is_code_block(content: &str) -> bool {
-    let re = regex!(r"\s*{.*?}");
+    let re = regex!(r"^\s*\{");
 
     re.is_match(content)
 }
