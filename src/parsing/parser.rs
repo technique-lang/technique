@@ -1105,7 +1105,10 @@ impl<'i> Parser<'i> {
             }
 
             // Parse bullet
-            if !outer.source.starts_with('-') {
+            if !outer
+                .source
+                .starts_with('-')
+            {
                 return Err(ParsingError::IllegalParserState(outer.offset));
             }
             outer.advance(1); // skip over '-'
@@ -2213,12 +2216,18 @@ mod check {
         assert!(!is_substep_dependent("2. Substep can't have number"));
         assert!(!is_substep_dependent("   1. Even if it is indented"));
 
-        // Test parallel substeps (whitespace agnostic, no main parallel steps)
+        // Test parallel substeps (whitespace agnostic)
         assert!(is_substep_parallel("- Parallel substep"));
         assert!(is_substep_parallel("  - Indented parallel"));
         assert!(is_substep_parallel("    - Deeper indented"));
         assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
         assert!(!is_substep_parallel("* Different bullet"));
+
+        // Test top-level parallel steps
+        assert!(is_step_parallel("- Top level parallel"));
+        assert!(is_step_parallel("  - Indented parallel"));
+        assert!(is_step("- Top level parallel")); // general step detection
+        assert!(is_step("1. Numbered step"));
 
         // Test recognition of sub-sub-steps
         assert!(is_subsubstep_dependent("i. One"));
@@ -2245,7 +2254,7 @@ mod check {
     }
 
     #[test]
-    fn read_steps() {
+    fn read_toplevel_steps() {
         let mut input = Parser::new();
 
         // Test simple dependent step
@@ -2258,6 +2267,40 @@ mod check {
                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
                     "First step"
                 )])],
+                responses: vec![],
+                scopes: vec![],
+            })
+        );
+
+        // Test simple parallel step
+        input.initialize(
+            r#"
+ - a top-level task to be one in parallel with
+ - another top-level task
+       "#,
+        );
+        let result = input.read_step_parallel();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![
+                    Descriptive::Paragraph(vec![Descriptive::Text(
+                        "a top-level task to be one in parallel with"
+                    )]),
+                ],
+                responses: vec![],
+                scopes: vec![],
+            })
+        );
+        let result = input.read_step_parallel();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![
+                    Descriptive::Paragraph(vec![Descriptive::Text(
+                        "another top-level task"
+                    )]),
+                ],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2506,13 +2549,17 @@ mod check {
         assert!(is_step_dependent(
             "1. Have you done the first thing in the first one?"
         ));
-        assert!(is_step_dependent("2. Do the second thing in the first one."));
+        assert!(is_step_dependent(
+            "2. Do the second thing in the first one."
+        ));
 
         // Test lines that should NOT be steps
         assert!(!is_step_dependent(
             "    a. Do the first thing. Then ask yourself if you are done:"
         ));
-        assert!(!is_step_dependent("        'Yes' | 'No' but I have an excuse"));
+        assert!(!is_step_dependent(
+            "        'Yes' | 'No' but I have an excuse"
+        ));
 
         // Finally, test content over multiple lines
         assert!(is_step_dependent(test_input));
@@ -2645,7 +2692,9 @@ This is the first one.
             "#,
         );
 
-        let result = input.take_block_lines(is_step_dependent, is_step_dependent, |inner| Ok(inner.entire()));
+        let result = input.take_block_lines(is_step_dependent, is_step_dependent, |inner| {
+            Ok(inner.entire())
+        });
 
         match result {
             Ok(content) => {
@@ -2713,7 +2762,7 @@ This is the first one.
         );
 
         let result = input.take_block_lines(
-            |_| true,             // start predicate (always true)
+            |_| true,                       // start predicate (always true)
             |line| is_step_dependent(line), // end predicate (stop at first step)
             |inner| Ok(inner.entire()),
         );
