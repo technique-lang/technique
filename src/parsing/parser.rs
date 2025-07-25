@@ -28,7 +28,6 @@ fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError
 pub enum ParsingError<'i> {
     IllegalParserState(usize),
     Unimplemented(usize),
-    ZeroLengthToken(usize),
     Unrecognized(usize), // improve this
     Expected(usize, &'static str),
     InvalidHeader(usize),
@@ -54,7 +53,6 @@ impl<'i> ParsingError<'i> {
         match self {
             ParsingError::IllegalParserState(offset) => *offset,
             ParsingError::Unimplemented(offset) => *offset,
-            ParsingError::ZeroLengthToken(offset) => *offset,
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
@@ -80,7 +78,6 @@ impl<'i> ParsingError<'i> {
         match self {
             ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
             ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
-            ParsingError::ZeroLengthToken(_) => "zero length input".to_string(),
             ParsingError::Unrecognized(_) => "unrecognized".to_string(),
             ParsingError::Expected(_, value) => format!("expected {}", value),
             ParsingError::InvalidHeader(_) => "invalid header".to_string(),
@@ -1039,17 +1036,11 @@ impl<'i> Parser<'i> {
     fn read_step_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
-            let content = outer.source;
-
-            if content.is_empty() {
-                // FIXME do we even need this check?
-                return Err(ParsingError::ZeroLengthToken(outer.offset));
-            }
 
             // Parse ordinal
             let re = regex!(r"^\s*(\d+)\.\s+");
             let cap = re
-                .captures(content)
+                .captures(outer.source)
                 .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
             let number = cap
@@ -1094,11 +1085,6 @@ impl<'i> Parser<'i> {
     fn read_step_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step, is_step, |outer| {
             outer.trim_whitespace();
-            let content = outer.source;
-
-            if content.is_empty() {
-                return Err(ParsingError::ZeroLengthToken(outer.offset));
-            }
 
             // Parse bullet
             if !outer
