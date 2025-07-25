@@ -1,4 +1,4 @@
-// Types representing parsing, compiling, and execution errors
+// Program wide top-level error handling
 
 mod display;
 

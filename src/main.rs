@@ -3,7 +3,8 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-mod parsing;
+use technique::parsing;
+
 mod rendering;
 
 fn main() {

@@ -1,16 +1,8 @@
 #![allow(dead_code)]
 
-use regex::Regex;
-use technique::error::*;
-use technique::language::*;
-
-macro_rules! regex {
-    ($pattern:expr) => {{
-        use std::sync::OnceLock;
-        static REGEX: OnceLock<regex::Regex> = OnceLock::new();
-        REGEX.get_or_init(|| regex::Regex::new($pattern).unwrap_or_else(|e| panic!("{}", e)))
-    }};
-}
+use crate::error::*;
+use crate::language::*;
+use crate::regex::*;
 
 pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
     let mut input = Parser::new();
@@ -36,7 +28,6 @@ fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError
 pub enum ParsingError<'i> {
     IllegalParserState(usize),
     Unimplemented(usize),
-    ZeroLengthToken(usize),
     Unrecognized(usize), // improve this
     Expected(usize, &'static str),
     InvalidHeader(usize),
@@ -54,6 +45,7 @@ pub enum ParsingError<'i> {
     InvalidStep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
+    InvalidNumeric(usize),
 }
 
 impl<'i> ParsingError<'i> {
@@ -61,7 +53,6 @@ impl<'i> ParsingError<'i> {
         match self {
             ParsingError::IllegalParserState(offset) => *offset,
             ParsingError::Unimplemented(offset) => *offset,
-            ParsingError::ZeroLengthToken(offset) => *offset,
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
@@ -79,6 +70,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
+            ParsingError::InvalidNumeric(offset) => *offset,
         }
     }
 
@@ -86,7 +78,6 @@ impl<'i> ParsingError<'i> {
         match self {
             ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
             ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
-            ParsingError::ZeroLengthToken(_) => "zero length input".to_string(),
             ParsingError::Unrecognized(_) => "unrecognized".to_string(),
             ParsingError::Expected(_, value) => format!("expected {}", value),
             ParsingError::InvalidHeader(_) => "invalid header".to_string(),
@@ -104,6 +95,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidStep(_) => "invalid step".to_string(),
             ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
             ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
+            ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
         }
     }
 }
@@ -138,7 +130,7 @@ impl<'i> Parser<'i> {
 
     fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
-        let header = if is_magic_line(self.entire()) {
+        let header = if is_magic_line(self.source) {
             Some(self.read_technique_header()?)
         } else {
             None
@@ -154,8 +146,7 @@ impl<'i> Parser<'i> {
             }
 
             // Check if current position starts with a procedure declaration
-            let content = self.entire();
-            if is_procedure_declaration(content) {
+            if is_procedure_declaration(self.source) {
                 let procedure = self.read_procedure()?;
                 procedures.push(procedure);
             } else {
@@ -183,6 +174,7 @@ impl<'i> Parser<'i> {
         result
     }
 
+    #[deprecated]
     fn entire(&self) -> &'i str {
         self.source
     }
@@ -389,7 +381,7 @@ impl<'i> Parser<'i> {
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
-        let content = self.entire();
+        let content = self.source;
         let mut results = Vec::new();
 
         for chunk in content.split(delimiter) {
@@ -585,11 +577,9 @@ impl<'i> Parser<'i> {
     }
 
     fn read_signature(&mut self) -> Result<Signature<'i>, ParsingError<'i>> {
-        let content = self.entire();
-
         let re = regex!(r"\s*(.+?)\s*->\s*(.+?)\s*$");
 
-        let cap = match re.captures(content) {
+        let cap = match re.captures(self.source) {
             Some(c) => c,
             None => return Err(ParsingError::InvalidSignature(self.offset)),
         };
@@ -706,8 +696,7 @@ impl<'i> Parser<'i> {
 
                 // Read title, if present
 
-                let content = outer.entire();
-                let title = if is_procedure_title(content) {
+                let title = if is_procedure_title(outer.source) {
                     let title = outer.take_block_lines(
                         |line| {
                             line.trim_start()
@@ -727,15 +716,14 @@ impl<'i> Parser<'i> {
 
                 // Extract content after declaration until a step is encountered
 
-                let content = outer.entire();
-                let description = if !is_step(content) {
+                let description = if !is_step(outer.source) {
                     outer.take_block_lines(
                         |line| !is_step(line),
                         |line| is_step(line),
                         |inner| {
                             let mut description = vec![];
 
-                            let content = inner.entire();
+                            let content = inner.source;
                             if !content.is_empty() {
                                 description = inner.read_descriptive()?;
                             }
@@ -750,9 +738,12 @@ impl<'i> Parser<'i> {
                 // Parse remaining content as steps
                 let mut steps = vec![];
                 while !outer.is_finished() {
-                    let content = outer.entire();
-                    if is_step(content) {
-                        let step = outer.read_step()?;
+                    let content = outer.source;
+                    if is_step_dependent(content) {
+                        let step = outer.read_step_dependent()?;
+                        steps.push(step);
+                    } else if is_step_parallel(content) {
+                        let step = outer.read_step_parallel()?;
                         steps.push(step);
                     } else {
                         return Err(ParsingError::Unrecognized(outer.offset));
@@ -780,7 +771,9 @@ impl<'i> Parser<'i> {
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.trim_whitespace();
-        let content = self.entire();
+        let content = self
+            .source
+            .trim_start();
 
         if is_binding(content) {
             self.read_binding_expression()
@@ -788,18 +781,17 @@ impl<'i> Parser<'i> {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
-        } else if content
-            .trim()
-            .starts_with("foreach ")
-        {
+        } else if content.starts_with("foreach ") {
             // Malformed foreach expression
             return Err(ParsingError::InvalidForeach(self.offset));
-        } else if content
-            .trim()
-            .starts_with('[')
-        {
-            // Data structure syntax - not yet implemented
-            return Err(ParsingError::Unimplemented(self.offset));
+        } else if content.starts_with('[') {
+            self.read_tablet_expression()
+        } else if is_numeric(content) {
+            let numeric = self.read_numeric()?;
+            Ok(Expression::Number(numeric))
+        } else if is_string_literal(content) {
+            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+            Ok(Expression::String(raw))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -811,7 +803,7 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
-            Ok(Expression::Value(identifier))
+            Ok(Expression::Variable(identifier))
         }
     }
 
@@ -846,7 +838,7 @@ impl<'i> Parser<'i> {
 
     fn read_identifiers(&mut self) -> Result<Vec<Identifier<'i>>, ParsingError<'i>> {
         if self
-            .entire()
+            .source
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
@@ -857,7 +849,7 @@ impl<'i> Parser<'i> {
                     outer.trim_whitespace();
 
                     if outer
-                        .entire()
+                        .source
                         .is_empty()
                     {
                         break;
@@ -869,7 +861,7 @@ impl<'i> Parser<'i> {
                     // Handle comma separation
                     outer.trim_whitespace();
                     if outer
-                        .entire()
+                        .source
                         .starts_with(',')
                     {
                         outer.advance(1);
@@ -917,13 +909,76 @@ impl<'i> Parser<'i> {
         Ok(Expression::Binding(Box::new(expression), identifiers))
     }
 
+    fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
+        self.take_block_chars('[', ']', |outer| {
+            let mut pairs = Vec::new();
+
+            loop {
+                outer.trim_whitespace();
+
+                if outer
+                    .source
+                    .is_empty()
+                {
+                    break;
+                }
+
+                // Parse quoted key
+                if !outer
+                    .source
+                    .starts_with('"')
+                {
+                    return Err(ParsingError::Expected(
+                        outer.offset,
+                        "a string label for the field, in double-quotes",
+                    ));
+                }
+
+                let label = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+
+                // Skip whitespace and expect '='
+                outer.trim_whitespace();
+                if !outer
+                    .source
+                    .starts_with('=')
+                {
+                    return Err(ParsingError::Expected(
+                        outer.offset,
+                        "a '=' after the field name to indicate what value is to be assigned to it",
+                    ));
+                }
+                outer.advance(1); // consume '='
+                outer.trim_whitespace();
+
+                // Parse value - take everything up to newline or end
+                let value = outer.take_line(|inner| {
+                    inner.trim_whitespace();
+
+                    let content = inner.source;
+                    if content.is_empty() {
+                        return Err(ParsingError::Expected(inner.offset, "value expression"));
+                    };
+
+                    inner.read_expression()
+                })?;
+
+                pairs.push(Pair { label, value });
+
+                // Skip any remaining whitespace/newlines
+                outer.trim_whitespace();
+            }
+
+            Ok(Expression::Tablet(pairs))
+        })
+    }
+
     /// Consume an identifier. As with the other smaller read methods, we do a
     /// general scan of the range here to get the relevant, then call the more
     /// detailed validation function to actually determine if it's a match.
     fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError<'i>> {
         self.trim_whitespace();
 
-        let content = self.entire();
+        let content = self.source;
 
         let possible = match content.find([' ', '\t', '\n', '(', '{', ',']) {
             None => content,
@@ -938,10 +993,25 @@ impl<'i> Parser<'i> {
         Ok(identifier)
     }
 
+    /// Parse a numeric literal (integer or quantity)
+    fn read_numeric(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        self.trim_whitespace();
+
+        let content = self.source;
+
+        // Parser is whitespace agnostic - consume entire remaining content
+        // The outer take_*() methods have already isolated the numeric content
+        let numeric = validate_numeric(content).ok_or(ParsingError::InvalidNumeric(self.offset))?;
+
+        self.advance(content.len());
+
+        Ok(numeric)
+    }
+
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
         self.take_block_chars('<', '>', |inner| {
-            let content = inner.entire();
+            let content = inner.source;
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
             } else {
@@ -962,22 +1032,15 @@ impl<'i> Parser<'i> {
         Ok(Invocation { target, parameters })
     }
 
-    /// Parse a step (main steps are always dependent, substeps can be dependent or parallel)
-    fn read_step(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
-        self.take_block_lines(is_step, is_step, |outer| {
+    /// Parse top-level ordered step
+    fn read_step_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
-            let content = outer.entire();
-
-            if content.is_empty() {
-                // FIXME do we even need this check?
-                return Err(ParsingError::ZeroLengthToken(outer.offset));
-            }
 
             // Parse ordinal
-
             let re = regex!(r"^\s*(\d+)\.\s+");
             let cap = re
-                .captures(content)
+                .captures(outer.source)
                 .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
             let number = cap
@@ -1000,7 +1063,7 @@ impl<'i> Parser<'i> {
             // Parse responses if present
             let mut responses = vec![];
             if !outer.is_finished() {
-                let content = outer.entire();
+                let content = outer.source;
                 if is_enum_response(content) {
                     responses = outer.read_responses()?;
                 }
@@ -1018,13 +1081,49 @@ impl<'i> Parser<'i> {
         })
     }
 
+    /// Parse a top-level concurrent step
+    fn read_step_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_step, is_step, |outer| {
+            outer.trim_whitespace();
+
+            // Parse bullet
+            if !outer
+                .source
+                .starts_with('-')
+            {
+                return Err(ParsingError::IllegalParserState(outer.offset));
+            }
+            outer.advance(1); // skip over '-'
+            outer.trim_whitespace();
+
+            let text = outer.read_descriptive()?;
+
+            // Parse responses if present
+            let mut responses = vec![];
+            if !outer.is_finished() {
+                let content = outer.source;
+                if is_enum_response(content) {
+                    responses = outer.read_responses()?;
+                }
+            }
+
+            let scopes = outer.read_scopes()?;
+
+            return Ok(Step::Parallel {
+                content: text,
+                responses,
+                scopes,
+            });
+        })
+    }
+
     /// Parse a dependent substep (a., b., c., etc.)
     fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
             |line| is_substep_dependent(line) || is_role_assignment(line),
             |outer| {
-                let content = outer.entire();
+                let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
                 let cap = re
                     .captures(content)
@@ -1052,8 +1151,7 @@ impl<'i> Parser<'i> {
                 // Parse responses if present
                 let mut responses = vec![];
                 if !outer.is_finished() {
-                    let content = outer.entire();
-                    if is_enum_response(content) {
+                    if is_enum_response(outer.source) {
                         responses = outer.read_responses()?;
                     }
                 }
@@ -1079,10 +1177,9 @@ impl<'i> Parser<'i> {
                 is_substep_dependent(line) || is_substep_parallel(line) || is_role_assignment(line)
             },
             |outer| {
-                let content = outer.entire();
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
-                    .find(content)
+                    .find(outer.source)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
                 // Skip past the dash and space
@@ -1096,8 +1193,7 @@ impl<'i> Parser<'i> {
                 // Parse responses if present
                 let mut responses = vec![];
                 if !outer.is_finished() {
-                    let content = outer.entire();
-                    if is_enum_response(content) {
+                    if is_enum_response(outer.source) {
                         responses = outer.read_responses()?;
                     }
                 }
@@ -1118,7 +1214,7 @@ impl<'i> Parser<'i> {
         self.take_block_lines(
             |_| true,
             |line| {
-                is_step(line)
+                is_step_dependent(line)
                     || is_substep_dependent(line)
                     || is_substep_parallel(line)
                     || is_subsubstep_dependent(line)
@@ -1207,8 +1303,7 @@ impl<'i> Parser<'i> {
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
     fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError<'i>> {
         self.take_split_by('|', |inner| {
-            let content = inner.entire();
-            validate_response(content).ok_or(ParsingError::InvalidResponse(inner.offset))
+            validate_response(inner.source).ok_or(ParsingError::InvalidResponse(inner.offset))
         })
     }
 
@@ -1288,31 +1383,27 @@ impl<'i> Parser<'i> {
             loop {
                 outer.trim_whitespace();
 
-                if outer
-                    .entire()
-                    .is_empty()
-                {
+                let content = outer.source;
+                if content.is_empty() {
                     break;
                 }
-
-                let content = outer.entire();
 
                 if content.starts_with("```") {
                     let (lang, lines) = outer
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
+                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
                     params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
-                    params.push(Expression::Value(name));
+                    params.push(Expression::Variable(name));
                 }
 
                 // Handle comma separation
                 outer.trim_whitespace();
                 if outer
-                    .entire()
+                    .source
                     .starts_with(',')
                 {
                     outer.advance(1);
@@ -1380,7 +1471,7 @@ impl<'i> Parser<'i> {
                 .collect();
 
             for part in role_parts {
-                let re = Regex::new(r"^\s*@([a-z][a-z0-9_]*)\s*$").unwrap();
+                let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
                 let cap = re
                     .captures(part.trim())
                     .ok_or(ParsingError::InvalidStep(inner.offset))?;
@@ -1411,7 +1502,7 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            let content = self.entire();
+            let content = self.source;
 
             if is_role_assignment(content) {
                 // If we have accumulated substeps without roles, create a scope for them
@@ -1440,6 +1531,17 @@ impl<'i> Parser<'i> {
             } else if is_substep_parallel(content) {
                 let substep = self.read_substep_parallel()?;
                 current_substeps.push(substep);
+            } else if is_code_block(content) {
+                // As with procedures as a whole, code blocks can be the
+                // entire content of a scope or step. If it is here, then
+                // treat it as (the only) parallel step.
+                let code_block = self.read_code_block()?;
+                let step = Step::Parallel {
+                    content: vec![Descriptive::CodeBlock(code_block)],
+                    responses: vec![],
+                    scopes: vec![],
+                };
+                current_substeps.push(step);
             } else {
                 break;
             }
@@ -1535,19 +1637,27 @@ fn is_genus(content: &str) -> bool {
 
 /// declarations are of the form
 ///
-///     name : signature
+/// ```text
+/// name : signature
+/// ```
 ///
 /// where the name is either
 ///
-///     identifier
+/// ```text
+/// identifier
+/// ```
 ///
 /// or
 ///
-///     identifier(parameters)
+/// ```text
+/// identifier(parameters)
+/// ```
 ///
 /// and where the optional signature is
 ///
-///     genus -> genus
+/// ```text
+/// genus -> genus
+/// ```
 ///
 /// as above. Crucially, it must not match within a procedure body, for
 /// example it must not match " a. And now: do something" or "b. Proceed
@@ -1624,7 +1734,7 @@ fn is_invocation(content: &str) -> bool {
 }
 
 fn is_code_block(content: &str) -> bool {
-    let re = regex!(r"\s*{.*?}");
+    let re = regex!(r"^\s*\{");
 
     re.is_match(content)
 }
@@ -1655,9 +1765,18 @@ fn is_binding(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_step(content: &str) -> bool {
+fn is_step_dependent(content: &str) -> bool {
     let re = regex!(r"^\s*\d+\.\s+");
     re.is_match(content)
+}
+
+fn is_step_parallel(content: &str) -> bool {
+    let re = regex!(r"^\s*-\s+");
+    re.is_match(content)
+}
+
+fn is_step(content: &str) -> bool {
+    is_step_dependent(content) || is_step_parallel(content)
 }
 
 /// Recognize
@@ -1691,6 +1810,18 @@ fn is_role_assignment(content: &str) -> bool {
 
 fn is_enum_response(content: &str) -> bool {
     let re = regex!(r"^\s*'.+?'");
+    re.is_match(content)
+}
+
+fn is_numeric(content: &str) -> bool {
+    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
+    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°μ]|\s*±|\s*×|\s*x\s*10)");
+
+    integral.is_match(content) || scientific.is_match(content)
+}
+
+fn is_string_literal(content: &str) -> bool {
+    let re = regex!(r#"^\s*".*"\s*$"#);
     re.is_match(content)
 }
 
@@ -1920,7 +2051,7 @@ mod check {
         input.initialize("{ todo() }");
 
         let result = input.take_block_chars('{', '}', |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, " todo() ");
             Ok(true)
         });
@@ -1932,7 +2063,7 @@ mod check {
         input.initialize("XhelloX world");
 
         let result = input.take_block_chars('X', 'X', |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "hello");
             Ok(true)
         });
@@ -1946,7 +2077,7 @@ mod check {
         assert_eq!(input.offset, 0);
 
         let result = input.take_block_delimited("```", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "bash\nls -l\necho hello");
             Ok(true)
         });
@@ -1958,7 +2089,7 @@ mod check {
         input.initialize("---start\ncontent here\nmore content---end");
 
         let result = input.take_block_delimited("---", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "start\ncontent here\nmore content");
             Ok(true)
         });
@@ -1968,7 +2099,7 @@ mod check {
         input.initialize("```  hello world  ``` and now goodbye");
 
         let result = input.take_block_delimited("```", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "  hello world  ");
             Ok(true)
         });
@@ -2034,9 +2165,9 @@ mod check {
             Ok(Invocation {
                 target: Target::Local(Identifier("greetings")),
                 parameters: Some(vec![
-                    Expression::Value(Identifier("name")),
-                    Expression::Value(Identifier("title")),
-                    Expression::Value(Identifier("occupation"))
+                    Expression::Variable(Identifier("name")),
+                    Expression::Variable(Identifier("title")),
+                    Expression::Variable(Identifier("occupation"))
                 ])
             })
         );
@@ -2058,11 +2189,11 @@ mod check {
     #[test]
     fn step_detection() {
         // Test main dependent steps (whitespace agnostic)
-        assert!(is_step("1. First step"));
-        assert!(is_step("  1. Indented step"));
-        assert!(is_step("10. Tenth step"));
-        assert!(!is_step("a. Letter step"));
-        assert!(!is_step("1.No space"));
+        assert!(is_step_dependent("1. First step"));
+        assert!(is_step_dependent("  1. Indented step"));
+        assert!(is_step_dependent("10. Tenth step"));
+        assert!(!is_step_dependent("a. Letter step"));
+        assert!(!is_step_dependent("1.No space"));
 
         // Test dependent substeps (whitespace agnostic)
         assert!(is_substep_dependent("a. Substep"));
@@ -2070,12 +2201,18 @@ mod check {
         assert!(!is_substep_dependent("2. Substep can't have number"));
         assert!(!is_substep_dependent("   1. Even if it is indented"));
 
-        // Test parallel substeps (whitespace agnostic, no main parallel steps)
+        // Test parallel substeps (whitespace agnostic)
         assert!(is_substep_parallel("- Parallel substep"));
         assert!(is_substep_parallel("  - Indented parallel"));
         assert!(is_substep_parallel("    - Deeper indented"));
         assert!(!is_substep_parallel("-No space")); // it's possible we may allow this in the future
         assert!(!is_substep_parallel("* Different bullet"));
+
+        // Test top-level parallel steps
+        assert!(is_step_parallel("- Top level parallel"));
+        assert!(is_step_parallel("  - Indented parallel"));
+        assert!(is_step("- Top level parallel")); // general step detection
+        assert!(is_step("1. Numbered step"));
 
         // Test recognition of sub-sub-steps
         assert!(is_subsubstep_dependent("i. One"));
@@ -2102,12 +2239,12 @@ mod check {
     }
 
     #[test]
-    fn read_steps() {
+    fn read_toplevel_steps() {
         let mut input = Parser::new();
 
         // Test simple dependent step
         input.initialize("1. First step");
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(
             result,
             Ok(Step::Dependent {
@@ -2120,13 +2257,43 @@ mod check {
             })
         );
 
+        // Test simple parallel step
+        input.initialize(
+            r#"
+ - a top-level task to be one in parallel with
+ - another top-level task
+       "#,
+        );
+        let result = input.read_step_parallel();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    "a top-level task to be one in parallel with"
+                )]),],
+                responses: vec![],
+                scopes: vec![],
+            })
+        );
+        let result = input.read_step_parallel();
+        assert_eq!(
+            result,
+            Ok(Step::Parallel {
+                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    "another top-level task"
+                )]),],
+                responses: vec![],
+                scopes: vec![],
+            })
+        );
+
         // Test multi-line dependent step
         input.initialize(
             r#"
     1.  Have you done the first thing in the first one?
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(
             result,
             Ok(Step::Dependent {
@@ -2141,7 +2308,7 @@ mod check {
 
         // Test invalid step
         input.initialize("Not a step");
-        let result = input.read_step();
+        let result = input.read_step_dependent();
         assert_eq!(result, Err(ParsingError::InvalidStep(0)));
     }
 
@@ -2190,7 +2357,7 @@ mod check {
     b. Second substep
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2234,7 +2401,7 @@ mod check {
     - Second substep
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2276,8 +2443,8 @@ mod check {
 2. Second step
             "#,
         );
-        let first_result = input.read_step();
-        let second_result = input.read_step();
+        let first_result = input.read_step_dependent();
+        let second_result = input.read_step_dependent();
 
         assert_eq!(
             first_result,
@@ -2323,7 +2490,7 @@ mod check {
         'Yes' | 'No'
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         assert_eq!(
             result,
@@ -2360,19 +2527,23 @@ mod check {
         let test_input = "1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.";
 
         // Test each line that should be a step
-        assert!(is_step(
+        assert!(is_step_dependent(
             "1. Have you done the first thing in the first one?"
         ));
-        assert!(is_step("2. Do the second thing in the first one."));
+        assert!(is_step_dependent(
+            "2. Do the second thing in the first one."
+        ));
 
         // Test lines that should NOT be steps
-        assert!(!is_step(
+        assert!(!is_step_dependent(
             "    a. Do the first thing. Then ask yourself if you are done:"
         ));
-        assert!(!is_step("        'Yes' | 'No' but I have an excuse"));
+        assert!(!is_step_dependent(
+            "        'Yes' | 'No' but I have an excuse"
+        ));
 
         // Finally, test content over multiple lines
-        assert!(is_step(test_input));
+        assert!(is_step_dependent(test_input));
     }
 
     #[test]
@@ -2388,7 +2559,7 @@ mod check {
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         // Should parse the complete first step with substeps
         assert_eq!(
@@ -2423,7 +2594,7 @@ mod check {
         );
 
         assert_eq!(
-            input.entire(),
+            input.source,
             "2. Do the second thing in the first one.\n            "
         );
     }
@@ -2434,7 +2605,7 @@ mod check {
 
         input.initialize("1. Have you done the first thing in the first one?");
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         // Should parse only the step line, no substeps
         assert_eq!(
@@ -2449,7 +2620,7 @@ mod check {
             })
         );
 
-        assert_eq!(input.entire(), "");
+        assert_eq!(input.source, "");
     }
 
     #[test]
@@ -2502,7 +2673,9 @@ This is the first one.
             "#,
         );
 
-        let result = input.take_block_lines(is_step, is_step, |inner| Ok(inner.entire()));
+        let result = input.take_block_lines(is_step_dependent, is_step_dependent, |inner| {
+            Ok(inner.source)
+        });
 
         match result {
             Ok(content) => {
@@ -2513,7 +2686,7 @@ This is the first one.
 
                 // Remaining should be the second step
                 assert_eq!(
-                    input.entire(),
+                    input.source,
                     "2. Do the second thing in the first one.\n            "
                 );
             }
@@ -2537,7 +2710,7 @@ This is the first one.
             .iter()
             .enumerate()
         {
-            let is_step_result = is_step(line);
+            let is_step_result = is_step_dependent(line);
 
             match i {
                 0 => assert!(is_step_result, "First step line should match is_step"),
@@ -2570,9 +2743,9 @@ This is the first one.
         );
 
         let result = input.take_block_lines(
-            |_| true,             // start predicate (always true)
-            |line| is_step(line), // end predicate (stop at first step)
-            |inner| Ok(inner.entire()),
+            |_| true,                       // start predicate (always true)
+            |line| is_step_dependent(line), // end predicate (stop at first step)
+            |inner| Ok(inner.source),
         );
 
         match result {
@@ -2584,7 +2757,7 @@ This is the first one.
 
                 // The remaining content should include ALL steps and substeps
                 let remaining = input
-                    .entire()
+                    .source
                     .trim_start();
                 assert!(remaining.starts_with("1. Have you done"));
                 assert!(remaining.contains("a. Do the first thing"));
@@ -2619,7 +2792,7 @@ This is the first one.
         let result = input.take_block_lines(
             is_procedure_declaration,
             is_procedure_declaration,
-            |outer| Ok(outer.entire()),
+            |outer| Ok(outer.source),
         );
 
         match result {
@@ -2647,7 +2820,7 @@ This is the first one.
         // Test simple identifier in code block
         input.initialize("{ count }");
         let result = input.read_code_block();
-        assert_eq!(result, Ok(Expression::Value(Identifier("count"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("count"))));
 
         // Test function with simple parameter
         input.initialize("{ sum(count) }");
@@ -2656,7 +2829,7 @@ This is the first one.
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("sum"),
-                parameters: vec![Expression::Value(Identifier("count"))]
+                parameters: vec![Expression::Variable(Identifier("count"))]
             }))
         );
 
@@ -2668,9 +2841,9 @@ This is the first one.
             Ok(Expression::Execution(Function {
                 target: Identifier("consume"),
                 parameters: vec![
-                    Expression::Value(Identifier("apple")),
-                    Expression::Value(Identifier("banana")),
-                    Expression::Value(Identifier("chocolate"))
+                    Expression::Variable(Identifier("apple")),
+                    Expression::Variable(Identifier("banana")),
+                    Expression::Variable(Identifier("chocolate"))
                 ]
             }))
         );
@@ -2859,6 +3032,121 @@ echo test
     }
 
     #[test]
+    fn tablets() {
+        let mut input = Parser::new();
+
+        // Test simple single-entry tablet
+        input.initialize(r#"{ ["name" = "Johannes Grammerly"] }"#);
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![Pair {
+                label: "name",
+                value: Expression::String("Johannes Grammerly")
+            }]))
+        );
+
+        // Test multiline tablet with string values
+        input.initialize(
+            r#"{ [
+    "name" = "Alice of Chains"
+    "age" = "29"
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "name",
+                    value: Expression::String("Alice of Chains")
+                },
+                Pair {
+                    label: "age",
+                    value: Expression::String("29")
+                }
+            ]))
+        );
+
+        // Test tablet with mixed value types
+        input.initialize(
+            r#"{ [
+    "answer" = 42
+    "message" = msg
+    "timestamp" = now()
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42))
+                },
+                Pair {
+                    label: "message",
+                    value: Expression::Variable(Identifier("msg"))
+                },
+                Pair {
+                    label: "timestamp",
+                    value: Expression::Execution(Function {
+                        target: Identifier("now"),
+                        parameters: vec![]
+                    })
+                }
+            ]))
+        );
+
+        // Test empty tablet
+        input.initialize("{ [ ] }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Tablet(vec![])));
+
+        // Test tablet with interpolated string values
+        input.initialize(
+            r#"{ [
+    "context" = "Details about the thing"
+    "status" = active
+] }"#,
+        );
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Tablet(vec![
+                Pair {
+                    label: "context",
+                    value: Expression::String("Details about the thing")
+                },
+                Pair {
+                    label: "status",
+                    value: Expression::Variable(Identifier("active"))
+                }
+            ]))
+        );
+    }
+
+    #[test]
+    fn numeric_literals() {
+        let mut input = Parser::new();
+
+        // Test simple integer
+        input.initialize("{ 42 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(42))));
+
+        // Test negative integer
+        input.initialize("{ -123 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(-123))));
+
+        // Test zero
+        input.initialize("{ 0 }");
+        let result = input.read_code_block();
+        assert_eq!(result, Ok(Expression::Number(Numeric::Integral(0))));
+    }
+
+    #[test]
     fn reading_identifiers() {
         let mut input = Parser::new();
 
@@ -2897,7 +3185,7 @@ echo test
             result,
             Ok(Expression::Foreach(
                 vec![Identifier("item")],
-                Box::new(Expression::Value(Identifier("items")))
+                Box::new(Expression::Variable(Identifier("items")))
             ))
         );
     }
@@ -2915,8 +3203,8 @@ echo test
                 Box::new(Expression::Execution(Function {
                     target: Identifier("zip"),
                     parameters: vec![
-                        Expression::Value(Identifier("designs")),
-                        Expression::Value(Identifier("components"))
+                        Expression::Variable(Identifier("designs")),
+                        Expression::Variable(Identifier("components"))
                     ]
                 }))
             ))
@@ -2932,9 +3220,9 @@ echo test
                 Box::new(Expression::Execution(Function {
                     target: Identifier("zip"),
                     parameters: vec![
-                        Expression::Value(Identifier("list1")),
-                        Expression::Value(Identifier("list2")),
-                        Expression::Value(Identifier("list3"))
+                        Expression::Variable(Identifier("list1")),
+                        Expression::Variable(Identifier("list2")),
+                        Expression::Variable(Identifier("list3"))
                     ]
                 }))
             ))
@@ -2967,9 +3255,9 @@ echo test
         let result = input.read_code_block();
         assert_eq!(
             result,
-            Ok(Expression::Repeat(Box::new(Expression::Value(Identifier(
-                "count"
-            )))))
+            Ok(Expression::Repeat(Box::new(Expression::Variable(
+                Identifier("count")
+            ))))
         );
     }
 
@@ -2981,7 +3269,7 @@ echo test
 
         let result = input.read_code_block();
         // Should parse as identifier, not foreach
-        assert_eq!(result, Ok(Expression::Value(Identifier("foreachitem"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("foreachitem"))));
     }
 
     #[test]
@@ -2992,7 +3280,7 @@ echo test
 
         let result = input.read_code_block();
         // Should parse as identifier, not repeat
-        assert_eq!(result, Ok(Expression::Value(Identifier("repeater"))));
+        assert_eq!(result, Ok(Expression::Variable(Identifier("repeater"))));
     }
 
     #[test]
@@ -3233,7 +3521,7 @@ echo test
         @nurse
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3274,7 +3562,7 @@ echo test
             a. Check ID
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3319,7 +3607,7 @@ echo test
             - Check readings
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3365,7 +3653,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3399,7 +3687,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3452,7 +3740,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3523,7 +3811,7 @@ echo test
         @nurse
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(step) => {
@@ -3551,7 +3839,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3649,7 +3937,7 @@ echo test
             "#,
         );
 
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -3730,7 +4018,7 @@ echo test
         c. File report
             "#,
         );
-        let result = input.read_step();
+        let result = input.read_step_dependent();
 
         match result {
             Ok(Step::Dependent {
@@ -4537,7 +4825,7 @@ before_leaving :
                                             Descriptive::Text("Specimen labelling"),
                                             Descriptive::CodeBlock(Expression::Foreach(
                                                 vec![Identifier("specimen")],
-                                                Box::new(Expression::Value(Identifier("specimens")))
+                                                Box::new(Expression::Variable(Identifier("specimens")))
                                             )),
                                         ])],
                                         responses: vec![],
