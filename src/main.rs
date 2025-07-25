@@ -5,6 +5,7 @@ use tracing_subscriber;
 
 use technique::parsing;
 
+mod formatter;
 mod rendering;
 
 fn main() {
@@ -102,10 +103,6 @@ fn main() {
             println!("{:?}", technique);
         }
         Some(("format", submatches)) => {
-            if submatches.contains_id("raw-control-chars") {
-                println!("Format command executed with raw-control-chars option");
-            }
-
             let raw_output = submatches
                 .get_one::<bool>("raw-control-chars")
                 .unwrap(); // flags are always present since SetTrue implies default_value
@@ -118,7 +115,11 @@ fn main() {
 
             debug!(filename);
 
-            todo!();
+            let content = parsing::load(&Path::new(filename));
+            let technique = parsing::parse(&content);
+
+            let result = formatter::format(&technique);
+            print!("{}", result);
         }
         Some(("render", submatches)) => {
             let filename = submatches
