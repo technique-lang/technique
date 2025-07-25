@@ -737,6 +737,354 @@ before_leaving :
     }
 
     #[test]
+    fn parallel_role_assignments() {
+        let mut input = Parser::new();
+
+        // Test a step that mirrors the surgical safety checklist pattern
+        input.initialize(
+            r#"
+5. Review anticipated critical events.
+        @surgeon
+            a. What are the critical or non-routine steps?
+            b. How long will the case take?
+            c. What is the blood loss expected?
+        @anaesthetist
+            d. Are there any patient-specific concerns?
+        @nursing_team
+            e. Has sterility been confirmed?
+            f. Has the equipment issues been addressed?
+            "#,
+        );
+
+        let result = input.read_step_dependent();
+
+        match result {
+            Ok(Step::Dependent {
+                ordinal,
+                content,
+                responses,
+                scopes,
+            }) => {
+                assert_eq!(ordinal, "5");
+                assert_eq!(
+                    content,
+                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "Review anticipated critical events."
+                    )])]
+                );
+                assert_eq!(responses, vec![]);
+                // Should have 3 scopes: one for each role with their substeps
+                assert_eq!(scopes.len(), 3);
+
+                // Check that the first scope has surgeon role
+                assert_eq!(
+                    scopes[0].roles,
+                    vec![Attribute::Role(Identifier("surgeon"))]
+                );
+                assert_eq!(
+                    scopes[0]
+                        .substeps
+                        .len(),
+                    3
+                ); // a, b, c
+
+                // Check that the second scope has anaesthetist role
+                assert_eq!(
+                    scopes[1].roles,
+                    vec![Attribute::Role(Identifier("anaesthetist"))]
+                );
+                assert_eq!(
+                    scopes[1]
+                        .substeps
+                        .len(),
+                    1
+                ); // d
+
+                // Check that the third scope has nursing_team role
+                assert_eq!(
+                    scopes[2].roles,
+                    vec![Attribute::Role(Identifier("nursing_team"))]
+                );
+                assert_eq!(
+                    scopes[2]
+                        .substeps
+                        .len(),
+                    2
+                ); // e, f
+            }
+            _ => panic!("Expected dependent step with role assignment"),
+        }
+    }
+
+    #[test]
+    fn multiple_roles_with_dependent_substeps() {
+        let mut input = Parser::new();
+
+        // Test multiple roles each with their own dependent substeps
+        input.initialize(
+            r#"
+1. Review surgical procedure
+        @surgeon
+            a. Review patient chart
+            b. Verify surgical site
+            c. Confirm procedure type
+        @anaesthetist
+            a. Check patient allergies
+            b. Review medication history
+        @nursing_team
+            a. Prepare instruments
+            b. Verify sterility
+            c. Confirm patient positioning
+            "#,
+        );
+
+        let result = input.read_step_dependent();
+
+        match result {
+            Ok(Step::Dependent {
+                ordinal,
+                content,
+                responses,
+                scopes,
+            }) => {
+                assert_eq!(ordinal, "1");
+                assert_eq!(
+                    content,
+                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "Review surgical procedure"
+                    )])]
+                );
+                assert_eq!(responses, vec![]);
+                assert_eq!(scopes.len(), 3);
+
+                // Check surgeon scope (3 dependent substeps)
+                assert_eq!(
+                    scopes[0].roles,
+                    vec![Attribute::Role(Identifier("surgeon"))]
+                );
+                assert_eq!(
+                    scopes[0]
+                        .substeps
+                        .len(),
+                    3
+                );
+
+                // Check anaesthetist scope (2 dependent substeps)
+                assert_eq!(
+                    scopes[1].roles,
+                    vec![Attribute::Role(Identifier("anaesthetist"))]
+                );
+                assert_eq!(
+                    scopes[1]
+                        .substeps
+                        .len(),
+                    2
+                );
+
+                // Check nursing_team scope (3 dependent substeps)
+                assert_eq!(
+                    scopes[2].roles,
+                    vec![Attribute::Role(Identifier("nursing_team"))]
+                );
+                assert_eq!(
+                    scopes[2]
+                        .substeps
+                        .len(),
+                    3
+                );
+
+                // Verify all substeps are dependent (ordered) steps
+                for scope in &scopes {
+                    for substep in &scope.substeps {
+                        assert!(matches!(substep, Step::Dependent { .. }));
+                    }
+                }
+            }
+            _ => panic!("Expected dependent step with multiple role assignments"),
+        }
+    }
+
+    #[test]
+    fn mixed_substeps_in_roles() {
+        let mut input = Parser::new();
+
+        input.initialize(
+            r#"
+1. Emergency response
+    @team_lead
+        a. Assess situation
+        b. Coordinate response
+            - Monitor communications
+            - Track resources
+        c. File report
+            "#,
+        );
+        let result = input.read_step_dependent();
+
+        match result {
+            Ok(Step::Dependent {
+                ordinal,
+                content,
+                responses,
+                scopes,
+            }) => {
+                assert_eq!(ordinal, "1");
+                assert_eq!(
+                    content,
+                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "Emergency response"
+                    )])]
+                );
+                assert_eq!(responses, vec![]);
+                assert_eq!(scopes.len(), 1);
+
+                // Check team_lead scope
+                assert_eq!(
+                    scopes[0].roles,
+                    vec![Attribute::Role(Identifier("team_lead"))]
+                );
+                assert_eq!(
+                    scopes[0]
+                        .substeps
+                        .len(),
+                    3
+                );
+
+                // Verify the sequence: dependent (a), dependent (b with nested parallel), dependent (c)
+                assert!(matches!(scopes[0].substeps[0], Step::Dependent { .. }));
+                assert!(matches!(scopes[0].substeps[1], Step::Dependent { .. }));
+                assert!(matches!(scopes[0].substeps[2], Step::Dependent { .. }));
+
+                // Check substep a
+                if let Step::Dependent {
+                    ordinal,
+                    content,
+                    scopes,
+                    ..
+                } = &scopes[0].substeps[0]
+                {
+                    assert_eq!(ordinal, &"a");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Assess situation"
+                        )])]
+                    );
+                    assert_eq!(scopes.len(), 0); // No nested scopes
+                }
+
+                // Check substep b - should have nested parallel steps
+                if let Step::Dependent {
+                    ordinal,
+                    content,
+                    scopes,
+                    ..
+                } = &scopes[0].substeps[1]
+                {
+                    assert_eq!(ordinal, &"b");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Coordinate response"
+                        )])]
+                    );
+                    assert_eq!(scopes.len(), 1); // Should have nested scope with parallel steps
+
+                    // Check the nested parallel steps
+                    assert_eq!(
+                        scopes[0]
+                            .substeps
+                            .len(),
+                        2
+                    );
+                    assert!(matches!(scopes[0].substeps[0], Step::Parallel { .. }));
+                    assert!(matches!(scopes[0].substeps[1], Step::Parallel { .. }));
+
+                    if let Step::Parallel { content, .. } = &scopes[0].substeps[0] {
+                        assert_eq!(
+                            content,
+                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Monitor communications"
+                            )])]
+                        );
+                    }
+
+                    if let Step::Parallel { content, .. } = &scopes[0].substeps[1] {
+                        assert_eq!(
+                            content,
+                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Track resources"
+                            )])]
+                        );
+                    }
+                }
+
+                // Check substep c
+                if let Step::Dependent {
+                    ordinal,
+                    content,
+                    scopes,
+                    ..
+                } = &scopes[0].substeps[2]
+                {
+                    assert_eq!(ordinal, &"c");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "File report"
+                        )])]
+                    );
+                    assert_eq!(scopes.len(), 0); // No nested scopes
+                }
+            }
+            _ => panic!("Expected step with mixed substep types"),
+        }
+    }
+
+    #[test]
+    fn substeps_with_responses() {
+        let mut input = Parser::new();
+
+        input.initialize(
+            r#"
+1. Main step
+    a. Substep with response
+        'Yes' | 'No'
+            "#,
+        );
+        let result = input.read_step_dependent();
+
+        assert_eq!(
+            result,
+            Ok(Step::Dependent {
+                ordinal: "1",
+                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                responses: vec![],
+                scopes: vec![Scope {
+                    roles: vec![],
+                    substeps: vec![Step::Dependent {
+                        ordinal: "a",
+                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Substep with response"
+                        )])],
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None,
+                            },
+                            Response {
+                                value: "No",
+                                condition: None,
+                            },
+                        ],
+                        scopes: vec![],
+                    }],
+                }],
+            })
+        );
+    }
+
+    #[test]
     fn naked_bindings() {
         let mut input = Parser::new();
 
@@ -789,5 +1137,96 @@ before_leaving :
                 )
             ])])
         );
+    }
+
+    #[test]
+    fn role_with_dependent_substeps() {
+        let mut input = Parser::new();
+
+        // Test role assignment with multiple dependent substeps that execute in series
+        input.initialize(
+            r#"
+1. Perform procedure
+        @surgeon
+            a. Make initial incision
+            b. Locate target area
+            c. Complete procedure
+            "#,
+        );
+
+        let result = input.read_step_dependent();
+
+        match result {
+            Ok(Step::Dependent {
+                ordinal,
+                content,
+                responses,
+                scopes,
+            }) => {
+                assert_eq!(ordinal, "1");
+                assert_eq!(
+                    content,
+                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "Perform procedure"
+                    )])]
+                );
+                assert_eq!(responses, vec![]);
+                assert_eq!(scopes.len(), 1);
+
+                // Check that the scope has the surgeon role
+                assert_eq!(
+                    scopes[0].roles,
+                    vec![Attribute::Role(Identifier("surgeon"))]
+                );
+
+                // Check that the scope has 3 dependent substeps in order
+                assert_eq!(
+                    scopes[0]
+                        .substeps
+                        .len(),
+                    3
+                );
+
+                if let Step::Dependent {
+                    ordinal, content, ..
+                } = &scopes[0].substeps[0]
+                {
+                    assert_eq!(ordinal, &"a");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Make initial incision"
+                        )])]
+                    );
+                }
+
+                if let Step::Dependent {
+                    ordinal, content, ..
+                } = &scopes[0].substeps[1]
+                {
+                    assert_eq!(ordinal, &"b");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Locate target area"
+                        )])]
+                    );
+                }
+
+                if let Step::Dependent {
+                    ordinal, content, ..
+                } = &scopes[0].substeps[2]
+                {
+                    assert_eq!(ordinal, &"c");
+                    assert_eq!(
+                        content,
+                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Complete procedure"
+                        )])]
+                    );
+                }
+            }
+            _ => panic!("Expected dependent step with role assignment and substeps"),
+        }
     }
 }
