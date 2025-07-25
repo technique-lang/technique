@@ -1,7 +1,7 @@
 // parser for the Technique language
 use std::path::Path;
 
-mod parser;
+pub mod parser;
 mod scope;
 
 pub fn load(source: &Path) {
