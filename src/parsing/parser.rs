@@ -133,7 +133,7 @@ impl<'i> Parser<'i> {
 
     fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
-        let header = if is_magic_line(self.entire()) {
+        let header = if is_magic_line(self.source) {
             Some(self.read_technique_header()?)
         } else {
             None
@@ -149,8 +149,7 @@ impl<'i> Parser<'i> {
             }
 
             // Check if current position starts with a procedure declaration
-            let content = self.entire();
-            if is_procedure_declaration(content) {
+            if is_procedure_declaration(self.source) {
                 let procedure = self.read_procedure()?;
                 procedures.push(procedure);
             } else {
@@ -178,6 +177,7 @@ impl<'i> Parser<'i> {
         result
     }
 
+    #[deprecated]
     fn entire(&self) -> &'i str {
         self.source
     }
@@ -384,7 +384,7 @@ impl<'i> Parser<'i> {
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
-        let content = self.entire();
+        let content = self.source;
         let mut results = Vec::new();
 
         for chunk in content.split(delimiter) {
@@ -580,11 +580,9 @@ impl<'i> Parser<'i> {
     }
 
     fn read_signature(&mut self) -> Result<Signature<'i>, ParsingError<'i>> {
-        let content = self.entire();
-
         let re = regex!(r"\s*(.+?)\s*->\s*(.+?)\s*$");
 
-        let cap = match re.captures(content) {
+        let cap = match re.captures(self.source) {
             Some(c) => c,
             None => return Err(ParsingError::InvalidSignature(self.offset)),
         };
@@ -701,8 +699,7 @@ impl<'i> Parser<'i> {
 
                 // Read title, if present
 
-                let content = outer.entire();
-                let title = if is_procedure_title(content) {
+                let title = if is_procedure_title(outer.source) {
                     let title = outer.take_block_lines(
                         |line| {
                             line.trim_start()
@@ -722,15 +719,14 @@ impl<'i> Parser<'i> {
 
                 // Extract content after declaration until a step is encountered
 
-                let content = outer.entire();
-                let description = if !is_step(content) {
+                let description = if !is_step(outer.source) {
                     outer.take_block_lines(
                         |line| !is_step(line),
                         |line| is_step(line),
                         |inner| {
                             let mut description = vec![];
 
-                            let content = inner.entire();
+                            let content = inner.source;
                             if !content.is_empty() {
                                 description = inner.read_descriptive()?;
                             }
@@ -745,7 +741,7 @@ impl<'i> Parser<'i> {
                 // Parse remaining content as steps
                 let mut steps = vec![];
                 while !outer.is_finished() {
-                    let content = outer.entire();
+                    let content = outer.source;
                     if is_step_dependent(content) {
                         let step = outer.read_step_dependent()?;
                         steps.push(step);
@@ -797,7 +793,7 @@ impl<'i> Parser<'i> {
             let numeric = self.read_numeric()?;
             Ok(Expression::Number(numeric))
         } else if is_string_literal(content) {
-            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
+            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.source))?;
             Ok(Expression::String(raw))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
@@ -845,7 +841,7 @@ impl<'i> Parser<'i> {
 
     fn read_identifiers(&mut self) -> Result<Vec<Identifier<'i>>, ParsingError<'i>> {
         if self
-            .entire()
+            .source
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
@@ -856,7 +852,7 @@ impl<'i> Parser<'i> {
                     outer.trim_whitespace();
 
                     if outer
-                        .entire()
+                        .source
                         .is_empty()
                     {
                         break;
@@ -868,7 +864,7 @@ impl<'i> Parser<'i> {
                     // Handle comma separation
                     outer.trim_whitespace();
                     if outer
-                        .entire()
+                        .source
                         .starts_with(',')
                     {
                         outer.advance(1);
@@ -924,7 +920,7 @@ impl<'i> Parser<'i> {
                 outer.trim_whitespace();
 
                 if outer
-                    .entire()
+                    .source
                     .is_empty()
                 {
                     break;
@@ -932,7 +928,7 @@ impl<'i> Parser<'i> {
 
                 // Parse quoted key
                 if !outer
-                    .entire()
+                    .source
                     .starts_with('"')
                 {
                     return Err(ParsingError::Expected(
@@ -985,7 +981,7 @@ impl<'i> Parser<'i> {
     fn read_identifier(&mut self) -> Result<Identifier<'i>, ParsingError<'i>> {
         self.trim_whitespace();
 
-        let content = self.entire();
+        let content = self.source;
 
         let possible = match content.find([' ', '\t', '\n', '(', '{', ',']) {
             None => content,
@@ -1004,7 +1000,7 @@ impl<'i> Parser<'i> {
     fn read_numeric(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
         self.trim_whitespace();
 
-        let content = self.entire();
+        let content = self.source;
 
         // Parser is whitespace agnostic - consume entire remaining content
         // The outer take_*() methods have already isolated the numeric content
@@ -1018,7 +1014,7 @@ impl<'i> Parser<'i> {
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
         self.take_block_chars('<', '>', |inner| {
-            let content = inner.entire();
+            let content = inner.source;
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
             } else {
@@ -1043,7 +1039,7 @@ impl<'i> Parser<'i> {
     fn read_step_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
-            let content = outer.entire();
+            let content = outer.source;
 
             if content.is_empty() {
                 // FIXME do we even need this check?
@@ -1076,7 +1072,7 @@ impl<'i> Parser<'i> {
             // Parse responses if present
             let mut responses = vec![];
             if !outer.is_finished() {
-                let content = outer.entire();
+                let content = outer.source;
                 if is_enum_response(content) {
                     responses = outer.read_responses()?;
                 }
@@ -1141,7 +1137,7 @@ impl<'i> Parser<'i> {
             is_substep_dependent,
             |line| is_substep_dependent(line) || is_role_assignment(line),
             |outer| {
-                let content = outer.entire();
+                let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
                 let cap = re
                     .captures(content)
@@ -1169,8 +1165,7 @@ impl<'i> Parser<'i> {
                 // Parse responses if present
                 let mut responses = vec![];
                 if !outer.is_finished() {
-                    let content = outer.entire();
-                    if is_enum_response(content) {
+                    if is_enum_response(outer.source) {
                         responses = outer.read_responses()?;
                     }
                 }
@@ -1196,10 +1191,9 @@ impl<'i> Parser<'i> {
                 is_substep_dependent(line) || is_substep_parallel(line) || is_role_assignment(line)
             },
             |outer| {
-                let content = outer.entire();
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
-                    .find(content)
+                    .find(outer.source)
                     .ok_or(ParsingError::InvalidStep(outer.offset))?;
 
                 // Skip past the dash and space
@@ -1213,8 +1207,7 @@ impl<'i> Parser<'i> {
                 // Parse responses if present
                 let mut responses = vec![];
                 if !outer.is_finished() {
-                    let content = outer.entire();
-                    if is_enum_response(content) {
+                    if is_enum_response(outer.source) {
                         responses = outer.read_responses()?;
                     }
                 }
@@ -1324,8 +1317,7 @@ impl<'i> Parser<'i> {
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
     fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError<'i>> {
         self.take_split_by('|', |inner| {
-            let content = inner.entire();
-            validate_response(content).ok_or(ParsingError::InvalidResponse(inner.offset))
+            validate_response(inner.source).ok_or(ParsingError::InvalidResponse(inner.offset))
         })
     }
 
@@ -1405,21 +1397,17 @@ impl<'i> Parser<'i> {
             loop {
                 outer.trim_whitespace();
 
-                if outer
-                    .entire()
-                    .is_empty()
-                {
+                let content = outer.source;
+                if content.is_empty() {
                     break;
                 }
-
-                let content = outer.entire();
 
                 if content.starts_with("```") {
                     let (lang, lines) = outer
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.entire()))?;
+                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
                     params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
@@ -1429,7 +1417,7 @@ impl<'i> Parser<'i> {
                 // Handle comma separation
                 outer.trim_whitespace();
                 if outer
-                    .entire()
+                    .source
                     .starts_with(',')
                 {
                     outer.advance(1);
@@ -1528,7 +1516,7 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            let content = self.entire();
+            let content = self.source;
 
             if is_role_assignment(content) {
                 // If we have accumulated substeps without roles, create a scope for them
@@ -2077,7 +2065,7 @@ mod check {
         input.initialize("{ todo() }");
 
         let result = input.take_block_chars('{', '}', |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, " todo() ");
             Ok(true)
         });
@@ -2089,7 +2077,7 @@ mod check {
         input.initialize("XhelloX world");
 
         let result = input.take_block_chars('X', 'X', |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "hello");
             Ok(true)
         });
@@ -2103,7 +2091,7 @@ mod check {
         assert_eq!(input.offset, 0);
 
         let result = input.take_block_delimited("```", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "bash\nls -l\necho hello");
             Ok(true)
         });
@@ -2115,7 +2103,7 @@ mod check {
         input.initialize("---start\ncontent here\nmore content---end");
 
         let result = input.take_block_delimited("---", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "start\ncontent here\nmore content");
             Ok(true)
         });
@@ -2125,7 +2113,7 @@ mod check {
         input.initialize("```  hello world  ``` and now goodbye");
 
         let result = input.take_block_delimited("```", |parser| {
-            let text = parser.entire();
+            let text = parser.source;
             assert_eq!(text, "  hello world  ");
             Ok(true)
         });
@@ -2294,11 +2282,9 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Parallel {
-                content: vec![
-                    Descriptive::Paragraph(vec![Descriptive::Text(
-                        "a top-level task to be one in parallel with"
-                    )]),
-                ],
+                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    "a top-level task to be one in parallel with"
+                )]),],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2307,11 +2293,9 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Parallel {
-                content: vec![
-                    Descriptive::Paragraph(vec![Descriptive::Text(
-                        "another top-level task"
-                    )]),
-                ],
+                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    "another top-level task"
+                )]),],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2624,7 +2608,7 @@ mod check {
         );
 
         assert_eq!(
-            input.entire(),
+            input.source,
             "2. Do the second thing in the first one.\n            "
         );
     }
@@ -2650,7 +2634,7 @@ mod check {
             })
         );
 
-        assert_eq!(input.entire(), "");
+        assert_eq!(input.source, "");
     }
 
     #[test]
@@ -2704,7 +2688,7 @@ This is the first one.
         );
 
         let result = input.take_block_lines(is_step_dependent, is_step_dependent, |inner| {
-            Ok(inner.entire())
+            Ok(inner.source)
         });
 
         match result {
@@ -2716,7 +2700,7 @@ This is the first one.
 
                 // Remaining should be the second step
                 assert_eq!(
-                    input.entire(),
+                    input.source,
                     "2. Do the second thing in the first one.\n            "
                 );
             }
@@ -2775,7 +2759,7 @@ This is the first one.
         let result = input.take_block_lines(
             |_| true,                       // start predicate (always true)
             |line| is_step_dependent(line), // end predicate (stop at first step)
-            |inner| Ok(inner.entire()),
+            |inner| Ok(inner.source),
         );
 
         match result {
@@ -2787,7 +2771,7 @@ This is the first one.
 
                 // The remaining content should include ALL steps and substeps
                 let remaining = input
-                    .entire()
+                    .source
                     .trim_start();
                 assert!(remaining.starts_with("1. Have you done"));
                 assert!(remaining.contains("a. Do the first thing"));
@@ -2822,7 +2806,7 @@ This is the first one.
         let result = input.take_block_lines(
             is_procedure_declaration,
             is_procedure_declaration,
-            |outer| Ok(outer.entire()),
+            |outer| Ok(outer.source),
         );
 
         match result {
