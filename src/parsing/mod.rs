@@ -1,37 +1,41 @@
-// parser for the Technique language
+//! parser for the Technique language
+
 use std::path::Path;
+use tracing::debug;
+
+use crate::language::Technique;
 
 pub mod parser;
 mod scope;
 
-pub fn load(source: &Path) {
-    // read source to a str
-    let content = std::fs::read_to_string(source).expect("Failed to read the source file");
+/// Read a file and return an owned String. We pass that ownership back to the main function so that
+/// the Technique object created by parse() below can have the same lifetime.
+pub fn load(filename: &Path) -> String {
+    let content = std::fs::read_to_string(filename).expect("Failed to read the source file");
+    content
+}
 
-    let result = parser::parse_via_taking(content.as_str());
+/// Parse text into a Technique object, or error out.
+pub fn parse(content: &str) -> Technique {
+    let result = parser::parse_via_taking(content);
 
     match result {
         Ok(technique) => {
             if let Some(procedures) = &technique.body {
-                println!("Found {} procedure(s):", procedures.len());
-                for procedure in procedures {
-                    println!(
-                        "  - {}",
-                        procedure
-                            .name
-                            .0
-                    );
-                }
-                println!();
+                debug!(
+                    "Found {} procedure{}",
+                    procedures.len(),
+                    if procedures.len() > 1 { "s" } else { "" }
+                );
             } else {
-                println!("No procedures found");
+                debug!("No procedures found");
             }
 
-            println!("{:#?}", technique);
+            technique
         }
         Err(error) => {
             eprintln!("error: {}", error);
             std::process::exit(1);
         }
-    };
+    }
 }
