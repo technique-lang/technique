@@ -20,12 +20,14 @@ pub fn format(technique: &Technique) -> String {
 
 struct Formatter {
     buffer: String,
+    nesting: u8,
 }
 
 impl Formatter {
     fn new() -> Formatter {
         Formatter {
             buffer: String::new(),
+            nesting: 0,
         }
     }
 
@@ -33,6 +35,21 @@ impl Formatter {
     fn reset(&mut self) {
         self.buffer
             .clear();
+    }
+
+    fn increase(&mut self, depth: u8) {
+        self.nesting += depth;
+    }
+
+    fn decrease(&mut self, depth: u8) {
+        self.nesting -= depth;
+    }
+
+    fn indent(&mut self) {
+        for _ in 0..self.nesting {
+            self.buffer
+                .push(' ');
+        }
     }
 
     fn append_str(&mut self, text: &str) {
@@ -223,9 +240,11 @@ impl Formatter {
     }
 
     fn append_steps(&mut self, steps: &Vec<Step>) {
+        self.increase(4);
         for step in steps {
             self.append_step(step);
         }
+        self.decrease(4);
     }
 
     fn append_step(&mut self, step: &Step) {
@@ -236,9 +255,12 @@ impl Formatter {
                 responses,
                 scopes,
             } => {
+                self.indent();
                 self.append_str(ordinal);
                 self.append_char('.');
                 self.append_char(' ');
+
+                self.increase(4);
 
                 if content.len() > 0 {
                     self.append_descriptives(content);
@@ -250,6 +272,8 @@ impl Formatter {
                     self.append_char('\n');
                     self.append_scopes(scopes);
                 }
+
+                self.decrease(4);
             }
             Step::Parallel {
                 content,
@@ -258,6 +282,8 @@ impl Formatter {
             } => {
                 self.append_str(" - ");
 
+                self.increase(4);
+
                 if content.len() > 0 {
                     self.append_descriptives(content);
                 }
@@ -268,6 +294,8 @@ impl Formatter {
                     self.append_char('\n');
                     self.append_scopes(scopes);
                 }
+
+                self.decrease(4);
             }
         }
     }
@@ -295,11 +323,14 @@ impl Formatter {
                 self.append_attribute(&scope.attributes);
                 self.append_char('\n');
             }
-            self.append_steps(&scope.substeps);
+            for step in &scope.substeps {
+                self.append_step(step);
+            }
         }
     }
 
     fn append_attribute(&mut self, attributes: &Vec<Attribute>) {
+        self.indent();
         for (i, attribute) in attributes
             .iter()
             .enumerate()
@@ -330,15 +361,24 @@ impl Formatter {
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
             Expression::Multiline(lang, lines) => {
+                self.append_char('\n');
+
+                self.indent();
                 self.append_str("```");
                 if let Some(which) = lang {
                     self.append_str(which);
                 }
                 self.append_char('\n');
+
+                self.increase(4);
                 for line in lines {
+                    self.indent();
                     self.append_str(line);
                     self.append_char('\n');
                 }
+                self.decrease(4);
+
+                self.indent();
                 self.append_str("```");
                 self.append_char('\n');
             }
