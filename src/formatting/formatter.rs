@@ -217,15 +217,27 @@ impl Formatter {
     fn append_descriptive(&mut self, descriptive: &Descriptive) {
         match descriptive {
             Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping?
-            Descriptive::CodeBlock(expr) => {
-                self.append_char('{');
-                self.append_char(' ');
+            Descriptive::CodeBlock(expr) => match expr {
+                Expression::Tablet(_) => {
+                    self.append_char('{');
+                    self.append_char('\n');
 
-                self.append_expression(expr);
+                    self.increase(4);
+                    self.indent();
+                    self.append_expression(expr);
+                    self.append_char('\n');
+                    self.decrease(4);
 
-                self.append_char(' ');
-                self.append_char('}');
-            }
+                    self.append_char('}');
+                }
+                _ => {
+                    self.append_char('{');
+                    self.append_char(' ');
+                    self.append_expression(expr);
+                    self.append_char(' ');
+                    self.append_char('}');
+                }
+            },
             Descriptive::Application(invocation) => self.append_application(invocation),
             Descriptive::Binding(descriptive, variables) => {
                 self.append_descriptive(descriptive);
@@ -488,8 +500,9 @@ impl Formatter {
         self.append_char('[');
         self.append_char('\n');
 
+        self.increase(4);
         for pair in pairs {
-            self.append_str("    "); // TODO handle indentation
+            self.indent();
             self.append_char('"');
             self.append_str(pair.label);
             self.append_char('"');
@@ -497,8 +510,10 @@ impl Formatter {
             self.append_expression(&pair.value);
             self.append_char('\n');
         }
+        self.decrease(4);
+
+        self.indent();
         self.append_char(']');
-        self.append_char('\n');
     }
 }
 
