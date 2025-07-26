@@ -181,26 +181,35 @@ impl Formatter {
             .iter()
             .enumerate()
         {
+            // TODO not sure about this in the face of re-wrapping
             if i > 0 {
                 self.append_char(' ');
             }
-            match descriptive {
-                Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping
-                Descriptive::CodeBlock(expr) => {
-                    self.append_char('{');
-                    self.append_char(' ');
+            self.append_descriptive(descriptive);
+        }
+    }
 
-                    self.append_expression(expr);
+    fn append_descriptive(&mut self, descriptive: &Descriptive) {
+        match descriptive {
+            Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping?
+            Descriptive::CodeBlock(expr) => {
+                self.append_char('{');
+                self.append_char(' ');
 
-                    self.append_char(' ');
-                    self.append_char('}');
-                }
-                Descriptive::Application(invocation) => todo!(),
-                Descriptive::Binding(descriptive, identifiers) => todo!(),
-                Descriptive::Paragraph(descriptives) => {
-                    self.append_descriptives(descriptives);
-                    self.append_char('\n');
-                }
+                self.append_expression(expr);
+
+                self.append_char(' ');
+                self.append_char('}');
+            }
+            Descriptive::Application(invocation) => self.append_application(invocation),
+            Descriptive::Binding(descriptive, variables) => {
+                self.append_descriptive(descriptive);
+                self.append_str(" ~ ");
+                self.append_variables(variables);
+            }
+            Descriptive::Paragraph(descriptives) => {
+                self.append_descriptives(descriptives);
+                self.append_char('\n');
             }
         }
     }
@@ -214,7 +223,19 @@ impl Formatter {
                 self.append_char('"');
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
-            Expression::Multiline(_, items) => todo!(),
+            Expression::Multiline(lang, lines) => {
+                self.append_str("```");
+                if let Some(which) = lang {
+                    self.append_str(which);
+                }
+                self.append_char('\n');
+                for line in lines {
+                    self.append_str(line);
+                    self.append_char('\n');
+                }
+                self.append_str("```");
+                self.append_char('\n');
+            }
             Expression::Repeat(expression) => {
                 self.append_str("repeat ");
                 self.append_expression(expression);
