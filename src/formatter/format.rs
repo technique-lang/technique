@@ -2,7 +2,7 @@
 
 use technique::language::*;
 
-pub fn format<'i>(technique: &Technique) -> String {
+pub fn format(technique: &Technique) -> String {
     let mut output = Formatter::new();
 
     if let Some(metadata) = &technique.header {
@@ -29,6 +29,7 @@ impl Formatter {
         }
     }
 
+    #[cfg(test)]
     fn reset(&mut self) {
         self.buffer
             .clear();
@@ -82,20 +83,29 @@ impl Formatter {
         let name = &procedure.name;
         self.append_str(name.0);
 
-        self.append_str(" : ");
+        self.append_char(' ');
+        self.append_char(':');
 
         if let Some(signature) = &procedure.signature {
-            self.append_genus(&signature.domain);
-            self.append_str(" -> ");
-            self.append_genus(&signature.range);
+            self.append_char(' ');
+            self.append_signature(signature);
         }
 
         self.append_char('\n');
     }
 
-    fn append_genus<'i>(&mut self, genus: &Genus<'i>) {
+    fn append_signature(&mut self, signature: &Signature) {
+        self.append_genus(&signature.domain);
+        self.append_str(" -> ");
+        self.append_genus(&signature.range);
+    }
+
+    fn append_genus(&mut self, genus: &Genus) {
         match genus {
-            Genus::Unit => self.append_str("()"),
+            Genus::Unit => {
+                self.append_char('(');
+                self.append_char(')');
+            }
             Genus::Single(forma) => self.append_forma(forma),
             Genus::Tuple(formas) => {
                 self.append_char('(');
@@ -104,7 +114,8 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append_str(", ");
+                        self.append_char(',');
+                        self.append_char(' ');
                     }
                     self.append_forma(forma);
                 }
@@ -118,7 +129,7 @@ impl Formatter {
         }
     }
 
-    fn append_forma<'i>(&mut self, forma: &Forma<'i>) {
+    fn append_forma(&mut self, forma: &Forma) {
         self.append_str(forma.0)
     }
 }
@@ -156,5 +167,30 @@ mod check {
         assert_eq!(output.buffer, "(Kid, Pilot, Scoundrel, Princess)");
 
         output.reset();
+    }
+
+    #[test]
+    fn signatures() {
+        let mut output = Formatter::new();
+
+        output.append_signature(&Signature {
+            domain: Genus::Single(Forma("Alderaan")),
+            range: Genus::Single(Forma("AsteroidField")),
+        });
+        assert_eq!(output.buffer, "Alderaan -> AsteroidField");
+
+        output.reset();
+        output.append_signature(&Signature {
+            domain: Genus::List(Forma("Clone")),
+            range: Genus::Single(Forma("Army")),
+        });
+        assert_eq!(output.buffer, "[Clone] -> Army");
+
+        output.reset();
+        output.append_signature(&Signature {
+            domain: Genus::Single(Forma("TaxationOfTradeRoutes")),
+            range: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
+        });
+        assert_eq!(output.buffer, "TaxationOfTradeRoutes -> (Rebels, Empire)");
     }
 }
