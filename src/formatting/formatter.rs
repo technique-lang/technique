@@ -80,8 +80,19 @@ impl Formatter {
             self.append_char('\n');
         }
 
+        // declaration
+
         let name = &procedure.name;
         self.append_str(name.0);
+
+        if let Some(parameters) = &procedure.parameters {
+            // note that append_arguments() is for general expression
+            // arguments and append_variables() is for the special case where
+            // tuples of names have parenthesis but single identifiers are
+            // naked. We use append_parameters() here which always encloses
+            // with parenthesis.
+            self.append_parameters(parameters);
+        }
 
         self.append_char(' ');
         self.append_char(':');
@@ -92,6 +103,22 @@ impl Formatter {
         }
 
         self.append_char('\n');
+
+        // description
+
+        if let Some(title) = &procedure.title {
+            self.append_char('#');
+            self.append_char(' ');
+            self.append_str(title);
+            self.append_char('\n');
+        }
+
+        let descriptives = &procedure.description;
+
+        if descriptives.len() > 0 {
+            self.append_char('\n');
+            self.append_descriptives(descriptives);
+        }
     }
 
     fn append_signature(&mut self, signature: &Signature) {
@@ -129,8 +156,182 @@ impl Formatter {
         }
     }
 
+    // Output names surrounded by parenthesis
+    fn append_parameters(&mut self, variables: &Vec<Identifier>) {
+        self.append_char('(');
+        for (i, variable) in variables
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(',');
+                self.append_char(' ');
+            }
+            self.append_identifier(variable);
+        }
+        self.append_char(')');
+    }
+
     fn append_forma(&mut self, forma: &Forma) {
         self.append_str(forma.0)
+    }
+
+    fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
+        for (i, descriptive) in descriptives
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(' ');
+            }
+            match descriptive {
+                Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping
+                Descriptive::CodeBlock(expr) => {
+                    self.append_char('{');
+                    self.append_char(' ');
+
+                    self.append_expression(expr);
+
+                    self.append_char(' ');
+                    self.append_char('}');
+                }
+                Descriptive::Application(invocation) => todo!(),
+                Descriptive::Binding(descriptive, identifiers) => todo!(),
+                Descriptive::Paragraph(descriptives) => {
+                    self.append_descriptives(descriptives);
+                    self.append_char('\n');
+                }
+            }
+        }
+    }
+
+    fn append_expression(&mut self, expression: &Expression) {
+        match expression {
+            Expression::Variable(identifier) => self.append_str(identifier.0),
+            Expression::String(text) => {
+                self.append_char('"');
+                self.append_str(text);
+                self.append_char('"');
+            }
+            Expression::Number(numeric) => self.append_numeric(numeric),
+            Expression::Multiline(_, items) => todo!(),
+            Expression::Repeat(expression) => {
+                self.append_str("repeat ");
+                self.append_expression(expression);
+            }
+            Expression::Foreach(variables, expression) => {
+                self.append_str("foreach ");
+                self.append_variables(variables);
+                self.append_str(" in ");
+                self.append_expression(expression);
+            }
+            Expression::Application(invocation) => self.append_application(invocation),
+            Expression::Execution(function) => self.append_function(function),
+            Expression::Binding(expression, variables) => {
+                self.append_expression(expression);
+                self.append_str(" ~ ");
+                self.append_variables(variables);
+            }
+            Expression::Tablet(pairs) => self.append_tablet(pairs),
+        }
+    }
+
+    // When doing binding we omit the parenthesis in the most common case of
+    // there only being one name being bound to.
+    fn append_variables(&mut self, variables: &Vec<Identifier>) {
+        if variables.len() > 1 {
+            self.append_char('(');
+        }
+        for (i, variable) in variables
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(',');
+                self.append_char(' ');
+            }
+            self.append_identifier(variable);
+        }
+        if variables.len() > 1 {
+            self.append_char(')');
+        }
+    }
+
+    fn append_numeric(&mut self, numeric: &Numeric) {
+        match numeric {
+            Numeric::Integral(num) => self.append_str(&num.to_string()),
+            Numeric::Scientific(_) => todo!(),
+        }
+    }
+
+    fn append_application(&mut self, invocation: &Invocation) {
+        self.append_char('<');
+        match &invocation.target {
+            Target::Local(identifier) => self.append_str(identifier.0),
+            Target::Remote(external) => self.append_str(external.0),
+        }
+        self.append_char('>');
+        if let Some(parameters) = &invocation.parameters {
+            self.append_arguments(parameters);
+        }
+    }
+
+    fn append_identifier(&mut self, identifier: &Identifier) {
+        self.append_str(identifier.0);
+    }
+
+    // This is the one that is for the generalized case where the arguments to
+    // a function can be Expressions themselves (though usually are just
+    // variable names)
+    fn append_arguments(&mut self, parameters: &Vec<Expression>) {
+        self.append_char('(');
+
+        for (i, parameter) in parameters
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(',');
+                self.append_char(' ');
+            }
+            self.append_expression(parameter);
+        }
+
+        self.append_char(')');
+    }
+
+    fn append_function(&mut self, function: &Function) {
+        self.append_identifier(&function.target);
+        self.append_char('(');
+        for (i, parameter) in function
+            .parameters
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(',');
+                self.append_char(' ');
+            }
+            self.append_expression(parameter);
+        }
+        self.append_char(')');
+    }
+
+    fn append_tablet(&mut self, pairs: &Vec<Pair>) {
+        self.append_char('[');
+        self.append_char('\n');
+
+        for pair in pairs {
+            self.append_str("    "); // TODO handle indentation
+            self.append_char('"');
+            self.append_str(pair.label);
+            self.append_char('"');
+            self.append_str(" = ");
+            self.append_expression(&pair.value);
+            self.append_char('\n');
+        }
+        self.append_char(']');
+        self.append_char('\n');
     }
 }
 
@@ -192,5 +393,13 @@ mod check {
             range: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
         });
         assert_eq!(output.buffer, "TaxationOfTradeRoutes -> (Rebels, Empire)");
+    }
+
+    #[test]
+    fn numbers() {
+        let mut output = Formatter::new();
+
+        output.append_numeric(&Numeric::Integral(42));
+        assert_eq!(output.buffer, "42");
     }
 }

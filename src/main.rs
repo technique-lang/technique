@@ -100,7 +100,7 @@ fn main() {
             let technique = parsing::parse(&content);
             // TODO continue with validation of the returned technique
 
-            println!("{:?}", technique);
+            println!("{:#?}", technique);
         }
         Some(("format", submatches)) => {
             let raw_output = submatches
