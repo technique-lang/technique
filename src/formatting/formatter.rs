@@ -130,28 +130,46 @@ impl Formatter {
 
         self.append_char('\n');
 
-        // description
+        // elements
 
-        if let Some(title) = &procedure.title {
-            self.append_char('#');
-            self.append_char(' ');
-            self.append_str(title);
-            self.append_char('\n');
+        for (i, element) in procedure
+            .elements
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char('\n');
+            }
+            self.append_element(element);
         }
+    }
 
-        let descriptives = &procedure.description;
+    fn append_element(&mut self, element: &Element) {
+        match element {
+            Element::Title(title) => {
+                self.append_char('#');
+                self.append_char(' ');
+                self.append_str(title);
+                self.append_char('\n');
+            }
+            Element::Description(descriptives) => {
+                self.append_descriptives(descriptives);
+            }
+            Element::Steps(steps) => {
+                self.append_steps(steps);
+            }
+            Element::CodeBlock(expression) => {
+                self.append_char('{');
+                self.append_char('\n');
 
-        if descriptives.len() > 0 {
-            self.append_char('\n');
-            self.append_descriptives(descriptives);
-        }
+                self.increase(4);
+                self.indent();
+                self.append_expression(expression);
+                self.append_char('\n');
+                self.decrease(4);
 
-        // steps
-
-        let steps = &procedure.steps;
-        if steps.len() > 0 {
-            self.append_char('\n');
-            self.append_steps(steps);
+                self.append_char('}');
+            }
         }
     }
 

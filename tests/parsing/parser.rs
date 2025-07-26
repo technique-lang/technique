@@ -64,10 +64,7 @@ making_coffee : (Beans, Milk) -> Coffee
                     domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
                     range: Genus::Single(Forma("Coffee"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -94,10 +91,7 @@ second : C -> D
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
 
@@ -111,10 +105,7 @@ second : C -> D
                     domain: Genus::Single(Forma("C")),
                     range: Genus::Single(Forma("D"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -139,10 +130,7 @@ making_coffee(e) : Ingredients -> Coffee
                     domain: Genus::Single(Forma("Ingredients")),
                     range: Genus::Single(Forma("Coffee"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -174,29 +162,30 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the first thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![]
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![]
-                    }
-                ]
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Step::Dependent {
+                            ordinal: "1",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Do the first thing in the first one."
+                            )])],
+                            responses: vec![],
+                            scopes: vec![]
+                        },
+                        Step::Dependent {
+                            ordinal: "2",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            scopes: vec![]
+                        }
+                    ])
+                ],
             })
         );
     }
@@ -228,37 +217,38 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Have you done the first thing in the first one?"
-                        )])],
-                        responses: vec![
-                            Response {
-                                value: "Yes",
-                                condition: None
-                            },
-                            Response {
-                                value: "No",
-                                condition: Some("but I have an excuse")
-                            }
-                        ],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![],
-                    }
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Step::Dependent {
+                            ordinal: "1",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Have you done the first thing in the first one?"
+                            )])],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
+                                },
+                                Response {
+                                    value: "No",
+                                    condition: Some("but I have an excuse")
+                                }
+                            ],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "2",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            scopes: vec![],
+                        }
+                    ])
                 ],
             })
         );
@@ -292,47 +282,48 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Have you done the first thing in the first one?"
-                        )])],
-                        responses: vec![],
-                        scopes: vec![Scope {
-                            attributes: vec![],
-                            substeps: vec![Step::Dependent {
-                                ordinal: "a",
-                                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                    "Do the first thing. Then ask yourself if you are done:"
-                                )])],
-                                responses: vec![
-                                    Response {
-                                        value: "Yes",
-                                        condition: None
-                                    },
-                                    Response {
-                                        value: "No",
-                                        condition: Some("but I have an excuse")
-                                    }
-                                ],
-                                scopes: vec![]
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Step::Dependent {
+                            ordinal: "1",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Have you done the first thing in the first one?"
+                            )])],
+                            responses: vec![],
+                            scopes: vec![Scope {
+                                attributes: vec![],
+                                substeps: vec![Step::Dependent {
+                                    ordinal: "a",
+                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                        "Do the first thing. Then ask yourself if you are done:"
+                                    )])],
+                                    responses: vec![
+                                        Response {
+                                            value: "Yes",
+                                            condition: None
+                                        },
+                                        Response {
+                                            value: "No",
+                                            condition: Some("but I have an excuse")
+                                        }
+                                    ],
+                                    scopes: vec![]
+                                }]
                             }]
-                        }]
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![],
-                    }
+                        },
+                        Step::Dependent {
+                            ordinal: "2",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            scopes: vec![],
+                        }
+                    ])
                 ],
             })
         );
@@ -373,125 +364,129 @@ This is the first one.
                 name: Identifier("before_anesthesia"),
                 parameters: None,
                 signature: None,
-                title: Some("Before induction of anaesthesia"),
-                description: vec![],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![
-                            Descriptive::Text(
-                                "Has the patient confirmed his/her identity, site, procedure,"
-                            ),
-                            Descriptive::Text("and consent?")
-                        ])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the site marked?"
-                        )])],
-                        responses: vec![
-                            Response {
+                elements: vec![
+                    Element::Title("Before induction of anaesthesia"),
+                    Element::Steps(vec![
+                        Step::Dependent {
+                            ordinal: "1",
+                            content: vec![Descriptive::Paragraph(vec![
+                                Descriptive::Text(
+                                    "Has the patient confirmed his/her identity, site, procedure,"
+                                ),
+                                Descriptive::Text("and consent?")
+                            ])],
+                            responses: vec![Response {
                                 value: "Yes",
                                 condition: None
-                            },
-                            Response {
-                                value: "Not Applicable",
-                                condition: None
-                            }
-                        ],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "3",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the anaesthesia machine and medication check complete?"
-                        )])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "4",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the pulse oximeter on the patient and functioning?"
-                        )])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "5",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Does the patient have a:"
-                        )])],
-                        responses: vec![],
-                        scopes: vec![Scope {
-                            attributes: vec![],
-                            substeps: vec![
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                        "Known allergy?"
-                                    )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: None
-                                        }
-                                    ],
-                                    scopes: vec![],
+                            }],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "2",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Is the site marked?"
+                            )])],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
                                 },
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                        "Difficult airway or aspiration risk?"
-                                    )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: Some("and equipment/assistance available")
-                                        }
-                                    ],
-                                    scopes: vec![],
-                                },
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                        "Risk of blood loss > 500 mL?"
-                                    )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: Some(
-                                                "and two IVs planned and fluids available"
-                                            )
-                                        }
-                                    ],
-                                    scopes: vec![],
+                                Response {
+                                    value: "Not Applicable",
+                                    condition: None
                                 }
-                            ]
-                        }],
-                    }
+                            ],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "3",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Is the anaesthesia machine and medication check complete?"
+                            )])],
+                            responses: vec![Response {
+                                value: "Yes",
+                                condition: None
+                            }],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "4",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Is the pulse oximeter on the patient and functioning?"
+                            )])],
+                            responses: vec![Response {
+                                value: "Yes",
+                                condition: None
+                            }],
+                            scopes: vec![],
+                        },
+                        Step::Dependent {
+                            ordinal: "5",
+                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                "Does the patient have a:"
+                            )])],
+                            responses: vec![],
+                            scopes: vec![Scope {
+                                attributes: vec![],
+                                substeps: vec![
+                                    Step::Parallel {
+                                        content: vec![Descriptive::Paragraph(vec![
+                                            Descriptive::Text("Known allergy?")
+                                        ])],
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: None
+                                            }
+                                        ],
+                                        scopes: vec![],
+                                    },
+                                    Step::Parallel {
+                                        content: vec![Descriptive::Paragraph(vec![
+                                            Descriptive::Text(
+                                                "Difficult airway or aspiration risk?"
+                                            )
+                                        ])],
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: Some(
+                                                    "and equipment/assistance available"
+                                                )
+                                            }
+                                        ],
+                                        scopes: vec![],
+                                    },
+                                    Step::Parallel {
+                                        content: vec![Descriptive::Paragraph(vec![
+                                            Descriptive::Text("Risk of blood loss > 500 mL?")
+                                        ])],
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: Some(
+                                                    "and two IVs planned and fluids available"
+                                                )
+                                            }
+                                        ],
+                                        scopes: vec![],
+                                    }
+                                ]
+                            }],
+                        }
+                    ])
                 ],
             })
         );
@@ -520,10 +515,7 @@ label_the_specimens :
                 name: Identifier("label_the_specimens"),
                 parameters: None,
                 signature: None,
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![Step::Dependent {
+                elements: vec![Element::Steps(vec![Step::Dependent {
                     ordinal: "1",
                     content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
                         "Specimen labelling"
@@ -561,7 +553,7 @@ label_the_specimens :
                             }]
                         }
                     ],
-                }],
+                }])],
             })
         );
     }
@@ -604,10 +596,9 @@ before_leaving :
                 name: Identifier("before_leaving"),
                 parameters: None,
                 signature: None,
-                title: Some("Before patient leaves operating room"),
-                description: vec![],
-                attribute: vec![],
-                steps: vec![
+                elements: vec![
+                    Element::Title("Before patient leaves operating room"),
+                    Element::Steps(vec![
                     Step::Dependent {
                         ordinal: "1",
                         content: vec![
@@ -731,6 +722,7 @@ before_leaving :
                             }
                         ],
                     }
+                    ])
                 ],
             })
         );

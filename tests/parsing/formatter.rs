@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod verify {
-    use technique::language::*;
     use technique::formatting::*;
-    
+    use technique::language::*;
+
     fn trim(text: &str) -> &str {
         let head = text.trim_start_matches('\n');
         let tail = head.trim_end_matches(' ');
@@ -42,10 +42,7 @@ mod verify {
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B")),
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![],
+                elements: vec![],
             }]),
         };
 
@@ -74,10 +71,7 @@ first : A -> B
                         domain: Genus::Single(Forma("A")),
                         range: Genus::Single(Forma("B")),
                     }),
-                    title: None,
-                    description: vec![],
-                    attribute: vec![],
-                    steps: vec![],
+                    elements: vec![],
                 },
                 Procedure {
                     name: Identifier("second"),
@@ -86,10 +80,7 @@ first : A -> B
                         domain: Genus::List(Forma("Thing")),
                         range: Genus::Tuple(vec![Forma("Who"), Forma("Where"), Forma("Why")]),
                     }),
-                    title: None,
-                    description: vec![],
-                    attribute: vec![],
-                    steps: vec![],
+                    elements: vec![],
                 },
             ]),
         };

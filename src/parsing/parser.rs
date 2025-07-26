@@ -694,7 +694,8 @@ impl<'i> Parser<'i> {
                     |inner| inner.parse_procedure_declaration(),
                 )?;
 
-                // Read title, if present
+                // Parse procedure elements in order
+                let mut elements = vec![];
 
                 let title = if is_procedure_title(outer.source) {
                     let title = outer.take_block_lines(
@@ -754,10 +755,7 @@ impl<'i> Parser<'i> {
                     name: declaration.0,
                     parameters: declaration.1,
                     signature: declaration.2,
-                    title,
-                    description,
-                    attribute: vec![], // TODO: parse attributes
-                    steps,
+                    elements,
                 })
             },
         )?;
@@ -2605,9 +2603,16 @@ This is the first one.
         // This should pass if read_procedure correctly isolates step content
         match result {
             Ok(procedure) => {
+                let steps = procedure
+                    .elements
+                    .iter()
+                    .find_map(|element| match element {
+                        Element::Steps(steps) => Some(steps),
+                        _ => None,
+                    });
                 assert_eq!(
-                    procedure
-                        .steps
+                    steps
+                        .unwrap()
                         .len(),
                     2
                 );
@@ -3665,7 +3670,10 @@ echo test
                     );
 
                     // Second scope should have nurse role
-                    assert_eq!(scopes[1].attributes, vec![Attribute::Role(Identifier("nurse"))]);
+                    assert_eq!(
+                        scopes[1].attributes,
+                        vec![Attribute::Role(Identifier("nurse"))]
+                    );
                     assert_eq!(
                         scopes[1]
                             .substeps

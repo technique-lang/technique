@@ -28,14 +28,28 @@ impl Default for Metadata<'_> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
+pub enum Element<'i> {
+    Title(&'i str),
+    Description(Vec<Descriptive<'i>>),
+    Steps(Vec<Step<'i>>),
+    CodeBlock(Expression<'i>),
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub struct Procedure<'i> {
     pub name: Identifier<'i>,
     pub parameters: Option<Vec<Identifier<'i>>>,
     pub signature: Option<Signature<'i>>,
-    pub title: Option<&'i str>,
-    pub description: Vec<Descriptive<'i>>,
-    pub attribute: Vec<Attribute<'i>>,
-    pub steps: Vec<Step<'i>>,
+    pub elements: Vec<Element<'i>>,
+}
+
+impl<'i> Procedure<'i> {
+    pub fn title(&self) -> Option<&'i str> {
+        self.elements.iter().find_map(|element| match element {
+            Element::Title(title) => Some(*title),
+            _ => None,
+        })
+    }
 }
 
 #[derive(Eq, Debug, PartialEq)]
