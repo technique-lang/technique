@@ -697,57 +697,61 @@ impl<'i> Parser<'i> {
                 // Parse procedure elements in order
                 let mut elements = vec![];
 
-                let title = if is_procedure_title(outer.source) {
-                    let title = outer.take_block_lines(
-                        |line| {
-                            line.trim_start()
-                                .starts_with('#')
-                        },
-                        |line| !line.starts_with('#'),
-                        |inner| {
-                            let text = inner.parse_procedure_title()?;
-                            Ok(Some(text))
-                        },
-                    )?;
-
-                    title
-                } else {
-                    None
-                };
-
-                // Extract content after declaration until a step is encountered
-
-                let description = if !is_step(outer.source) {
-                    outer.take_block_lines(
-                        |line| !is_step(line),
-                        |line| is_step(line),
-                        |inner| {
-                            let mut description = vec![];
-
-                            let content = inner.source;
-                            if !content.is_empty() {
-                                description = inner.read_descriptive()?;
-                            }
-
-                            Ok(description)
-                        },
-                    )?
-                } else {
-                    vec![]
-                };
-
-                // Parse remaining content as steps
-                let mut steps = vec![];
                 while !outer.is_finished() {
                     let content = outer.source;
-                    if is_step_dependent(content) {
-                        let step = outer.read_step_dependent()?;
-                        steps.push(step);
-                    } else if is_step_parallel(content) {
-                        let step = outer.read_step_parallel()?;
-                        steps.push(step);
+
+                    if is_procedure_title(content) {
+                        let title = outer.take_block_lines(
+                            |line| {
+                                line.trim_start()
+                                    .starts_with('#')
+                            },
+                            |line| !line.starts_with('#'),
+                            |inner| {
+                                let text = inner.parse_procedure_title()?;
+                                Ok(text)
+                            },
+                        )?;
+                        elements.push(Element::Title(title));
+                    } else if is_code_block(content) {
+                        let expression = outer.read_code_block()?;
+                        elements.push(Element::CodeBlock(expression));
+                    } else if is_step(content) {
+                        let mut steps = vec![];
+                        while !outer.is_finished() && is_step(outer.source) {
+                            let content = outer.source;
+                            if is_step_dependent(content) {
+                                let step = outer.read_step_dependent()?;
+                                steps.push(step);
+                            } else if is_step_parallel(content) {
+                                let step = outer.read_step_parallel()?;
+                                steps.push(step);
+                            } else {
+                                break;
+                            }
+                        }
+                        if !steps.is_empty() {
+                            elements.push(Element::Steps(steps));
+                        }
                     } else {
-                        return Err(ParsingError::Unrecognized(outer.offset));
+                        // Handle descriptive text
+                        let description = outer.take_block_lines(
+                            |line| {
+                                !is_step(line) && !is_procedure_title(line) && !is_code_block(line)
+                            },
+                            |line| is_step(line) || is_procedure_title(line) || is_code_block(line),
+                            |inner| {
+                                let content = inner.source;
+                                if !content.is_empty() {
+                                    inner.read_descriptive()
+                                } else {
+                                    Ok(vec![])
+                                }
+                            },
+                        )?;
+                        if !description.is_empty() {
+                            elements.push(Element::Description(description));
+                        }
                     }
                 }
 
