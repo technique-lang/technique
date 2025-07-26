@@ -29,14 +29,19 @@ impl Formatter {
         }
     }
 
+    fn reset(&mut self) {
+        self.buffer
+            .clear();
+    }
+
     fn append_str(&mut self, text: &str) {
         self.buffer
             .push_str(text);
     }
 
-    fn append_newline(&mut self) {
+    fn append_char(&mut self, c: char) {
         self.buffer
-            .push('\n');
+            .push(c);
     }
 
     fn is_empty(&self) -> bool {
@@ -57,13 +62,13 @@ impl Formatter {
                 self.append_str(copyright);
             }
 
-            self.append_newline();
+            self.append_char('\n');
         }
 
         if let Some(template) = metadata.template {
             self.append_str("& ");
             self.append_str(template);
-            self.append_newline();
+            self.append_char('\n');
         }
     }
 
@@ -71,7 +76,7 @@ impl Formatter {
         // if a header or another procedure has already been added,
         // separate the upcoming one with a blank line.
         if !self.is_empty() {
-            self.append_newline();
+            self.append_char('\n');
         }
 
         let name = &procedure.name;
@@ -85,8 +90,32 @@ impl Formatter {
             self.append_genus(&signature.range);
         }
 
-        self.buffer
-            .push('\n');
+        self.append_char('\n');
+    }
+
+    fn append_genus<'i>(&mut self, genus: &Genus<'i>) {
+        match genus {
+            Genus::Unit => self.append_str("()"),
+            Genus::Single(forma) => self.append_forma(forma),
+            Genus::Tuple(formas) => {
+                self.append_char('(');
+                for (i, forma) in formas
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        self.append_str(", ");
+                    }
+                    self.append_forma(forma);
+                }
+                self.append_char(')');
+            }
+            Genus::List(forma) => {
+                self.append_char('[');
+                self.append_forma(forma);
+                self.append_char(']');
+            }
+        }
     }
 
     fn append_forma<'i>(&mut self, forma: &Forma<'i>) {
@@ -97,4 +126,35 @@ impl Formatter {
 #[cfg(test)]
 mod check {
     use super::*;
+
+    #[test]
+    fn genus() {
+        let mut output = Formatter::new();
+
+        output.append_forma(&Forma("Jedi"));
+        assert_eq!(output.buffer, "Jedi");
+
+        output.reset();
+        output.append_genus(&Genus::Unit);
+        assert_eq!(output.buffer, "()");
+
+        output.reset();
+        output.append_genus(&Genus::Single(Forma("Stormtrooper")));
+        assert_eq!(output.buffer, "Stormtrooper");
+
+        output.reset();
+        output.append_genus(&Genus::List(Forma("Pilot")));
+        assert_eq!(output.buffer, "[Pilot]");
+
+        output.reset();
+        output.append_genus(&Genus::Tuple(vec![
+            Forma("Kid"),
+            Forma("Pilot"),
+            Forma("Scoundrel"),
+            Forma("Princess"),
+        ]));
+        assert_eq!(output.buffer, "(Kid, Pilot, Scoundrel, Princess)");
+
+        output.reset();
+    }
 }
