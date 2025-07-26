@@ -288,11 +288,11 @@ impl Formatter {
     fn append_scopes(&mut self, scopes: &Vec<Scope>) {
         for scope in scopes {
             if scope
-                .roles
+                .attributes
                 .len()
                 > 0
             {
-                self.append_attribute(&scope.roles);
+                self.append_attribute(&scope.attributes);
                 self.append_char('\n');
             }
             self.append_steps(&scope.substeps);
