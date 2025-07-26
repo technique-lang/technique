@@ -119,6 +119,14 @@ impl Formatter {
             self.append_char('\n');
             self.append_descriptives(descriptives);
         }
+
+        // steps
+
+        let steps = &procedure.steps;
+        if steps.len() > 0 {
+            self.append_char('\n');
+            self.append_steps(steps);
+        }
     }
 
     fn append_signature(&mut self, signature: &Signature) {
@@ -210,6 +218,104 @@ impl Formatter {
             Descriptive::Paragraph(descriptives) => {
                 self.append_descriptives(descriptives);
                 self.append_char('\n');
+            }
+        }
+    }
+
+    fn append_steps(&mut self, steps: &Vec<Step>) {
+        for step in steps {
+            self.append_step(step);
+        }
+    }
+
+    fn append_step(&mut self, step: &Step) {
+        match step {
+            Step::Dependent {
+                ordinal,
+                content,
+                responses,
+                scopes,
+            } => {
+                self.append_str(ordinal);
+                self.append_char('.');
+                self.append_char(' ');
+
+                if content.len() > 0 {
+                    self.append_descriptives(content);
+                }
+                if responses.len() > 0 {
+                    self.append_responses(responses);
+                }
+                if scopes.len() > 0 {
+                    self.append_char('\n');
+                    self.append_scopes(scopes);
+                }
+            }
+            Step::Parallel {
+                content,
+                responses,
+                scopes,
+            } => {
+                self.append_str(" - ");
+
+                if content.len() > 0 {
+                    self.append_descriptives(content);
+                }
+                if responses.len() > 0 {
+                    self.append_responses(responses);
+                }
+                if scopes.len() > 0 {
+                    self.append_char('\n');
+                    self.append_scopes(scopes);
+                }
+            }
+        }
+    }
+
+    fn append_responses(&mut self, responses: &Vec<Response>) {
+        for response in responses {
+            self.append_char('\'');
+            self.append_str(response.value);
+            self.append_char('\'');
+
+            if let Some(text) = response.condition {
+                self.append_char(' ');
+                self.append_str(text);
+            }
+        }
+    }
+
+    fn append_scopes(&mut self, scopes: &Vec<Scope>) {
+        for scope in scopes {
+            if scope
+                .roles
+                .len()
+                > 0
+            {
+                self.append_attribute(&scope.roles);
+                self.append_char('\n');
+            }
+            self.append_steps(&scope.substeps);
+        }
+    }
+
+    fn append_attribute(&mut self, attributes: &Vec<Attribute>) {
+        for (i, attribute) in attributes
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_str(" + ");
+            }
+            match attribute {
+                Attribute::Role(name) => {
+                    self.append_char('@');
+                    self.append_identifier(name);
+                }
+                Attribute::Place(name) => {
+                    self.append_char('#');
+                    self.append_identifier(name);
+                }
             }
         }
     }
