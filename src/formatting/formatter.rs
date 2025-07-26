@@ -15,6 +15,15 @@ pub fn format(technique: &Technique) -> String {
         }
     }
 
+    if !output
+        .buffer
+        .is_empty()
+        && !output
+            .buffer
+            .ends_with('\n')
+    {
+        output.append_char('\n');
+    }
     output.buffer
 }
 
