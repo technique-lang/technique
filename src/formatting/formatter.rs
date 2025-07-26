@@ -1,6 +1,6 @@
 //! Code formatter for the Technique language
 
-use technique::language::*;
+use crate::language::*;
 
 pub fn format(technique: &Technique) -> String {
     let mut output = Formatter::new();

@@ -4,8 +4,8 @@ use tracing::debug;
 use tracing_subscriber;
 
 use technique::parsing;
+use technique::formatting;
 
-mod formatter;
 mod rendering;
 
 fn main() {
@@ -118,7 +118,7 @@ fn main() {
             let content = parsing::load(&Path::new(filename));
             let technique = parsing::parse(&content);
 
-            let result = formatter::format(&technique);
+            let result = formatting::format(&technique);
             print!("{}", result);
         }
         Some(("render", submatches)) => {
