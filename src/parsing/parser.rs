@@ -1212,7 +1212,7 @@ impl<'i> Parser<'i> {
         )
     }
 
-    pub fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError<'i>> {
+    pub fn read_descriptive(&mut self) -> Result<Vec<Paragraph<'i>>, ParsingError<'i>> {
         self.take_block_lines(
             |_| true,
             |line| {
@@ -1232,14 +1232,13 @@ impl<'i> Parser<'i> {
                         break;
                     }
 
-                    // Decide container type based on first character
-                    if outer.peek_next_char() == Some('{') {
-                        // Standalone CodeBlock
-                        let code_block = outer.take_paragraph(|parser| parser.read_code_block())?;
-                        results.push(Descriptive::CodeBlock(code_block));
+                    if is_code_block(outer.source) {
+                        // standalone CodeBlock wrapped in a Paragraph
+                        let code_block = outer.read_code_block()?;
+                        results.push(Paragraph(vec![Descriptive::CodeBlock(code_block)]));
                     } else {
                         // Paragraph container
-                        let paragraph_content = outer.take_paragraph(|parser| {
+                        let descriptives = outer.take_paragraph(|parser| {
                             let mut content = vec![];
 
                             while let Some(c) = parser.peek_next_char() {
@@ -1291,8 +1290,8 @@ impl<'i> Parser<'i> {
                             Ok(content)
                         })?;
 
-                        if !paragraph_content.is_empty() {
-                            results.push(Descriptive::Paragraph(paragraph_content));
+                        if !descriptives.is_empty() {
+                            results.push(Paragraph(descriptives));
                         }
                     }
                 }
@@ -1539,7 +1538,7 @@ impl<'i> Parser<'i> {
                 // treat it as (the only) parallel step.
                 let code_block = self.read_code_block()?;
                 let step = Step::Parallel {
-                    content: vec![Descriptive::CodeBlock(code_block)],
+                    content: vec![Paragraph(vec![Descriptive::CodeBlock(code_block)])],
                     responses: vec![],
                     scopes: vec![],
                 };
@@ -2276,9 +2275,7 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First step"
-                )])],
+                content: vec![Paragraph(vec![Descriptive::Text("First step")])],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2295,7 +2292,7 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                content: vec![Paragraph(vec![Descriptive::Text(
                     "a top-level task to be one in parallel with"
                 )]),],
                 responses: vec![],
@@ -2306,9 +2303,7 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "another top-level task"
-                )]),],
+                content: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2325,7 +2320,7 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                content: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
                 responses: vec![],
@@ -2350,9 +2345,7 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "a",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First subordinate task"
-                )])],
+                content: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2364,9 +2357,7 @@ mod check {
         assert_eq!(
             result,
             Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "Parallel task"
-                )])],
+                content: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2390,24 +2381,20 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                content: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
                     attributes: vec![],
                     substeps: vec![
                         Step::Dependent {
                             ordinal: "a",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "First substep"
-                            )])],
+                            content: vec![Paragraph(vec![Descriptive::Text("First substep")])],
                             responses: vec![],
                             scopes: vec![],
                         },
                         Step::Dependent {
                             ordinal: "b",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Second substep"
-                            )])],
+                            content: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
                             responses: vec![],
                             scopes: vec![],
                         },
@@ -2434,22 +2421,18 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                content: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
                     attributes: vec![],
                     substeps: vec![
                         Step::Parallel {
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "First substep"
-                            )])],
+                            content: vec![Paragraph(vec![Descriptive::Text("First substep")])],
                             responses: vec![],
                             scopes: vec![],
                         },
                         Step::Parallel {
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Second substep"
-                            )])],
+                            content: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
                             responses: vec![],
                             scopes: vec![],
                         },
@@ -2477,15 +2460,13 @@ mod check {
             first_result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First step"
-                )])],
+                content: vec![Paragraph(vec![Descriptive::Text("First step")])],
                 responses: vec![],
                 scopes: vec![Scope {
                     attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Substep")])],
+                        content: vec![Paragraph(vec![Descriptive::Text("Substep")])],
                         responses: vec![],
                         scopes: vec![],
                     }],
@@ -2497,9 +2478,7 @@ mod check {
             second_result,
             Ok(Step::Dependent {
                 ordinal: "2",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "Second step"
-                )])],
+                content: vec![Paragraph(vec![Descriptive::Text("Second step")])],
                 responses: vec![],
                 scopes: vec![],
             })
@@ -2550,7 +2529,7 @@ mod check {
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                content: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
                 responses: vec![],
@@ -2558,7 +2537,7 @@ mod check {
                     attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        content: vec![Paragraph(vec![Descriptive::Text(
                             "Do the first thing. Then ask yourself if you are done:"
                         )])],
                         responses: vec![
@@ -3500,7 +3479,7 @@ echo test
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    &[Descriptive::Paragraph(vec![Descriptive::Text(
+                    &[Paragraph(vec![Descriptive::Text(
                         "Check the patient's vital signs"
                     )])]
                 );
@@ -3541,7 +3520,7 @@ echo test
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Verify patient identity"
                     )])]
                 );
@@ -3586,9 +3565,7 @@ echo test
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Monitor patient vitals"
-                    )])]
+                    vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])]
                 );
                 assert_eq!(responses, vec![]);
                 assert_eq!(scopes.len(), 1);

@@ -115,7 +115,7 @@ second : [Thing] -> (Who, Where, Why)
                 elements: vec![Element::Steps(vec![
                     Step::Dependent {
                         ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        content: vec![Paragraph(vec![Descriptive::Text(
                             "Eat breakfast.",
                         )])],
                         responses: vec![],
@@ -123,7 +123,7 @@ second : [Thing] -> (Who, Where, Why)
                     },
                     Step::Dependent {
                         ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        content: vec![Paragraph(vec![Descriptive::Text(
                             "Win a stage:",
                         )])],
                         responses: vec![],
@@ -132,7 +132,7 @@ second : [Thing] -> (Who, Where, Why)
                             substeps: vec![
                                 Step::Dependent {
                                     ordinal: "a",
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                    content: vec![Paragraph(vec![Descriptive::Text(
                                         "Ride really fast, then",
                                     )])],
                                     responses: vec![],
@@ -140,7 +140,7 @@ second : [Thing] -> (Who, Where, Why)
                                 },
                                 Step::Dependent {
                                     ordinal: "b",
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                    content: vec![Paragraph(vec![Descriptive::Text(
                                         "Win the sprint.",
                                     )])],
                                     responses: vec![],
@@ -151,7 +151,7 @@ second : [Thing] -> (Who, Where, Why)
                     },
                     Step::Dependent {
                         ordinal: "3",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        content: vec![Paragraph(vec![Descriptive::Text(
                             "Eat dinner.",
                         )])],
                         responses: vec![],

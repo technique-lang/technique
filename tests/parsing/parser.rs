@@ -164,13 +164,13 @@ This is the first one.
                 }),
                 elements: vec![
                     Element::Title("The First"),
-                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
                         "This is the first one."
                     )])]),
                     Element::Steps(vec![
                         Step::Dependent {
                             ordinal: "1",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the first thing in the first one."
                             )])],
                             responses: vec![],
@@ -178,7 +178,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "2",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
                             responses: vec![],
@@ -219,13 +219,13 @@ This is the first one.
                 }),
                 elements: vec![
                     Element::Title("The First"),
-                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
                         "This is the first one."
                     )])]),
                     Element::Steps(vec![
                         Step::Dependent {
                             ordinal: "1",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
                             responses: vec![
@@ -242,7 +242,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "2",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
                             responses: vec![],
@@ -284,13 +284,13 @@ This is the first one.
                 }),
                 elements: vec![
                     Element::Title("The First"),
-                    Element::Description(vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
                         "This is the first one."
                     )])]),
                     Element::Steps(vec![
                         Step::Dependent {
                             ordinal: "1",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
                             responses: vec![],
@@ -298,7 +298,7 @@ This is the first one.
                                 attributes: vec![],
                                 substeps: vec![Step::Dependent {
                                     ordinal: "a",
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                    content: vec![Paragraph(vec![Descriptive::Text(
                                         "Do the first thing. Then ask yourself if you are done:"
                                     )])],
                                     responses: vec![
@@ -317,7 +317,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "2",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
                             responses: vec![],
@@ -369,7 +369,7 @@ This is the first one.
                     Element::Steps(vec![
                         Step::Dependent {
                             ordinal: "1",
-                            content: vec![Descriptive::Paragraph(vec![
+                            content: vec![Paragraph(vec![
                                 Descriptive::Text(
                                     "Has the patient confirmed his/her identity, site, procedure,"
                                 ),
@@ -383,7 +383,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "2",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the site marked?"
                             )])],
                             responses: vec![
@@ -400,7 +400,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "3",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the anaesthesia machine and medication check complete?"
                             )])],
                             responses: vec![Response {
@@ -411,7 +411,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "4",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the pulse oximeter on the patient and functioning?"
                             )])],
                             responses: vec![Response {
@@ -422,7 +422,7 @@ This is the first one.
                         },
                         Step::Dependent {
                             ordinal: "5",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            content: vec![Paragraph(vec![Descriptive::Text(
                                 "Does the patient have a:"
                             )])],
                             responses: vec![],
@@ -430,7 +430,7 @@ This is the first one.
                                 attributes: vec![],
                                 substeps: vec![
                                     Step::Parallel {
-                                        content: vec![Descriptive::Paragraph(vec![
+                                        content: vec![Paragraph(vec![
                                             Descriptive::Text("Known allergy?")
                                         ])],
                                         responses: vec![
@@ -446,7 +446,7 @@ This is the first one.
                                         scopes: vec![],
                                     },
                                     Step::Parallel {
-                                        content: vec![Descriptive::Paragraph(vec![
+                                        content: vec![Paragraph(vec![
                                             Descriptive::Text(
                                                 "Difficult airway or aspiration risk?"
                                             )
@@ -466,7 +466,7 @@ This is the first one.
                                         scopes: vec![],
                                     },
                                     Step::Parallel {
-                                        content: vec![Descriptive::Paragraph(vec![
+                                        content: vec![Paragraph(vec![
                                             Descriptive::Text("Risk of blood loss > 500 mL?")
                                         ])],
                                         responses: vec![
@@ -517,7 +517,7 @@ label_the_specimens :
                 signature: None,
                 elements: vec![Element::Steps(vec![Step::Dependent {
                     ordinal: "1",
-                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    content: vec![Paragraph(vec![Descriptive::Text(
                         "Specimen labelling"
                     )])],
                     responses: vec![],
@@ -526,14 +526,14 @@ label_the_specimens :
                             attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                             substeps: vec![
                                 Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                    content: vec![Paragraph(vec![Descriptive::Text(
                                         "Label blood tests"
                                     )])],
                                     responses: vec![],
                                     scopes: vec![],
                                 },
                                 Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                    content: vec![Paragraph(vec![Descriptive::Text(
                                         "Label tissue samples"
                                     )])],
                                     responses: vec![],
@@ -545,7 +545,7 @@ label_the_specimens :
                             attributes: vec![Attribute::Role(Identifier("admin_staff"))],
                             substeps: vec![Step::Dependent {
                                 ordinal: "a",
-                                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                content: vec![Paragraph(vec![Descriptive::Text(
                                     "Prepare the envelopes"
                                 )])],
                                 responses: vec![],
@@ -602,7 +602,7 @@ before_leaving :
                     Step::Dependent {
                         ordinal: "1",
                         content: vec![
-                            Descriptive::Paragraph(vec![Descriptive::Text("Verbally confirm:")])
+                            Paragraph(vec![Descriptive::Text("Verbally confirm:")])
                         ],
                         responses: vec![],
                         scopes: vec![
@@ -611,20 +611,20 @@ before_leaving :
                                 substeps: vec![
                                     Step::Parallel {
                                         content: vec![
-                                            Descriptive::Paragraph(vec![Descriptive::Text("The name of the surgical procedure(s).")])
+                                            Paragraph(vec![Descriptive::Text("The name of the surgical procedure(s).")])
                                         ],
                                         responses: vec![],
                                         scopes: vec![],
                                     },
                                     Step::Parallel {
                                         content: vec![
-                                            Descriptive::Paragraph(vec![Descriptive::Text("Completion of instrument, sponge, and needle counts.")])
+                                            Paragraph(vec![Descriptive::Text("Completion of instrument, sponge, and needle counts.")])
                                         ],
                                         responses: vec![],
                                         scopes: vec![],
                                     },
                                     Step::Parallel {
-                                        content: vec![Descriptive::Paragraph(vec![
+                                        content: vec![Paragraph(vec![
                                             Descriptive::Text("Specimen labelling"),
                                             Descriptive::CodeBlock(Expression::Foreach(
                                                 vec![Identifier("specimen")],
@@ -642,7 +642,7 @@ before_leaving :
                                     Step::Dependent {
                                         ordinal: "a",
                                         content: vec![
-                                            Descriptive::Paragraph(vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("Read specimen labels aloud, including patient"),
                                                 Descriptive::Text("name.")
                                             ])
@@ -653,7 +653,7 @@ before_leaving :
                                             substeps: vec![
                                                 Step::Parallel {
                                                     content: vec![
-                                                        Descriptive::Paragraph(vec![Descriptive::Text("Whether there are any equipment problems to be addressed.")])
+                                                        Paragraph(vec![Descriptive::Text("Whether there are any equipment problems to be addressed.")])
                                                     ],
                                                     responses: vec![],
                                                     scopes: vec![],
@@ -668,7 +668,7 @@ before_leaving :
                     Step::Dependent {
                         ordinal: "2",
                         content: vec![
-                            Descriptive::Paragraph(vec![Descriptive::Text("Post-operative care:")])
+                            Paragraph(vec![Descriptive::Text("Post-operative care:")])
                         ],
                         responses: vec![],
                         scopes: vec![
@@ -678,7 +678,7 @@ before_leaving :
                                     Step::Dependent {
                                         ordinal: "a",
                                         content: vec![
-                                            Descriptive::Paragraph(vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
@@ -694,7 +694,7 @@ before_leaving :
                                     Step::Dependent {
                                         ordinal: "b",
                                         content: vec![
-                                            Descriptive::Paragraph(vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
@@ -710,7 +710,7 @@ before_leaving :
                                     Step::Dependent {
                                         ordinal: "c",
                                         content: vec![
-                                            Descriptive::Paragraph(vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
@@ -760,7 +760,7 @@ before_leaving :
                 assert_eq!(ordinal, "5");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Review anticipated critical events."
                     )])]
                 );
@@ -842,7 +842,7 @@ before_leaving :
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Review surgical procedure"
                     )])]
                 );
@@ -923,7 +923,7 @@ before_leaving :
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Emergency response"
                     )])]
                 );
@@ -958,7 +958,7 @@ before_leaving :
                     assert_eq!(ordinal, &"a");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "Assess situation"
                         )])]
                     );
@@ -976,7 +976,7 @@ before_leaving :
                     assert_eq!(ordinal, &"b");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "Coordinate response"
                         )])]
                     );
@@ -995,7 +995,7 @@ before_leaving :
                     if let Step::Parallel { content, .. } = &scopes[0].substeps[0] {
                         assert_eq!(
                             content,
-                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            &vec![Paragraph(vec![Descriptive::Text(
                                 "Monitor communications"
                             )])]
                         );
@@ -1004,7 +1004,7 @@ before_leaving :
                     if let Step::Parallel { content, .. } = &scopes[0].substeps[1] {
                         assert_eq!(
                             content,
-                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            &vec![Paragraph(vec![Descriptive::Text(
                                 "Track resources"
                             )])]
                         );
@@ -1022,7 +1022,7 @@ before_leaving :
                     assert_eq!(ordinal, &"c");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "File report"
                         )])]
                     );
@@ -1050,13 +1050,13 @@ before_leaving :
             result,
             Ok(Step::Dependent {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                content: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
                     attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        content: vec![Paragraph(vec![Descriptive::Text(
                             "Substep with response"
                         )])],
                         responses: vec![
@@ -1085,7 +1085,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![Descriptive::Binding(
+            Ok(vec![Paragraph(vec![Descriptive::Binding(
                 Box::new(Descriptive::Text("What is the result?")),
                 vec![Identifier("answer")]
             )])])
@@ -1097,7 +1097,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![
+            Ok(vec![Paragraph(vec![
                 Descriptive::Binding(
                     Box::new(Descriptive::Text("Enter your name")),
                     vec![Identifier("name")]
@@ -1114,7 +1114,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![
+            Ok(vec![Paragraph(vec![
                 Descriptive::Text("First"),
                 Descriptive::Binding(
                     Box::new(Descriptive::Application(Invocation {
@@ -1158,7 +1158,7 @@ before_leaving :
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Perform procedure"
                     )])]
                 );
@@ -1186,7 +1186,7 @@ before_leaving :
                     assert_eq!(ordinal, &"a");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "Make initial incision"
                         )])]
                     );
@@ -1199,7 +1199,7 @@ before_leaving :
                     assert_eq!(ordinal, &"b");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "Locate target area"
                         )])]
                     );
@@ -1212,7 +1212,7 @@ before_leaving :
                     assert_eq!(ordinal, &"c");
                     assert_eq!(
                         content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                        &vec![Paragraph(vec![Descriptive::Text(
                             "Complete procedure"
                         )])]
                     );

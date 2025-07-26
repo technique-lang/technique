@@ -30,7 +30,7 @@ impl Default for Metadata<'_> {
 #[derive(Eq, Debug, PartialEq)]
 pub enum Element<'i> {
     Title(&'i str),
-    Description(Vec<Descriptive<'i>>),
+    Description(Vec<Paragraph<'i>>),
     Steps(Vec<Step<'i>>),
     CodeBlock(Expression<'i>),
 }
@@ -92,12 +92,14 @@ pub struct Invocation<'i> {
 // types for descriptive content
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct Paragraph<'i>(pub Vec<Descriptive<'i>>);
+
+#[derive(Eq, Debug, PartialEq)]
 pub enum Descriptive<'i> {
     Text(&'i str),
     CodeBlock(Expression<'i>),
     Application(Invocation<'i>),
     Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
-    Paragraph(Vec<Descriptive<'i>>),
 }
 
 // types for Steps within procedures
@@ -112,12 +114,12 @@ pub struct Scope<'i> {
 pub enum Step<'i> {
     Dependent {
         ordinal: &'i str,
-        content: Vec<Descriptive<'i>>,
+        content: Vec<Paragraph<'i>>,
         responses: Vec<Response<'i>>,
         scopes: Vec<Scope<'i>>,
     },
     Parallel {
-        content: Vec<Descriptive<'i>>,
+        content: Vec<Paragraph<'i>>,
         responses: Vec<Response<'i>>,
         scopes: Vec<Scope<'i>>,
     },
