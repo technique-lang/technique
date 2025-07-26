@@ -305,7 +305,7 @@ This is the first one.
                         )])],
                         responses: vec![],
                         scopes: vec![Scope {
-                            roles: vec![],
+                            attributes: vec![],
                             substeps: vec![Step::Dependent {
                                 ordinal: "a",
                                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -437,7 +437,7 @@ This is the first one.
                         )])],
                         responses: vec![],
                         scopes: vec![Scope {
-                            roles: vec![],
+                            attributes: vec![],
                             substeps: vec![
                                 Step::Parallel {
                                     content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -531,7 +531,7 @@ label_the_specimens :
                     responses: vec![],
                     scopes: vec![
                         Scope {
-                            roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                            attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                             substeps: vec![
                                 Step::Parallel {
                                     content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -550,7 +550,7 @@ label_the_specimens :
                             ]
                         },
                         Scope {
-                            roles: vec![Attribute::Role(Identifier("admin_staff"))],
+                            attributes: vec![Attribute::Role(Identifier("admin_staff"))],
                             substeps: vec![Step::Dependent {
                                 ordinal: "a",
                                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -616,7 +616,7 @@ before_leaving :
                         responses: vec![],
                         scopes: vec![
                             Scope {
-                                roles: vec![],
+                                attributes: vec![],
                                 substeps: vec![
                                     Step::Parallel {
                                         content: vec![
@@ -646,7 +646,7 @@ before_leaving :
                                 ]
                             },
                             Scope {
-                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                                 substeps: vec![
                                     Step::Dependent {
                                         ordinal: "a",
@@ -658,7 +658,7 @@ before_leaving :
                                         ],
                                         responses: vec![],
                                         scopes: vec![Scope {
-                                            roles: vec![],
+                                            attributes: vec![],
                                             substeps: vec![
                                                 Step::Parallel {
                                                     content: vec![
@@ -682,7 +682,7 @@ before_leaving :
                         responses: vec![],
                         scopes: vec![
                             Scope {
-                                roles: vec![Attribute::Role(Identifier("surgeon"))],
+                                attributes: vec![Attribute::Role(Identifier("surgeon"))],
                                 substeps: vec![
                                     Step::Dependent {
                                         ordinal: "a",
@@ -698,7 +698,7 @@ before_leaving :
                                 ]
                             },
                             Scope {
-                                roles: vec![Attribute::Role(Identifier("anesthetist"))],
+                                attributes: vec![Attribute::Role(Identifier("anesthetist"))],
                                 substeps: vec![
                                     Step::Dependent {
                                         ordinal: "b",
@@ -714,7 +714,7 @@ before_leaving :
                                 ]
                             },
                             Scope {
-                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
+                                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                                 substeps: vec![
                                     Step::Dependent {
                                         ordinal: "c",
@@ -778,7 +778,7 @@ before_leaving :
 
                 // Check that the first scope has surgeon role
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("surgeon"))]
                 );
                 assert_eq!(
@@ -790,7 +790,7 @@ before_leaving :
 
                 // Check that the second scope has anaesthetist role
                 assert_eq!(
-                    scopes[1].roles,
+                    scopes[1].attributes,
                     vec![Attribute::Role(Identifier("anaesthetist"))]
                 );
                 assert_eq!(
@@ -802,7 +802,7 @@ before_leaving :
 
                 // Check that the third scope has nursing_team role
                 assert_eq!(
-                    scopes[2].roles,
+                    scopes[2].attributes,
                     vec![Attribute::Role(Identifier("nursing_team"))]
                 );
                 assert_eq!(
@@ -859,7 +859,7 @@ before_leaving :
 
                 // Check surgeon scope (3 dependent substeps)
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("surgeon"))]
                 );
                 assert_eq!(
@@ -871,7 +871,7 @@ before_leaving :
 
                 // Check anaesthetist scope (2 dependent substeps)
                 assert_eq!(
-                    scopes[1].roles,
+                    scopes[1].attributes,
                     vec![Attribute::Role(Identifier("anaesthetist"))]
                 );
                 assert_eq!(
@@ -883,7 +883,7 @@ before_leaving :
 
                 // Check nursing_team scope (3 dependent substeps)
                 assert_eq!(
-                    scopes[2].roles,
+                    scopes[2].attributes,
                     vec![Attribute::Role(Identifier("nursing_team"))]
                 );
                 assert_eq!(
@@ -940,7 +940,7 @@ before_leaving :
 
                 // Check team_lead scope
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("team_lead"))]
                 );
                 assert_eq!(
@@ -1061,7 +1061,7 @@ before_leaving :
                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
-                    roles: vec![],
+                    attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
                         content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -1175,7 +1175,7 @@ before_leaving :
 
                 // Check that the scope has the surgeon role
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("surgeon"))]
                 );
 

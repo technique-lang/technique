@@ -90,7 +90,7 @@ pub enum Descriptive<'i> {
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Scope<'i> {
-    pub roles: Vec<Attribute<'i>>, // empty for non-role scopes
+    pub attributes: Vec<Attribute<'i>>, // empty for non-role scopes
     pub substeps: Vec<Step<'i>>,
 }
 

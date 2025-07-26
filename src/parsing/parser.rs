@@ -1508,7 +1508,7 @@ impl<'i> Parser<'i> {
                 // If we have accumulated substeps without roles, create a scope for them
                 if !current_substeps.is_empty() && current_roles.is_empty() {
                     scopes.push(Scope {
-                        roles: Vec::new(),
+                        attributes: Vec::new(),
                         substeps: current_substeps,
                     });
                     current_substeps = Vec::new();
@@ -1517,7 +1517,7 @@ impl<'i> Parser<'i> {
                 // If we have accumulated roles and substeps, create a scope for them
                 if !current_roles.is_empty() {
                     scopes.push(Scope {
-                        roles: current_roles,
+                        attributes: current_roles,
                         substeps: current_substeps,
                     });
                     current_substeps = Vec::new();
@@ -1550,7 +1550,7 @@ impl<'i> Parser<'i> {
         // Handle any remaining roles and substeps
         if !current_roles.is_empty() || !current_substeps.is_empty() {
             scopes.push(Scope {
-                roles: current_roles,
+                attributes: current_roles,
                 substeps: current_substeps,
             });
         }
@@ -2391,7 +2391,7 @@ mod check {
                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
-                    roles: vec![],
+                    attributes: vec![],
                     substeps: vec![
                         Step::Dependent {
                             ordinal: "a",
@@ -2435,7 +2435,7 @@ mod check {
                 content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
                 scopes: vec![Scope {
-                    roles: vec![],
+                    attributes: vec![],
                     substeps: vec![
                         Step::Parallel {
                             content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -2480,7 +2480,7 @@ mod check {
                 )])],
                 responses: vec![],
                 scopes: vec![Scope {
-                    roles: vec![],
+                    attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
                         content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Substep")])],
@@ -2553,7 +2553,7 @@ mod check {
                 )])],
                 responses: vec![],
                 scopes: vec![Scope {
-                    roles: vec![],
+                    attributes: vec![],
                     substeps: vec![Step::Dependent {
                         ordinal: "a",
                         content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
@@ -3499,7 +3499,7 @@ echo test
                 assert_eq!(
                     scopes,
                     vec![Scope {
-                        roles: vec![Attribute::Role(Identifier("nurse"))],
+                        attributes: vec![Attribute::Role(Identifier("nurse"))],
                         substeps: vec![],
                     }]
                 );
@@ -3539,7 +3539,7 @@ echo test
                 assert_eq!(responses, vec![]);
                 assert_eq!(scopes.len(), 1);
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("surgeon"))]
                 );
                 assert_eq!(
@@ -3584,7 +3584,7 @@ echo test
                 assert_eq!(responses, vec![]);
                 assert_eq!(scopes.len(), 1);
                 assert_eq!(
-                    scopes[0].roles,
+                    scopes[0].attributes,
                     vec![Attribute::Role(Identifier("nursing_team"))]
                 );
                 assert_eq!(
@@ -3618,7 +3618,7 @@ echo test
                 if let Step::Dependent { scopes, .. } = step {
                     assert_eq!(scopes.len(), 1);
                     assert_eq!(
-                        scopes[0].roles,
+                        scopes[0].attributes,
                         vec![Attribute::Role(Identifier("surgeon"))]
                     );
                 }
@@ -3654,7 +3654,7 @@ echo test
 
                     // First scope should have surgeon role
                     assert_eq!(
-                        scopes[0].roles,
+                        scopes[0].attributes,
                         vec![Attribute::Role(Identifier("surgeon"))]
                     );
                     assert_eq!(
@@ -3665,7 +3665,7 @@ echo test
                     );
 
                     // Second scope should have nurse role
-                    assert_eq!(scopes[1].roles, vec![Attribute::Role(Identifier("nurse"))]);
+                    assert_eq!(scopes[1].attributes, vec![Attribute::Role(Identifier("nurse"))]);
                     assert_eq!(
                         scopes[1]
                             .substeps
