@@ -100,4 +100,114 @@ second : [Thing] -> (Who, Where, Why)
             )
         );
     }
+
+    #[test]
+    fn steps_and_substeps() {
+        let technique = Technique {
+            header: None,
+            body: Some(vec![Procedure {
+                name: Identifier("win_le_tour"),
+                parameters: None,
+                signature: Some(Signature {
+                    domain: Genus::Single(Forma("Bicycle")),
+                    range: Genus::Single(Forma("YellowJersey")),
+                }),
+                elements: vec![Element::Steps(vec![
+                    Step::Dependent {
+                        ordinal: "1",
+                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Eat breakfast.",
+                        )])],
+                        responses: vec![],
+                        scopes: vec![],
+                    },
+                    Step::Dependent {
+                        ordinal: "2",
+                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Win a stage:",
+                        )])],
+                        responses: vec![],
+                        scopes: vec![Scope {
+                            attributes: vec![],
+                            substeps: vec![
+                                Step::Dependent {
+                                    ordinal: "a",
+                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                        "Ride really fast, then",
+                                    )])],
+                                    responses: vec![],
+                                    scopes: vec![],
+                                },
+                                Step::Dependent {
+                                    ordinal: "b",
+                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                        "Win the sprint.",
+                                    )])],
+                                    responses: vec![],
+                                    scopes: vec![],
+                                },
+                            ],
+                        }],
+                    },
+                    Step::Dependent {
+                        ordinal: "3",
+                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            "Eat dinner.",
+                        )])],
+                        responses: vec![],
+                        scopes: vec![],
+                    },
+                ])],
+            }]),
+        };
+
+        let result = format(&technique);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+win_le_tour : Bicycle -> YellowJersey
+
+    1.  Eat breakfast.
+    2.  Win a stage:
+        a.  Ride really fast, then
+        b.  Win the sprint.
+    3.  Eat dinner.
+                "#
+            )
+        );
+    }
+
+    #[test]
+    fn code_blocks() {
+        let technique = Technique {
+            header: None,
+            body: Some(vec![Procedure {
+                name: Identifier("vibe_coding"),
+                parameters: None,
+                signature: None,
+                elements: vec![Element::CodeBlock(Expression::Execution(Function {
+                    target: Identifier("exec"),
+                    parameters: vec![Expression::Multiline(Some("bash"), vec!["rm -rf /"])],
+                }))],
+            }]),
+        };
+
+        let result = format(&technique);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+vibe_coding :
+{
+    exec(
+    ```bash
+        rm -rf /
+    ```
+    )
+}
+                "#
+            )
+        );
+    }
 }

@@ -305,8 +305,10 @@ impl Formatter {
                     self.append_descriptives(content);
                 }
                 if responses.len() > 0 {
+                    self.indent();
                     self.append_responses(responses);
                 }
+
                 if scopes.len() > 0 {
                     self.append_char('\n');
                     self.append_scopes(scopes);
@@ -319,7 +321,8 @@ impl Formatter {
                 responses,
                 scopes,
             } => {
-                self.append_str(" - ");
+                self.indent();
+                self.append_str("-   ");
 
                 self.increase(4);
 
@@ -327,20 +330,31 @@ impl Formatter {
                     self.append_descriptives(content);
                 }
                 if responses.len() > 0 {
+                    self.indent();
                     self.append_responses(responses);
+                    if scopes.len() > 0 {
+                        self.append_char('\n');
+                    }
                 }
+
                 if scopes.len() > 0 {
-                    self.append_char('\n');
                     self.append_scopes(scopes);
                 }
 
                 self.decrease(4);
+                self.append_char('\n');
             }
         }
     }
 
     fn append_responses(&mut self, responses: &Vec<Response>) {
-        for response in responses {
+        for (i, response) in responses
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_str(" | ");
+            }
             self.append_char('\'');
             self.append_str(response.value);
             self.append_char('\'');
@@ -520,6 +534,7 @@ impl Formatter {
             }
             self.append_expression(parameter);
         }
+        self.indent();
         self.append_char(')');
     }
 
