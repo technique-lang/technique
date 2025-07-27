@@ -1224,6 +1224,7 @@ impl<'i> Parser<'i> {
                     || is_subsubstep_dependent(line)
                     || is_role_assignment(line)
                     || is_enum_response(line)
+                    || is_code_block(line)
             },
             |outer| {
                 let mut results = vec![];
@@ -1495,7 +1496,8 @@ impl<'i> Parser<'i> {
         })
     }
 
-    /// Parse scopes - role assignments with their substeps
+    /// Parse role assignments, substeps, and code blocks, crucially with all
+    /// of their subscopes also parsed.
     fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError<'i>> {
         let mut scopes = Vec::new();
 
@@ -1507,37 +1509,64 @@ impl<'i> Parser<'i> {
 
             let content = self.source;
 
-            // TODO this logic probably needs review
-
             if is_role_assignment(content) {
-                let attributes = self.read_role_assignments()?;
-                let block = Scope::AttributeBlock {
-                    attributes,
-                    subscopes: vec![],
-                };
+                let block = self.read_attribute_scope()?;
                 scopes.push(block);
-                if is_substep_dependent(content) {
-                    let substep = self.read_substep_dependent()?;
-                    scopes.push(substep);
-                } else if is_substep_parallel(content) {
-                    let substep = self.read_substep_parallel()?;
-                    scopes.push(substep);
-                } else if is_code_block(content) {
-                    // As with procedures as a whole, code blocks can be the
-                    // entire content of a scope or step. If it is here, then
-                    // treat it as (the only) parallel step.
-                    let code = self.read_code_block()?;
-                    let block = Scope::CodeBlock {
-                        expression: code,
-                        subscopes: vec![],
-                    };
-                    scopes.push(block);
-                } else {
-                    break;
-                }
+            } else if is_substep_dependent(content) {
+                let block = self.read_substep_dependent()?;
+                scopes.push(block);
+            } else if is_substep_parallel(content) {
+                let block = self.read_substep_parallel()?;
+                scopes.push(block);
+            } else if is_step_dependent(content) {
+                let block = self.read_step_dependent()?;
+                scopes.push(block);
+            } else if is_step_parallel(content) {
+                let block = self.read_step_parallel()?;
+                scopes.push(block);
+            } else if is_code_block(content) {
+                let block = self.read_code_scope()?;
+                scopes.push(block);
+            } else {
+                break;
             }
         }
         Ok(scopes)
+    }
+
+    /// Parse an attribute block (role assignment) with its subscopes
+    fn read_attribute_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_role_assignment, is_role_assignment, |outer| {
+            let attributes = outer.read_role_assignments()?;
+            let subscopes = outer.read_scopes()?;
+
+            Ok(Scope::AttributeBlock {
+                attributes,
+                subscopes,
+            })
+        })
+    }
+
+    /// Parse a code block scope with its subscopes (if any)
+    fn read_code_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(
+            is_code_block,
+            |_line| {
+                // Code blocks consume everything until there's no more content
+                // Since they're already isolated by the parent's take_block_lines,
+                // we should process all remaining content as part of this code block
+                false // Never stop - consume all remaining content
+            },
+            |outer| {
+                let code = outer.read_code_block()?;
+                let subscopes = outer.read_scopes()?;
+
+                Ok(Scope::CodeBlock {
+                    expression: code,
+                    subscopes,
+                })
+            },
+        )
     }
 }
 
