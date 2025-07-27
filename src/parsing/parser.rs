@@ -385,7 +385,7 @@ impl<'i> Parser<'i> {
         let mut results = Vec::new();
 
         for chunk in content.split(delimiter) {
-            let trimmed = chunk.trim();
+            let trimmed = chunk.trim_ascii();
             if trimmed.is_empty() {
                 return Err(ParsingError::Expected(
                     self.offset,
@@ -636,14 +636,14 @@ impl<'i> Parser<'i> {
             if !list.ends_with(')') {
                 return Err(ParsingError::InvalidDeclaration(self.offset));
             }
-            let list = &list[..list.len() - 1].trim();
+            let list = &list[..list.len() - 1].trim_ascii();
 
             let parameters = if list.is_empty() {
                 None
             } else {
                 let mut params = Vec::new();
                 for item in list.split(',') {
-                    let param = validate_identifier(item.trim())
+                    let param = validate_identifier(item.trim_ascii())
                         .ok_or(ParsingError::Unrecognized(self.offset))?;
                     params.push(param);
                 }
@@ -674,7 +674,7 @@ impl<'i> Parser<'i> {
         self.trim_whitespace();
 
         if self.peek_next_char() == Some('#') {
-            let title = self.source[1..].trim();
+            let title = self.source[1..].trim_ascii();
             Ok(title)
         } else {
             // we shouldn't have invoked this unless we have a title to parse!
@@ -703,7 +703,7 @@ impl<'i> Parser<'i> {
                     if is_procedure_title(content) {
                         let title = outer.take_block_lines(
                             |line| {
-                                line.trim_start()
+                                line.trim_ascii_start()
                                     .starts_with('#')
                             },
                             |line| !line.starts_with('#'),
@@ -775,7 +775,7 @@ impl<'i> Parser<'i> {
         self.trim_whitespace();
         let content = self
             .source
-            .trim_start();
+            .trim_ascii_start();
 
         if is_binding(content) {
             self.read_binding_expression()
@@ -1273,7 +1273,7 @@ impl<'i> Parser<'i> {
                                         parser.take_until(&['{', '<', '~', '\n'], |inner| {
                                             Ok(inner
                                                 .source
-                                                .trim())
+                                                .trim_ascii())
                                         })?;
                                     if text.is_empty() {
                                         continue;
@@ -1325,7 +1325,7 @@ impl<'i> Parser<'i> {
         }
 
         // Extract language hint from first line if present
-        let first = lines[0].trim();
+        let first = lines[0].trim_ascii();
         let lang = if !first.is_empty() { Some(first) } else { None };
         lines.remove(0);
 
@@ -1334,7 +1334,7 @@ impl<'i> Parser<'i> {
         // We let the indentation of the first line govern the rest of the block
         let indent = second.len()
             - second
-                .trim_start()
+                .trim_ascii_start()
                 .len();
 
         // Trim consistent leading whitespace while preserving internal indentation
@@ -1350,7 +1350,7 @@ impl<'i> Parser<'i> {
             // would have truncated the user's text. That's not allowed!
             let (before, after) = line.split_at(i);
             if !before
-                .trim()
+                .trim_ascii()
                 .is_empty()
             {
                 return Err(ParsingError::InvalidMultiline(self.offset));
@@ -1478,7 +1478,7 @@ impl<'i> Parser<'i> {
             for part in role_parts {
                 let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
                 let cap = re
-                    .captures(part.trim())
+                    .captures(part.trim_ascii())
                     .ok_or(ParsingError::InvalidStep(inner.offset))?;
 
                 let role_name = cap
@@ -1582,7 +1582,7 @@ fn is_signature(content: &str) -> bool {
 /// the full validation template for Forma but we're only matching, not
 /// capturing, so it is an acceptable duplication.
 fn is_genus(content: &str) -> bool {
-    let content = content.trim();
+    let content = content.trim_ascii();
     if content.is_empty() {
         return false;
     }
@@ -1648,13 +1648,13 @@ fn is_genus(content: &str) -> bool {
 fn is_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
         Some((before, after)) => {
-            let before = before.trim();
-            let after = after.trim();
+            let before = before.trim_ascii();
+            let after = after.trim_ascii();
 
             // Check if the name part is valid
             let has_valid_name = if let Some((name, params)) = before.split_once('(') {
                 // Has parameters: check name is identifier and params end with ')'
-                is_identifier(name.trim()) && params.ends_with(')')
+                is_identifier(name.trim_ascii()) && params.ends_with(')')
             } else {
                 // No parameters: just check if it's an identifier
                 is_identifier(before)
@@ -1677,8 +1677,8 @@ fn is_procedure_declaration(content: &str) -> bool {
                     // First token is a Genus, so we expect a complete signature: Genus -> Genus
                     // Find the arrow and extract domain and range
                     if let Some(i) = after.find("->") {
-                        let domain = after[..i].trim();
-                        let range = after[i + 2..].trim();
+                        let domain = after[..i].trim_ascii();
+                        let range = after[i + 2..].trim_ascii();
 
                         let range = if let Some(j) = range.find('\n') {
                             &range[..j]
@@ -1703,7 +1703,7 @@ fn is_procedure_declaration(content: &str) -> bool {
 
 fn is_procedure_title(content: &str) -> bool {
     content
-        .trim_start()
+        .trim_ascii_start()
         .starts_with('#')
 }
 
@@ -1722,7 +1722,7 @@ fn is_code_block(content: &str) -> bool {
 }
 
 fn is_code_inline(content: &str) -> bool {
-    let content = content.trim_start();
+    let content = content.trim_ascii_start();
     content.starts_with('{')
 }
 
@@ -2683,7 +2683,7 @@ This is the first one.
                 // The remaining content should include ALL steps and substeps
                 let remaining = input
                     .source
-                    .trim_start();
+                    .trim_ascii_start();
                 assert!(remaining.starts_with("1. Have you done"));
                 assert!(remaining.contains("a. Do the first thing"));
                 assert!(remaining.contains("2. Do the second thing"));

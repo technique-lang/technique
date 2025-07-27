@@ -301,7 +301,7 @@ fn parse_tuple(input: &str) -> Option<Genus> {
     let mut formas: Vec<Forma> = Vec::new();
 
     for text in input.split(",") {
-        let text = text.trim();
+        let text = text.trim_ascii();
         let forma = validate_forma(text)?;
         formas.push(forma);
     }
@@ -323,7 +323,7 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
                 return None;
             }
 
-            let content = &input[1..input.len() - 1].trim();
+            let content = &input[1..input.len() - 1].trim_ascii();
 
             if content.is_empty() {
                 return None;
@@ -339,7 +339,7 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
                 return None;
             }
 
-            let content = &input[1..input.len() - 1].trim();
+            let content = &input[1..input.len() - 1].trim_ascii();
 
             if content.is_empty() {
                 return Some(Genus::Unit);
@@ -398,7 +398,7 @@ pub fn validate_numeric(input: &str) -> Option<Numeric> {
         return None;
     }
 
-    let input = input.trim();
+    let input = input.trim_ascii();
 
     // Try to parse as a simple Integral
     if let Ok(amount) = input.parse::<i64>() {
