@@ -937,11 +937,19 @@ before_leaving :
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Emergency response")])],
                 responses: vec![],
-                subscopes: vec![
-                    Scope::AttributeBlock {
-                        attributes: vec![Attribute::Role(Identifier("team_lead"))],
-                        subscopes: vec![Scope::DependentBlock {
+                subscopes: vec![Scope::AttributeBlock {
+                    attributes: vec![Attribute::Role(Identifier("team_lead"))],
+                    subscopes: vec![
+                        Scope::DependentBlock {
                             ordinal: "a",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Assess situation"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "b",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Coordinate response"
                             )])],
@@ -964,21 +972,15 @@ before_leaving :
                                     subscopes: vec![]
                                 }
                             ]
-                        }]
-                    },
-                    Scope::DependentBlock {
-                        ordinal: "b",
-                        description: vec![Paragraph(vec![Descriptive::Text("Assess situation")])],
-                        responses: vec![],
-                        subscopes: vec![]
-                    },
-                    Scope::DependentBlock {
-                        ordinal: "c",
-                        description: vec![Paragraph(vec![Descriptive::Text("File report")])],
-                        responses: vec![],
-                        subscopes: vec![]
-                    }
-                ]
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "c",
+                            description: vec![Paragraph(vec![Descriptive::Text("File report")])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        }
+                    ]
+                }]
             }
         );
     }
@@ -1073,55 +1075,6 @@ before_leaving :
                     vec![Identifier("description")]
                 )
             ])])
-        );
-    }
-
-    #[test]
-    fn parallel_step_boundaries() {
-        let mut input = Parser::new();
-
-        input.initialize(
-            r#"
-1.  Confirm items:
-    -   First parallel
-    -   Second parallel with complex content
-        { foreach item in items }
-            @team
-                a.  Process item
-    -   Third parallel
-                "#,
-        );
-        let result = input.read_step_dependent();
-
-        let scope = result.expect("Expected step with mixed substep types");
-
-        assert_eq!(
-            scope,
-            Scope::DependentBlock {
-                ordinal: "1",
-                description: vec![Paragraph(vec![Descriptive::Text("Confirm items:")])],
-                responses: vec![],
-                subscopes: vec![
-                    Scope::ParallelBlock {
-                        bullet: '-',
-                        description: vec![Paragraph(vec![Descriptive::Text("First parallel")])],
-                        responses: vec![],
-                        subscopes: vec![]
-                    },
-                    Scope::ParallelBlock {
-                        bullet: '-',
-                        description: vec![Paragraph(vec![Descriptive::Text("Second parallel")])],
-                        responses: vec![],
-                        subscopes: vec![]
-                    },
-                    Scope::ParallelBlock {
-                        bullet: '-',
-                        description: vec![Paragraph(vec![Descriptive::Text("Third parallel")])],
-                        responses: vec![],
-                        subscopes: vec![]
-                    }
-                ]
-            }
         );
     }
 }

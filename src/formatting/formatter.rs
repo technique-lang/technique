@@ -381,18 +381,18 @@ impl Formatter {
         for scope in scopes {
             match scope {
                 Scope::DependentBlock {
-                    ordinal,
-                    description,
-                    responses,
-                    subscopes,
+                    ordinal: _,
+                    description: _,
+                    responses: _,
+                    subscopes: _,
                 } => {
                     self.append_step(scope);
                 }
                 Scope::ParallelBlock {
-                    bullet,
-                    description,
-                    responses,
-                    subscopes,
+                    bullet: _,
+                    description: _,
+                    responses: _,
+                    subscopes: _,
                 } => {
                     self.append_step(scope);
                 }
@@ -406,9 +406,7 @@ impl Formatter {
                         // Increase indentation for substeps under role assignments
                         self.increase(4);
                     }
-                    for step in substeps {
-                        self.append_step(step);
-                    }
+                    self.append_scopes(substeps);
                     if attributes.len() > 0 {
                         // Decrease indentation after role assignment substeps
                         self.decrease(4);
@@ -432,9 +430,7 @@ impl Formatter {
 
                     // Format substeps within the code block scope
                     self.increase(4);
-                    for step in substeps {
-                        self.append_step(step);
-                    }
+                    self.append_scopes(substeps);
                     self.decrease(4);
                 }
             }
