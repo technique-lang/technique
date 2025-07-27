@@ -113,52 +113,48 @@ second : [Thing] -> (Who, Where, Why)
                     range: Genus::Single(Forma("YellowJersey")),
                 }),
                 elements: vec![Element::Steps(vec![
-                    Step::Dependent {
+                    Scope::DependentBlock {
                         ordinal: "1",
-                        content: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph(vec![Descriptive::Text(
                             "Eat breakfast.",
                         )])],
                         responses: vec![],
-                        scopes: vec![],
+                        subscopes: vec![],
                     },
-                    Step::Dependent {
+                    Scope::DependentBlock {
                         ordinal: "2",
-                        content: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph(vec![Descriptive::Text(
                             "Win a stage:",
                         )])],
                         responses: vec![],
-                        scopes: vec![Scope {
-                            attributes: vec![],
-                            substeps: vec![
-                                Step::Dependent {
+                        subscopes: vec![Scope::DependentBlock {
                                     ordinal: "a",
-                                    content: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Ride really fast, then",
                                     )])],
                                     responses: vec![],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 },
-                                Step::Dependent {
+                                Scope::DependentBlock {
                                     ordinal: "b",
-                                    content: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Win the sprint.",
                                     )])],
                                     responses: vec![],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 },
                             ],
-                        }],
                     },
-                    Step::Dependent {
+                    Scope::DependentBlock {
                         ordinal: "3",
-                        content: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph(vec![Descriptive::Text(
                             "Eat dinner.",
                         )])],
                         responses: vec![],
-                        scopes: vec![],
+                        subscopes: vec![],
                     },
-                ])],
-            }]),
+                ])]
+            }])
         };
 
         let result = format(&technique);

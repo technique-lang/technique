@@ -132,14 +132,7 @@ impl Formatter {
 
         // elements
 
-        for (i, element) in procedure
-            .elements
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                self.append_char('\n');
-            }
+        for element in &procedure.elements {
             self.append_element(element);
         }
     }
@@ -147,15 +140,18 @@ impl Formatter {
     fn append_element(&mut self, element: &Element) {
         match element {
             Element::Title(title) => {
+                self.append_char('\n');
                 self.append_char('#');
                 self.append_char(' ');
                 self.append_str(title);
                 self.append_char('\n');
             }
-            Element::Description(descriptives) => {
-                self.append_descriptives(descriptives);
+            Element::Description(paragraphs) => {
+                self.append_char('\n');
+                self.append_paragraphs(paragraphs);
             }
             Element::Steps(steps) => {
+                self.append_char('\n');
                 self.append_steps(steps);
             }
             Element::CodeBlock(expression) => {
@@ -228,6 +224,20 @@ impl Formatter {
         self.append_str(forma.0)
     }
 
+    fn append_paragraphs(&mut self, paragraphs: &Vec<Paragraph>) {
+        for (i, paragraph) in paragraphs
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                // Add blank line between paragraphs
+                self.append_char('\n');
+            }
+            self.append_descriptives(&paragraph.0);
+            self.append_char('\n');
+        }
+    }
+
     fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
         for (i, descriptive) in descriptives
             .iter()
@@ -237,6 +247,7 @@ impl Formatter {
             if i > 0 {
                 self.append_char(' ');
             }
+
             self.append_descriptive(descriptive);
         }
     }
@@ -244,7 +255,7 @@ impl Formatter {
     fn append_descriptive(&mut self, descriptive: &Descriptive) {
         match descriptive {
             Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping?
-            Descriptive::CodeBlock(expr) => match expr {
+            Descriptive::CodeInline(expr) => match expr {
                 Expression::Tablet(_) => {
                     self.append_char('{');
                     self.append_char('\n');
@@ -271,14 +282,10 @@ impl Formatter {
                 self.append_str(" ~ ");
                 self.append_variables(variables);
             }
-            Descriptive::Paragraph(descriptives) => {
-                self.append_descriptives(descriptives);
-                self.append_char('\n');
-            }
         }
     }
 
-    fn append_steps(&mut self, steps: &Vec<Step>) {
+    fn append_steps(&mut self, steps: &Vec<Scope>) {
         self.increase(4);
         for step in steps {
             self.append_step(step);
@@ -286,23 +293,26 @@ impl Formatter {
         self.decrease(4);
     }
 
-    fn append_step(&mut self, step: &Step) {
+    fn append_step(&mut self, step: &Scope) {
         match step {
-            Step::Dependent {
+            Scope::DependentBlock {
                 ordinal,
-                content,
+                description: content,
                 responses,
-                scopes,
+                subscopes: scopes,
             } => {
                 self.indent();
                 self.append_str(ordinal);
                 self.append_char('.');
                 self.append_char(' ');
+                if ordinal.len() == 1 {
+                    self.append_char(' ');
+                }
 
                 self.increase(4);
 
                 if content.len() > 0 {
-                    self.append_descriptives(content);
+                    self.append_paragraphs(content);
                 }
                 if responses.len() > 0 {
                     self.indent();
@@ -310,40 +320,40 @@ impl Formatter {
                 }
 
                 if scopes.len() > 0 {
-                    self.append_char('\n');
                     self.append_scopes(scopes);
                 }
 
                 self.decrease(4);
             }
-            Step::Parallel {
-                content,
+            Scope::ParallelBlock {
+                bullet,
+                description,
                 responses,
-                scopes,
+                subscopes,
             } => {
                 self.indent();
-                self.append_str("-   ");
+                self.append_char(*bullet);
+                self.append_char(' ');
+                self.append_char(' ');
+                self.append_char(' ');
 
                 self.increase(4);
 
-                if content.len() > 0 {
-                    self.append_descriptives(content);
+                if description.len() > 0 {
+                    self.append_paragraphs(description);
                 }
                 if responses.len() > 0 {
                     self.indent();
                     self.append_responses(responses);
-                    if scopes.len() > 0 {
-                        self.append_char('\n');
-                    }
                 }
 
-                if scopes.len() > 0 {
-                    self.append_scopes(scopes);
+                if subscopes.len() > 0 {
+                    self.append_scopes(subscopes);
                 }
 
                 self.decrease(4);
-                self.append_char('\n');
             }
+            _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
     }
 
@@ -364,20 +374,69 @@ impl Formatter {
                 self.append_str(text);
             }
         }
+        self.append_char('\n');
     }
 
     fn append_scopes(&mut self, scopes: &Vec<Scope>) {
         for scope in scopes {
-            if scope
-                .attributes
-                .len()
-                > 0
-            {
-                self.append_attribute(&scope.attributes);
-                self.append_char('\n');
-            }
-            for step in &scope.substeps {
-                self.append_step(step);
+            match scope {
+                Scope::DependentBlock {
+                    ordinal,
+                    description,
+                    responses,
+                    subscopes,
+                } => {
+                    self.append_step(scope);
+                }
+                Scope::ParallelBlock {
+                    bullet,
+                    description,
+                    responses,
+                    subscopes,
+                } => {
+                    self.append_step(scope);
+                }
+                Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } => {
+                    if attributes.len() > 0 {
+                        self.append_attribute(attributes);
+                        self.append_char('\n');
+                        // Increase indentation for substeps under role assignments
+                        self.increase(4);
+                    }
+                    for step in substeps {
+                        self.append_step(step);
+                    }
+                    if attributes.len() > 0 {
+                        // Decrease indentation after role assignment substeps
+                        self.decrease(4);
+                    }
+                }
+                Scope::CodeBlock {
+                    expression,
+                    subscopes: substeps,
+                } => {
+                    self.append_char('{');
+                    self.append_char('\n');
+
+                    self.increase(4);
+                    self.indent();
+                    self.append_expression(expression);
+                    self.append_char('\n');
+                    self.decrease(4);
+
+                    self.append_char('}');
+                    self.append_char('\n');
+
+                    // Format substeps within the code block scope
+                    self.increase(4);
+                    for step in substeps {
+                        self.append_step(step);
+                    }
+                    self.decrease(4);
+                }
             }
         }
     }
@@ -523,6 +582,15 @@ impl Formatter {
     fn append_function(&mut self, function: &Function) {
         self.append_identifier(&function.target);
         self.append_char('(');
+
+        let mut has_multiline = false;
+        for parameter in &function.parameters {
+            if let Expression::Multiline(_, _) = parameter {
+                has_multiline = true;
+                break;
+            }
+        }
+
         for (i, parameter) in function
             .parameters
             .iter()
@@ -534,7 +602,10 @@ impl Formatter {
             }
             self.append_expression(parameter);
         }
-        self.indent();
+
+        if has_multiline {
+            self.indent();
+        }
         self.append_char(')');
     }
 
