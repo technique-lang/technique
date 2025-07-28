@@ -1125,7 +1125,7 @@ impl<'i> Parser<'i> {
         self.take_block_lines(
             is_substep_dependent,
             |line| {
-                is_substep_dependent(line) || is_substep_parallel(line) || is_role_assignment(line)
+                is_substep_dependent(line)
             },
             |outer| {
                 let content = outer.source;
@@ -1178,7 +1178,7 @@ impl<'i> Parser<'i> {
     fn read_substep_parallel(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_parallel,
-            |line| is_substep_dependent(line) || is_substep_parallel(line),
+            |line| is_substep_parallel(line),
             |outer| {
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
