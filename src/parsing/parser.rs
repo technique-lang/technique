@@ -385,7 +385,7 @@ impl<'i> Parser<'i> {
         let mut results = Vec::new();
 
         for chunk in content.split(delimiter) {
-            let trimmed = chunk.trim();
+            let trimmed = chunk.trim_ascii();
             if trimmed.is_empty() {
                 return Err(ParsingError::Expected(
                     self.offset,
@@ -636,14 +636,14 @@ impl<'i> Parser<'i> {
             if !list.ends_with(')') {
                 return Err(ParsingError::InvalidDeclaration(self.offset));
             }
-            let list = &list[..list.len() - 1].trim();
+            let list = &list[..list.len() - 1].trim_ascii();
 
             let parameters = if list.is_empty() {
                 None
             } else {
                 let mut params = Vec::new();
                 for item in list.split(',') {
-                    let param = validate_identifier(item.trim())
+                    let param = validate_identifier(item.trim_ascii())
                         .ok_or(ParsingError::Unrecognized(self.offset))?;
                     params.push(param);
                 }
@@ -674,7 +674,7 @@ impl<'i> Parser<'i> {
         self.trim_whitespace();
 
         if self.peek_next_char() == Some('#') {
-            let title = self.source[1..].trim();
+            let title = self.source[1..].trim_ascii();
             Ok(title)
         } else {
             // we shouldn't have invoked this unless we have a title to parse!
@@ -694,59 +694,64 @@ impl<'i> Parser<'i> {
                     |inner| inner.parse_procedure_declaration(),
                 )?;
 
-                // Read title, if present
+                // Parse procedure elements in order
+                let mut elements = vec![];
 
-                let title = if is_procedure_title(outer.source) {
-                    let title = outer.take_block_lines(
-                        |line| {
-                            line.trim_start()
-                                .starts_with('#')
-                        },
-                        |line| !line.starts_with('#'),
-                        |inner| {
-                            let text = inner.parse_procedure_title()?;
-                            Ok(Some(text))
-                        },
-                    )?;
-
-                    title
-                } else {
-                    None
-                };
-
-                // Extract content after declaration until a step is encountered
-
-                let description = if !is_step(outer.source) {
-                    outer.take_block_lines(
-                        |line| !is_step(line),
-                        |line| is_step(line),
-                        |inner| {
-                            let mut description = vec![];
-
-                            let content = inner.source;
-                            if !content.is_empty() {
-                                description = inner.read_descriptive()?;
-                            }
-
-                            Ok(description)
-                        },
-                    )?
-                } else {
-                    vec![]
-                };
-
-                // Parse remaining content as steps
-                let mut steps = vec![];
                 while !outer.is_finished() {
                     let content = outer.source;
-                    if is_step_dependent(content) {
-                        let step = outer.read_step_dependent()?;
-                        steps.push(step);
-                    } else if is_step_parallel(content) {
-                        let step = outer.read_step_parallel()?;
-                        steps.push(step);
+
+                    if is_procedure_title(content) {
+                        let title = outer.take_block_lines(
+                            |line| {
+                                line.trim_ascii_start()
+                                    .starts_with('#')
+                            },
+                            |line| !line.starts_with('#'),
+                            |inner| {
+                                let text = inner.parse_procedure_title()?;
+                                Ok(text)
+                            },
+                        )?;
+                        elements.push(Element::Title(title));
+                    } else if is_code_block(content) {
+                        let expression = outer.read_code_block()?;
+                        elements.push(Element::CodeBlock(expression));
+                    } else if is_step(content) {
+                        let mut steps = vec![];
+                        while !outer.is_finished() && is_step(outer.source) {
+                            let content = outer.source;
+                            if is_step_dependent(content) {
+                                let step = outer.read_step_dependent()?;
+                                steps.push(step);
+                            } else if is_step_parallel(content) {
+                                let step = outer.read_step_parallel()?;
+                                steps.push(step);
+                            } else {
+                                break;
+                            }
+                        }
+                        if !steps.is_empty() {
+                            elements.push(Element::Steps(steps));
+                        }
                     } else {
-                        return Err(ParsingError::Unrecognized(outer.offset));
+                        // Handle descriptive text
+                        let description = outer.take_block_lines(
+                            |line| {
+                                !is_step(line) && !is_procedure_title(line) && !is_code_block(line)
+                            },
+                            |line| is_step(line) || is_procedure_title(line) || is_code_block(line),
+                            |inner| {
+                                let content = inner.source;
+                                if !content.is_empty() {
+                                    inner.read_descriptive()
+                                } else {
+                                    Ok(vec![])
+                                }
+                            },
+                        )?;
+                        if !description.is_empty() {
+                            elements.push(Element::Description(description));
+                        }
                     }
                 }
 
@@ -754,10 +759,7 @@ impl<'i> Parser<'i> {
                     name: declaration.0,
                     parameters: declaration.1,
                     signature: declaration.2,
-                    title,
-                    description,
-                    attribute: vec![], // TODO: parse attributes
-                    steps,
+                    elements,
                 })
             },
         )?;
@@ -773,7 +775,7 @@ impl<'i> Parser<'i> {
         self.trim_whitespace();
         let content = self
             .source
-            .trim_start();
+            .trim_ascii_start();
 
         if is_binding(content) {
             self.read_binding_expression()
@@ -1033,7 +1035,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse top-level ordered step
-    pub fn read_step_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+    pub fn read_step_dependent(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
 
@@ -1072,18 +1074,18 @@ impl<'i> Parser<'i> {
             // Parse scopes (role assignments and substeps)
             let scopes = outer.read_scopes()?;
 
-            return Ok(Step::Dependent {
+            return Ok(Scope::DependentBlock {
                 ordinal: number,
-                content: text,
+                description: text,
                 responses,
-                scopes,
+                subscopes: scopes,
             });
         })
     }
 
     /// Parse a top-level concurrent step
-    pub fn read_step_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
-        self.take_block_lines(is_step, is_step, |outer| {
+    pub fn read_step_parallel(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_step_parallel, is_step_parallel, |outer| {
             outer.trim_whitespace();
 
             // Parse bullet
@@ -1109,19 +1111,22 @@ impl<'i> Parser<'i> {
 
             let scopes = outer.read_scopes()?;
 
-            return Ok(Step::Parallel {
-                content: text,
+            return Ok(Scope::ParallelBlock {
+                bullet: '-',
+                description: text,
                 responses,
-                scopes,
+                subscopes: scopes,
             });
         })
     }
 
     /// Parse a dependent substep (a., b., c., etc.)
-    fn read_substep_dependent(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+    fn read_substep_dependent(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
-            |line| is_substep_dependent(line) || is_role_assignment(line),
+            |line| {
+                is_substep_dependent(line)
+            },
             |outer| {
                 let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
@@ -1159,23 +1164,21 @@ impl<'i> Parser<'i> {
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
-                Ok(Step::Dependent {
+                Ok(Scope::DependentBlock {
                     ordinal: letter,
-                    content: text,
+                    description: text,
                     responses,
-                    scopes,
+                    subscopes: scopes,
                 })
             },
         )
     }
 
     /// Parse a parallel substep (-)
-    fn read_substep_parallel(&mut self) -> Result<Step<'i>, ParsingError<'i>> {
+    fn read_substep_parallel(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_parallel,
-            |line| {
-                is_substep_dependent(line) || is_substep_parallel(line) || is_role_assignment(line)
-            },
+            |line| is_substep_parallel(line),
             |outer| {
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
@@ -1201,16 +1204,17 @@ impl<'i> Parser<'i> {
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
-                Ok(Step::Parallel {
-                    content: text,
+                Ok(Scope::ParallelBlock {
+                    bullet: '-',
+                    description: text,
                     responses,
-                    scopes,
+                    subscopes: scopes,
                 })
             },
         )
     }
 
-    pub fn read_descriptive(&mut self) -> Result<Vec<Descriptive<'i>>, ParsingError<'i>> {
+    pub fn read_descriptive(&mut self) -> Result<Vec<Paragraph<'i>>, ParsingError<'i>> {
         self.take_block_lines(
             |_| true,
             |line| {
@@ -1220,6 +1224,7 @@ impl<'i> Parser<'i> {
                     || is_subsubstep_dependent(line)
                     || is_role_assignment(line)
                     || is_enum_response(line)
+                    || is_code_block(line)
             },
             |outer| {
                 let mut results = vec![];
@@ -1230,14 +1235,15 @@ impl<'i> Parser<'i> {
                         break;
                     }
 
-                    // Decide container type based on first character
-                    if outer.peek_next_char() == Some('{') {
-                        // Standalone CodeBlock
-                        let code_block = outer.take_paragraph(|parser| parser.read_code_block())?;
-                        results.push(Descriptive::CodeBlock(code_block));
+                    if is_code_block(outer.source) {
+                        // standalone CodeBlock wrapped in a Paragraph
+
+                        // FIXME this needs to be promoted to a Scope::CodeBlock? Or better yet shouldnt' be here?
+                        let code_block = outer.read_code_block()?;
+                        results.push(Paragraph(vec![Descriptive::CodeInline(code_block)]));
                     } else {
                         // Paragraph container
-                        let paragraph_content = outer.take_paragraph(|parser| {
+                        let descriptives = outer.take_paragraph(|parser| {
                             let mut content = vec![];
 
                             while let Some(c) = parser.peek_next_char() {
@@ -1248,7 +1254,7 @@ impl<'i> Parser<'i> {
 
                                 if c == '{' {
                                     let expression = parser.read_code_block()?;
-                                    content.push(Descriptive::CodeBlock(expression));
+                                    content.push(Descriptive::CodeInline(expression));
                                 } else if c == '<' {
                                     let invocation = parser.read_invocation()?;
                                     parser.trim_whitespace();
@@ -1268,7 +1274,7 @@ impl<'i> Parser<'i> {
                                         parser.take_until(&['{', '<', '~', '\n'], |inner| {
                                             Ok(inner
                                                 .source
-                                                .trim())
+                                                .trim_ascii())
                                         })?;
                                     if text.is_empty() {
                                         continue;
@@ -1289,8 +1295,8 @@ impl<'i> Parser<'i> {
                             Ok(content)
                         })?;
 
-                        if !paragraph_content.is_empty() {
-                            results.push(Descriptive::Paragraph(paragraph_content));
+                        if !descriptives.is_empty() {
+                            results.push(Paragraph(descriptives));
                         }
                     }
                 }
@@ -1320,7 +1326,7 @@ impl<'i> Parser<'i> {
         }
 
         // Extract language hint from first line if present
-        let first = lines[0].trim();
+        let first = lines[0].trim_ascii();
         let lang = if !first.is_empty() { Some(first) } else { None };
         lines.remove(0);
 
@@ -1329,7 +1335,7 @@ impl<'i> Parser<'i> {
         // We let the indentation of the first line govern the rest of the block
         let indent = second.len()
             - second
-                .trim_start()
+                .trim_ascii_start()
                 .len();
 
         // Trim consistent leading whitespace while preserving internal indentation
@@ -1345,7 +1351,7 @@ impl<'i> Parser<'i> {
             // would have truncated the user's text. That's not allowed!
             let (before, after) = line.split_at(i);
             if !before
-                .trim()
+                .trim_ascii()
                 .is_empty()
             {
                 return Err(ParsingError::InvalidMultiline(self.offset));
@@ -1473,7 +1479,7 @@ impl<'i> Parser<'i> {
             for part in role_parts {
                 let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
                 let cap = re
-                    .captures(part.trim())
+                    .captures(part.trim_ascii())
                     .ok_or(ParsingError::InvalidStep(inner.offset))?;
 
                 let role_name = cap
@@ -1490,11 +1496,10 @@ impl<'i> Parser<'i> {
         })
     }
 
-    /// Parse scopes - role assignments with their substeps
+    /// Parse role assignments, substeps, and code blocks, crucially with all
+    /// of their subscopes also parsed.
     fn read_scopes(&mut self) -> Result<Vec<Scope<'i>>, ParsingError<'i>> {
         let mut scopes = Vec::new();
-        let mut current_roles = Vec::new();
-        let mut current_substeps = Vec::new();
 
         while !self.is_finished() {
             self.trim_whitespace();
@@ -1505,57 +1510,63 @@ impl<'i> Parser<'i> {
             let content = self.source;
 
             if is_role_assignment(content) {
-                // If we have accumulated substeps without roles, create a scope for them
-                if !current_substeps.is_empty() && current_roles.is_empty() {
-                    scopes.push(Scope {
-                        roles: Vec::new(),
-                        substeps: current_substeps,
-                    });
-                    current_substeps = Vec::new();
-                }
-
-                // If we have accumulated roles and substeps, create a scope for them
-                if !current_roles.is_empty() {
-                    scopes.push(Scope {
-                        roles: current_roles,
-                        substeps: current_substeps,
-                    });
-                    current_substeps = Vec::new();
-                }
-
-                // Parse the new role assignment
-                current_roles = self.read_role_assignments()?;
+                let block = self.read_attribute_scope()?;
+                scopes.push(block);
             } else if is_substep_dependent(content) {
-                let substep = self.read_substep_dependent()?;
-                current_substeps.push(substep);
+                let block = self.read_substep_dependent()?;
+                scopes.push(block);
             } else if is_substep_parallel(content) {
-                let substep = self.read_substep_parallel()?;
-                current_substeps.push(substep);
+                let block = self.read_substep_parallel()?;
+                scopes.push(block);
+            } else if is_step_dependent(content) {
+                let block = self.read_step_dependent()?;
+                scopes.push(block);
+            } else if is_step_parallel(content) {
+                let block = self.read_step_parallel()?;
+                scopes.push(block);
             } else if is_code_block(content) {
-                // As with procedures as a whole, code blocks can be the
-                // entire content of a scope or step. If it is here, then
-                // treat it as (the only) parallel step.
-                let code_block = self.read_code_block()?;
-                let step = Step::Parallel {
-                    content: vec![Descriptive::CodeBlock(code_block)],
-                    responses: vec![],
-                    scopes: vec![],
-                };
-                current_substeps.push(step);
+                let block = self.read_code_scope()?;
+                scopes.push(block);
             } else {
                 break;
             }
         }
-
-        // Handle any remaining roles and substeps
-        if !current_roles.is_empty() || !current_substeps.is_empty() {
-            scopes.push(Scope {
-                roles: current_roles,
-                substeps: current_substeps,
-            });
-        }
-
         Ok(scopes)
+    }
+
+    /// Parse an attribute block (role assignment) with its subscopes
+    fn read_attribute_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_role_assignment, is_role_assignment, |outer| {
+            let attributes = outer.read_role_assignments()?;
+            let subscopes = outer.read_scopes()?;
+
+            Ok(Scope::AttributeBlock {
+                attributes,
+                subscopes,
+            })
+        })
+    }
+
+    /// Parse a code block scope with its subscopes (if any)
+    fn read_code_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(
+            is_code_block,
+            |_line| {
+                // Code blocks consume everything until there's no more content
+                // Since they're already isolated by the parent's take_block_lines,
+                // we should process all remaining content as part of this code block
+                false // Never stop - consume all remaining content
+            },
+            |outer| {
+                let code = outer.read_code_block()?;
+                let subscopes = outer.read_scopes()?;
+
+                Ok(Scope::CodeBlock {
+                    expression: code,
+                    subscopes,
+                })
+            },
+        )
     }
 }
 
@@ -1600,7 +1611,7 @@ fn is_signature(content: &str) -> bool {
 /// the full validation template for Forma but we're only matching, not
 /// capturing, so it is an acceptable duplication.
 fn is_genus(content: &str) -> bool {
-    let content = content.trim();
+    let content = content.trim_ascii();
     if content.is_empty() {
         return false;
     }
@@ -1666,13 +1677,13 @@ fn is_genus(content: &str) -> bool {
 fn is_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
         Some((before, after)) => {
-            let before = before.trim();
-            let after = after.trim();
+            let before = before.trim_ascii();
+            let after = after.trim_ascii();
 
             // Check if the name part is valid
             let has_valid_name = if let Some((name, params)) = before.split_once('(') {
                 // Has parameters: check name is identifier and params end with ')'
-                is_identifier(name.trim()) && params.ends_with(')')
+                is_identifier(name.trim_ascii()) && params.ends_with(')')
             } else {
                 // No parameters: just check if it's an identifier
                 is_identifier(before)
@@ -1695,8 +1706,8 @@ fn is_procedure_declaration(content: &str) -> bool {
                     // First token is a Genus, so we expect a complete signature: Genus -> Genus
                     // Find the arrow and extract domain and range
                     if let Some(i) = after.find("->") {
-                        let domain = after[..i].trim();
-                        let range = after[i + 2..].trim();
+                        let domain = after[..i].trim_ascii();
+                        let range = after[i + 2..].trim_ascii();
 
                         let range = if let Some(j) = range.find('\n') {
                             &range[..j]
@@ -1721,7 +1732,7 @@ fn is_procedure_declaration(content: &str) -> bool {
 
 fn is_procedure_title(content: &str) -> bool {
     content
-        .trim_start()
+        .trim_ascii_start()
         .starts_with('#')
 }
 
@@ -1737,6 +1748,11 @@ fn is_code_block(content: &str) -> bool {
     let re = regex!(r"^\s*\{");
 
     re.is_match(content)
+}
+
+fn is_code_inline(content: &str) -> bool {
+    let content = content.trim_ascii_start();
+    content.starts_with('{')
 }
 
 fn is_foreach_keyword(content: &str) -> bool {
@@ -2272,13 +2288,11 @@ mod check {
         let result = input.read_step_dependent();
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First step"
-                )])],
+                description: vec![Paragraph(vec![Descriptive::Text("First step")])],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
 
@@ -2292,23 +2306,23 @@ mod check {
         let result = input.read_step_parallel();
         assert_eq!(
             result,
-            Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+            Ok(Scope::ParallelBlock {
+                bullet: '-',
+                description: vec![Paragraph(vec![Descriptive::Text(
                     "a top-level task to be one in parallel with"
                 )]),],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
         let result = input.read_step_parallel();
         assert_eq!(
             result,
-            Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "another top-level task"
-                )]),],
+            Ok(Scope::ParallelBlock {
+                bullet: '-',
+                description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
 
@@ -2321,13 +2335,13 @@ mod check {
         let result = input.read_step_dependent();
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
 
@@ -2346,13 +2360,11 @@ mod check {
         let result = input.read_substep_dependent();
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "a",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First subordinate task"
-                )])],
+                description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
 
@@ -2361,12 +2373,11 @@ mod check {
         let result = input.read_substep_parallel();
         assert_eq!(
             result,
-            Ok(Step::Parallel {
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "Parallel task"
-                )])],
+            Ok(Scope::ParallelBlock {
+                bullet: '-',
+                description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
     }
@@ -2386,31 +2397,24 @@ mod check {
 
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
-                scopes: vec![Scope {
-                    roles: vec![],
-                    substeps: vec![
-                        Step::Dependent {
-                            ordinal: "a",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "First substep"
-                            )])],
-                            responses: vec![],
-                            scopes: vec![],
-                        },
-                        Step::Dependent {
-                            ordinal: "b",
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Second substep"
-                            )])],
-                            responses: vec![],
-                            scopes: vec![],
-                        },
-                    ],
-                },],
+                subscopes: vec![
+                    Scope::DependentBlock {
+                        ordinal: "a",
+                        description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                        responses: vec![],
+                        subscopes: vec![],
+                    },
+                    Scope::DependentBlock {
+                        ordinal: "b",
+                        description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                        responses: vec![],
+                        subscopes: vec![],
+                    },
+                ],
             })
         );
     }
@@ -2430,29 +2434,24 @@ mod check {
 
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
-                scopes: vec![Scope {
-                    roles: vec![],
-                    substeps: vec![
-                        Step::Parallel {
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "First substep"
-                            )])],
-                            responses: vec![],
-                            scopes: vec![],
-                        },
-                        Step::Parallel {
-                            content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Second substep"
-                            )])],
-                            responses: vec![],
-                            scopes: vec![],
-                        },
-                    ],
-                }],
+                subscopes: vec![
+                    Scope::ParallelBlock {
+                        bullet: '-',
+                        description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                        responses: vec![],
+                        subscopes: vec![],
+                    },
+                    Scope::ParallelBlock {
+                        bullet: '-',
+                        description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                        responses: vec![],
+                        subscopes: vec![],
+                    },
+                ],
             })
         );
     }
@@ -2473,33 +2472,26 @@ mod check {
 
         assert_eq!(
             first_result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "First step"
-                )])],
+                description: vec![Paragraph(vec![Descriptive::Text("First step")])],
                 responses: vec![],
-                scopes: vec![Scope {
-                    roles: vec![],
-                    substeps: vec![Step::Dependent {
-                        ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Substep")])],
-                        responses: vec![],
-                        scopes: vec![],
-                    }],
+                subscopes: vec![Scope::DependentBlock {
+                    ordinal: "a",
+                    description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
+                    responses: vec![],
+                    subscopes: vec![],
                 }],
             })
         );
 
         assert_eq!(
             second_result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "2",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "Second step"
-                )])],
+                description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
                 responses: vec![],
-                scopes: vec![],
+                subscopes: vec![],
             })
         );
     }
@@ -2546,31 +2538,28 @@ mod check {
         // Should parse the complete first step with substeps
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
                 responses: vec![],
-                scopes: vec![Scope {
-                    roles: vec![],
-                    substeps: vec![Step::Dependent {
-                        ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the first thing. Then ask yourself if you are done:"
-                        )])],
-                        responses: vec![
-                            Response {
-                                value: "Yes",
-                                condition: None
-                            },
-                            Response {
-                                value: "No",
-                                condition: Some("but I have an excuse")
-                            }
-                        ],
-                        scopes: vec![]
-                    }],
+                subscopes: vec![Scope::DependentBlock {
+                    ordinal: "a",
+                    description: vec![Paragraph(vec![Descriptive::Text(
+                        "Do the first thing. Then ask yourself if you are done:"
+                    )])],
+                    responses: vec![
+                        Response {
+                            value: "Yes",
+                            condition: None
+                        },
+                        Response {
+                            value: "No",
+                            condition: Some("but I have an excuse")
+                        }
+                    ],
+                    subscopes: vec![]
                 }],
             })
         );
@@ -2605,9 +2594,16 @@ This is the first one.
         // This should pass if read_procedure correctly isolates step content
         match result {
             Ok(procedure) => {
+                let steps = procedure
+                    .elements
+                    .iter()
+                    .find_map(|element| match element {
+                        Element::Steps(steps) => Some(steps),
+                        _ => None,
+                    });
                 assert_eq!(
-                    procedure
-                        .steps
+                    steps
+                        .unwrap()
                         .len(),
                     2
                 );
@@ -2716,7 +2712,7 @@ This is the first one.
                 // The remaining content should include ALL steps and substeps
                 let remaining = input
                     .source
-                    .trim_start();
+                    .trim_ascii_start();
                 assert!(remaining.starts_with("1. Have you done"));
                 assert!(remaining.contains("a. Do the first thing"));
                 assert!(remaining.contains("2. Do the second thing"));
@@ -3481,31 +3477,23 @@ echo test
         );
         let result = input.read_step_dependent();
 
-        match result {
-            Ok(Step::Dependent {
-                ordinal,
-                content,
-                responses,
-                scopes,
-            }) => {
-                assert_eq!(ordinal, "1");
-                assert_eq!(
-                    content,
-                    &[Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Check the patient's vital signs"
-                    )])]
-                );
-                assert_eq!(responses, vec![]);
-                assert_eq!(
-                    scopes,
-                    vec![Scope {
-                        roles: vec![Attribute::Role(Identifier("nurse"))],
-                        substeps: vec![],
-                    }]
-                );
+        let scope = result.expect("Expected dependent step with role assignment");
+
+        assert_eq!(
+            scope,
+            Scope::DependentBlock {
+                ordinal: "1",
+
+                description: vec![Paragraph(vec![Descriptive::Text(
+                    "Check the patient's vital signs"
+                )])],
+                responses: vec![],
+                subscopes: vec![Scope::AttributeBlock {
+                    attributes: vec![Attribute::Role(Identifier("nurse"))],
+                    subscopes: vec![],
+                }]
             }
-            _ => panic!("Expected dependent step with role assignment"),
-        }
+        );
     }
 
     #[test]
@@ -3522,35 +3510,27 @@ echo test
         );
         let result = input.read_step_dependent();
 
-        match result {
-            Ok(Step::Dependent {
-                ordinal,
-                content,
-                responses,
-                scopes,
-            }) => {
-                assert_eq!(ordinal, "1");
-                assert_eq!(
-                    content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Verify patient identity"
-                    )])]
-                );
-                assert_eq!(responses, vec![]);
-                assert_eq!(scopes.len(), 1);
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("surgeon"))]
-                );
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    1
-                );
+        let scope = result.expect("Expected dependent step with role assignment");
+
+        assert_eq!(
+            scope,
+            Scope::DependentBlock {
+                ordinal: "1",
+                description: vec![Paragraph(vec![Descriptive::Text(
+                    "Verify patient identity"
+                )])],
+                responses: vec![],
+                subscopes: vec![Scope::AttributeBlock {
+                    attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                    subscopes: vec![Scope::DependentBlock {
+                        ordinal: "a",
+                        description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
+                        responses: vec![],
+                        subscopes: vec![]
+                    }]
+                }]
             }
-            _ => panic!("Expected dependent step with role assignment"),
-        }
+        );
     }
 
     #[test]
@@ -3567,67 +3547,25 @@ echo test
         );
         let result = input.read_step_dependent();
 
-        match result {
-            Ok(Step::Dependent {
-                ordinal,
-                content,
-                responses,
-                scopes,
-            }) => {
-                assert_eq!(ordinal, "1");
-                assert_eq!(
-                    content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Monitor patient vitals"
-                    )])]
-                );
-                assert_eq!(responses, vec![]);
-                assert_eq!(scopes.len(), 1);
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("nursing_team"))]
-                );
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    1
-                );
+        let scope = result.expect("Expected dependent step with role assignment");
+
+        assert_eq!(
+            scope,
+            Scope::DependentBlock {
+                ordinal: "1",
+                description: vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])],
+                responses: vec![],
+                subscopes: vec![Scope::AttributeBlock {
+                    attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                    subscopes: vec![Scope::ParallelBlock {
+                        bullet: '-',
+                        description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
+                        responses: vec![],
+                        subscopes: vec![]
+                    }]
+                }]
             }
-            _ => panic!("Expected dependent step with role assignment"),
-        }
-    }
-
-    #[test]
-    fn simple_step_with_role_and_substeps() {
-        let mut input = Parser::new();
-
-        // Test a simpler case first
-        input.initialize(
-            r#"
-1. Review events.
-        @surgeon
-            a. What are the steps?
-            "#,
         );
-
-        let result = input.read_step_dependent();
-
-        match result {
-            Ok(step) => {
-                if let Step::Dependent { scopes, .. } = step {
-                    assert_eq!(scopes.len(), 1);
-                    assert_eq!(
-                        scopes[0].roles,
-                        vec![Attribute::Role(Identifier("surgeon"))]
-                    );
-                }
-            }
-            Err(e) => panic!(
-                "Failed to parse simple step with role and substeps: {:?}",
-                e
-            ),
-        }
     }
 
     #[test]
@@ -3647,34 +3585,39 @@ echo test
 
         let result = input.read_step_dependent();
 
-        match result {
-            Ok(step) => {
-                if let Step::Dependent { scopes, .. } = step {
-                    assert_eq!(scopes.len(), 2);
+        let scope = result.expect("Failed to parse two roles with substeps");
 
-                    // First scope should have surgeon role
-                    assert_eq!(
-                        scopes[0].roles,
-                        vec![Attribute::Role(Identifier("surgeon"))]
-                    );
-                    assert_eq!(
-                        scopes[0]
-                            .substeps
-                            .len(),
-                        1
-                    );
-
-                    // Second scope should have nurse role
-                    assert_eq!(scopes[1].roles, vec![Attribute::Role(Identifier("nurse"))]);
-                    assert_eq!(
-                        scopes[1]
-                            .substeps
-                            .len(),
-                        1
-                    );
-                }
+        assert_eq!(
+            scope,
+            Scope::DependentBlock {
+                ordinal: "1",
+                description: vec![Paragraph(vec![Descriptive::Text("Review events.")])],
+                responses: vec![],
+                subscopes: vec![
+                    Scope::AttributeBlock {
+                        attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                        subscopes: vec![Scope::DependentBlock {
+                            ordinal: "a",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "What are the steps?"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        }]
+                    },
+                    Scope::AttributeBlock {
+                        attributes: vec![Attribute::Role(Identifier("nurse"))],
+                        subscopes: vec![Scope::DependentBlock {
+                            ordinal: "b",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "What are the concerns?"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        }]
+                    }
+                ]
             }
-            Err(e) => panic!("Failed to parse two roles with substeps: {:?}", e),
-        }
+        );
     }
 }

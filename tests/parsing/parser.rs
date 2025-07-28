@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod verify {
+    use std::vec;
+
     use technique::language::*;
     use technique::parsing::parser::Parser;
 
@@ -64,10 +66,7 @@ making_coffee : (Beans, Milk) -> Coffee
                     domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
                     range: Genus::Single(Forma("Coffee"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -94,10 +93,7 @@ second : C -> D
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
 
@@ -111,10 +107,7 @@ second : C -> D
                     domain: Genus::Single(Forma("C")),
                     range: Genus::Single(Forma("D"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -139,10 +132,7 @@ making_coffee(e) : Ingredients -> Coffee
                     domain: Genus::Single(Forma("Ingredients")),
                     range: Genus::Single(Forma("Coffee"))
                 }),
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![]
+                elements: vec![],
             })
         );
     }
@@ -174,29 +164,30 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the first thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![]
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![]
-                    }
-                ]
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Scope::DependentBlock {
+                            ordinal: "1",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Do the first thing in the first one."
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "2",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        }
+                    ])
+                ],
             })
         );
     }
@@ -228,37 +219,38 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Have you done the first thing in the first one?"
-                        )])],
-                        responses: vec![
-                            Response {
-                                value: "Yes",
-                                condition: None
-                            },
-                            Response {
-                                value: "No",
-                                condition: Some("but I have an excuse")
-                            }
-                        ],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![],
-                    }
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Scope::DependentBlock {
+                            ordinal: "1",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Have you done the first thing in the first one?"
+                            )])],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
+                                },
+                                Response {
+                                    value: "No",
+                                    condition: Some("but I have an excuse")
+                                }
+                            ],
+                            subscopes: vec![],
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "2",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![],
+                        }
+                    ])
                 ],
             })
         );
@@ -292,23 +284,21 @@ This is the first one.
                     domain: Genus::Single(Forma("A")),
                     range: Genus::Single(Forma("B"))
                 }),
-                title: Some("The First"),
-                description: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                    "This is the first one."
-                )])],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Have you done the first thing in the first one?"
-                        )])],
-                        responses: vec![],
-                        scopes: vec![Scope {
-                            roles: vec![],
-                            substeps: vec![Step::Dependent {
+                elements: vec![
+                    Element::Title("The First"),
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])]),
+                    Element::Steps(vec![
+                        Scope::DependentBlock {
+                            ordinal: "1",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Have you done the first thing in the first one?"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
-                                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph(vec![Descriptive::Text(
                                     "Do the first thing. Then ask yourself if you are done:"
                                 )])],
                                 responses: vec![
@@ -321,18 +311,18 @@ This is the first one.
                                         condition: Some("but I have an excuse")
                                     }
                                 ],
-                                scopes: vec![]
+                                subscopes: vec![]
                             }]
-                        }]
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Do the second thing in the first one."
-                        )])],
-                        responses: vec![],
-                        scopes: vec![],
-                    }
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "2",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Do the second thing in the first one."
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![],
+                        }
+                    ])
                 ],
             })
         );
@@ -365,82 +355,81 @@ This is the first one.
                             'No' | 'Yes' and two IVs planned and fluids available
             "#,
         ));
-        let procedure = input.read_procedure();
+        let result = input.read_procedure();
+        let procedure = result.expect("a parsed Procedure");
 
         assert_eq!(
             procedure,
-            Ok(Procedure {
+            Procedure {
                 name: Identifier("before_anesthesia"),
                 parameters: None,
                 signature: None,
-                title: Some("Before induction of anaesthesia"),
-                description: vec![],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
-                        ordinal: "1",
-                        content: vec![Descriptive::Paragraph(vec![
-                            Descriptive::Text(
-                                "Has the patient confirmed his/her identity, site, procedure,"
-                            ),
-                            Descriptive::Text("and consent?")
-                        ])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "2",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the site marked?"
-                        )])],
-                        responses: vec![
-                            Response {
+                elements: vec![
+                    Element::Title("Before induction of anaesthesia"),
+                    Element::Steps(vec![
+                        Scope::DependentBlock {
+                            ordinal: "1",
+                            description: vec![Paragraph(vec![
+                                Descriptive::Text(
+                                    "Has the patient confirmed his/her identity, site, procedure,"
+                                ),
+                                Descriptive::Text("and consent?")
+                            ])],
+                            responses: vec![Response {
                                 value: "Yes",
                                 condition: None
-                            },
-                            Response {
-                                value: "Not Applicable",
+                            }],
+                            subscopes: vec![],
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "2",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Is the site marked?"
+                            )])],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None
+                                },
+                                Response {
+                                    value: "Not Applicable",
+                                    condition: None
+                                }
+                            ],
+                            subscopes: vec![],
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "3",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Is the anaesthesia machine and medication check complete?"
+                            )])],
+                            responses: vec![Response {
+                                value: "Yes",
                                 condition: None
-                            }
-                        ],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "3",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the anaesthesia machine and medication check complete?"
-                        )])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "4",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Is the pulse oximeter on the patient and functioning?"
-                        )])],
-                        responses: vec![Response {
-                            value: "Yes",
-                            condition: None
-                        }],
-                        scopes: vec![],
-                    },
-                    Step::Dependent {
-                        ordinal: "5",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Does the patient have a:"
-                        )])],
-                        responses: vec![],
-                        scopes: vec![Scope {
-                            roles: vec![],
-                            substeps: vec![
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                            }],
+                            subscopes: vec![],
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "4",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Is the pulse oximeter on the patient and functioning?"
+                            )])],
+                            responses: vec![Response {
+                                value: "Yes",
+                                condition: None
+                            }],
+                            subscopes: vec![],
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "5",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Does the patient have a:"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Known allergy?"
                                     )])],
                                     responses: vec![
@@ -453,10 +442,11 @@ This is the first one.
                                             condition: None
                                         }
                                     ],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 },
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Difficult airway or aspiration risk?"
                                     )])],
                                     responses: vec![
@@ -469,10 +459,11 @@ This is the first one.
                                             condition: Some("and equipment/assistance available")
                                         }
                                     ],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 },
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Risk of blood loss > 500 mL?"
                                     )])],
                                     responses: vec![
@@ -487,13 +478,13 @@ This is the first one.
                                             )
                                         }
                                     ],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 }
                             ]
-                        }],
-                    }
-                ],
-            })
+                        }
+                    ])
+                ]
+            }
         );
     }
 
@@ -520,48 +511,45 @@ label_the_specimens :
                 name: Identifier("label_the_specimens"),
                 parameters: None,
                 signature: None,
-                title: None,
-                description: vec![],
-                attribute: vec![],
-                steps: vec![Step::Dependent {
+                elements: vec![Element::Steps(vec![Scope::DependentBlock {
                     ordinal: "1",
-                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Specimen labelling"
-                    )])],
+                    description: vec![Paragraph(vec![Descriptive::Text("Specimen labelling")])],
                     responses: vec![],
-                    scopes: vec![
-                        Scope {
-                            roles: vec![Attribute::Role(Identifier("nursing_team"))],
-                            substeps: vec![
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    subscopes: vec![
+                        Scope::AttributeBlock {
+                            attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                            subscopes: vec![
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Label blood tests"
                                     )])],
                                     responses: vec![],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 },
-                                Step::Parallel {
-                                    content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
                                         "Label tissue samples"
                                     )])],
                                     responses: vec![],
-                                    scopes: vec![],
+                                    subscopes: vec![],
                                 }
                             ]
                         },
-                        Scope {
-                            roles: vec![Attribute::Role(Identifier("admin_staff"))],
-                            substeps: vec![Step::Dependent {
+                        Scope::AttributeBlock {
+                            attributes: vec![Attribute::Role(Identifier("admin_staff"))],
+                            subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
-                                content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph(vec![Descriptive::Text(
                                     "Prepare the envelopes"
                                 )])],
                                 responses: vec![],
-                                scopes: vec![],
+                                subscopes: vec![],
                             }]
                         }
                     ],
-                }],
+                }])],
             })
         );
     }
@@ -596,144 +584,141 @@ before_leaving :
                 of this patient?
             "#,
         ));
-        let procedure = input.read_procedure();
+        let result = input.read_procedure();
 
+        let procedure = result.expect("a procedure");
         assert_eq!(
             procedure,
-            Ok(Procedure {
+            Procedure {
                 name: Identifier("before_leaving"),
                 parameters: None,
                 signature: None,
-                title: Some("Before patient leaves operating room"),
-                description: vec![],
-                attribute: vec![],
-                steps: vec![
-                    Step::Dependent {
+                elements: vec![
+                    Element::Title("Before patient leaves operating room"),
+                    Element::Steps(vec![
+                      Scope::DependentBlock {
                         ordinal: "1",
-                        content: vec![
-                            Descriptive::Paragraph(vec![Descriptive::Text("Verbally confirm:")])
+                        description: vec![
+                            Paragraph(vec![Descriptive::Text("Verbally confirm:")])
                         ],
                         responses: vec![],
-                        scopes: vec![
-                            Scope {
-                                roles: vec![],
-                                substeps: vec![
-                                    Step::Parallel {
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![Descriptive::Text("The name of the surgical procedure(s).")])
-                                        ],
-                                        responses: vec![],
-                                        scopes: vec![],
-                                    },
-                                    Step::Parallel {
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![Descriptive::Text("Completion of instrument, sponge, and needle counts.")])
-                                        ],
-                                        responses: vec![],
-                                        scopes: vec![],
-                                    },
-                                    Step::Parallel {
-                                        content: vec![Descriptive::Paragraph(vec![
-                                            Descriptive::Text("Specimen labelling"),
-                                            Descriptive::CodeBlock(Expression::Foreach(
+                        subscopes: vec![
+                           Scope::ParallelBlock {
+                               bullet: '-',
+                               description: vec![
+                                            Paragraph(vec![Descriptive::Text("The name of the surgical procedure(s).")])
+                                    ],
+                                responses: vec![],
+                                subscopes: vec![],
+                            },
+                            Scope::ParallelBlock {
+                                bullet: '-',
+                                description: vec![
+                                    Paragraph(vec![Descriptive::Text("Completion of instrument, sponge, and needle counts.")])
+                                ],
+                                responses: vec![],
+                                subscopes: vec![],
+                            },
+                            Scope::ParallelBlock {
+                                bullet: '-',
+                                description: vec![Paragraph(vec![
+                                    Descriptive::Text("Specimen labelling")])],
+                                responses: vec![],
+                                subscopes: vec![
+                                    Scope::CodeBlock {
+                                        expression: Expression::Foreach(
                                                 vec![Identifier("specimen")],
                                                 Box::new(Expression::Variable(Identifier("specimens")))
-                                            )),
-                                        ])],
-                                        responses: vec![],
-                                        scopes: vec![],
-                                    }
-                                ]
-                            },
-                            Scope {
-                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
-                                substeps: vec![
-                                    Step::Dependent {
-                                        ordinal: "a",
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![
-                                                Descriptive::Text("Read specimen labels aloud, including patient"),
-                                                Descriptive::Text("name.")
-                                            ])
-                                        ],
-                                        responses: vec![],
-                                        scopes: vec![Scope {
-                                            roles: vec![],
-                                            substeps: vec![
-                                                Step::Parallel {
-                                                    content: vec![
-                                                        Descriptive::Paragraph(vec![Descriptive::Text("Whether there are any equipment problems to be addressed.")])
+                                            ),
+                                        subscopes: vec![
+                                            Scope::AttributeBlock {
+                                                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                                                subscopes: vec![
+                                                    Scope::DependentBlock {
+                                                        ordinal: "a",
+                                                        description: vec![
+                                                            Paragraph(vec![
+                                                                Descriptive::Text("Read specimen labels aloud, including patient"),
+                                                                Descriptive::Text("name.")
+                                                            ])
+                                                        ],
+                                                        responses: vec![],
+                                                        subscopes: vec![]
+                                                    }
+                                                ]
+                                            }
+                                        ]}
+                                ]},
+                            Scope::ParallelBlock {
+                                bullet: '-',
+                                                    description: vec![
+                                                        Paragraph(vec![Descriptive::Text("Whether there are any equipment problems to be addressed.")])
                                                     ],
                                                     responses: vec![],
-                                                    scopes: vec![],
+                                                    subscopes: vec![],
                                                 }
-                                            ]
-                                        }],
-                                    }
-                                ]
-                            }
-                        ],
-                    },
-                    Step::Dependent {
+                                        ]
+                      },
+                    Scope::DependentBlock {
                         ordinal: "2",
-                        content: vec![
-                            Descriptive::Paragraph(vec![Descriptive::Text("Post-operative care:")])
+                        description: vec![
+                            Paragraph(vec![Descriptive::Text("Post-operative care:")])
                         ],
                         responses: vec![],
-                        scopes: vec![
-                            Scope {
-                                roles: vec![Attribute::Role(Identifier("surgeon"))],
-                                substeps: vec![
-                                    Step::Dependent {
+                        subscopes: vec![
+                            Scope::AttributeBlock {
+                                attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                                subscopes: vec![
+                                    Scope::DependentBlock {
                                         ordinal: "a",
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![
+                                        description: vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
                                         responses: vec![],
-                                        scopes: vec![],
+                                        subscopes: vec![],
                                     }
                                 ]
                             },
-                            Scope {
-                                roles: vec![Attribute::Role(Identifier("anesthetist"))],
-                                substeps: vec![
-                                    Step::Dependent {
+                            Scope::AttributeBlock {
+                                attributes: vec![Attribute::Role(Identifier("anesthetist"))],
+                                subscopes: vec![
+                                    Scope::DependentBlock {
                                         ordinal: "b",
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![
+                                        description: vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
                                         responses: vec![],
-                                        scopes: vec![],
+                                        subscopes: vec![],
                                     }
                                 ]
                             },
-                            Scope {
-                                roles: vec![Attribute::Role(Identifier("nursing_team"))],
-                                substeps: vec![
-                                    Step::Dependent {
+                            Scope::AttributeBlock {
+                                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                                subscopes: vec![
+                                    Scope::DependentBlock {
                                         ordinal: "c",
-                                        content: vec![
-                                            Descriptive::Paragraph(vec![
+                                        description: vec![
+                                            Paragraph(vec![
                                                 Descriptive::Text("What are the key concerns for recovery and management"),
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
                                         responses: vec![],
-                                        scopes: vec![],
+                                        subscopes: vec![],
                                     }
                                 ]
                             }
                         ],
                     }
+                    ])
                 ],
-            })
-        );
+            });
     }
 
     #[test]
@@ -759,16 +744,16 @@ before_leaving :
         let result = input.read_step_dependent();
 
         match result {
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal,
-                content,
+                description: content,
                 responses,
-                scopes,
+                subscopes: scopes,
             }) => {
                 assert_eq!(ordinal, "5");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Review anticipated critical events."
                     )])]
                 );
@@ -777,40 +762,46 @@ before_leaving :
                 assert_eq!(scopes.len(), 3);
 
                 // Check that the first scope has surgeon role
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("surgeon"))]
-                );
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    3
-                ); // a, b, c
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[0]
+                {
+                    assert_eq!(*attributes, vec![Attribute::Role(Identifier("surgeon"))]);
+                    assert_eq!(substeps.len(), 3); // a, b, c
+                } else {
+                    panic!("Expected AttributedBlock for surgeon");
+                }
 
                 // Check that the second scope has anaesthetist role
-                assert_eq!(
-                    scopes[1].roles,
-                    vec![Attribute::Role(Identifier("anaesthetist"))]
-                );
-                assert_eq!(
-                    scopes[1]
-                        .substeps
-                        .len(),
-                    1
-                ); // d
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[1]
+                {
+                    assert_eq!(
+                        *attributes,
+                        vec![Attribute::Role(Identifier("anaesthetist"))]
+                    );
+                    assert_eq!(substeps.len(), 1); // d
+                } else {
+                    panic!("Expected AttributedBlock for anaesthetist");
+                }
 
                 // Check that the third scope has nursing_team role
-                assert_eq!(
-                    scopes[2].roles,
-                    vec![Attribute::Role(Identifier("nursing_team"))]
-                );
-                assert_eq!(
-                    scopes[2]
-                        .substeps
-                        .len(),
-                    2
-                ); // e, f
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[2]
+                {
+                    assert_eq!(
+                        *attributes,
+                        vec![Attribute::Role(Identifier("nursing_team"))]
+                    );
+                    assert_eq!(substeps.len(), 2); // e, f
+                } else {
+                    panic!("Expected AttributedBlock for nursing_team");
+                }
             }
             _ => panic!("Expected dependent step with role assignment"),
         }
@@ -841,16 +832,16 @@ before_leaving :
         let result = input.read_step_dependent();
 
         match result {
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal,
-                content,
+                description: content,
                 responses,
-                scopes,
+                subscopes: scopes,
             }) => {
                 assert_eq!(ordinal, "1");
                 assert_eq!(
                     content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
+                    vec![Paragraph(vec![Descriptive::Text(
                         "Review surgical procedure"
                     )])]
                 );
@@ -858,45 +849,59 @@ before_leaving :
                 assert_eq!(scopes.len(), 3);
 
                 // Check surgeon scope (3 dependent substeps)
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("surgeon"))]
-                );
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    3
-                );
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[0]
+                {
+                    assert_eq!(*attributes, vec![Attribute::Role(Identifier("surgeon"))]);
+                    assert_eq!(substeps.len(), 3);
+                } else {
+                    panic!("Expected AttributedBlock for surgeon");
+                }
 
                 // Check anaesthetist scope (2 dependent substeps)
-                assert_eq!(
-                    scopes[1].roles,
-                    vec![Attribute::Role(Identifier("anaesthetist"))]
-                );
-                assert_eq!(
-                    scopes[1]
-                        .substeps
-                        .len(),
-                    2
-                );
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[1]
+                {
+                    assert_eq!(
+                        *attributes,
+                        vec![Attribute::Role(Identifier("anaesthetist"))]
+                    );
+                    assert_eq!(substeps.len(), 2);
+                } else {
+                    panic!("Expected AttributedBlock for anaesthetist");
+                }
 
                 // Check nursing_team scope (3 dependent substeps)
-                assert_eq!(
-                    scopes[2].roles,
-                    vec![Attribute::Role(Identifier("nursing_team"))]
-                );
-                assert_eq!(
-                    scopes[2]
-                        .substeps
-                        .len(),
-                    3
-                );
+                if let Scope::AttributeBlock {
+                    attributes,
+                    subscopes: substeps,
+                } = &scopes[2]
+                {
+                    assert_eq!(
+                        *attributes,
+                        vec![Attribute::Role(Identifier("nursing_team"))]
+                    );
+                    assert_eq!(substeps.len(), 3);
+                } else {
+                    panic!("Expected AttributedBlock for nursing_team");
+                }
 
                 // Verify all substeps are dependent (ordered) steps
                 for scope in &scopes {
-                    for substep in &scope.substeps {
-                        assert!(matches!(substep, Step::Dependent { .. }));
+                    match scope {
+                        Scope::AttributeBlock {
+                            subscopes: substeps,
+                            ..
+                        } => {
+                            for substep in substeps {
+                                assert!(matches!(substep, Scope::DependentBlock { .. }));
+                            }
+                        }
+                        _ => panic!("Expected AttributedBlock scopes"),
                     }
                 }
             }
@@ -921,124 +926,63 @@ before_leaving :
         );
         let result = input.read_step_dependent();
 
-        match result {
-            Ok(Step::Dependent {
-                ordinal,
-                content,
-                responses,
-                scopes,
-            }) => {
-                assert_eq!(ordinal, "1");
-                assert_eq!(
-                    content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Emergency response"
-                    )])]
-                );
-                assert_eq!(responses, vec![]);
-                assert_eq!(scopes.len(), 1);
-
-                // Check team_lead scope
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("team_lead"))]
-                );
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    3
-                );
-
-                // Verify the sequence: dependent (a), dependent (b with nested parallel), dependent (c)
-                assert!(matches!(scopes[0].substeps[0], Step::Dependent { .. }));
-                assert!(matches!(scopes[0].substeps[1], Step::Dependent { .. }));
-                assert!(matches!(scopes[0].substeps[2], Step::Dependent { .. }));
-
-                // Check substep a
-                if let Step::Dependent {
-                    ordinal,
-                    content,
-                    scopes,
-                    ..
-                } = &scopes[0].substeps[0]
-                {
-                    assert_eq!(ordinal, &"a");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Assess situation"
-                        )])]
-                    );
-                    assert_eq!(scopes.len(), 0); // No nested scopes
-                }
-
-                // Check substep b - should have nested parallel steps
-                if let Step::Dependent {
-                    ordinal,
-                    content,
-                    scopes,
-                    ..
-                } = &scopes[0].substeps[1]
-                {
-                    assert_eq!(ordinal, &"b");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Coordinate response"
-                        )])]
-                    );
-                    assert_eq!(scopes.len(), 1); // Should have nested scope with parallel steps
-
-                    // Check the nested parallel steps
-                    assert_eq!(
-                        scopes[0]
-                            .substeps
-                            .len(),
-                        2
-                    );
-                    assert!(matches!(scopes[0].substeps[0], Step::Parallel { .. }));
-                    assert!(matches!(scopes[0].substeps[1], Step::Parallel { .. }));
-
-                    if let Step::Parallel { content, .. } = &scopes[0].substeps[0] {
-                        assert_eq!(
-                            content,
-                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Monitor communications"
-                            )])]
-                        );
-                    }
-
-                    if let Step::Parallel { content, .. } = &scopes[0].substeps[1] {
-                        assert_eq!(
-                            content,
-                            &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                                "Track resources"
-                            )])]
-                        );
-                    }
-                }
-
-                // Check substep c
-                if let Step::Dependent {
-                    ordinal,
-                    content,
-                    scopes,
-                    ..
-                } = &scopes[0].substeps[2]
-                {
-                    assert_eq!(ordinal, &"c");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "File report"
-                        )])]
-                    );
-                    assert_eq!(scopes.len(), 0); // No nested scopes
-                }
-            }
+        let step = match result {
+            Ok(step) => step,
             _ => panic!("Expected step with mixed substep types"),
-        }
+        };
+
+        assert_eq!(
+            step,
+            Scope::DependentBlock {
+                ordinal: "1",
+                description: vec![Paragraph(vec![Descriptive::Text("Emergency response")])],
+                responses: vec![],
+                subscopes: vec![Scope::AttributeBlock {
+                    attributes: vec![Attribute::Role(Identifier("team_lead"))],
+                    subscopes: vec![
+                        Scope::DependentBlock {
+                            ordinal: "a",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Assess situation"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "b",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Coordinate response"
+                            )])],
+                            responses: vec![],
+                            subscopes: vec![
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                        "Monitor communications"
+                                    )])],
+                                    responses: vec![],
+                                    subscopes: vec![]
+                                },
+                                Scope::ParallelBlock {
+                                    bullet: '-',
+                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                        "Track resources"
+                                    )])],
+                                    responses: vec![],
+                                    subscopes: vec![]
+                                }
+                            ]
+                        },
+                        Scope::DependentBlock {
+                            ordinal: "c",
+                            description: vec![Paragraph(vec![Descriptive::Text("File report")])],
+                            responses: vec![],
+                            subscopes: vec![]
+                        }
+                    ]
+                }]
+            }
+        );
     }
 
     #[test]
@@ -1048,7 +992,7 @@ before_leaving :
         input.initialize(
             r#"
 1. Main step
-    a. Substep with response
+    a.  Substep with response
         'Yes' | 'No'
             "#,
         );
@@ -1056,29 +1000,24 @@ before_leaving :
 
         assert_eq!(
             result,
-            Ok(Step::Dependent {
+            Ok(Scope::DependentBlock {
                 ordinal: "1",
-                content: vec![Descriptive::Paragraph(vec![Descriptive::Text("Main step")])],
+                description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
                 responses: vec![],
-                scopes: vec![Scope {
-                    roles: vec![],
-                    substeps: vec![Step::Dependent {
-                        ordinal: "a",
-                        content: vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Substep with response"
-                        )])],
-                        responses: vec![
-                            Response {
-                                value: "Yes",
-                                condition: None,
-                            },
-                            Response {
-                                value: "No",
-                                condition: None,
-                            },
-                        ],
-                        scopes: vec![],
-                    }],
+                subscopes: vec![Scope::DependentBlock {
+                    ordinal: "a",
+                    description: vec![Paragraph(vec![Descriptive::Text("Substep with response")])],
+                    responses: vec![
+                        Response {
+                            value: "Yes",
+                            condition: None,
+                        },
+                        Response {
+                            value: "No",
+                            condition: None,
+                        },
+                    ],
+                    subscopes: vec![],
                 }],
             })
         );
@@ -1093,7 +1032,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![Descriptive::Binding(
+            Ok(vec![Paragraph(vec![Descriptive::Binding(
                 Box::new(Descriptive::Text("What is the result?")),
                 vec![Identifier("answer")]
             )])])
@@ -1105,7 +1044,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![
+            Ok(vec![Paragraph(vec![
                 Descriptive::Binding(
                     Box::new(Descriptive::Text("Enter your name")),
                     vec![Identifier("name")]
@@ -1122,7 +1061,7 @@ before_leaving :
         let descriptive = input.read_descriptive();
         assert_eq!(
             descriptive,
-            Ok(vec![Descriptive::Paragraph(vec![
+            Ok(vec![Paragraph(vec![
                 Descriptive::Text("First"),
                 Descriptive::Binding(
                     Box::new(Descriptive::Application(Invocation {
@@ -1137,96 +1076,5 @@ before_leaving :
                 )
             ])])
         );
-    }
-
-    #[test]
-    fn role_with_dependent_substeps() {
-        let mut input = Parser::new();
-
-        // Test role assignment with multiple dependent substeps that execute in series
-        input.initialize(
-            r#"
-1. Perform procedure
-        @surgeon
-            a. Make initial incision
-            b. Locate target area
-            c. Complete procedure
-            "#,
-        );
-
-        let result = input.read_step_dependent();
-
-        match result {
-            Ok(Step::Dependent {
-                ordinal,
-                content,
-                responses,
-                scopes,
-            }) => {
-                assert_eq!(ordinal, "1");
-                assert_eq!(
-                    content,
-                    vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                        "Perform procedure"
-                    )])]
-                );
-                assert_eq!(responses, vec![]);
-                assert_eq!(scopes.len(), 1);
-
-                // Check that the scope has the surgeon role
-                assert_eq!(
-                    scopes[0].roles,
-                    vec![Attribute::Role(Identifier("surgeon"))]
-                );
-
-                // Check that the scope has 3 dependent substeps in order
-                assert_eq!(
-                    scopes[0]
-                        .substeps
-                        .len(),
-                    3
-                );
-
-                if let Step::Dependent {
-                    ordinal, content, ..
-                } = &scopes[0].substeps[0]
-                {
-                    assert_eq!(ordinal, &"a");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Make initial incision"
-                        )])]
-                    );
-                }
-
-                if let Step::Dependent {
-                    ordinal, content, ..
-                } = &scopes[0].substeps[1]
-                {
-                    assert_eq!(ordinal, &"b");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Locate target area"
-                        )])]
-                    );
-                }
-
-                if let Step::Dependent {
-                    ordinal, content, ..
-                } = &scopes[0].substeps[2]
-                {
-                    assert_eq!(ordinal, &"c");
-                    assert_eq!(
-                        content,
-                        &vec![Descriptive::Paragraph(vec![Descriptive::Text(
-                            "Complete procedure"
-                        )])]
-                    );
-                }
-            }
-            _ => panic!("Expected dependent step with role assignment and substeps"),
-        }
     }
 }

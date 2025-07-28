@@ -28,14 +28,30 @@ impl Default for Metadata<'_> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
+pub enum Element<'i> {
+    Title(&'i str),
+    Description(Vec<Paragraph<'i>>),
+    Steps(Vec<Scope<'i>>),
+    CodeBlock(Expression<'i>), // TODO remove, possibly, if Scope::CodeBlock covers this adequately, or change to Vec<Scope> as well.
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub struct Procedure<'i> {
     pub name: Identifier<'i>,
     pub parameters: Option<Vec<Identifier<'i>>>,
     pub signature: Option<Signature<'i>>,
-    pub title: Option<&'i str>,
-    pub description: Vec<Descriptive<'i>>,
-    pub attribute: Vec<Attribute<'i>>,
-    pub steps: Vec<Step<'i>>,
+    pub elements: Vec<Element<'i>>,
+}
+
+impl<'i> Procedure<'i> {
+    pub fn title(&self) -> Option<&'i str> {
+        self.elements
+            .iter()
+            .find_map(|element| match element {
+                Element::Title(title) => return Some(*title),
+                _ => None,
+            })
+    }
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -58,6 +74,7 @@ pub enum Genus<'i> {
     Unit,
     Single(Forma<'i>),
     Tuple(Vec<Forma<'i>>),
+    Naked(Vec<Forma<'i>>),
     List(Forma<'i>),
 }
 
@@ -78,34 +95,42 @@ pub struct Invocation<'i> {
 // types for descriptive content
 
 #[derive(Eq, Debug, PartialEq)]
+pub struct Paragraph<'i>(pub Vec<Descriptive<'i>>);
+
+#[derive(Eq, Debug, PartialEq)]
 pub enum Descriptive<'i> {
     Text(&'i str),
-    CodeBlock(Expression<'i>),
+    CodeInline(Expression<'i>),
     Application(Invocation<'i>),
     Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
-    Paragraph(Vec<Descriptive<'i>>),
 }
 
 // types for Steps within procedures
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Scope<'i> {
-    pub roles: Vec<Attribute<'i>>, // empty for non-role scopes
-    pub substeps: Vec<Step<'i>>,
-}
-
-#[derive(Eq, Debug, PartialEq)]
-pub enum Step<'i> {
-    Dependent {
+pub enum Scope<'i> {
+    DependentBlock {
         ordinal: &'i str,
-        content: Vec<Descriptive<'i>>,
+        description: Vec<Paragraph<'i>>,
         responses: Vec<Response<'i>>,
-        scopes: Vec<Scope<'i>>,
+        subscopes: Vec<Scope<'i>>,
     },
-    Parallel {
-        content: Vec<Descriptive<'i>>,
+    ParallelBlock {
+        bullet: char,
+        description: Vec<Paragraph<'i>>,
         responses: Vec<Response<'i>>,
-        scopes: Vec<Scope<'i>>,
+        subscopes: Vec<Scope<'i>>,
+    },
+    // Attribute scope: @role (or other attributes) with substeps
+    AttributeBlock {
+        attributes: Vec<Attribute<'i>>,
+        subscopes: Vec<Scope<'i>>,
+    },
+
+    // Code block scope: { foreach ... } with substeps
+    CodeBlock {
+        expression: Expression<'i>,
+        subscopes: Vec<Scope<'i>>,
     },
 }
 
@@ -156,11 +181,11 @@ pub enum Expression<'i> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Numeric<'i> {
     Integral(i64),
-    // Scientific(Quantity<'i>), // TODO implement parsing for Quanity
+    // Scientific(Quantity<'i>), // TODO implement parsing for Quantity
     Scientific(&'i str), // temporary placeholder
 }
 
-// A Quantiy is an amount, possibly with uncertainty, at the magnitude if
+// A Quantity is an amount, possibly with uncertainty, at the magnitude if
 // given, of the units specified.
 //
 // Valid Quantities include:
@@ -171,7 +196,7 @@ pub enum Numeric<'i> {
 // 5.9722 ± 0.0006 × 10²⁴ kg
 //
 // More conventional ASCII symbol characters are also supported when writing
-// Quantiy values in a Technique file:
+// Quantity values in a Technique file:
 //
 // 5.9722 * 10^24 kg"
 // 5.9722 +/- 0.0006 kg
@@ -273,16 +298,16 @@ pub fn validate_forma(input: &str) -> Option<Forma> {
     Some(Forma(input))
 }
 
-fn parse_tuple(input: &str) -> Option<Genus> {
+fn parse_tuple(input: &str) -> Option<Vec<Forma>> {
     let mut formas: Vec<Forma> = Vec::new();
 
     for text in input.split(",") {
-        let text = text.trim();
+        let text = text.trim_ascii();
         let forma = validate_forma(text)?;
         formas.push(forma);
     }
 
-    Some(Genus::Tuple(formas))
+    Some(formas)
 }
 
 /// This one copes with (and discards) any internal whitespace encountered.
@@ -299,7 +324,7 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
                 return None;
             }
 
-            let content = &input[1..input.len() - 1].trim();
+            let content = &input[1..input.len() - 1].trim_ascii();
 
             if content.is_empty() {
                 return None;
@@ -315,13 +340,14 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
                 return None;
             }
 
-            let content = &input[1..input.len() - 1].trim();
+            let content = &input[1..input.len() - 1].trim_ascii();
 
             if content.is_empty() {
                 return Some(Genus::Unit);
             }
 
-            parse_tuple(content)
+            let formas = parse_tuple(content)?;
+            Some(Genus::Tuple(formas))
         }
         _ => {
             if input.len() == 0 {
@@ -330,10 +356,10 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
 
             // Check if this is a bare tuple (comma-separated but non-parenthesized)
             if input.contains(',') {
-                parse_tuple(input)
+                let formas = parse_tuple(input)?;
+                Some(Genus::Naked(formas))
             } else {
                 let forma = validate_forma(input)?;
-
                 Some(Genus::Single(forma))
             }
         }
@@ -374,7 +400,7 @@ pub fn validate_numeric(input: &str) -> Option<Numeric> {
         return None;
     }
 
-    let input = input.trim();
+    let input = input.trim_ascii();
 
     // Try to parse as a simple Integral
     if let Ok(amount) = input.parse::<i64>() {
@@ -473,17 +499,17 @@ mod check {
     fn genus_rules_tuple_bare() {
         assert_eq!(
             validate_genus("A, B"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
         );
 
         assert_eq!(
             validate_genus("Coffee, Tea"),
-            Some(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+            Some(Genus::Naked(vec![Forma("Coffee"), Forma("Tea")]))
         );
 
         assert_eq!(
             validate_genus("Input, Data, Config"),
-            Some(Genus::Tuple(vec![
+            Some(Genus::Naked(vec![
                 Forma("Input"),
                 Forma("Data"),
                 Forma("Config")
@@ -492,23 +518,23 @@ mod check {
 
         assert_eq!(
             validate_genus("A,B"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
         );
 
         assert_eq!(
             validate_genus("A , B"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
         );
 
         // Test edge cases with whitespace
         assert_eq!(
             validate_genus("  A  ,  B  "),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
         );
 
         assert_eq!(
             validate_genus("\tA\t,\tB\t"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
         );
     }
 
@@ -579,7 +605,6 @@ mod check {
             Some(Numeric::Integral(9223372036854775807))
         );
     }
-
 
     #[test]
     fn ast_construction() {

@@ -48,7 +48,7 @@ is
 a
 test
             "#
-        .trim();
+        .trim_ascii();
 
         let n = calculate_line_number(content, 10);
         assert_eq!(n + 1, 4);
