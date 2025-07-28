@@ -203,7 +203,7 @@ vibe_coding :
     }
 
     #[test]
-    fn code_blocks_2() {
+    fn multiline_in_code_inline() {
         let technique = Technique {
             header: None,
             body: Some(vec![Procedure {
@@ -253,7 +253,7 @@ We must take action!
     }
 
     #[test]
-    fn code_blocks_3() {
+    fn code_block_under_attribute() {
         let technique = Technique {
             header: None,
             body: Some(vec![Procedure {
@@ -273,13 +273,19 @@ We must take action!
                         subscopes: vec![Scope::AttributeBlock {
                             attributes: vec![Attribute::Role(Identifier("journalist"))],
                             subscopes: vec![Scope::CodeBlock {
-                                expression: Expression::Tablet(vec![Pair {
-                                    label: "timestamp",
-                                    value: Expression::Execution(Function {
-                                        target: Identifier("now"),
-                                        parameters: vec![],
-                                    }),
-                                }]),
+                                expression: Expression::Tablet(vec![
+                                    Pair {
+                                        label: "timestamp",
+                                        value: Expression::Execution(Function {
+                                            target: Identifier("now"),
+                                            parameters: vec![],
+                                        }),
+                                    },
+                                    Pair {
+                                        label: "message",
+                                        value: Expression::Variable(Identifier("msg")),
+                                    },
+                                ]),
                                 subscopes: vec![],
                             }],
                         }],
