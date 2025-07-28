@@ -64,8 +64,17 @@ impl Formatter {
     }
 
     fn append_str(&mut self, text: &str) {
-        self.buffer
-            .push_str(text);
+        for c in text.chars() {
+            self.append_char(c);
+        }
+    }
+
+    fn subformatter(&self) -> Formatter {
+        Formatter {
+            buffer: String::new(),
+            nesting: self.nesting,
+            width: self.width,
+        }
     }
 
     fn append_char(&mut self, c: char) {
@@ -253,49 +262,230 @@ impl Formatter {
     }
 
     fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
-        for (i, descriptive) in descriptives
-            .iter()
-            .enumerate()
-        {
-            // TODO not sure about this in the face of re-wrapping
-            if i > 0 {
-                self.append_char(' ');
-            }
+        let mut current = String::new();
+        let mut pos = self.nesting;
 
-            self.append_descriptive(descriptive);
+        for descriptive in descriptives {
+            match descriptive {
+                Descriptive::Text(text) => {
+                    for word in text.split_ascii_whitespace() {
+                        // Add space before word if we have content
+                        if !current.is_empty() {
+                            // Check if space + word would exceed width
+                            if pos + 1 + word.len() as u8 > self.width {
+                                // Wrap: output current line and start new one
+                                self.append_str(&current);
+                                self.append_char('\n');
+                                for _ in 0..self.nesting {
+                                    self.append_char(' ');
+                                }
+                                current.clear();
+                                current.push_str(word);
+                                pos = self.nesting + word.len() as u8;
+                            } else {
+                                // Fits: add space and word
+                                current.push(' ');
+                                current.push_str(word);
+                                pos += 1 + word.len() as u8;
+                            }
+                        } else {
+                            // First word on line
+                            current.push_str(word);
+                            pos += word.len() as u8;
+                        }
+                    }
+                }
+                Descriptive::CodeInline(expr) => {
+                    match expr {
+                        Expression::Tablet(_) => {
+                            // Multi-line expressions break the line - output what we have first
+                            if !current.is_empty() {
+                                self.append_str(&current);
+                                current.clear();
+                                pos = self.nesting;
+                            }
+                            // Output tablet expression with newlines
+                            self.append_char('{');
+                            self.append_char('\n');
+                            self.increase(4);
+                            self.indent();
+                            self.append_expression(expr);
+                            self.append_char('\n');
+                            self.decrease(4);
+                            self.append_char('}');
+                            continue;
+                        }
+                        Expression::Multiline(_, _) => {
+                            // Multi-line expressions break the line - output what we have first
+                            if !current.is_empty() {
+                                self.append_str(&current);
+                                current.clear();
+                                pos = self.nesting;
+                            }
+                            // Output multiline expression preserving current indentation context
+                            self.append_char('{');
+                            self.increase(4);
+                            self.append_expression(expr);
+                            self.decrease(4);
+                            self.append_char('\n');
+                            self.indent();
+                            self.append_char('}');
+                            continue;
+                        }
+                        _ => {
+                            // For expressions containing multilines, don't treat as atomic
+                            match expr {
+                                Expression::Execution(func)
+                                    if func
+                                        .parameters
+                                        .iter()
+                                        .any(|p| matches!(p, Expression::Multiline(_, _))) =>
+                                {
+                                    // Multi-line expressions break the line - output what we have first
+                                    if !current.is_empty() {
+                                        self.append_str(&current);
+                                        self.append_char(' ');
+                                        current.clear();
+                                        pos = self.nesting;
+                                    }
+                                    // Output with proper line breaks
+                                    self.append_char('{');
+                                    self.append_char(' ');
+                                    self.append_expression(expr);
+                                    self.append_char(' ');
+                                    self.append_char('}');
+                                    continue;
+                                }
+                                _ => {
+                                    // Inline code block - treat as atomic token
+                                    let mut sub = self.subformatter();
+                                    sub.append_char('{');
+                                    sub.append_char(' ');
+                                    sub.append_expression(expr);
+                                    sub.append_char(' ');
+                                    sub.append_char('}');
+                                    let code_text = sub.buffer;
+
+                                    if !current.is_empty() {
+                                        if pos + 1 + code_text.len() as u8 > self.width {
+                                            self.append_str(&current);
+                                            self.append_char('\n');
+                                            for _ in 0..self.nesting {
+                                                self.append_char(' ');
+                                            }
+                                            current.clear();
+                                            current.push_str(&code_text);
+                                            pos = self.nesting + code_text.len() as u8;
+                                        } else {
+                                            current.push(' ');
+                                            current.push_str(&code_text);
+                                            pos += 1 + code_text.len() as u8;
+                                        }
+                                    } else {
+                                        current.push_str(&code_text);
+                                        pos += code_text.len() as u8;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Descriptive::Application(invocation) => {
+                    let mut sub = self.subformatter();
+                    sub.nesting = self.nesting;
+                    sub.append_application(invocation);
+                    let app_text = sub.buffer;
+
+                    // Treat as atomic token - either fits on line or wrap
+                    if !current.is_empty() {
+                        if pos + 1 + app_text.len() as u8 > self.width {
+                            self.append_str(&current);
+                            self.append_char('\n');
+                            for _ in 0..self.nesting {
+                                self.append_char(' ');
+                            }
+                            current.clear();
+                            current.push_str(&app_text);
+                            pos = self.nesting + app_text.len() as u8;
+                        } else {
+                            current.push(' ');
+                            current.push_str(&app_text);
+                            pos += 1 + app_text.len() as u8;
+                        }
+                    } else {
+                        current.push_str(&app_text);
+                        pos += app_text.len() as u8;
+                    }
+                }
+                Descriptive::Binding(inner_descriptive, variables) => {
+                    // Use subformatter to generate the complete binding text
+                    let mut sub = self.subformatter();
+                    sub.nesting = self.nesting;
+
+                    // Render the inner descriptive
+                    match inner_descriptive.as_ref() {
+                        Descriptive::Text(text) => sub.append_str(text),
+                        Descriptive::CodeInline(expr) => match expr {
+                            Expression::Tablet(_) => {
+                                sub.append_char('{');
+                                sub.append_char('\n');
+                                sub.increase(4);
+                                sub.indent();
+                                sub.append_expression(expr);
+                                sub.append_char('\n');
+                                sub.decrease(4);
+                                sub.append_char('}');
+                            }
+                            _ => {
+                                sub.append_char('{');
+                                sub.append_char(' ');
+                                sub.append_expression(expr);
+                                sub.append_char(' ');
+                                sub.append_char('}');
+                            }
+                        },
+                        Descriptive::Application(invocation) => {
+                            sub.append_application(invocation);
+                        }
+                        Descriptive::Binding(_, _) => {
+                            // Nested bindings - for simplicity, just add placeholder
+                            sub.append_str("<<nested binding>>");
+                        }
+                    }
+
+                    // Add binding operator and variables
+                    sub.append_str(" ~ ");
+                    sub.append_variables(variables);
+
+                    let binding_text = sub.buffer;
+
+                    // Treat as atomic token
+                    if !current.is_empty() {
+                        if pos + 1 + binding_text.len() as u8 > self.width {
+                            self.append_str(&current);
+                            self.append_char('\n');
+                            for _ in 0..self.nesting {
+                                self.append_char(' ');
+                            }
+                            current.clear();
+                            current.push_str(&binding_text);
+                            pos = self.nesting + binding_text.len() as u8;
+                        } else {
+                            current.push(' ');
+                            current.push_str(&binding_text);
+                            pos += 1 + binding_text.len() as u8;
+                        }
+                    } else {
+                        current.push_str(&binding_text);
+                        pos += binding_text.len() as u8;
+                    }
+                }
+            }
         }
-    }
 
-    fn append_descriptive(&mut self, descriptive: &Descriptive) {
-        match descriptive {
-            Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping?
-            Descriptive::CodeInline(expr) => match expr {
-                Expression::Tablet(_) => {
-                    self.append_char('{');
-                    self.append_char('\n');
-
-                    self.increase(4);
-                    self.indent();
-                    self.append_expression(expr);
-                    self.append_char('\n');
-                    self.decrease(4);
-
-                    self.append_char('}');
-                }
-                _ => {
-                    self.append_char('{');
-                    self.append_char(' ');
-                    self.append_expression(expr);
-                    self.append_char(' ');
-                    self.append_char('}');
-                }
-            },
-            Descriptive::Application(invocation) => self.append_application(invocation),
-            Descriptive::Binding(descriptive, variables) => {
-                self.append_descriptive(descriptive);
-                self.append_str(" ~ ");
-                self.append_variables(variables);
-            }
+        // Output any remaining text
+        if !current.is_empty() {
+            self.append_str(&current);
         }
     }
 
@@ -412,17 +602,26 @@ impl Formatter {
                 }
                 Scope::AttributeBlock {
                     attributes,
-                    subscopes: substeps,
+                    subscopes,
                 } => {
-                    if attributes.len() > 0 {
-                        self.append_attribute(attributes);
-                        self.append_char('\n');
-                        // Increase indentation for substeps under role assignments
-                        self.increase(4);
+                    self.append_attributes(attributes);
+                    self.append_char('\n');
+
+                    if subscopes.len() == 0 {
+                        return;
                     }
-                    self.append_scopes(substeps);
-                    if attributes.len() > 0 {
-                        // Decrease indentation after role assignment substeps
+
+                    let first = subscopes
+                        .iter()
+                        .next()
+                        .unwrap();
+
+                    if let Scope::CodeBlock { .. } = first {
+                        // do NOT increase indent
+                        self.append_scopes(subscopes);
+                    } else {
+                        self.increase(4);
+                        self.append_scopes(subscopes);
                         self.decrease(4);
                     }
                 }
@@ -432,7 +631,6 @@ impl Formatter {
                 } => {
                     match expression {
                         Expression::Tablet(_) => {
-                            self.append_char('\n');
                             self.indent();
                             self.append_char('{');
                             self.append_char('\n');
@@ -442,7 +640,7 @@ impl Formatter {
                             self.append_expression(expression);
                             self.append_char('\n');
                             self.decrease(4);
-
+                            self.indent();
                             self.append_char('}');
                         }
                         _ => {
@@ -465,7 +663,7 @@ impl Formatter {
         }
     }
 
-    fn append_attribute(&mut self, attributes: &Vec<Attribute>) {
+    fn append_attributes(&mut self, attributes: &Vec<Attribute>) {
         self.indent();
         for (i, attribute) in attributes
             .iter()

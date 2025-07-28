@@ -203,6 +203,114 @@ vibe_coding :
     }
 
     #[test]
+    fn code_blocks_2() {
+        let technique = Technique {
+            header: None,
+            body: Some(vec![Procedure {
+                name: Identifier("action"),
+                parameters: None,
+                signature: None,
+                elements: vec![
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
+                        "We must take action!",
+                    )])]),
+                    Element::Steps(vec![Scope::DependentBlock {
+                        ordinal: "1",
+                        description: vec![Paragraph(vec![
+                            Descriptive::Text("To take the action, we must:"),
+                            Descriptive::CodeInline(Expression::Execution(Function {
+                                target: Identifier("exec"),
+                                parameters: vec![Expression::Multiline(
+                                    Some("bash"),
+                                    vec!["rm -rf /"],
+                                )],
+                            })),
+                        ])],
+                        responses: vec![],
+                        subscopes: vec![],
+                    }]),
+                ],
+            }]),
+        };
+
+        let result = format(&technique, 78);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+action :
+
+We must take action!
+
+    1.  To take the action, we must: { exec(
+        ```bash
+            rm -rf /
+        ```
+        ) }
+                "#
+            )
+        );
+    }
+
+    #[test]
+    fn code_blocks_3() {
+        let technique = Technique {
+            header: None,
+            body: Some(vec![Procedure {
+                name: Identifier("journal"),
+                parameters: None,
+                signature: None,
+                elements: vec![
+                    Element::Description(vec![Paragraph(vec![Descriptive::Text(
+                        "Record everything, with timestamps.",
+                    )])]),
+                    Element::Steps(vec![Scope::ParallelBlock {
+                        bullet: '-',
+                        description: vec![Paragraph(vec![Descriptive::Text(
+                            "Record event as it happens",
+                        )])],
+                        responses: vec![],
+                        subscopes: vec![Scope::AttributeBlock {
+                            attributes: vec![Attribute::Role(Identifier("journalist"))],
+                            subscopes: vec![Scope::CodeBlock {
+                                expression: Expression::Tablet(vec![Pair {
+                                    label: "timestamp",
+                                    value: Expression::Execution(Function {
+                                        target: Identifier("now"),
+                                        parameters: vec![],
+                                    }),
+                                }]),
+                                subscopes: vec![],
+                            }],
+                        }],
+                    }]),
+                ],
+            }]),
+        };
+
+        let result = format(&technique, 78);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+journal :
+
+Record everything, with timestamps.
+
+    -   Record event as it happens
+        @journalist
+        {
+            [
+                "timestamp" = now()
+                "message" = msg
+            ]
+        }
+                "#
+            )
+        );
+    }
+
+    #[test]
     fn nested_scopes() {
         let technique = Technique {
             header: None,

@@ -992,7 +992,7 @@ before_leaving :
         input.initialize(
             r#"
 1. Main step
-    a. Substep with response
+    a.  Substep with response
         'Yes' | 'No'
             "#,
         );
