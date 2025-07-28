@@ -198,6 +198,18 @@ impl Formatter {
                 }
                 self.append_char(')');
             }
+            Genus::Naked(formas) => {
+                for (i, forma) in formas
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        self.append_char(',');
+                        self.append_char(' ');
+                    }
+                    self.append_forma(forma);
+                }
+            }
             Genus::List(forma) => {
                 self.append_char('[');
                 self.append_forma(forma);
