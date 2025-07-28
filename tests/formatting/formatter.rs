@@ -21,7 +21,7 @@ mod verify {
             body: None,
         };
 
-        let result = format(&technique);
+        let result = format(&technique, 78);
         assert_eq!(
             result,
             trim(
@@ -46,7 +46,7 @@ mod verify {
             }]),
         };
 
-        let result = format(&technique);
+        let result = format(&technique, 78);
         assert_eq!(
             result,
             trim(
@@ -85,7 +85,7 @@ first : A -> B
             ]),
         };
 
-        let result = format(&technique);
+        let result = format(&technique, 78);
         assert_eq!(
             result,
             trim(
@@ -152,7 +152,7 @@ second : [Thing] -> (Who, Where, Why)
             }]),
         };
 
-        let result = format(&technique);
+        let result = format(&technique, 78);
         assert_eq!(
             result,
             trim(
@@ -184,7 +184,7 @@ win_le_tour : Bicycle -> YellowJersey
             }]),
         };
 
-        let result = format(&technique);
+        let result = format(&technique, 78);
         assert_eq!(
             result,
             trim(
@@ -275,7 +275,7 @@ vibe_coding :
                 ],
             }]),
         };
-        let result = format(&technique);
+        let result = format(&technique, 60);
 
         assert_eq!(
             result,

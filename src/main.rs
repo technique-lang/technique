@@ -3,8 +3,8 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-use technique::parsing;
 use technique::formatting;
+use technique::parsing;
 
 mod rendering;
 
@@ -118,7 +118,7 @@ fn main() {
             let content = parsing::load(&Path::new(filename));
             let technique = parsing::parse(&content);
 
-            let result = formatting::format(&technique);
+            let result = formatting::format(&technique, 78);
             print!("{}", result);
         }
         Some(("render", submatches)) => {

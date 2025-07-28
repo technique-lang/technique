@@ -2,8 +2,8 @@
 
 use crate::language::*;
 
-pub fn format(technique: &Technique) -> String {
-    let mut output = Formatter::new();
+pub fn format(technique: &Technique, width: usize) -> String {
+    let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);
@@ -33,7 +33,7 @@ struct Formatter {
 }
 
 impl Formatter {
-    fn new() -> Formatter {
+    fn new(width: usize) -> Formatter {
         Formatter {
             buffer: String::new(),
             nesting: 0,
@@ -646,7 +646,7 @@ mod check {
 
     #[test]
     fn genus() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_forma(&Forma("Jedi"));
         assert_eq!(output.buffer, "Jedi");
@@ -677,7 +677,7 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("Alderaan")),
@@ -702,7 +702,7 @@ mod check {
 
     #[test]
     fn numbers() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.buffer, "42");
