@@ -2,7 +2,7 @@
 
 use crate::language::*;
 
-pub fn format(technique: &Technique, width: usize) -> String {
+pub fn format(technique: &Technique, width: u8) -> String {
     let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
@@ -30,13 +30,15 @@ pub fn format(technique: &Technique, width: usize) -> String {
 struct Formatter {
     buffer: String,
     nesting: u8,
+    width: u8,
 }
 
 impl Formatter {
-    fn new(width: usize) -> Formatter {
+    fn new(width: u8) -> Formatter {
         Formatter {
             buffer: String::new(),
             nesting: 0,
+            width,
         }
     }
 

@@ -1,3 +1,4 @@
+use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
 use tracing::debug;
@@ -62,6 +63,15 @@ fn main() {
                         .help("Emit ANSI escape codes for syntax highlighting even if output is redirected to a pipe or file."),
                 )
                 .arg(
+                    Arg::new("wrap-width")
+                        .short('w')
+                        .long("width")
+                        .value_name("COLUMN")
+                        .value_parser(value_parser!(u8))
+                        .action(ArgAction::Set)
+                        .help("The column at which to wrap descriptive text.")
+                )
+                .arg(
                     Arg::new("filename")
                         .required(true)
                         .help("The file containing the code for the procedure you want to format."),
@@ -103,11 +113,17 @@ fn main() {
             println!("{:#?}", technique);
         }
         Some(("format", submatches)) => {
-            let raw_output = submatches
+            let raw_output = *submatches
                 .get_one::<bool>("raw-control-chars")
                 .unwrap(); // flags are always present since SetTrue implies default_value
 
             debug!(raw_output);
+
+            let wrap_width = *submatches
+                .get_one::<u8>("wrap-width")
+                .unwrap_or(&78);
+
+            debug!(wrap_width);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -118,7 +134,7 @@ fn main() {
             let content = parsing::load(&Path::new(filename));
             let technique = parsing::parse(&content);
 
-            let result = formatting::format(&technique, 78);
+            let result = formatting::format(&technique, wrap_width);
             print!("{}", result);
         }
         Some(("render", submatches)) => {

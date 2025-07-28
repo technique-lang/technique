@@ -287,13 +287,15 @@ before_leaving :
 
     1.  Verbally confirm:
         -   The name of the surgical procedure(s).
-        -   Completion of instrument, sponge, and needle counts.
+        -   Completion of instrument, sponge, and needle
+            counts.
         -   Specimen labelling
             { foreach specimen in specimens }
                 @nursing_team
-                    a.  Read specimen labels aloud, including patient
-                        name.
-        -   Whether there are any equipment problems to be addressed.
+                    a.  Read specimen labels aloud,
+                        including patient name.
+        -   Whether there are any equipment problems to be
+            addressed.
                 "#,
             ),
         );
