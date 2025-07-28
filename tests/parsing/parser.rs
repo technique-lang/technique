@@ -1086,7 +1086,23 @@ main_procedure :
 
 I. First Section
 
+first_section_first_procedure :
+
+# One dot One
+
+first_section_second_procedure :
+
+# One dot Two
+
 II. Second Section
+
+second_section_first_procedure :
+
+# Two dot One
+
+second_section_second_procedure :
+
+# Two dot Two
             "#,
         ));
 
@@ -1114,12 +1130,38 @@ II. Second Section
                     Element::Section {
                         numeral: "I",
                         title: Some("First Section"),
-                        procedures: vec![],
+                        procedures: vec![
+                            Procedure {
+                                name: Identifier("first_section_first_procedure"),
+                                parameters: None,
+                                signature: None,
+                                elements: vec![Element::Title("One dot One")]
+                            },
+                            Procedure {
+                                name: Identifier("first_section_second_procedure"),
+                                parameters: None,
+                                signature: None,
+                                elements: vec![Element::Title("One dot Two")]
+                            }
+                        ],
                     },
                     Element::Section {
                         numeral: "II",
                         title: Some("Second Section"),
-                        procedures: vec![],
+                        procedures: vec![
+                            Procedure {
+                                name: Identifier("second_section_first_procedure"),
+                                parameters: None,
+                                signature: None,
+                                elements: vec![Element::Title("Two dot One")]
+                            },
+                            Procedure {
+                                name: Identifier("second_section_second_procedure"),
+                                parameters: None,
+                                signature: None,
+                                elements: vec![Element::Title("Two dot Two")]
+                            }
+                        ],
                     },
                 ],
             }
