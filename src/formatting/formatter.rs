@@ -416,19 +416,33 @@ impl Formatter {
                     expression,
                     subscopes: substeps,
                 } => {
-                    self.append_char('{');
+                    match expression {
+                        Expression::Tablet(_) => {
+                            self.append_char('\n');
+                            self.indent();
+                            self.append_char('{');
+                            self.append_char('\n');
+
+                            self.increase(4);
+                            self.indent();
+                            self.append_expression(expression);
+                            self.append_char('\n');
+                            self.decrease(4);
+
+                            self.append_char('}');
+                        }
+                        _ => {
+                            self.indent();
+                            self.append_char('{');
+                            self.append_char(' ');
+                            self.append_expression(expression);
+                            self.append_char(' ');
+                            self.append_char('}');
+                        }
+                    }
                     self.append_char('\n');
 
-                    self.increase(4);
-                    self.indent();
-                    self.append_expression(expression);
-                    self.append_char('\n');
-                    self.decrease(4);
-
-                    self.append_char('}');
-                    self.append_char('\n');
-
-                    // Format substeps within the code block scope
+                    // Format subscopes within the code block scope
                     self.increase(4);
                     self.append_scopes(substeps);
                     self.decrease(4);
