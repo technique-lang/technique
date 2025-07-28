@@ -2,8 +2,8 @@
 
 use crate::language::*;
 
-pub fn format(technique: &Technique) -> String {
-    let mut output = Formatter::new();
+pub fn format(technique: &Technique, width: u8) -> String {
+    let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);
@@ -30,13 +30,15 @@ pub fn format(technique: &Technique) -> String {
 struct Formatter {
     buffer: String,
     nesting: u8,
+    width: u8,
 }
 
 impl Formatter {
-    fn new() -> Formatter {
+    fn new(width: u8) -> Formatter {
         Formatter {
             buffer: String::new(),
             nesting: 0,
+            width,
         }
     }
 
@@ -62,8 +64,74 @@ impl Formatter {
     }
 
     fn append_str(&mut self, text: &str) {
-        self.buffer
-            .push_str(text);
+        for c in text.chars() {
+            self.append_char(c);
+        }
+    }
+
+    fn subformatter(&self) -> Formatter {
+        Formatter {
+            buffer: String::new(),
+            nesting: self.nesting,
+            width: self.width,
+        }
+    }
+
+    fn builder(&mut self) -> Line {
+        Line::new(self)
+    }
+
+    fn render_inline_code(&self, expr: &Expression) -> String {
+        match expr {
+            Expression::Tablet(_) | Expression::Multiline(_, _) => {
+                // These are not inline, caller should handle specially
+                String::new()
+            }
+            _ => {
+                let mut sub = self.subformatter();
+                sub.append_char('{');
+                sub.append_char(' ');
+                sub.append_expression(expr);
+                sub.append_char(' ');
+                sub.append_char('}');
+                sub.buffer
+            }
+        }
+    }
+
+    fn render_application(&self, invocation: &Invocation) -> String {
+        let mut sub = self.subformatter();
+        sub.append_application(invocation);
+        sub.buffer
+    }
+
+    fn render_binding(
+        &self,
+        inner_descriptive: &Descriptive,
+        variables: &Vec<Identifier>,
+    ) -> String {
+        let mut sub = self.subformatter();
+
+        match inner_descriptive {
+            Descriptive::Text(text) => sub.append_str(text),
+            Descriptive::CodeInline(expr) => {
+                sub.append_char('{');
+                sub.append_char(' ');
+                sub.append_expression(expr);
+                sub.append_char(' ');
+                sub.append_char('}');
+            }
+            Descriptive::Application(invocation) => {
+                sub.append_application(invocation);
+            }
+            Descriptive::Binding(_, _) => {
+                sub.append_str("<<nested binding>>");
+            }
+        }
+
+        sub.append_str(" ~ ");
+        sub.append_variables(variables);
+        sub.buffer
     }
 
     fn append_char(&mut self, c: char) {
@@ -132,14 +200,7 @@ impl Formatter {
 
         // elements
 
-        for (i, element) in procedure
-            .elements
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                self.append_char('\n');
-            }
+        for element in &procedure.elements {
             self.append_element(element);
         }
     }
@@ -147,15 +208,18 @@ impl Formatter {
     fn append_element(&mut self, element: &Element) {
         match element {
             Element::Title(title) => {
+                self.append_char('\n');
                 self.append_char('#');
                 self.append_char(' ');
                 self.append_str(title);
                 self.append_char('\n');
             }
-            Element::Description(descriptives) => {
-                self.append_descriptives(descriptives);
+            Element::Description(paragraphs) => {
+                self.append_char('\n');
+                self.append_paragraphs(paragraphs);
             }
             Element::Steps(steps) => {
+                self.append_char('\n');
                 self.append_steps(steps);
             }
             Element::CodeBlock(expression) => {
@@ -200,6 +264,18 @@ impl Formatter {
                 }
                 self.append_char(')');
             }
+            Genus::Naked(formas) => {
+                for (i, forma) in formas
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        self.append_char(',');
+                        self.append_char(' ');
+                    }
+                    self.append_forma(forma);
+                }
+            }
             Genus::List(forma) => {
                 self.append_char('[');
                 self.append_forma(forma);
@@ -228,57 +304,86 @@ impl Formatter {
         self.append_str(forma.0)
     }
 
-    fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
-        for (i, descriptive) in descriptives
+    fn append_paragraphs(&mut self, paragraphs: &Vec<Paragraph>) {
+        for (i, paragraph) in paragraphs
             .iter()
             .enumerate()
         {
-            // TODO not sure about this in the face of re-wrapping
             if i > 0 {
-                self.append_char(' ');
-            }
-            self.append_descriptive(descriptive);
-        }
-    }
-
-    fn append_descriptive(&mut self, descriptive: &Descriptive) {
-        match descriptive {
-            Descriptive::Text(text) => self.append_str(text), // TODO re-wrapping?
-            Descriptive::CodeBlock(expr) => match expr {
-                Expression::Tablet(_) => {
-                    self.append_char('{');
-                    self.append_char('\n');
-
-                    self.increase(4);
-                    self.indent();
-                    self.append_expression(expr);
-                    self.append_char('\n');
-                    self.decrease(4);
-
-                    self.append_char('}');
-                }
-                _ => {
-                    self.append_char('{');
-                    self.append_char(' ');
-                    self.append_expression(expr);
-                    self.append_char(' ');
-                    self.append_char('}');
-                }
-            },
-            Descriptive::Application(invocation) => self.append_application(invocation),
-            Descriptive::Binding(descriptive, variables) => {
-                self.append_descriptive(descriptive);
-                self.append_str(" ~ ");
-                self.append_variables(variables);
-            }
-            Descriptive::Paragraph(descriptives) => {
-                self.append_descriptives(descriptives);
+                // Add blank line between paragraphs
                 self.append_char('\n');
             }
+            self.append_descriptives(&paragraph.0);
+            self.append_char('\n');
         }
     }
 
-    fn append_steps(&mut self, steps: &Vec<Step>) {
+    fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
+        let mut line = self.builder();
+
+        for descriptive in descriptives {
+            match descriptive {
+                Descriptive::Text(text) => {
+                    line.add_text(text);
+                }
+                Descriptive::CodeInline(expr) => match expr {
+                    Expression::Tablet(_) => {
+                        line.flush();
+                        self.append_char('{');
+                        self.append_char('\n');
+                        self.increase(4);
+                        self.indent();
+                        self.append_expression(expr);
+                        self.append_char('\n');
+                        self.decrease(4);
+                        self.append_char('}');
+                        line = self.builder();
+                    }
+                    Expression::Multiline(_, _) => {
+                        line.flush();
+                        self.append_char('{');
+                        self.increase(4);
+                        self.append_expression(expr);
+                        self.decrease(4);
+                        self.append_char('\n');
+                        self.indent();
+                        self.append_char('}');
+                        line = self.builder();
+                    }
+                    _ => match expr {
+                        Expression::Execution(func)
+                            if func
+                                .parameters
+                                .iter()
+                                .any(|p| matches!(p, Expression::Multiline(_, _))) =>
+                        {
+                            line.flush();
+                            self.append_char(' ');
+                            self.append_char('{');
+                            self.append_char(' ');
+                            self.append_expression(expr);
+                            self.append_char(' ');
+                            self.append_char('}');
+                            line = self.builder();
+                        }
+                        _ => {
+                            line.add_inline_code(expr);
+                        }
+                    },
+                },
+                Descriptive::Application(invocation) => {
+                    line.add_application(invocation);
+                }
+                Descriptive::Binding(inner_descriptive, variables) => {
+                    line.add_binding(inner_descriptive, variables);
+                }
+            }
+        }
+
+        line.flush();
+    }
+
+    fn append_steps(&mut self, steps: &Vec<Scope>) {
         self.increase(4);
         for step in steps {
             self.append_step(step);
@@ -286,23 +391,26 @@ impl Formatter {
         self.decrease(4);
     }
 
-    fn append_step(&mut self, step: &Step) {
+    fn append_step(&mut self, step: &Scope) {
         match step {
-            Step::Dependent {
+            Scope::DependentBlock {
                 ordinal,
-                content,
+                description: content,
                 responses,
-                scopes,
+                subscopes: scopes,
             } => {
                 self.indent();
                 self.append_str(ordinal);
                 self.append_char('.');
                 self.append_char(' ');
+                if ordinal.len() == 1 {
+                    self.append_char(' ');
+                }
 
                 self.increase(4);
 
                 if content.len() > 0 {
-                    self.append_descriptives(content);
+                    self.append_paragraphs(content);
                 }
                 if responses.len() > 0 {
                     self.indent();
@@ -310,40 +418,40 @@ impl Formatter {
                 }
 
                 if scopes.len() > 0 {
-                    self.append_char('\n');
                     self.append_scopes(scopes);
                 }
 
                 self.decrease(4);
             }
-            Step::Parallel {
-                content,
+            Scope::ParallelBlock {
+                bullet,
+                description,
                 responses,
-                scopes,
+                subscopes,
             } => {
                 self.indent();
-                self.append_str("-   ");
+                self.append_char(*bullet);
+                self.append_char(' ');
+                self.append_char(' ');
+                self.append_char(' ');
 
                 self.increase(4);
 
-                if content.len() > 0 {
-                    self.append_descriptives(content);
+                if description.len() > 0 {
+                    self.append_paragraphs(description);
                 }
                 if responses.len() > 0 {
                     self.indent();
                     self.append_responses(responses);
-                    if scopes.len() > 0 {
-                        self.append_char('\n');
-                    }
                 }
 
-                if scopes.len() > 0 {
-                    self.append_scopes(scopes);
+                if subscopes.len() > 0 {
+                    self.append_scopes(subscopes);
                 }
 
                 self.decrease(4);
-                self.append_char('\n');
             }
+            _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
     }
 
@@ -364,25 +472,92 @@ impl Formatter {
                 self.append_str(text);
             }
         }
+        self.append_char('\n');
     }
 
     fn append_scopes(&mut self, scopes: &Vec<Scope>) {
         for scope in scopes {
-            if scope
-                .attributes
-                .len()
-                > 0
-            {
-                self.append_attribute(&scope.attributes);
-                self.append_char('\n');
-            }
-            for step in &scope.substeps {
-                self.append_step(step);
+            match scope {
+                Scope::DependentBlock {
+                    ordinal: _,
+                    description: _,
+                    responses: _,
+                    subscopes: _,
+                } => {
+                    self.append_step(scope);
+                }
+                Scope::ParallelBlock {
+                    bullet: _,
+                    description: _,
+                    responses: _,
+                    subscopes: _,
+                } => {
+                    self.append_step(scope);
+                }
+                Scope::AttributeBlock {
+                    attributes,
+                    subscopes,
+                } => {
+                    self.append_attributes(attributes);
+                    self.append_char('\n');
+
+                    if subscopes.len() == 0 {
+                        return;
+                    }
+
+                    let first = subscopes
+                        .iter()
+                        .next()
+                        .unwrap();
+
+                    if let Scope::CodeBlock { .. } = first {
+                        // do NOT increase indent
+                        self.append_scopes(subscopes);
+                    } else {
+                        self.increase(4);
+                        self.append_scopes(subscopes);
+                        self.decrease(4);
+                    }
+                }
+                Scope::CodeBlock {
+                    expression,
+                    subscopes: substeps,
+                } => {
+                    match expression {
+                        Expression::Tablet(_) => {
+                            self.indent();
+                            self.append_char('{');
+                            self.append_char('\n');
+
+                            self.increase(4);
+                            self.indent();
+                            self.append_expression(expression);
+                            self.append_char('\n');
+                            self.decrease(4);
+                            self.indent();
+                            self.append_char('}');
+                        }
+                        _ => {
+                            self.indent();
+                            self.append_char('{');
+                            self.append_char(' ');
+                            self.append_expression(expression);
+                            self.append_char(' ');
+                            self.append_char('}');
+                        }
+                    }
+                    self.append_char('\n');
+
+                    // Format subscopes within the code block scope
+                    self.increase(4);
+                    self.append_scopes(substeps);
+                    self.decrease(4);
+                }
             }
         }
     }
 
-    fn append_attribute(&mut self, attributes: &Vec<Attribute>) {
+    fn append_attributes(&mut self, attributes: &Vec<Attribute>) {
         self.indent();
         for (i, attribute) in attributes
             .iter()
@@ -523,6 +698,15 @@ impl Formatter {
     fn append_function(&mut self, function: &Function) {
         self.append_identifier(&function.target);
         self.append_char('(');
+
+        let mut has_multiline = false;
+        for parameter in &function.parameters {
+            if let Expression::Multiline(_, _) = parameter {
+                has_multiline = true;
+                break;
+            }
+        }
+
         for (i, parameter) in function
             .parameters
             .iter()
@@ -534,7 +718,10 @@ impl Formatter {
             }
             self.append_expression(parameter);
         }
-        self.indent();
+
+        if has_multiline {
+            self.indent();
+        }
         self.append_char(')');
     }
 
@@ -559,13 +746,142 @@ impl Formatter {
     }
 }
 
+struct Line<'a> {
+    output: &'a mut Formatter, // reference to parent
+    current: String,
+    position: u8,
+}
+
+impl<'a> Line<'a> {
+    fn new(output: &'a mut Formatter) -> Self {
+        Line {
+            current: String::new(),
+            position: output.nesting,
+            output,
+        }
+    }
+
+    fn add_text(&mut self, text: &str) {
+        for word in text.split_ascii_whitespace() {
+            self.add_word(word);
+        }
+    }
+
+    fn add_word(&mut self, word: &str) {
+        if !self
+            .current
+            .is_empty()
+        {
+            if self.position + 1 + word.len() as u8
+                > self
+                    .output
+                    .width
+            {
+                self.wrap_line();
+                self.current
+                    .push_str(word);
+                self.position = self
+                    .output
+                    .nesting
+                    + word.len() as u8;
+            } else {
+                self.current
+                    .push(' ');
+                self.current
+                    .push_str(word);
+                self.position += 1 + word.len() as u8;
+            }
+        } else {
+            self.current
+                .push_str(word);
+            self.position += word.len() as u8;
+        }
+    }
+
+    fn add_inline_code(&mut self, expr: &Expression) {
+        let code_text = self
+            .output
+            .render_inline_code(expr);
+        self.add_token(&code_text);
+    }
+
+    fn add_application(&mut self, invocation: &Invocation) {
+        let app_text = self
+            .output
+            .render_application(invocation);
+        self.add_token(&app_text);
+    }
+
+    fn add_binding(&mut self, inner_descriptive: &Descriptive, variables: &Vec<Identifier>) {
+        let binding_text = self
+            .output
+            .render_binding(inner_descriptive, variables);
+        self.add_token(&binding_text);
+    }
+
+    fn add_token(&mut self, token: &str) {
+        if self
+            .current
+            .is_empty()
+        {
+            self.current
+                .push_str(token);
+            self.position += token.len() as u8;
+        } else {
+            if self.position + 1 + token.len() as u8
+                > self
+                    .output
+                    .width
+            {
+                self.wrap_line();
+                self.current
+                    .push_str(token);
+                self.position = self
+                    .output
+                    .nesting
+                    + token.len() as u8;
+            } else {
+                self.current
+                    .push(' ');
+                self.current
+                    .push_str(token);
+                self.position += 1 + token.len() as u8;
+            }
+        }
+    }
+
+    fn wrap_line(&mut self) {
+        self.output
+            .append_str(&self.current);
+        self.output
+            .append_char('\n');
+        self.output
+            .indent();
+        self.current
+            .clear();
+        self.position = self
+            .output
+            .nesting;
+    }
+
+    fn flush(self) {
+        if !self
+            .current
+            .is_empty()
+        {
+            self.output
+                .append_str(&self.current);
+        }
+    }
+}
+
 #[cfg(test)]
 mod check {
     use super::*;
 
     #[test]
     fn genus() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_forma(&Forma("Jedi"));
         assert_eq!(output.buffer, "Jedi");
@@ -596,7 +912,7 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("Alderaan")),
@@ -621,7 +937,7 @@ mod check {
 
     #[test]
     fn numbers() {
-        let mut output = Formatter::new();
+        let mut output = Formatter::new(78);
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.buffer, "42");
