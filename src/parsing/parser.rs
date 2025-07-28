@@ -38,6 +38,7 @@ pub enum ParsingError<'i> {
     InvalidGenus(usize),
     InvalidSignature(usize),
     InvalidDeclaration(usize),
+    InvalidSection(usize),
     InvalidInvocation(usize),
     InvalidFunction(usize),
     InvalidCodeBlock(usize),
@@ -63,6 +64,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidGenus(offset) => *offset,
             ParsingError::InvalidSignature(offset) => *offset,
             ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidSection(offset) => *offset,
             ParsingError::InvalidInvocation(offset) => *offset,
             ParsingError::InvalidFunction(offset) => *offset,
             ParsingError::InvalidCodeBlock(offset) => *offset,
@@ -88,6 +90,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
             ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
             ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
+            ParsingError::InvalidSection(_) => "invalid section heading".to_string(),
             ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
             ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
             ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
@@ -138,6 +141,7 @@ impl<'i> Parser<'i> {
 
         // Parse zero or more procedures
         let mut procedures = Vec::new();
+
         while !self.is_finished() {
             self.trim_whitespace();
 
@@ -164,7 +168,7 @@ impl<'i> Parser<'i> {
         Ok(Technique { header, body })
     }
 
-    /// consume up to but not including newline (or end)
+    /// consume up to but not including newline (or end), then take newline
     fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError<'i>>
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
@@ -767,6 +771,62 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
+    fn read_section(&mut self) -> Result<Element<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_section, is_section, |outer| {
+            // Parse the section header first
+            let (numeral, title) = outer.take_line(|inner| {
+                let result = inner.parse_section_header()?;
+                Ok(result)
+            })?;
+
+            // Parse procedures within this section
+            let mut procedures = Vec::new();
+            while !outer.is_finished() {
+                outer.trim_whitespace();
+                if outer.is_finished() {
+                    break;
+                }
+
+                if is_procedure_declaration(outer.source) {
+                    let procedure = outer.read_procedure()?;
+                    procedures.push(procedure);
+                } else {
+                    // Stop if we hit something that's not a procedure
+                    break;
+                }
+            }
+
+            Ok(Element::Section {
+                numeral,
+                title,
+                procedures,
+            })
+        })
+    }
+
+    fn parse_section_header(&mut self) -> Result<(&'i str, Option<&'i str>), ParsingError<'i>> {
+        self.trim_whitespace();
+
+        // Extract roman numeral and optional title
+        let re = regex!(r"^\s*([IVX]+)\.\s*(.*?)\s*$");
+        let cap = re
+            .captures(self.source)
+            .ok_or(ParsingError::InvalidSection(self.offset))?;
+
+        let numeral = match cap.get(1) {
+            Some(one) => one.as_str(),
+            None => return Err(ParsingError::Expected(self.offset, "section header")),
+        };
+
+        let title = match cap.get(2) {
+            Some(two) => Some(two.as_str()),
+            None => None,
+        };
+
+        // parse methods do not advance
+        Ok((numeral, title))
+    }
+
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.take_block_chars('{', '}', |outer| outer.read_expression())
     }
@@ -1124,9 +1184,7 @@ impl<'i> Parser<'i> {
     fn read_substep_dependent(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
-            |line| {
-                is_substep_dependent(line)
-            },
+            |line| is_substep_dependent(line),
             |outer| {
                 let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
@@ -1793,6 +1851,11 @@ fn is_step_parallel(content: &str) -> bool {
 
 fn is_step(content: &str) -> bool {
     is_step_dependent(content) || is_step_parallel(content)
+}
+
+fn is_section(content: &str) -> bool {
+    let re = regex!(r"^\s*([IVX]+)\.\s+");
+    re.is_match(content)
 }
 
 /// Recognize

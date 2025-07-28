@@ -1077,4 +1077,52 @@ before_leaving :
             ])])
         );
     }
+
+    #[test]
+    fn section_parsing() {
+        let result = technique::parsing::parser::parse_via_taking(trim(
+            r#"
+main_procedure :
+
+I. First Section
+
+II. Second Section
+            "#,
+        ));
+
+        assert!(result.is_ok());
+        let technique = result.unwrap();
+
+        // Check we have procedures
+        assert!(technique
+            .body
+            .is_some());
+        let procedures = technique
+            .body
+            .unwrap();
+        assert_eq!(procedures.len(), 1);
+
+        // Verify complete structure
+        let main_procedure = &procedures[0];
+        assert_eq!(
+            main_procedure,
+            &Procedure {
+                name: Identifier("main_procedure"),
+                parameters: None,
+                signature: None,
+                elements: vec![
+                    Element::Section {
+                        numeral: "I",
+                        title: Some("First Section"),
+                        procedures: vec![],
+                    },
+                    Element::Section {
+                        numeral: "II",
+                        title: Some("Second Section"),
+                        procedures: vec![],
+                    },
+                ],
+            }
+        );
+    }
 }

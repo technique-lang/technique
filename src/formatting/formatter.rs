@@ -234,6 +234,24 @@ impl Formatter {
 
                 self.append_char('}');
             }
+            Element::Section {
+                numeral,
+                title,
+                procedures,
+            } => {
+                self.append_char('\n');
+                self.append_str(numeral);
+                self.append_str(". ");
+                if let Some(title_text) = title {
+                    self.append_str(title_text);
+                }
+                self.append_char('\n');
+
+                for procedure in procedures {
+                    self.append_char('\n');
+                    self.format_procedure(procedure);
+                }
+            }
         }
     }
 

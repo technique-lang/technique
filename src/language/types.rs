@@ -33,6 +33,11 @@ pub enum Element<'i> {
     Description(Vec<Paragraph<'i>>),
     Steps(Vec<Scope<'i>>),
     CodeBlock(Expression<'i>), // TODO remove, possibly, if Scope::CodeBlock covers this adequately, or change to Vec<Scope> as well.
+    Section {
+        numeral: &'i str,
+        title: Option<&'i str>,
+        procedures: Vec<Procedure<'i>>,
+    },
 }
 
 #[derive(Eq, Debug, PartialEq)]

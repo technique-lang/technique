@@ -414,4 +414,49 @@ before_leaving :
             ),
         );
     }
+
+    #[test]
+    fn section_formatting() {
+        let technique = Technique {
+            header: None,
+            body: Some(vec![Procedure {
+                name: Identifier("main_procedure"),
+                parameters: None,
+                signature: None,
+                elements: vec![
+                    Element::Section {
+                        numeral: "I",
+                        title: Some("First Section"),
+                        procedures: vec![],
+                    },
+                    Element::Section {
+                        numeral: "II",
+                        title: Some("Second Section"),
+                        procedures: vec![],
+                    },
+                    Element::Section {
+                        numeral: "III",
+                        title: None,
+                        procedures: vec![],
+                    },
+                ],
+            }]),
+        };
+
+        let result = format(&technique, 78);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+main_procedure :
+
+I. First Section
+
+II. Second Section
+
+III.
+                "#
+            )
+        );
+    }
 }
