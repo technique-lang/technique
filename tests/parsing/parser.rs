@@ -1266,7 +1266,7 @@ III. Implementation
                         Scope::SectionChunk {
                             numeral: "I",
                             title: Some("Concept"),
-                            body: Technique::Procedures(vec![]),
+                            body: Technique::Empty,
                         },
                         Scope::SectionChunk {
                             numeral: "II",
@@ -1340,7 +1340,7 @@ III. Implementation
                         Scope::SectionChunk {
                             numeral: "III",
                             title: Some("Implementation"),
-                            body: Technique::Procedures(vec![]),
+                            body: Technique::Empty,
                         },
                     ])],
                 }])),

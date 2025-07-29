@@ -808,7 +808,16 @@ impl<'i> Parser<'i> {
             outer.require_newline()?;
 
             // Determine if this section contains procedures or steps
-            if is_procedure_declaration(outer.source) {
+            outer.trim_whitespace();
+            if outer.is_finished() {
+                // Section is empty (fairly common, especially in early
+                // drafting of a Technique)
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Empty,
+                })
+            } else if is_procedure_declaration(outer.source) {
                 // Section contains procedures
                 let mut procedures = Vec::new();
                 while !outer.is_finished() {
@@ -1778,25 +1787,32 @@ fn is_genus(content: &str) -> bool {
 
     match first {
         '[' => {
-            // List pattern: [Forma] where Forma starts with uppercase
+            // List pattern? [Forma] where Forma starts with uppercase
             let re = regex!(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$");
             re.is_match(content)
         }
         '(' => {
-            // Unit Forma: ()
+            // Unit Forma? ()
             if let Some(c) = chars.next() {
                 if c == ')' {
                     return true;
                 }
             }
-            // Tuple pattern: (Forma, Forma, ...)
+            // Tuple pattern? (Forma, Forma, ...)
             let re = regex!(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$");
             re.is_match(content)
         }
         _ => {
-            // Single Forma pattern
-            let re = regex!(r"^[A-Z][A-Za-z0-9]*$");
-            re.is_match(content)
+            if content.contains(',') {
+                // could be a Naked tuple? Forma, Forma, ...
+                let re = regex!(r"^[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)+$");
+                re.is_match(content)
+            } else {
+                // nope, check if it's just a simple Single Forma. Great if
+                // so, otherwise the caller is going to make some choices!
+                let re = regex!(r"^[A-Z][A-Za-z0-9]*$");
+                re.is_match(content)
+            }
         }
     }
 }

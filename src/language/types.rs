@@ -31,6 +31,7 @@ impl Default for Metadata<'_> {
 pub enum Technique<'i> {
     Steps(Vec<Scope<'i>>),
     Procedures(Vec<Procedure<'i>>),
+    Empty,
 }
 
 #[derive(Eq, Debug, PartialEq)]

@@ -180,6 +180,7 @@ impl Formatter {
                 // and restore
                 self.nesting = saved;
             }
+            Technique::Empty => {}
         }
     }
 

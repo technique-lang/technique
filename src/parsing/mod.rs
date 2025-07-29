@@ -37,6 +37,9 @@ pub fn parse(content: &str) -> Document {
                             if steps.len() == 1 { "" } else { "s" }
                         );
                     }
+                    Technique::Empty => {
+                        debug!("Empty");
+                    }
                 }
             } else {
                 debug!("No content found");
