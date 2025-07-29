@@ -3,7 +3,7 @@
 use std::path::Path;
 use tracing::debug;
 
-use crate::language::Technique;
+use crate::language::{Document, Technique};
 
 pub mod parser;
 mod scope;
@@ -16,22 +16,33 @@ pub fn load(filename: &Path) -> String {
 }
 
 /// Parse text into a Technique object, or error out.
-pub fn parse(content: &str) -> Technique {
+pub fn parse(content: &str) -> Document {
     let result = parser::parse_via_taking(content);
 
     match result {
-        Ok(technique) => {
-            if let Some(procedures) = &technique.body {
-                debug!(
-                    "Found {} procedure{}",
-                    procedures.len(),
-                    if procedures.len() > 1 { "s" } else { "" }
-                );
+        Ok(document) => {
+            if let Some(body) = &document.body {
+                match body {
+                    Technique::Procedures(procedures) => {
+                        debug!(
+                            "Found {} procedure{}",
+                            procedures.len(),
+                            if procedures.len() == 1 { "" } else { "s" }
+                        );
+                    }
+                    Technique::Steps(steps) => {
+                        debug!(
+                            "Found {} step{}",
+                            steps.len(),
+                            if steps.len() == 1 { "" } else { "s" }
+                        );
+                    }
+                }
             } else {
-                debug!("No procedures found");
+                debug!("No content found");
             }
 
-            technique
+            document
         }
         Err(error) => {
             eprintln!("error: {}", error);

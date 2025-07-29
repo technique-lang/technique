@@ -11,7 +11,7 @@ mod verify {
 
     #[test]
     fn header_and_body() {
-        let technique = Technique {
+        let document = Document {
             header: Some(Metadata {
                 version: 1,
                 license: Some("MIT"),
@@ -21,7 +21,7 @@ mod verify {
             body: None,
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -33,9 +33,9 @@ mod verify {
             )
         );
 
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("first"),
                 parameters: None,
                 signature: Some(Signature {
@@ -43,10 +43,10 @@ mod verify {
                     range: Genus::Single(Forma("B")),
                 }),
                 elements: vec![],
-            }]),
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -56,14 +56,14 @@ first : A -> B
             )
         );
 
-        let technique = Technique {
+        let document = Document {
             header: Some(Metadata {
                 version: 1,
                 license: Some("PD"),
                 copyright: Some("2025 The First Procedure Society, Inc"),
                 template: None,
             }),
-            body: Some(vec![
+            body: Some(Technique::Procedures(vec![
                 Procedure {
                     name: Identifier("first"),
                     parameters: None,
@@ -82,10 +82,10 @@ first : A -> B
                     }),
                     elements: vec![],
                 },
-            ]),
+            ])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -103,9 +103,9 @@ second : [Thing] -> (Who, Where, Why)
 
     #[test]
     fn steps_and_substeps() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("win_le_tour"),
                 parameters: None,
                 signature: Some(Signature {
@@ -149,10 +149,10 @@ second : [Thing] -> (Who, Where, Why)
                         subscopes: vec![],
                     },
                 ])],
-            }]),
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -171,9 +171,9 @@ win_le_tour : Bicycle -> YellowJersey
 
     #[test]
     fn code_blocks() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("vibe_coding"),
                 parameters: None,
                 signature: None,
@@ -181,10 +181,10 @@ win_le_tour : Bicycle -> YellowJersey
                     target: Identifier("exec"),
                     parameters: vec![Expression::Multiline(Some("bash"), vec!["rm -rf /"])],
                 }))],
-            }]),
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -204,9 +204,9 @@ vibe_coding :
 
     #[test]
     fn multiline_in_code_inline() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("action"),
                 parameters: None,
                 signature: None,
@@ -230,10 +230,10 @@ vibe_coding :
                         subscopes: vec![],
                     }]),
                 ],
-            }]),
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -254,9 +254,9 @@ We must take action!
 
     #[test]
     fn code_block_under_attribute() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("journal"),
                 parameters: None,
                 signature: None,
@@ -291,10 +291,10 @@ We must take action!
                         }],
                     }]),
                 ],
-            }]),
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -318,9 +318,9 @@ Record everything, with timestamps.
 
     #[test]
     fn nested_scopes() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("before_leaving"),
                 parameters: None,
                 signature: None,
@@ -387,9 +387,9 @@ Record everything, with timestamps.
                         ],
                     }]),
                 ],
-            }]),
+            }])),
         };
-        let result = format(&technique, 60);
+        let result = format(&document, 60);
 
         assert_eq!(
             result,
@@ -417,33 +417,33 @@ before_leaving :
 
     #[test]
     fn section_formatting() {
-        let technique = Technique {
+        let document = Document {
             header: None,
-            body: Some(vec![Procedure {
+            body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("main_procedure"),
                 parameters: None,
                 signature: None,
-                elements: vec![
-                    Element::Section {
+                elements: vec![Element::Steps(vec![
+                    Scope::SectionChunk {
                         numeral: "I",
                         title: Some("First Section"),
-                        procedures: vec![],
+                        body: Technique::Procedures(vec![]),
                     },
-                    Element::Section {
+                    Scope::SectionChunk {
                         numeral: "II",
                         title: Some("Second Section"),
-                        procedures: vec![],
+                        body: Technique::Procedures(vec![]),
                     },
-                    Element::Section {
+                    Scope::SectionChunk {
                         numeral: "III",
                         title: None,
-                        procedures: vec![],
+                        body: Technique::Procedures(vec![]),
                     },
-                ],
-            }]),
+                ])],
+            }])),
         };
 
-        let result = format(&technique, 78);
+        let result = format(&document, 78);
         assert_eq!(
             result,
             trim(
@@ -455,6 +455,69 @@ I. First Section
 II. Second Section
 
 III.
+                "#
+            )
+        );
+    }
+
+    #[test]
+    fn response_formatting() {
+        let document = Document {
+            header: None,
+            body: Some(Technique::Procedures(vec![Procedure {
+                name: Identifier("test_procedure"),
+                parameters: None,
+                signature: None,
+                elements: vec![Element::Steps(vec![
+                    Scope::DependentBlock {
+                        ordinal: "1",
+                        description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+                        responses: vec![],
+                        subscopes: vec![Scope::DependentBlock {
+                            ordinal: "a",
+                            description: vec![Paragraph(vec![Descriptive::Text(
+                                "Substep with response",
+                            )])],
+                            responses: vec![
+                                Response {
+                                    value: "Yes",
+                                    condition: None,
+                                },
+                                Response {
+                                    value: "No",
+                                    condition: None,
+                                },
+                            ],
+                            subscopes: vec![],
+                        }],
+                    },
+                    Scope::DependentBlock {
+                        ordinal: "2",
+                        description: vec![Paragraph(vec![Descriptive::Text(
+                            "Simple step with response",
+                        )])],
+                        responses: vec![Response {
+                            value: "Confirmed",
+                            condition: None,
+                        }],
+                        subscopes: vec![],
+                    },
+                ])],
+            }])),
+        };
+
+        let result = format(&document, 78);
+        assert_eq!(
+            result,
+            trim(
+                r#"
+test_procedure :
+
+    1.  Main step
+        a.  Substep with response
+                'Yes' | 'No'
+    2.  Simple step with response
+            'Confirmed'
                 "#
             )
         );

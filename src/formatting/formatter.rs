@@ -2,17 +2,15 @@
 
 use crate::language::*;
 
-pub fn format(technique: &Technique, width: u8) -> String {
+pub fn format(technique: &Document, width: u8) -> String {
     let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);
     }
 
-    if let Some(procedures) = &technique.body {
-        for procedure in procedures {
-            output.format_procedure(procedure);
-        }
+    if let Some(body) = &technique.body {
+        output.format_technique(body);
     }
 
     if !output
@@ -167,6 +165,24 @@ impl Formatter {
         }
     }
 
+    fn format_technique(&mut self, technique: &Technique) {
+        match technique {
+            Technique::Steps(steps) => {
+                self.append_steps(steps);
+            }
+            Technique::Procedures(procedures) => {
+                // Procedures always format at left margin
+                let saved = self.nesting;
+                self.nesting = 0;
+                for procedure in procedures {
+                    self.format_procedure(procedure);
+                }
+                // and restore
+                self.nesting = saved;
+            }
+        }
+    }
+
     fn format_procedure(&mut self, procedure: &Procedure) {
         // if a header or another procedure has already been added,
         // separate the upcoming one with a blank line.
@@ -233,24 +249,6 @@ impl Formatter {
                 self.decrease(4);
 
                 self.append_char('}');
-            }
-            Element::Section {
-                numeral,
-                title,
-                procedures,
-            } => {
-                self.append_char('\n');
-                self.append_str(numeral);
-                self.append_str(". ");
-                if let Some(title_text) = title {
-                    self.append_str(title_text);
-                }
-                self.append_char('\n');
-
-                for procedure in procedures {
-                    self.append_char('\n');
-                    self.format_procedure(procedure);
-                }
             }
         }
     }
@@ -403,9 +401,7 @@ impl Formatter {
 
     fn append_steps(&mut self, steps: &Vec<Scope>) {
         self.increase(4);
-        for step in steps {
-            self.append_step(step);
-        }
+        self.append_scopes(steps);
         self.decrease(4);
     }
 
@@ -431,8 +427,10 @@ impl Formatter {
                     self.append_paragraphs(content);
                 }
                 if responses.len() > 0 {
+                    self.increase(4);
                     self.indent();
                     self.append_responses(responses);
+                    self.decrease(4);
                 }
 
                 if scopes.len() > 0 {
@@ -459,8 +457,10 @@ impl Formatter {
                     self.append_paragraphs(description);
                 }
                 if responses.len() > 0 {
+                    self.increase(4);
                     self.indent();
                     self.append_responses(responses);
+                    self.decrease(4);
                 }
 
                 if subscopes.len() > 0 {
@@ -493,85 +493,103 @@ impl Formatter {
         self.append_char('\n');
     }
 
-    fn append_scopes(&mut self, scopes: &Vec<Scope>) {
-        for scope in scopes {
-            match scope {
-                Scope::DependentBlock {
-                    ordinal: _,
-                    description: _,
-                    responses: _,
-                    subscopes: _,
-                } => {
-                    self.append_step(scope);
+    fn append_scope(&mut self, scope: &Scope) {
+        match scope {
+            Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
+                self.append_step(scope);
+            }
+            Scope::AttributeBlock {
+                attributes,
+                subscopes,
+            } => {
+                self.append_attributes(attributes);
+                self.append_char('\n');
+
+                if subscopes.len() == 0 {
+                    return;
                 }
-                Scope::ParallelBlock {
-                    bullet: _,
-                    description: _,
-                    responses: _,
-                    subscopes: _,
-                } => {
-                    self.append_step(scope);
-                }
-                Scope::AttributeBlock {
-                    attributes,
-                    subscopes,
-                } => {
-                    self.append_attributes(attributes);
-                    self.append_char('\n');
 
-                    if subscopes.len() == 0 {
-                        return;
-                    }
+                let first = subscopes
+                    .iter()
+                    .next()
+                    .unwrap();
 
-                    let first = subscopes
-                        .iter()
-                        .next()
-                        .unwrap();
-
-                    if let Scope::CodeBlock { .. } = first {
-                        // do NOT increase indent
-                        self.append_scopes(subscopes);
-                    } else {
-                        self.increase(4);
-                        self.append_scopes(subscopes);
-                        self.decrease(4);
-                    }
-                }
-                Scope::CodeBlock {
-                    expression,
-                    subscopes: substeps,
-                } => {
-                    match expression {
-                        Expression::Tablet(_) => {
-                            self.indent();
-                            self.append_char('{');
-                            self.append_char('\n');
-
-                            self.increase(4);
-                            self.indent();
-                            self.append_expression(expression);
-                            self.append_char('\n');
-                            self.decrease(4);
-                            self.indent();
-                            self.append_char('}');
-                        }
-                        _ => {
-                            self.indent();
-                            self.append_char('{');
-                            self.append_char(' ');
-                            self.append_expression(expression);
-                            self.append_char(' ');
-                            self.append_char('}');
-                        }
-                    }
-                    self.append_char('\n');
-
-                    // Format subscopes within the code block scope
+                if let Scope::CodeBlock { .. } = first {
+                    // do NOT increase indent
+                    self.append_scopes(subscopes);
+                } else {
                     self.increase(4);
-                    self.append_scopes(substeps);
+                    self.append_scopes(subscopes);
                     self.decrease(4);
                 }
             }
+            Scope::CodeBlock {
+                expression,
+                subscopes: substeps,
+            } => {
+                match expression {
+                    Expression::Tablet(_) => {
+                        self.indent();
+                        self.append_char('{');
+                        self.append_char('\n');
+
+                        self.increase(4);
+                        self.indent();
+                        self.append_expression(expression);
+                        self.append_char('\n');
+                        self.decrease(4);
+                        self.indent();
+                        self.append_char('}');
+                    }
+                    _ => {
+                        self.indent();
+                        self.append_char('{');
+                        self.append_char(' ');
+                        self.append_expression(expression);
+                        self.append_char(' ');
+                        self.append_char('}');
+                    }
+                }
+                self.append_char('\n');
+
+                // Format subscopes below this code block, if there are any.
+                self.increase(4);
+                self.append_scopes(substeps);
+                self.decrease(4);
+            }
+            Scope::SectionChunk {
+                numeral,
+                title,
+                body,
+            } => {
+                self.append_str(numeral);
+                self.append_char('.');
+                if let Some(title_text) = title {
+                    self.append_char(' ');
+                    self.append_str(title_text);
+                }
+                self.append_char('\n');
+
+                // Sections headings always reset back to left margin
+                let saved = self.nesting;
+                self.nesting = 0;
+                self.format_technique(body);
+                self.nesting = saved;
+            }
+        }
+    }
+
+    fn append_scopes(&mut self, scopes: &Vec<Scope>) {
+        for (i, scope) in scopes
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                if let Scope::SectionChunk { .. } = scope {
+                    self.append_char('\n');
+                }
+            }
+            self.append_scope(scope);
         }
     }
 

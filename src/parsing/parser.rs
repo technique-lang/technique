@@ -4,7 +4,7 @@ use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
+pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
     let mut input = Parser::new();
     input.initialize(content);
 
@@ -131,7 +131,7 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
+    fn parse_from_start(&mut self) -> Result<Document<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
         let header = if is_magic_line(self.source) {
             Some(self.read_technique_header()?)
@@ -139,7 +139,7 @@ impl<'i> Parser<'i> {
             None
         };
 
-        // Parse zero or more procedures
+        // Parse zero or more procedures, handling sections if they exist
         let mut procedures = Vec::new();
 
         while !self.is_finished() {
@@ -149,9 +149,39 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            // Check if current position starts with a procedure declaration
             if is_procedure_declaration(self.source) {
-                let procedure = self.read_procedure()?;
+                let mut procedure = self.take_block_lines(
+                    is_procedure_declaration,
+                    |line| is_section(line) || is_procedure_declaration(line),
+                    |inner| inner.read_procedure(),
+                )?;
+
+                // Check if there are sections following this procedure
+                while !self.is_finished() {
+                    self.trim_whitespace();
+                    if self.is_finished() {
+                        break;
+                    }
+
+                    if is_section(self.source) {
+                        let section = self.read_section()?;
+                        if let Some(Element::Steps(ref mut steps)) = procedure
+                            .elements
+                            .last_mut()
+                        {
+                            steps.push(section);
+                        } else {
+                            // Create a new Steps element if one doesn't exist
+                            procedure
+                                .elements
+                                .push(Element::Steps(vec![section]));
+                        }
+                    } else {
+                        // If we hit something that's not a section, stop parsing sections
+                        break;
+                    }
+                }
+
                 procedures.push(procedure);
             } else {
                 // TODO: Handle unexpected content properly
@@ -162,10 +192,10 @@ impl<'i> Parser<'i> {
         let body = if procedures.is_empty() {
             None
         } else {
-            Some(procedures)
+            Some(Technique::Procedures(procedures))
         };
 
-        Ok(Technique { header, body })
+        Ok(Document { header, body })
     }
 
     /// consume up to but not including newline (or end), then take newline
@@ -771,46 +801,103 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
-    fn read_section(&mut self) -> Result<Element<'i>, ParsingError<'i>> {
+    fn read_section(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(is_section, is_section, |outer| {
             // Parse the section header first
-            let (numeral, title) = outer.take_line(|inner| {
-                let result = inner.parse_section_header()?;
-                Ok(result)
-            })?;
+            let (numeral, title) = outer.parse_section_header()?;
+            outer.require_newline()?;
 
-            // Parse procedures within this section
-            let mut procedures = Vec::new();
-            while !outer.is_finished() {
-                outer.trim_whitespace();
-                if outer.is_finished() {
-                    break;
+            // Determine if this section contains procedures or steps
+            if is_procedure_declaration(outer.source) {
+                // Section contains procedures
+                let mut procedures = Vec::new();
+                while !outer.is_finished() {
+                    outer.trim_whitespace();
+                    if outer.is_finished() {
+                        break;
+                    }
+                    if is_procedure_declaration(outer.source) {
+                        let procedure = outer.read_procedure()?;
+                        procedures.push(procedure);
+                    } else {
+                        // Skip non-procedure content line by line
+                        if let Some(newline_pos) = outer
+                            .source
+                            .find('\n')
+                        {
+                            outer.advance(newline_pos + 1);
+                        } else {
+                            outer.advance(
+                                outer
+                                    .source
+                                    .len(),
+                            );
+                        }
+                    }
                 }
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Procedures(procedures),
+                })
+            } else {
+                // Section contains steps - parse as steps
+                let mut steps = Vec::new();
+                while !outer.is_finished() {
+                    outer.trim_whitespace();
+                    if outer.is_finished() {
+                        break;
+                    }
 
-                if is_procedure_declaration(outer.source) {
-                    let procedure = outer.read_procedure()?;
-                    procedures.push(procedure);
-                } else {
-                    // Stop if we hit something that's not a procedure
-                    break;
+                    // Try to parse steps
+                    if is_substep_dependent(outer.source) {
+                        let step = outer.read_substep_dependent()?;
+                        steps.push(step);
+                    } else if is_substep_parallel(outer.source) {
+                        let step = outer.read_substep_parallel()?;
+                        steps.push(step);
+                    } else {
+                        // Skip unrecognized content line by line
+                        if let Some(newline_pos) = outer
+                            .source
+                            .find('\n')
+                        {
+                            outer.advance(newline_pos + 1);
+                        } else {
+                            outer.advance(
+                                outer
+                                    .source
+                                    .len(),
+                            );
+                        }
+                    }
                 }
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Steps(steps),
+                })
             }
-
-            Ok(Element::Section {
-                numeral,
-                title,
-                procedures,
-            })
         })
     }
 
     fn parse_section_header(&mut self) -> Result<(&'i str, Option<&'i str>), ParsingError<'i>> {
         self.trim_whitespace();
 
+        // Get the current line (up to newline or end)
+        let line_end = self
+            .source
+            .find('\n')
+            .unwrap_or(
+                self.source
+                    .len(),
+            );
+        let line = &self.source[..line_end];
+
         // Extract roman numeral and optional title
-        let re = regex!(r"^\s*([IVX]+)\.\s*(.*?)\s*$");
+        let re = regex!(r"^\s*([IVX]+)\.\s*(.*)$");
         let cap = re
-            .captures(self.source)
+            .captures(line)
             .ok_or(ParsingError::InvalidSection(self.offset))?;
 
         let numeral = match cap.get(1) {
@@ -819,11 +906,21 @@ impl<'i> Parser<'i> {
         };
 
         let title = match cap.get(2) {
-            Some(two) => Some(two.as_str()),
+            Some(two) => {
+                let title_text = two
+                    .as_str()
+                    .trim();
+                if title_text.is_empty() {
+                    None
+                } else {
+                    Some(title_text)
+                }
+            }
             None => None,
         };
 
-        // parse methods do not advance
+        // Advance past the header line
+        self.advance(line_end);
         Ok((numeral, title))
     }
 

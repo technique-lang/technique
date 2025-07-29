@@ -3,9 +3,9 @@
 use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Technique<'i> {
+pub struct Document<'i> {
     pub header: Option<Metadata<'i>>,
-    pub body: Option<Vec<Procedure<'i>>>,
+    pub body: Option<Technique<'i>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -28,16 +28,17 @@ impl Default for Metadata<'_> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
+pub enum Technique<'i> {
+    Steps(Vec<Scope<'i>>),
+    Procedures(Vec<Procedure<'i>>),
+}
+
+#[derive(Eq, Debug, PartialEq)]
 pub enum Element<'i> {
     Title(&'i str),
     Description(Vec<Paragraph<'i>>),
     Steps(Vec<Scope<'i>>),
     CodeBlock(Expression<'i>), // TODO remove, possibly, if Scope::CodeBlock covers this adequately, or change to Vec<Scope> as well.
-    Section {
-        numeral: &'i str,
-        title: Option<&'i str>,
-        procedures: Vec<Procedure<'i>>,
-    },
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -136,6 +137,13 @@ pub enum Scope<'i> {
     CodeBlock {
         expression: Expression<'i>,
         subscopes: Vec<Scope<'i>>,
+    },
+
+    // Section chunk scope: organizational container with technique content
+    SectionChunk {
+        numeral: &'i str,
+        title: Option<&'i str>,
+        body: Technique<'i>,
     },
 }
 
