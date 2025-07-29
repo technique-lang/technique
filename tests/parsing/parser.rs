@@ -1287,21 +1287,14 @@ III. Implementation
                                             ordinal: "2",
                                             description: vec![Paragraph(vec![
                                                 Descriptive::Text("Define Requirements"),
-                                                Descriptive::Binding(
-                                                    Box::new(Descriptive::Application(
-                                                        Invocation {
-                                                            target: Target::Local(Identifier(
-                                                                "define_requirements"
-                                                            )),
-                                                            parameters: Some(vec![
-                                                                Expression::Variable(Identifier(
-                                                                    "concept"
-                                                                ))
-                                                            ]),
-                                                        }
+                                                Descriptive::Application(Invocation {
+                                                    target: Target::Local(Identifier(
+                                                        "define_requirements"
                                                     )),
-                                                    vec![],
-                                                ),
+                                                    parameters: Some(vec![Expression::Variable(
+                                                        Identifier("concept")
+                                                    )]),
+                                                }),
                                             ])],
                                             responses: vec![],
                                             subscopes: vec![],
@@ -1310,21 +1303,14 @@ III. Implementation
                                             ordinal: "3",
                                             description: vec![Paragraph(vec![
                                                 Descriptive::Text("Determine Architecture"),
-                                                Descriptive::Binding(
-                                                    Box::new(Descriptive::Application(
-                                                        Invocation {
-                                                            target: Target::Local(Identifier(
-                                                                "determine_architecture"
-                                                            )),
-                                                            parameters: Some(vec![
-                                                                Expression::Variable(Identifier(
-                                                                    "concept"
-                                                                ))
-                                                            ]),
-                                                        }
+                                                Descriptive::Application(Invocation {
+                                                    target: Target::Local(Identifier(
+                                                        "determine_architecture"
                                                     )),
-                                                    vec![],
-                                                ),
+                                                    parameters: Some(vec![Expression::Variable(
+                                                        Identifier("concept")
+                                                    )]),
+                                                }),
                                             ])],
                                             responses: vec![],
                                             subscopes: vec![],
