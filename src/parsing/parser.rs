@@ -78,29 +78,297 @@ impl<'i> ParsingError<'i> {
         }
     }
 
-    fn message(&self) -> String {
+    fn message(&self) -> (String, String) {
         match self {
-            ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
-            ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
-            ParsingError::Unrecognized(_) => "unrecognized".to_string(),
-            ParsingError::Expected(_, value) => format!("expected {}", value),
-            ParsingError::InvalidHeader(_) => "invalid header".to_string(),
-            ParsingError::InvalidCharacter(_, c) => format!("invalid character '{}'", c),
-            ParsingError::UnexpectedEndOfInput(_) => "unexpected end of input".to_string(),
-            ParsingError::InvalidIdentifier(_, _) => "invalid identifier".to_string(),
-            ParsingError::InvalidForma(_) => "invalid forma".to_string(),
-            ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
-            ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
-            ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
-            ParsingError::InvalidSection(_) => "invalid section heading".to_string(),
-            ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
-            ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
-            ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
-            ParsingError::InvalidMultiline(_) => "invalid multi-line string".to_string(),
-            ParsingError::InvalidStep(_) => "invalid step".to_string(),
-            ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
-            ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
-            ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
+            ParsingError::IllegalParserState(_) => (
+                "Illegal parser state".to_string(),
+                "Internal parser error. This should not have happened! Sorry.".to_string(),
+            ),
+            ParsingError::Unimplemented(_) => (
+                "Feature not yet implemented".to_string(),
+                "This feature is planned but not yet available.".to_string(),
+            ),
+            ParsingError::Unrecognized(_) => (
+                "Unrecognized input".to_string(),
+                "The parser encountered unexpected content".to_string(),
+            ),
+            ParsingError::Expected(_, value) => (
+                format!("Expected {}", value),
+                format!(
+                    "The parser was looking for {} but found something else.",
+                    value
+                ),
+            ),
+            ParsingError::InvalidHeader(_) => (
+                "Invalid header".to_string(),
+                r#"
+The metadata describing a Technique file must follow this format:
+
+    % technique v1
+    ! «license»; © «copyright»
+    & «template»
+
+The first line are the magic bytes identifying the Technique file format and
+current language version.
+
+The second line lists the System Package Data Exchange (SPDX) information
+about the ownership of the Technique in this file and permissions associated
+with it. The line is optional but if present it starts with a «license»
+declaration, conventionally an SPDX identifier like `MIT`, `CC-BY 4.0`, or
+`Proprietary`. A declaration of the «copyright» holder can optionally follow
+the license statement, separated from it by a semicolon. Copyright statements
+typically list the year and then the name of the person or entity holding the
+copyright.
+
+The third line optionally specifies the template to be used when rendering the
+Technique. Common templates include `checklist`, `nasa-flight-plan,v4.0`, and
+`recipe`.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidCharacter(_, c) => (
+                format!("Invalid character '{}'", c),
+                "This character is not allowed here.".to_string(),
+            ),
+            ParsingError::UnexpectedEndOfInput(_) => (
+                "Unexpected end of input".to_string(),
+                "The file ended before the parser expected it to".to_string(),
+            ),
+            ParsingError::InvalidIdentifier(_, _) => (
+                "Invalid identifier".to_string(),
+                r#"
+Identifiers must start with a lowercase letter and contain only lower case
+letters, numbers, and underscores. No uppercase letters, spaces, dashes, or
+other punctuation. Examples:
+
+    make_coffee
+    attempt1
+    i
+    l33t_hax0r
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidForma(_) => (
+                "Invalid forma name".to_string(),
+                r#"
+The names of Forma (the basic types in Technique) must start with an uppercase
+letter and cannot contain dashes, underscores, spaces, or other punctuation.
+For example:
+
+    Coffee
+    Ingredients
+    PatientRecord
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidGenus(_) => (
+                "Invalid genus".to_string(),
+                r#"
+Genus are the full types in Technique. They are either simple (just the name
+of a Forma) or compound (lists or tuples of Forma). Some examples:
+
+    Coffee
+    (Beans, Water)
+    Beans, Water
+    [Patient]
+    ()
+
+Tuples can be enclosed in parenthesis or "naked"; semantically they are the
+same. The final example is the syntax for the Unit genus, used when something
+doesn't have an input or result, per se.
+    "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSignature(_) => (
+                "Invalid procedure signature".to_string(),
+                r#"
+Signatures follow the pattern domain -> range, where domain and range are
+genus. Some examples:
+
+    A -> B
+    (Beans, Milk) -> Coffee
+    [FunctionalRequirement] -> Architecture
+
+Signatures are optional on procedure declarations but if present must follow
+this form.
+    "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidDeclaration(_) => (
+                "Invalid procedure declaration".to_string(),
+                r#"
+Procedures are declared by specifying an identifier as a name, followed by a
+colon:
+
+    f :
+    implementation :
+    make_coffee :
+
+A procedure can optionally have a signature, as in the following examples:
+
+    f : A -> B
+    implementation : Design -> Product
+    make_coffee : Beans, Milk -> Coffee
+    make_coffee : (Beans, Milk) -> Coffee
+
+Finally, variables can be assigned for the names of the input parameters:
+
+    make_coffee(b, m) : Beans, Milk -> Coffee
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSection(_) => (
+                "Invalid section heading".to_string(),
+                r#"
+Section headings use capital Roman numerals, followed by optional title:
+
+    I. First Section
+    II. Second Section
+    III.
+
+Conventionally such a title would be in Proper Case but that is left up to the
+author of the Technique.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidInvocation(_) => (
+                "Invalid procedure invocation".to_string(),
+                r#"
+To denote the invocation of another procedure, use angle brackets:
+
+    <make_coffee>
+
+If the procedure takes parameters they can be specified in parenthesis:
+
+    <check_vitals>(patient)
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidFunction(_) => (
+                "Invalid function call".to_string(),
+                r#"
+Function calls in code blocks are made by specifying the name of the function
+to be executed followed by parentheses, supplying values, variables, or other
+expressions as parameters as required:
+
+    exec("ls -la")
+    now()
+    calculate(a, b)
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidCodeBlock(_) => (
+                "Invalid code block".to_string(),
+                r#"
+Inline code blocks are enclosed in braces:
+
+    { exec("command") }
+    { repeat 5 }
+    { foreach patient in patients }
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidMultiline(_) => (
+                "Invalid multi-line string".to_string(),
+                r#"
+Multi-line strings can be written by surrounding the content in triple
+backticks:
+
+    ```
+    In those days spirits were brave, the stakes were high, men were real men,
+    women were real women and small furry creatures from Alpha Centauri were
+    real small furry creatures from Alpha Centauri.
+    ```
+
+The leading and trailing newline will be trimmed. In addition, any whitespace
+indenting the string will be removed. So
+
+    ```bash
+        if [ -f /etc/passwd ]
+        then
+            echo "Found the password file"
+        fi
+    ```
+
+would result in a string with the `if` on the left margin but `echo` indented
+by 4 spaces. This example also shows that the «language» of the content can be
+specified. Doing so does not change the meaning of the multi-line string, but
+it may be used by output templates when rendering the procedure.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidStep(_) => (
+                "Invalid step format".to_string(),
+                r#"
+Steps must start with a number or letter (in the case of dependent steps and
+sub-steps, respectively) followed by a '.', or a dash (for tasks that can
+execute in parallel):
+
+    1.  First step
+    2.  Second step
+        a.  First substep
+        b.  Second substep
+    -   Parallel task
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidForeach(_) => (
+                "Invalid foreach loop".to_string(),
+                r#"
+Loops follow this pattern:
+
+    { foreach patient in patients }
+    { foreach (name, value) in data }
+
+In the first example `patients` would be a list; in the latter case `data` is
+a list of tuples.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidResponse(_) => (
+                "Invalid response format".to_string(),
+                r#"
+The fixed choices that are valid for the result of a given step can be
+enumerated. These responses are each enclosed in single quotes, separated by
+the '|' character:
+
+    'Rock' | 'Paper' | 'Scissors'
+    'Confirmed'
+    'Yes' | 'No' but with explanation
+
+By convention the response values are Proper Case.
+
+The third example shows that additional context can be supplied when
+documenting a response to help the user understand what is expected of them.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidNumeric(_) => (
+                "Invalid numeric literal".to_string(),
+                r#"
+Numeric literals can be integers:
+
+    42
+    -123
+    0
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
         }
     }
 }
