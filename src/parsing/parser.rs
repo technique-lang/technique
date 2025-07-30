@@ -30,6 +30,7 @@ pub enum ParsingError<'i> {
     Unimplemented(usize),
     Unrecognized(usize), // improve this
     Expected(usize, &'static str),
+    ExpectedMatchingChar(usize, &'static str, char, char),
     InvalidHeader(usize),
     InvalidCharacter(usize, char),
     UnexpectedEndOfInput(usize),
@@ -56,6 +57,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::Unimplemented(offset) => *offset,
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
+            ParsingError::ExpectedMatchingChar(offset, _, _, _) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
             ParsingError::InvalidCharacter(offset, _) => *offset,
             ParsingError::UnexpectedEndOfInput(offset) => *offset,
@@ -96,6 +98,18 @@ impl<'i> ParsingError<'i> {
                     "The parser was looking for {} but found something else.",
                     value
                 ),
+            ),
+            ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
+                format!("Expected matching character '{}'", end),
+                format!(
+                    r#"
+The parser was expecting {} enclosed by '{}' and '{}' but there was no more
+input remaining in the current scope.
+                    "#,
+                    subject, start, end
+                )
+                .trim_ascii()
+                .to_string(),
             ),
             ParsingError::InvalidHeader(_) => (
                 "Invalid header".to_string(),
@@ -535,6 +549,7 @@ impl<'i> Parser<'i> {
 
     fn take_block_chars<A, F>(
         &mut self,
+        subject: &'static str,
         start_char: char,
         end_char: char,
         function: F,
@@ -587,7 +602,12 @@ impl<'i> Parser<'i> {
             return Err(ParsingError::Expected(self.offset, "the start character"));
         }
         if l == 0 {
-            return Err(ParsingError::Expected(self.offset, "the end character"));
+            return Err(ParsingError::ExpectedMatchingChar(
+                self.offset,
+                subject,
+                start_char,
+                end_char,
+            ));
         }
 
         let block = &self.source[1..l - 1];
@@ -1217,7 +1237,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars('{', '}', |outer| outer.read_expression())
+        self.take_block_chars("a code block", '{', '}', |outer| outer.read_expression())
     }
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
@@ -1241,7 +1261,8 @@ impl<'i> Parser<'i> {
             let numeric = self.read_numeric()?;
             Ok(Expression::Number(numeric))
         } else if is_string_literal(content) {
-            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+            let raw =
+                self.take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
             Ok(Expression::String(raw))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
@@ -1293,7 +1314,7 @@ impl<'i> Parser<'i> {
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
-            self.take_block_chars('(', ')', |outer| {
+            self.take_block_chars("a list of identifiers", '(', ')', |outer| {
                 let mut identifiers = Vec::new();
 
                 loop {
@@ -1361,7 +1382,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars('[', ']', |outer| {
+        self.take_block_chars("a tablet", '[', ']', |outer| {
             let mut pairs = Vec::new();
 
             loop {
@@ -1385,7 +1406,8 @@ impl<'i> Parser<'i> {
                     ));
                 }
 
-                let label = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+                let label =
+                    outer.take_block_chars("a label", '"', '"', |inner| Ok(inner.source))?;
 
                 // Skip whitespace and expect '='
                 outer.trim_whitespace();
@@ -1461,7 +1483,7 @@ impl<'i> Parser<'i> {
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
-        self.take_block_chars('<', '>', |inner| {
+        self.take_block_chars("an invocation", '<', '>', |inner| {
             let content = inner.source;
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
@@ -1793,7 +1815,7 @@ impl<'i> Parser<'i> {
     /// ( ```lang some content``` )
     ///
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError<'i>> {
-        self.take_block_chars('(', ')', |outer| {
+        self.take_block_chars("parameters for a function", '(', ')', |outer| {
             let mut params = Vec::new();
 
             loop {
@@ -1809,7 +1831,8 @@ impl<'i> Parser<'i> {
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+                    let raw = outer
+                        .take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
                     params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
@@ -2514,7 +2537,7 @@ mod check {
         let mut input = Parser::new();
         input.initialize("{ todo() }");
 
-        let result = input.take_block_chars('{', '}', |parser| {
+        let result = input.take_block_chars("inline code", '{', '}', |parser| {
             let text = parser.source;
             assert_eq!(text, " todo() ");
             Ok(true)
@@ -2526,7 +2549,7 @@ mod check {
         // we find ourselves parsing them, so subparser() won't work.
         input.initialize("XhelloX world");
 
-        let result = input.take_block_chars('X', 'X', |parser| {
+        let result = input.take_block_chars("", 'X', 'X', |parser| {
             let text = parser.source;
             assert_eq!(text, "hello");
             Ok(true)
