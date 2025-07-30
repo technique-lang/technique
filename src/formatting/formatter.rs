@@ -411,7 +411,6 @@ impl Formatter {
             Scope::DependentBlock {
                 ordinal,
                 description: content,
-                responses,
                 subscopes: scopes,
             } => {
                 self.indent();
@@ -427,12 +426,6 @@ impl Formatter {
                 if content.len() > 0 {
                     self.append_paragraphs(content);
                 }
-                if responses.len() > 0 {
-                    self.increase(4);
-                    self.indent();
-                    self.append_responses(responses);
-                    self.decrease(4);
-                }
 
                 if scopes.len() > 0 {
                     self.append_scopes(scopes);
@@ -443,7 +436,6 @@ impl Formatter {
             Scope::ParallelBlock {
                 bullet,
                 description,
-                responses,
                 subscopes,
             } => {
                 self.indent();
@@ -456,12 +448,6 @@ impl Formatter {
 
                 if description.len() > 0 {
                     self.append_paragraphs(description);
-                }
-                if responses.len() > 0 {
-                    self.increase(4);
-                    self.indent();
-                    self.append_responses(responses);
-                    self.decrease(4);
                 }
 
                 if subscopes.len() > 0 {
@@ -556,6 +542,12 @@ impl Formatter {
                 // Format subscopes below this code block, if there are any.
                 self.increase(4);
                 self.append_scopes(substeps);
+                self.decrease(4);
+            }
+            Scope::ResponseBlock { responses } => {
+                self.increase(4);
+                self.indent();
+                self.append_responses(responses);
                 self.decrease(4);
             }
             Scope::SectionChunk {

@@ -119,15 +119,15 @@ pub enum Scope<'i> {
     DependentBlock {
         ordinal: &'i str,
         description: Vec<Paragraph<'i>>,
-        responses: Vec<Response<'i>>,
         subscopes: Vec<Scope<'i>>,
     },
+
     ParallelBlock {
         bullet: char,
         description: Vec<Paragraph<'i>>,
-        responses: Vec<Response<'i>>,
         subscopes: Vec<Scope<'i>>,
     },
+
     // Attribute scope: @role (or other attributes) with substeps
     AttributeBlock {
         attributes: Vec<Attribute<'i>>,
@@ -138,6 +138,11 @@ pub enum Scope<'i> {
     CodeBlock {
         expression: Expression<'i>,
         subscopes: Vec<Scope<'i>>,
+    },
+
+    // Response block scope: 'Yes' | 'No' responses
+    ResponseBlock {
+        responses: Vec<Response<'i>>,
     },
 
     // Section chunk scope: organizational container with technique content

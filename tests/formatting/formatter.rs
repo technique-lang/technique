@@ -116,20 +116,17 @@ second : [Thing] -> (Who, Where, Why)
                     Scope::DependentBlock {
                         ordinal: "1",
                         description: vec![Paragraph(vec![Descriptive::Text("Eat breakfast.")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                     Scope::DependentBlock {
                         ordinal: "2",
                         description: vec![Paragraph(vec![Descriptive::Text("Win a stage:")])],
-                        responses: vec![],
                         subscopes: vec![
                             Scope::DependentBlock {
                                 ordinal: "a",
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Ride really fast, then",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![],
                             },
                             Scope::DependentBlock {
@@ -137,7 +134,6 @@ second : [Thing] -> (Who, Where, Why)
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Win the sprint.",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![],
                             },
                         ],
@@ -145,7 +141,6 @@ second : [Thing] -> (Who, Where, Why)
                     Scope::DependentBlock {
                         ordinal: "3",
                         description: vec![Paragraph(vec![Descriptive::Text("Eat dinner.")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                 ])],
@@ -226,7 +221,6 @@ vibe_coding :
                                 )],
                             })),
                         ])],
-                        responses: vec![],
                         subscopes: vec![],
                     }]),
                 ],
@@ -269,7 +263,6 @@ We must take action!
                         description: vec![Paragraph(vec![Descriptive::Text(
                             "Record event as it happens",
                         )])],
-                        responses: vec![],
                         subscopes: vec![Scope::AttributeBlock {
                             attributes: vec![Attribute::Role(Identifier("journalist"))],
                             subscopes: vec![Scope::CodeBlock {
@@ -329,14 +322,12 @@ Record everything, with timestamps.
                     Element::Steps(vec![Scope::DependentBlock {
                         ordinal: "1",
                         description: vec![Paragraph(vec![Descriptive::Text("Verbally confirm:")])],
-                        responses: vec![],
                         subscopes: vec![
                             Scope::ParallelBlock {
                                 bullet: '-',
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "The name of the surgical procedure(s).",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![],
                             },
                             Scope::ParallelBlock {
@@ -344,7 +335,6 @@ Record everything, with timestamps.
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Completion of instrument, sponge, and needle counts.",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![],
                             },
                             Scope::ParallelBlock {
@@ -352,7 +342,6 @@ Record everything, with timestamps.
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Specimen labelling",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![Scope::CodeBlock {
                                     expression: Expression::Foreach(
                                         vec![Identifier("specimen")],
@@ -370,7 +359,6 @@ Record everything, with timestamps.
                                                 ),
                                                 Descriptive::Text("name."),
                                             ])],
-                                            responses: vec![],
                                             subscopes: vec![],
                                         }],
                                     }],
@@ -381,7 +369,6 @@ Record everything, with timestamps.
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Whether there are any equipment problems to be addressed.",
                                 )])],
-                                responses: vec![],
                                 subscopes: vec![],
                             },
                         ],
@@ -472,23 +459,23 @@ III.
                     Scope::DependentBlock {
                         ordinal: "1",
                         description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                        responses: vec![],
                         subscopes: vec![Scope::DependentBlock {
                             ordinal: "a",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Substep with response",
                             )])],
-                            responses: vec![
-                                Response {
-                                    value: "Yes",
-                                    condition: None,
-                                },
-                                Response {
-                                    value: "No",
-                                    condition: None,
-                                },
-                            ],
-                            subscopes: vec![],
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![
+                                    Response {
+                                        value: "Yes",
+                                        condition: None,
+                                    },
+                                    Response {
+                                        value: "No",
+                                        condition: None,
+                                    },
+                                ],
+                            }],
                         }],
                     },
                     Scope::DependentBlock {
@@ -496,11 +483,12 @@ III.
                         description: vec![Paragraph(vec![Descriptive::Text(
                             "Simple step with response",
                         )])],
-                        responses: vec![Response {
-                            value: "Confirmed",
-                            condition: None,
+                        subscopes: vec![Scope::ResponseBlock {
+                            responses: vec![Response {
+                                value: "Confirmed",
+                                condition: None,
+                            }],
                         }],
-                        subscopes: vec![],
                     },
                 ])],
             }])),

@@ -1243,22 +1243,12 @@ impl<'i> Parser<'i> {
 
             let text = outer.read_descriptive()?;
 
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
-                let content = outer.source;
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
-                }
-            }
-
             // Parse scopes (role assignments and substeps)
             let scopes = outer.read_scopes()?;
 
             return Ok(Scope::DependentBlock {
                 ordinal: number,
                 description: text,
-                responses,
                 subscopes: scopes,
             });
         })
@@ -1281,21 +1271,12 @@ impl<'i> Parser<'i> {
 
             let text = outer.read_descriptive()?;
 
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
-                let content = outer.source;
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
-                }
-            }
-
+            // Parse scopes (role assignments and substeps)
             let scopes = outer.read_scopes()?;
 
             return Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: text,
-                responses,
                 subscopes: scopes,
             });
         })
@@ -1332,21 +1313,12 @@ impl<'i> Parser<'i> {
                 // Parse the remaining content
                 let text = outer.read_descriptive()?;
 
-                // Parse responses if present
-                let mut responses = vec![];
-                if !outer.is_finished() {
-                    if is_enum_response(outer.source) {
-                        responses = outer.read_responses()?;
-                    }
-                }
-
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
                 Ok(Scope::DependentBlock {
                     ordinal: letter,
                     description: text,
-                    responses,
                     subscopes: scopes,
                 })
             },
@@ -1372,21 +1344,12 @@ impl<'i> Parser<'i> {
                 // Parse the remaining content
                 let text = outer.read_descriptive()?;
 
-                // Parse responses if present
-                let mut responses = vec![];
-                if !outer.is_finished() {
-                    if is_enum_response(outer.source) {
-                        responses = outer.read_responses()?;
-                    }
-                }
-
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
                 Ok(Scope::ParallelBlock {
                     bullet: '-',
                     description: text,
-                    responses,
                     subscopes: scopes,
                 })
             },
@@ -1706,6 +1669,9 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
+            } else if is_enum_response(content) {
+                let responses = self.read_responses()?;
+                scopes.push(Scope::ResponseBlock { responses });
             } else {
                 break;
             }
@@ -2482,7 +2448,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("First step")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2502,7 +2467,6 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "a top-level task to be one in parallel with"
                 )]),],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2512,7 +2476,6 @@ mod check {
             Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2531,7 +2494,6 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2554,7 +2516,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "a",
                 description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2567,7 +2528,6 @@ mod check {
             Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2591,18 +2551,15 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::DependentBlock {
                         ordinal: "a",
                         description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                     Scope::DependentBlock {
                         ordinal: "b",
                         description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                 ],
@@ -2628,18 +2585,15 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                     Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                 ],
@@ -2666,11 +2620,9 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("First step")])],
-                responses: vec![],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
-                    responses: vec![],
                     subscopes: vec![],
                 }],
             })
@@ -2681,7 +2633,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "2",
                 description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2734,23 +2685,23 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text(
                         "Do the first thing. Then ask yourself if you are done:"
                     )])],
-                    responses: vec![
-                        Response {
-                            value: "Yes",
-                            condition: None
-                        },
-                        Response {
-                            value: "No",
-                            condition: Some("but I have an excuse")
-                        }
-                    ],
-                    subscopes: vec![]
+                    subscopes: vec![Scope::ResponseBlock {
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None
+                            },
+                            Response {
+                                value: "No",
+                                condition: Some("but I have an excuse")
+                            }
+                        ]
+                    }]
                 }],
             })
         );
@@ -3678,7 +3629,6 @@ echo test
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Check the patient's vital signs"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("nurse"))],
                     subscopes: vec![],
@@ -3710,13 +3660,11 @@ echo test
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Verify patient identity"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("surgeon"))],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "a",
                         description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
-                        responses: vec![],
                         subscopes: vec![]
                     }]
                 }]
@@ -3745,13 +3693,11 @@ echo test
             Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                     subscopes: vec![Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
-                        responses: vec![],
                         subscopes: vec![]
                     }]
                 }]
@@ -3783,7 +3729,6 @@ echo test
             Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Review events.")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::AttributeBlock {
                         attributes: vec![Attribute::Role(Identifier("surgeon"))],
@@ -3792,7 +3737,6 @@ echo test
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "What are the steps?"
                             )])],
-                            responses: vec![],
                             subscopes: vec![]
                         }]
                     },
@@ -3803,7 +3747,6 @@ echo test
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "What are the concerns?"
                             )])],
-                            responses: vec![],
                             subscopes: vec![]
                         }]
                     }

@@ -175,7 +175,7 @@ This is the first one.
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the first thing in the first one."
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![]
                         },
                         Scope::DependentBlock {
@@ -183,7 +183,7 @@ This is the first one.
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![]
                         }
                     ])
@@ -230,24 +230,25 @@ This is the first one.
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
-                            responses: vec![
-                                Response {
-                                    value: "Yes",
-                                    condition: None
-                                },
-                                Response {
-                                    value: "No",
-                                    condition: Some("but I have an excuse")
-                                }
-                            ],
-                            subscopes: vec![],
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![
+                                    Response {
+                                        value: "Yes",
+                                        condition: None
+                                    },
+                                    Response {
+                                        value: "No",
+                                        condition: Some("but I have an excuse")
+                                    }
+                                ]
+                            }],
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![],
                         }
                     ])
@@ -295,23 +296,24 @@ This is the first one.
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Do the first thing. Then ask yourself if you are done:"
                                 )])],
-                                responses: vec![
-                                    Response {
-                                        value: "Yes",
-                                        condition: None
-                                    },
-                                    Response {
-                                        value: "No",
-                                        condition: Some("but I have an excuse")
-                                    }
-                                ],
-                                subscopes: vec![]
+                                subscopes: vec![Scope::ResponseBlock {
+                                    responses: vec![
+                                        Response {
+                                            value: "Yes",
+                                            condition: None
+                                        },
+                                        Response {
+                                            value: "No",
+                                            condition: Some("but I have an excuse")
+                                        }
+                                    ]
+                                }]
                             }]
                         },
                         Scope::DependentBlock {
@@ -319,7 +321,7 @@ This is the first one.
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![],
                         }
                     ])
@@ -375,110 +377,119 @@ This is the first one.
                                 ),
                                 Descriptive::Text("and consent?")
                             ])],
-                            responses: vec![Response {
-                                value: "Yes",
-                                condition: None
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![Response {
+                                    value: "Yes",
+                                    condition: None
+                                }]
                             }],
-                            subscopes: vec![],
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the site marked?"
                             )])],
-                            responses: vec![
-                                Response {
-                                    value: "Yes",
-                                    condition: None
-                                },
-                                Response {
-                                    value: "Not Applicable",
-                                    condition: None
-                                }
-                            ],
-                            subscopes: vec![],
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![
+                                    Response {
+                                        value: "Yes",
+                                        condition: None
+                                    },
+                                    Response {
+                                        value: "Not Applicable",
+                                        condition: None
+                                    }
+                                ]
+                            }],
                         },
                         Scope::DependentBlock {
                             ordinal: "3",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the anaesthesia machine and medication check complete?"
                             )])],
-                            responses: vec![Response {
-                                value: "Yes",
-                                condition: None
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![Response {
+                                    value: "Yes",
+                                    condition: None
+                                }]
                             }],
-                            subscopes: vec![],
                         },
                         Scope::DependentBlock {
                             ordinal: "4",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Is the pulse oximeter on the patient and functioning?"
                             )])],
-                            responses: vec![Response {
-                                value: "Yes",
-                                condition: None
+                            subscopes: vec![Scope::ResponseBlock {
+                                responses: vec![Response {
+                                    value: "Yes",
+                                    condition: None
+                                }]
                             }],
-                            subscopes: vec![],
                         },
                         Scope::DependentBlock {
                             ordinal: "5",
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Does the patient have a:"
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Known allergy?"
                                     )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: None
-                                        }
-                                    ],
-                                    subscopes: vec![],
+                                    subscopes: vec![Scope::ResponseBlock {
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: None
+                                            }
+                                        ]
+                                    }],
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Difficult airway or aspiration risk?"
                                     )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: Some("and equipment/assistance available")
-                                        }
-                                    ],
-                                    subscopes: vec![],
+                                    subscopes: vec![Scope::ResponseBlock {
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: Some(
+                                                    "and equipment/assistance available"
+                                                )
+                                            }
+                                        ]
+                                    }],
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Risk of blood loss > 500 mL?"
                                     )])],
-                                    responses: vec![
-                                        Response {
-                                            value: "No",
-                                            condition: None
-                                        },
-                                        Response {
-                                            value: "Yes",
-                                            condition: Some(
-                                                "and two IVs planned and fluids available"
-                                            )
-                                        }
-                                    ],
-                                    subscopes: vec![],
+                                    subscopes: vec![Scope::ResponseBlock {
+                                        responses: vec![
+                                            Response {
+                                                value: "No",
+                                                condition: None
+                                            },
+                                            Response {
+                                                value: "Yes",
+                                                condition: Some(
+                                                    "and two IVs planned and fluids available"
+                                                )
+                                            }
+                                        ]
+                                    }],
                                 }
                             ]
                         }
@@ -514,7 +525,7 @@ label_the_specimens :
                 elements: vec![Element::Steps(vec![Scope::DependentBlock {
                     ordinal: "1",
                     description: vec![Paragraph(vec![Descriptive::Text("Specimen labelling")])],
-                    responses: vec![],
+
                     subscopes: vec![
                         Scope::AttributeBlock {
                             attributes: vec![Attribute::Role(Identifier("nursing_team"))],
@@ -524,7 +535,7 @@ label_the_specimens :
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Label blood tests"
                                     )])],
-                                    responses: vec![],
+
                                     subscopes: vec![],
                                 },
                                 Scope::ParallelBlock {
@@ -532,7 +543,7 @@ label_the_specimens :
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Label tissue samples"
                                     )])],
-                                    responses: vec![],
+
                                     subscopes: vec![],
                                 }
                             ]
@@ -544,7 +555,7 @@ label_the_specimens :
                                 description: vec![Paragraph(vec![Descriptive::Text(
                                     "Prepare the envelopes"
                                 )])],
-                                responses: vec![],
+
                                 subscopes: vec![],
                             }]
                         }
@@ -601,14 +612,14 @@ before_leaving :
                         description: vec![
                             Paragraph(vec![Descriptive::Text("Verbally confirm:")])
                         ],
-                        responses: vec![],
+
                         subscopes: vec![
                            Scope::ParallelBlock {
                                bullet: '-',
                                description: vec![
                                             Paragraph(vec![Descriptive::Text("The name of the surgical procedure(s).")])
                                     ],
-                                responses: vec![],
+
                                 subscopes: vec![],
                             },
                             Scope::ParallelBlock {
@@ -616,14 +627,14 @@ before_leaving :
                                 description: vec![
                                     Paragraph(vec![Descriptive::Text("Completion of instrument, sponge, and needle counts.")])
                                 ],
-                                responses: vec![],
+
                                 subscopes: vec![],
                             },
                             Scope::ParallelBlock {
                                 bullet: '-',
                                 description: vec![Paragraph(vec![
                                     Descriptive::Text("Specimen labelling")])],
-                                responses: vec![],
+
                                 subscopes: vec![
                                     Scope::CodeBlock {
                                         expression: Expression::Foreach(
@@ -642,7 +653,7 @@ before_leaving :
                                                                 Descriptive::Text("name.")
                                                             ])
                                                         ],
-                                                        responses: vec![],
+
                                                         subscopes: vec![]
                                                     }
                                                 ]
@@ -654,7 +665,7 @@ before_leaving :
                                                     description: vec![
                                                         Paragraph(vec![Descriptive::Text("Whether there are any equipment problems to be addressed.")])
                                                     ],
-                                                    responses: vec![],
+
                                                     subscopes: vec![],
                                                 }
                                         ]
@@ -664,7 +675,7 @@ before_leaving :
                         description: vec![
                             Paragraph(vec![Descriptive::Text("Post-operative care:")])
                         ],
-                        responses: vec![],
+
                         subscopes: vec![
                             Scope::AttributeBlock {
                                 attributes: vec![Attribute::Role(Identifier("surgeon"))],
@@ -677,7 +688,7 @@ before_leaving :
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
-                                        responses: vec![],
+
                                         subscopes: vec![],
                                     }
                                 ]
@@ -693,7 +704,7 @@ before_leaving :
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
-                                        responses: vec![],
+
                                         subscopes: vec![],
                                     }
                                 ]
@@ -709,7 +720,7 @@ before_leaving :
                                                 Descriptive::Text("of this patient?")
                                             ])
                                         ],
-                                        responses: vec![],
+
                                         subscopes: vec![],
                                     }
                                 ]
@@ -747,7 +758,6 @@ before_leaving :
             Ok(Scope::DependentBlock {
                 ordinal,
                 description: content,
-                responses,
                 subscopes: scopes,
             }) => {
                 assert_eq!(ordinal, "5");
@@ -757,7 +767,6 @@ before_leaving :
                         "Review anticipated critical events."
                     )])]
                 );
-                assert_eq!(responses, vec![]);
                 // Should have 3 scopes: one for each role with their substeps
                 assert_eq!(scopes.len(), 3);
 
@@ -835,7 +844,6 @@ before_leaving :
             Ok(Scope::DependentBlock {
                 ordinal,
                 description: content,
-                responses,
                 subscopes: scopes,
             }) => {
                 assert_eq!(ordinal, "1");
@@ -845,7 +853,6 @@ before_leaving :
                         "Review surgical procedure"
                     )])]
                 );
-                assert_eq!(responses, vec![]);
                 assert_eq!(scopes.len(), 3);
 
                 // Check surgeon scope (3 dependent substeps)
@@ -936,7 +943,7 @@ before_leaving :
             Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Emergency response")])],
-                responses: vec![],
+
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("team_lead"))],
                     subscopes: vec![
@@ -945,7 +952,7 @@ before_leaving :
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Assess situation"
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![]
                         },
                         Scope::DependentBlock {
@@ -953,14 +960,14 @@ before_leaving :
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "Coordinate response"
                             )])],
-                            responses: vec![],
+
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Monitor communications"
                                     )])],
-                                    responses: vec![],
+
                                     subscopes: vec![]
                                 },
                                 Scope::ParallelBlock {
@@ -968,7 +975,7 @@ before_leaving :
                                     description: vec![Paragraph(vec![Descriptive::Text(
                                         "Track resources"
                                     )])],
-                                    responses: vec![],
+
                                     subscopes: vec![]
                                 }
                             ]
@@ -976,7 +983,7 @@ before_leaving :
                         Scope::DependentBlock {
                             ordinal: "c",
                             description: vec![Paragraph(vec![Descriptive::Text("File report")])],
-                            responses: vec![],
+
                             subscopes: vec![]
                         }
                     ]
@@ -1003,21 +1010,22 @@ before_leaving :
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                responses: vec![],
+
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text("Substep with response")])],
-                    responses: vec![
-                        Response {
-                            value: "Yes",
-                            condition: None,
-                        },
-                        Response {
-                            value: "No",
-                            condition: None,
-                        },
-                    ],
-                    subscopes: vec![],
+                    subscopes: vec![Scope::ResponseBlock {
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None,
+                            },
+                            Response {
+                                value: "No",
+                                condition: None,
+                            },
+                        ]
+                    }],
                 }],
             })
         );
@@ -1304,7 +1312,7 @@ III. Implementation
                                                     )]),
                                                 }),
                                             ])],
-                                            responses: vec![],
+
                                             subscopes: vec![],
                                         },
                                         Scope::DependentBlock {
@@ -1320,7 +1328,7 @@ III. Implementation
                                                     )]),
                                                 }),
                                             ])],
-                                            responses: vec![],
+
                                             subscopes: vec![],
                                         },
                                     ])],
