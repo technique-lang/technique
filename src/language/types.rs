@@ -143,7 +143,7 @@ pub enum Scope<'i> {
     // Section chunk scope: organizational container with technique content
     SectionChunk {
         numeral: &'i str,
-        title: Option<&'i str>,
+        title: Option<Paragraph<'i>>,
         body: Technique<'i>,
     },
 }

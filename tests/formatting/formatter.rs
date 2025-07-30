@@ -426,12 +426,12 @@ before_leaving :
                 elements: vec![Element::Steps(vec![
                     Scope::SectionChunk {
                         numeral: "I",
-                        title: Some("First Section"),
+                        title: Some(Paragraph(vec![Descriptive::Text("First Section")])),
                         body: Technique::Procedures(vec![]),
                     },
                     Scope::SectionChunk {
                         numeral: "II",
-                        title: Some("Second Section"),
+                        title: Some(Paragraph(vec![Descriptive::Text("Second Section")])),
                         body: Technique::Procedures(vec![]),
                     },
                     Scope::SectionChunk {

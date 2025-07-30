@@ -890,7 +890,9 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn parse_section_header(&mut self) -> Result<(&'i str, Option<&'i str>), ParsingError<'i>> {
+    fn parse_section_header(
+        &mut self,
+    ) -> Result<(&'i str, Option<Paragraph<'i>>), ParsingError<'i>> {
         self.trim_whitespace();
 
         // Get the current line (up to newline or end)
@@ -914,19 +916,32 @@ impl<'i> Parser<'i> {
             None => return Err(ParsingError::Expected(self.offset, "section header")),
         };
 
+        // Though section text appear as titles, they are in fact steps and so
+        // their text can support the various things you can put in a
+        // Descriptive. Section titles should, however, only be single line,
+        // so we take the first paragraph found and error otherwise.
         let title = match cap.get(2) {
             Some(two) => {
-                let title_text = two
+                let text = two
                     .as_str()
                     .trim();
-                if title_text.is_empty() {
-                    None
+                if text.is_empty() {
+                    Ok(None)
                 } else {
-                    Some(title_text)
+                    let mut parser = self.subparser(two.start(), text);
+                    let paragraphs = parser.read_descriptive()?;
+
+                    if paragraphs.len() != 1 {
+                        return Err(ParsingError::InvalidSection(self.offset));
+                    }
+                    let paragraph = paragraphs
+                        .into_iter()
+                        .next();
+                    Ok(paragraph)
                 }
             }
-            None => None,
-        };
+            None => Ok(None),
+        }?;
 
         // Advance past the header line
         self.advance(line_end);

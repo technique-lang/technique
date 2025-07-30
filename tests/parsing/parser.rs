@@ -1106,12 +1106,14 @@ second_section_second_procedure :
             "#,
         ));
 
-        assert!(result.is_ok());
-        let technique = result.unwrap();
+        let document = match result {
+            Ok(document) => document,
+            Err(e) => panic!("Parsing failed: {}", e),
+        };
 
         // Verify complete structure
         assert_eq!(
-            technique,
+            document,
             Document {
                 header: None,
                 body: Some(Technique::Procedures(vec![Procedure {
@@ -1121,7 +1123,7 @@ second_section_second_procedure :
                     elements: vec![Element::Steps(vec![
                         Scope::SectionChunk {
                             numeral: "I",
-                            title: Some("First Section"),
+                            title: Some(Paragraph(vec![Descriptive::Text("First Section")])),
                             body: Technique::Procedures(vec![
                                 Procedure {
                                     name: Identifier("first_section_first_procedure"),
@@ -1139,7 +1141,7 @@ second_section_second_procedure :
                         },
                         Scope::SectionChunk {
                             numeral: "II",
-                            title: Some("Second Section"),
+                            title: Some(Paragraph(vec![Descriptive::Text("Second Section")])),
                             body: Technique::Procedures(vec![
                                 Procedure {
                                     name: Identifier("second_section_first_procedure"),
@@ -1181,11 +1183,13 @@ procedure_four : Concept -> Architecture
             "#,
         ));
 
-        assert!(result.is_ok());
-        let technique = result.unwrap();
+        let document = match result {
+            Ok(document) => document,
+            Err(e) => panic!("Parsing failed: {}", e),
+        };
 
         // Verify that both sections contain their respective procedures
-        if let Some(Technique::Procedures(procs)) = technique.body {
+        if let Some(Technique::Procedures(procs)) = document.body {
             let main_proc = &procs[0];
             if let Some(Element::Steps(steps)) = main_proc
                 .elements
@@ -1251,8 +1255,10 @@ III. Implementation
             "#,
         ));
 
-        assert!(result.is_ok());
-        let document = result.unwrap();
+        let document = match result {
+            Ok(document) => document,
+            Err(e) => panic!("Parsing failed: {}", e),
+        };
 
         assert_eq!(
             document,
@@ -1265,12 +1271,14 @@ III. Implementation
                     elements: vec![Element::Steps(vec![
                         Scope::SectionChunk {
                             numeral: "I",
-                            title: Some("Concept"),
+                            title: Some(Paragraph(vec![Descriptive::Text("Concept")])),
                             body: Technique::Empty,
                         },
                         Scope::SectionChunk {
                             numeral: "II",
-                            title: Some("Requirements Definition and Architecture"),
+                            title: Some(Paragraph(vec![Descriptive::Text(
+                                "Requirements Definition and Architecture"
+                            )])),
                             body: Technique::Procedures(vec![
                                 Procedure {
                                     name: Identifier("requirements_and_architecture"),
@@ -1339,7 +1347,7 @@ III. Implementation
                         },
                         Scope::SectionChunk {
                             numeral: "III",
-                            title: Some("Implementation"),
+                            title: Some(Paragraph(vec![Descriptive::Text("Implementation")])),
                             body: Technique::Empty,
                         },
                     ])],

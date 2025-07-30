@@ -565,9 +565,9 @@ impl Formatter {
             } => {
                 self.append_str(numeral);
                 self.append_char('.');
-                if let Some(title_text) = title {
+                if let Some(paragraph) = title {
                     self.append_char(' ');
-                    self.append_str(title_text);
+                    self.append_descriptives(&paragraph.0);
                 }
                 self.append_char('\n');
 
