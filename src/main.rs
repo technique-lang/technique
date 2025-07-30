@@ -106,8 +106,9 @@ fn main() {
 
             debug!(filename);
 
-            let content = parsing::load(&Path::new(filename));
-            let technique = parsing::parse(&content);
+            let filename = Path::new(filename);
+            let content = parsing::load(filename);
+            let technique = parsing::parse(&filename, &content);
             // TODO continue with validation of the returned technique
 
             println!("{:#?}", technique);
@@ -131,8 +132,9 @@ fn main() {
 
             debug!(filename);
 
-            let content = parsing::load(&Path::new(filename));
-            let technique = parsing::parse(&content);
+            let filename = Path::new(filename);
+            let content = parsing::load(&filename);
+            let technique = parsing::parse(&filename, &content);
 
             let result = formatting::format(&technique, wrap_width);
             print!("{}", result);

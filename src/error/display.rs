@@ -1,39 +1,81 @@
+use std::{fmt, path::Path};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TechniqueError<'i> {
     pub problem: String,
     pub details: String,
+    pub filename: &'i Path,
     pub source: &'i str,
     pub offset: usize,
     pub width: Option<usize>,
 }
 
-use std::fmt;
-
+// Verbose detailed explanation
 impl<'i> TechniqueError<'i> {
     pub fn full_details(&self) -> String {
-        let n = calculate_line_number(self.source, self.offset);
+        let i = calculate_line_number(self.source, self.offset);
+        let j = calculate_column_number(self.source, self.offset);
 
-        let line = self
+        let code = self
             .source
             .lines()
-            .nth(n)
-            .unwrap_or("<NOT FOUND>");
+            .nth(i)
+            .unwrap_or("?");
 
-        format!("{}\n{}: {}\n\n{}", self.problem, n + 1, line, self.details)
+        let line = i + 1;
+        let column = j + 1;
+
+        let width = line
+            .to_string()
+            .len();
+        let width = 3.max(width);
+
+        format!(
+            r#"
+error: {}
+{}:{}:{}
+
+{:width$} |
+{:width$} | {}
+{:width$} | {:>j$}
+
+{}
+            "#,
+            self.problem,
+            self.filename
+                .to_string_lossy(),
+            line,
+            column,
+            ' ',
+            line,
+            code,
+            ' ',
+            '^',
+            self.details
+        )
+        .trim_ascii()
+        .to_string()
     }
 }
 
+// Concise version for internal use
 impl<'i> fmt::Display for TechniqueError<'i> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = calculate_line_number(self.source, self.offset);
+        let i = calculate_line_number(self.source, self.offset);
+        let j = calculate_column_number(self.source, self.offset);
 
-        let line = self
-            .source
-            .lines()
-            .nth(n)
-            .unwrap_or("<NOT FOUND>");
+        let line = i + 1;
+        let column = j + 1;
 
-        write!(f, "{}\n{}: {}", self.problem, n + 1, line)
+        write!(
+            f,
+            "error: {}:{}:{} {}",
+            self.filename
+                .to_string_lossy(),
+            line,
+            column,
+            self.problem
+        )
     }
 }
 
@@ -44,6 +86,15 @@ fn calculate_line_number(content: &str, offset: usize) -> usize {
         .bytes()
         .filter(|&b| b == b'\n')
         .count()
+}
+
+// Calculate the column number, also zero-origin for consistency.
+fn calculate_column_number(content: &str, offset: usize) -> usize {
+    let before = &content[..offset];
+    match before.rfind('\n') {
+        Some(start) => offset - start,
+        None => offset,
+    }
 }
 
 #[cfg(test)]

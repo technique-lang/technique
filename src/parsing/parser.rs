@@ -1,9 +1,15 @@
+use std::path::Path;
+
 use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
+pub fn parse_via_taking<'i>(
+    path: &'i Path,
+    content: &'i str,
+) -> Result<Document<'i>, TechniqueError<'i>> {
     let mut input = Parser::new();
+    input.filename(path);
     input.initialize(content);
 
     let result = input.parse_from_start();
@@ -18,6 +24,7 @@ fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError
     TechniqueError {
         problem,
         details,
+        filename: parser.filename,
         source: parser.original,
         offset: error.offset(),
         width: None,
@@ -387,6 +394,7 @@ Numeric literals can be integers:
 
 #[derive(Debug)]
 pub struct Parser<'i> {
+    filename: &'i Path,
     original: &'i str,
     source: &'i str,
     offset: usize,
@@ -395,12 +403,16 @@ pub struct Parser<'i> {
 impl<'i> Parser<'i> {
     pub fn new() -> Parser<'i> {
         Parser {
+            filename: Path::new("-"),
             original: "",
             source: "",
             offset: 0,
         }
     }
 
+    pub fn filename(&mut self, filename: &'i Path) {
+        self.filename = filename;
+    }
     pub fn initialize(&mut self, content: &'i str) {
         self.original = content;
         self.source = content;
@@ -753,6 +765,7 @@ impl<'i> Parser<'i> {
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
+            filename: self.filename,
             original: self.original,
             source: content,
             offset: indent + self.offset,
