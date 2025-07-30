@@ -512,7 +512,7 @@ impl<'i> Parser<'i> {
     // versions then this will be a lot more complicated than just dealing with a
     // different natural number here.
     fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"%\s*technique\s+v1");
 
             if re.is_match(inner.source) {
@@ -526,12 +526,12 @@ impl<'i> Parser<'i> {
     // This one is awkward because if a SPDX line is present, then it really needs
     // to have a license, whereas the copyright part is optional.
     fn read_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$");
 
             let cap = re
                 .captures(inner.source)
-                .ok_or(ParsingError::InvalidHeader(0))?;
+                .ok_or(ParsingError::InvalidHeader(inner.offset))?;
 
             // Now to extracting the values we need. We get the license code from
             // the first capture. It must be present otherwise we don't have a
@@ -562,7 +562,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"^&\s*(.+)$");
 
             let cap = re
@@ -582,22 +582,27 @@ impl<'i> Parser<'i> {
     pub fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError<'i>> {
         // Process magic line
         let version = if is_magic_line(self.source) {
-            self.read_magic_line()?
+            let result = self.read_magic_line()?;
+            self.require_newline()?;
+            result
         } else {
             Err(ParsingError::Expected(0, "The % symbol"))?
         };
 
         // Process SPDX line
-
         let (license, copyright) = if is_spdx_line(self.source) {
-            self.read_spdx_line()?
+            let result = self.read_spdx_line()?;
+            self.require_newline()?;
+            result
         } else {
             (None, None)
         };
 
         // Process template line
         let template = if is_template_line(self.source) {
-            self.read_template_line()?
+            let result = self.read_template_line()?;
+            self.require_newline()?;
+            result
         } else {
             None
         };
@@ -1722,15 +1727,15 @@ fn is_magic_line(content: &str) -> bool {
 }
 
 fn is_spdx_line(content: &str) -> bool {
-    let re = regex!(r"!\s*[^;]+(?:;\s*.+)?");
-
-    re.is_match(content)
+    content
+        .trim_ascii_start()
+        .starts_with('!')
 }
 
 fn is_template_line(content: &str) -> bool {
-    let re = regex!(r"&\s*.+");
-
-    re.is_match(content)
+    content
+        .trim_ascii_start()
+        .starts_with('&')
 }
 
 fn is_identifier(content: &str) -> bool {

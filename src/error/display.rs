@@ -22,7 +22,7 @@ impl<'i> fmt::Display for TechniqueError<'i> {
     }
 }
 
-// This returns a zero-origin result so that it can subseequently be used for
+// This returns a zero-origin result so that it can subsequently be used for
 // splitting; for display to humans you'll have to add 1.
 fn calculate_line_number(content: &str, offset: usize) -> usize {
     content[..offset]
