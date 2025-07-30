@@ -4,7 +4,7 @@ use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Technique, TechniqueError> {
+pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
     let mut input = Parser::new();
     input.initialize(content);
 
@@ -38,6 +38,7 @@ pub enum ParsingError<'i> {
     InvalidGenus(usize),
     InvalidSignature(usize),
     InvalidDeclaration(usize),
+    InvalidSection(usize),
     InvalidInvocation(usize),
     InvalidFunction(usize),
     InvalidCodeBlock(usize),
@@ -63,6 +64,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidGenus(offset) => *offset,
             ParsingError::InvalidSignature(offset) => *offset,
             ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidSection(offset) => *offset,
             ParsingError::InvalidInvocation(offset) => *offset,
             ParsingError::InvalidFunction(offset) => *offset,
             ParsingError::InvalidCodeBlock(offset) => *offset,
@@ -88,6 +90,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
             ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
             ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
+            ParsingError::InvalidSection(_) => "invalid section heading".to_string(),
             ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
             ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
             ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
@@ -128,7 +131,7 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<Technique<'i>, ParsingError<'i>> {
+    fn parse_from_start(&mut self) -> Result<Document<'i>, ParsingError<'i>> {
         // Check if header is present by looking for magic line
         let header = if is_magic_line(self.source) {
             Some(self.read_technique_header()?)
@@ -136,8 +139,9 @@ impl<'i> Parser<'i> {
             None
         };
 
-        // Parse zero or more procedures
+        // Parse zero or more procedures, handling sections if they exist
         let mut procedures = Vec::new();
+
         while !self.is_finished() {
             self.trim_whitespace();
 
@@ -145,9 +149,39 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            // Check if current position starts with a procedure declaration
             if is_procedure_declaration(self.source) {
-                let procedure = self.read_procedure()?;
+                let mut procedure = self.take_block_lines(
+                    is_procedure_declaration,
+                    |line| is_section(line) || is_procedure_declaration(line),
+                    |inner| inner.read_procedure(),
+                )?;
+
+                // Check if there are sections following this procedure
+                while !self.is_finished() {
+                    self.trim_whitespace();
+                    if self.is_finished() {
+                        break;
+                    }
+
+                    if is_section(self.source) {
+                        let section = self.read_section()?;
+                        if let Some(Element::Steps(ref mut steps)) = procedure
+                            .elements
+                            .last_mut()
+                        {
+                            steps.push(section);
+                        } else {
+                            // Create a new Steps element if one doesn't exist
+                            procedure
+                                .elements
+                                .push(Element::Steps(vec![section]));
+                        }
+                    } else {
+                        // If we hit something that's not a section, stop parsing sections
+                        break;
+                    }
+                }
+
                 procedures.push(procedure);
             } else {
                 // TODO: Handle unexpected content properly
@@ -158,13 +192,13 @@ impl<'i> Parser<'i> {
         let body = if procedures.is_empty() {
             None
         } else {
-            Some(procedures)
+            Some(Technique::Procedures(procedures))
         };
 
-        Ok(Technique { header, body })
+        Ok(Document { header, body })
     }
 
-    /// consume up to but not including newline (or end)
+    /// consume up to but not including newline (or end), then take newline
     fn take_line<A, F>(&mut self, f: F) -> Result<A, ParsingError<'i>>
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
@@ -767,6 +801,153 @@ impl<'i> Parser<'i> {
         Ok(procedure)
     }
 
+    fn read_section(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
+        self.take_block_lines(is_section, is_section, |outer| {
+            // Parse the section header first
+            let (numeral, title) = outer.parse_section_header()?;
+            outer.require_newline()?;
+
+            // Determine if this section contains procedures or steps
+            outer.trim_whitespace();
+            if outer.is_finished() {
+                // Section is empty (fairly common, especially in early
+                // drafting of a Technique)
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Empty,
+                })
+            } else if is_procedure_declaration(outer.source) {
+                // Section contains procedures
+                let mut procedures = Vec::new();
+                while !outer.is_finished() {
+                    outer.trim_whitespace();
+                    if outer.is_finished() {
+                        break;
+                    }
+                    if is_procedure_declaration(outer.source) {
+                        let procedure = outer.read_procedure()?;
+                        procedures.push(procedure);
+                    } else {
+                        // Skip non-procedure content line by line
+                        if let Some(newline_pos) = outer
+                            .source
+                            .find('\n')
+                        {
+                            outer.advance(newline_pos + 1);
+                        } else {
+                            outer.advance(
+                                outer
+                                    .source
+                                    .len(),
+                            );
+                        }
+                    }
+                }
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Procedures(procedures),
+                })
+            } else {
+                // Section contains steps - parse as steps
+                let mut steps = Vec::new();
+                while !outer.is_finished() {
+                    outer.trim_whitespace();
+                    if outer.is_finished() {
+                        break;
+                    }
+
+                    // Try to parse steps
+                    if is_substep_dependent(outer.source) {
+                        let step = outer.read_substep_dependent()?;
+                        steps.push(step);
+                    } else if is_substep_parallel(outer.source) {
+                        let step = outer.read_substep_parallel()?;
+                        steps.push(step);
+                    } else {
+                        // Skip unrecognized content line by line
+                        if let Some(newline_pos) = outer
+                            .source
+                            .find('\n')
+                        {
+                            outer.advance(newline_pos + 1);
+                        } else {
+                            outer.advance(
+                                outer
+                                    .source
+                                    .len(),
+                            );
+                        }
+                    }
+                }
+                Ok(Scope::SectionChunk {
+                    numeral,
+                    title,
+                    body: Technique::Steps(steps),
+                })
+            }
+        })
+    }
+
+    fn parse_section_header(
+        &mut self,
+    ) -> Result<(&'i str, Option<Paragraph<'i>>), ParsingError<'i>> {
+        self.trim_whitespace();
+
+        // Get the current line (up to newline or end)
+        let line_end = self
+            .source
+            .find('\n')
+            .unwrap_or(
+                self.source
+                    .len(),
+            );
+        let line = &self.source[..line_end];
+
+        // Extract roman numeral and optional title
+        let re = regex!(r"^\s*([IVX]+)\.\s*(.*)$");
+        let cap = re
+            .captures(line)
+            .ok_or(ParsingError::InvalidSection(self.offset))?;
+
+        let numeral = match cap.get(1) {
+            Some(one) => one.as_str(),
+            None => return Err(ParsingError::Expected(self.offset, "section header")),
+        };
+
+        // Though section text appear as titles, they are in fact steps and so
+        // their text can support the various things you can put in a
+        // Descriptive. Section titles should, however, only be single line,
+        // so we take the first paragraph found and error otherwise.
+        let title = match cap.get(2) {
+            Some(two) => {
+                let text = two
+                    .as_str()
+                    .trim();
+                if text.is_empty() {
+                    Ok(None)
+                } else {
+                    let mut parser = self.subparser(two.start(), text);
+                    let paragraphs = parser.read_descriptive()?;
+
+                    if paragraphs.len() != 1 {
+                        return Err(ParsingError::InvalidSection(self.offset));
+                    }
+                    let paragraph = paragraphs
+                        .into_iter()
+                        .next();
+                    Ok(paragraph)
+                }
+            }
+            None => Ok(None),
+        }?;
+
+        // Advance past the header line
+        self.advance(line_end);
+        Ok((numeral, title))
+    }
+
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
         self.take_block_chars('{', '}', |outer| outer.read_expression())
     }
@@ -1062,22 +1243,12 @@ impl<'i> Parser<'i> {
 
             let text = outer.read_descriptive()?;
 
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
-                let content = outer.source;
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
-                }
-            }
-
             // Parse scopes (role assignments and substeps)
             let scopes = outer.read_scopes()?;
 
             return Ok(Scope::DependentBlock {
                 ordinal: number,
                 description: text,
-                responses,
                 subscopes: scopes,
             });
         })
@@ -1100,21 +1271,12 @@ impl<'i> Parser<'i> {
 
             let text = outer.read_descriptive()?;
 
-            // Parse responses if present
-            let mut responses = vec![];
-            if !outer.is_finished() {
-                let content = outer.source;
-                if is_enum_response(content) {
-                    responses = outer.read_responses()?;
-                }
-            }
-
+            // Parse scopes (role assignments and substeps)
             let scopes = outer.read_scopes()?;
 
             return Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: text,
-                responses,
                 subscopes: scopes,
             });
         })
@@ -1124,9 +1286,7 @@ impl<'i> Parser<'i> {
     fn read_substep_dependent(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
         self.take_block_lines(
             is_substep_dependent,
-            |line| {
-                is_substep_dependent(line)
-            },
+            |line| is_substep_dependent(line),
             |outer| {
                 let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
@@ -1153,21 +1313,12 @@ impl<'i> Parser<'i> {
                 // Parse the remaining content
                 let text = outer.read_descriptive()?;
 
-                // Parse responses if present
-                let mut responses = vec![];
-                if !outer.is_finished() {
-                    if is_enum_response(outer.source) {
-                        responses = outer.read_responses()?;
-                    }
-                }
-
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
                 Ok(Scope::DependentBlock {
                     ordinal: letter,
                     description: text,
-                    responses,
                     subscopes: scopes,
                 })
             },
@@ -1193,21 +1344,12 @@ impl<'i> Parser<'i> {
                 // Parse the remaining content
                 let text = outer.read_descriptive()?;
 
-                // Parse responses if present
-                let mut responses = vec![];
-                if !outer.is_finished() {
-                    if is_enum_response(outer.source) {
-                        responses = outer.read_responses()?;
-                    }
-                }
-
                 // Parse scopes (role assignments and substeps)
                 let scopes = outer.read_scopes()?;
 
                 Ok(Scope::ParallelBlock {
                     bullet: '-',
                     description: text,
-                    responses,
                     subscopes: scopes,
                 })
             },
@@ -1527,6 +1669,9 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
+            } else if is_enum_response(content) {
+                let responses = self.read_responses()?;
+                scopes.push(Scope::ResponseBlock { responses });
             } else {
                 break;
             }
@@ -1623,25 +1768,32 @@ fn is_genus(content: &str) -> bool {
 
     match first {
         '[' => {
-            // List pattern: [Forma] where Forma starts with uppercase
+            // List pattern? [Forma] where Forma starts with uppercase
             let re = regex!(r"^\[\s*[A-Z][A-Za-z0-9]*\s*\]$");
             re.is_match(content)
         }
         '(' => {
-            // Unit Forma: ()
+            // Unit Forma? ()
             if let Some(c) = chars.next() {
                 if c == ')' {
                     return true;
                 }
             }
-            // Tuple pattern: (Forma, Forma, ...)
+            // Tuple pattern? (Forma, Forma, ...)
             let re = regex!(r"^\(\s*[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)*\s*\)$");
             re.is_match(content)
         }
         _ => {
-            // Single Forma pattern
-            let re = regex!(r"^[A-Z][A-Za-z0-9]*$");
-            re.is_match(content)
+            if content.contains(',') {
+                // could be a Naked tuple? Forma, Forma, ...
+                let re = regex!(r"^[A-Z][A-Za-z0-9]*(\s*,\s*[A-Z][A-Za-z0-9]*)+$");
+                re.is_match(content)
+            } else {
+                // nope, check if it's just a simple Single Forma. Great if
+                // so, otherwise the caller is going to make some choices!
+                let re = regex!(r"^[A-Z][A-Za-z0-9]*$");
+                re.is_match(content)
+            }
         }
     }
 }
@@ -1793,6 +1945,11 @@ fn is_step_parallel(content: &str) -> bool {
 
 fn is_step(content: &str) -> bool {
     is_step_dependent(content) || is_step_parallel(content)
+}
+
+fn is_section(content: &str) -> bool {
+    let re = regex!(r"^\s*([IVX]+)\.\s+");
+    re.is_match(content)
 }
 
 /// Recognize
@@ -2291,7 +2448,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("First step")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2311,7 +2467,6 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "a top-level task to be one in parallel with"
                 )]),],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2321,7 +2476,6 @@ mod check {
             Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2340,7 +2494,6 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2363,7 +2516,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "a",
                 description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2376,7 +2528,6 @@ mod check {
             Ok(Scope::ParallelBlock {
                 bullet: '-',
                 description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2400,18 +2551,15 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::DependentBlock {
                         ordinal: "a",
                         description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                     Scope::DependentBlock {
                         ordinal: "b",
                         description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                 ],
@@ -2437,18 +2585,15 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                     Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
-                        responses: vec![],
                         subscopes: vec![],
                     },
                 ],
@@ -2475,11 +2620,9 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("First step")])],
-                responses: vec![],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
-                    responses: vec![],
                     subscopes: vec![],
                 }],
             })
@@ -2490,7 +2633,6 @@ mod check {
             Ok(Scope::DependentBlock {
                 ordinal: "2",
                 description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
-                responses: vec![],
                 subscopes: vec![],
             })
         );
@@ -2543,23 +2685,23 @@ mod check {
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Have you done the first thing in the first one?"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text(
                         "Do the first thing. Then ask yourself if you are done:"
                     )])],
-                    responses: vec![
-                        Response {
-                            value: "Yes",
-                            condition: None
-                        },
-                        Response {
-                            value: "No",
-                            condition: Some("but I have an excuse")
-                        }
-                    ],
-                    subscopes: vec![]
+                    subscopes: vec![Scope::ResponseBlock {
+                        responses: vec![
+                            Response {
+                                value: "Yes",
+                                condition: None
+                            },
+                            Response {
+                                value: "No",
+                                condition: Some("but I have an excuse")
+                            }
+                        ]
+                    }]
                 }],
             })
         );
@@ -3487,7 +3629,6 @@ echo test
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Check the patient's vital signs"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("nurse"))],
                     subscopes: vec![],
@@ -3519,13 +3660,11 @@ echo test
                 description: vec![Paragraph(vec![Descriptive::Text(
                     "Verify patient identity"
                 )])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("surgeon"))],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "a",
                         description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
-                        responses: vec![],
                         subscopes: vec![]
                     }]
                 }]
@@ -3554,13 +3693,11 @@ echo test
             Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])],
-                responses: vec![],
                 subscopes: vec![Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier("nursing_team"))],
                     subscopes: vec![Scope::ParallelBlock {
                         bullet: '-',
                         description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
-                        responses: vec![],
                         subscopes: vec![]
                     }]
                 }]
@@ -3592,7 +3729,6 @@ echo test
             Scope::DependentBlock {
                 ordinal: "1",
                 description: vec![Paragraph(vec![Descriptive::Text("Review events.")])],
-                responses: vec![],
                 subscopes: vec![
                     Scope::AttributeBlock {
                         attributes: vec![Attribute::Role(Identifier("surgeon"))],
@@ -3601,7 +3737,6 @@ echo test
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "What are the steps?"
                             )])],
-                            responses: vec![],
                             subscopes: vec![]
                         }]
                     },
@@ -3612,7 +3747,6 @@ echo test
                             description: vec![Paragraph(vec![Descriptive::Text(
                                 "What are the concerns?"
                             )])],
-                            responses: vec![],
                             subscopes: vec![]
                         }]
                     }

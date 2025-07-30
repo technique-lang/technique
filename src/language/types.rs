@@ -3,9 +3,9 @@
 use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
-pub struct Technique<'i> {
+pub struct Document<'i> {
     pub header: Option<Metadata<'i>>,
-    pub body: Option<Vec<Procedure<'i>>>,
+    pub body: Option<Technique<'i>>,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -25,6 +25,13 @@ impl Default for Metadata<'_> {
             template: None,
         }
     }
+}
+
+#[derive(Eq, Debug, PartialEq)]
+pub enum Technique<'i> {
+    Steps(Vec<Scope<'i>>),
+    Procedures(Vec<Procedure<'i>>),
+    Empty,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -112,15 +119,15 @@ pub enum Scope<'i> {
     DependentBlock {
         ordinal: &'i str,
         description: Vec<Paragraph<'i>>,
-        responses: Vec<Response<'i>>,
         subscopes: Vec<Scope<'i>>,
     },
+
     ParallelBlock {
         bullet: char,
         description: Vec<Paragraph<'i>>,
-        responses: Vec<Response<'i>>,
         subscopes: Vec<Scope<'i>>,
     },
+
     // Attribute scope: @role (or other attributes) with substeps
     AttributeBlock {
         attributes: Vec<Attribute<'i>>,
@@ -131,6 +138,18 @@ pub enum Scope<'i> {
     CodeBlock {
         expression: Expression<'i>,
         subscopes: Vec<Scope<'i>>,
+    },
+
+    // Response block scope: 'Yes' | 'No' responses
+    ResponseBlock {
+        responses: Vec<Response<'i>>,
+    },
+
+    // Section chunk scope: organizational container with technique content
+    SectionChunk {
+        numeral: &'i str,
+        title: Option<Paragraph<'i>>,
+        body: Technique<'i>,
     },
 }
 
