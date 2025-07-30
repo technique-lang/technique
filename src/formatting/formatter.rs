@@ -353,8 +353,8 @@ impl Formatter {
                         self.append_expression(expr);
                         self.append_char('\n');
                         self.decrease(4);
-                        self.append_char('}');
                         line = self.builder();
+                        line.add_text("}");
                     }
                     Expression::Multiline(_, _) => {
                         line.flush();
@@ -364,8 +364,8 @@ impl Formatter {
                         self.decrease(4);
                         self.append_char('\n');
                         self.indent();
-                        self.append_char('}');
                         line = self.builder();
+                        line.add_text("}");
                     }
                     _ => match expr {
                         Expression::Execution(func)
@@ -380,8 +380,8 @@ impl Formatter {
                             self.append_char(' ');
                             self.append_expression(expr);
                             self.append_char(' ');
-                            self.append_char('}');
                             line = self.builder();
+                            line.add_text("}");
                         }
                         _ => {
                             line.add_inline_code(expr);
