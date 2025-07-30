@@ -1,12 +1,27 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TechniqueError<'i> {
     pub problem: String,
+    pub details: String,
     pub source: &'i str,
     pub offset: usize,
     pub width: Option<usize>,
 }
 
 use std::fmt;
+
+impl<'i> TechniqueError<'i> {
+    pub fn full_details(&self) -> String {
+        let n = calculate_line_number(self.source, self.offset);
+
+        let line = self
+            .source
+            .lines()
+            .nth(n)
+            .unwrap_or("<NOT FOUND>");
+
+        format!("{}\n{}: {}\n\n{}", self.problem, n + 1, line, self.details)
+    }
+}
 
 impl<'i> fmt::Display for TechniqueError<'i> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

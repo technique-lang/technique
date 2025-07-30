@@ -16,8 +16,10 @@ pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
 }
 
 fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
+    let (problem, details) = error.message();
     TechniqueError {
-        problem: error.message(),
+        problem,
+        details,
         source: parser.original,
         offset: error.offset(),
         width: None,

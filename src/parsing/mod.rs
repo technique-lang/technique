@@ -48,7 +48,7 @@ pub fn parse(content: &str) -> Document {
             document
         }
         Err(error) => {
-            eprintln!("error: {}", error);
+            eprintln!("error: {}", error.full_details());
             std::process::exit(1);
         }
     }
