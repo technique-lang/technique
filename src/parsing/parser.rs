@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
@@ -476,11 +474,6 @@ impl<'i> Parser<'i> {
         let result = self.take_until(&['\n'], f);
         self.require_newline()?;
         result
-    }
-
-    #[deprecated]
-    fn entire(&self) -> &'i str {
-        self.source
     }
 
     fn is_finished(&self) -> bool {
@@ -1839,17 +1832,6 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn ensure_nonempty(&mut self) -> Result<(), ParsingError<'i>> {
-        if self
-            .source
-            .len()
-            == 0
-        {
-            return Err(ParsingError::UnexpectedEndOfInput(self.offset));
-        }
-        Ok(())
-    }
-
     /// Trim any leading whitespace (space, tab, newline) from the front of
     /// the current parser text.
     fn trim_whitespace(&mut self) {
@@ -2019,6 +2001,7 @@ fn is_identifier(content: &str) -> bool {
 ///
 /// terminated by an end of line.
 
+#[allow(unused)]
 fn is_signature(content: &str) -> bool {
     let re = regex!(r"\s*.+?\s*->\s*.+?\s*$");
 
@@ -2177,6 +2160,7 @@ fn is_code_block(content: &str) -> bool {
     re.is_match(content)
 }
 
+#[allow(unused)]
 fn is_code_inline(content: &str) -> bool {
     let content = content.trim_ascii_start();
     content.starts_with('{')
@@ -2353,12 +2337,19 @@ mod check {
     fn check_not_eof() {
         let mut input = Parser::new();
         input.initialize("Hello World");
-        assert_eq!(input.ensure_nonempty(), Ok(()));
+        assert!(
+            input
+                .source
+                .len()
+                > 0
+        );
 
         input.initialize("");
-        assert_eq!(
-            input.ensure_nonempty(),
-            Err(ParsingError::UnexpectedEndOfInput(input.offset))
+        assert!(
+            input
+                .source
+                .len()
+                > 0
         );
     }
 
