@@ -2373,20 +2373,10 @@ mod check {
     fn check_not_eof() {
         let mut input = Parser::new();
         input.initialize("Hello World");
-        assert!(
-            input
-                .source
-                .len()
-                > 0
-        );
+        assert!(!input.is_finished());
 
         input.initialize("");
-        assert!(
-            input
-                .source
-                .len()
-                > 0
-        );
+        assert!(input.is_finished());
     }
 
     #[test]
