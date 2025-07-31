@@ -9,6 +9,12 @@ use technique::parsing;
 
 mod rendering;
 
+#[derive(Eq, Debug, PartialEq)]
+enum Output {
+    Native,
+    Silent,
+}
+
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
@@ -45,6 +51,15 @@ fn main() {
                         .long("watch")
                         .action(clap::ArgAction::SetTrue)
                         .help("Watch the given procedure file and recompile if changes are detected."),
+                )
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_parser(["native", "none"])
+                        .default_value("none")
+                        .action(ArgAction::Set)
+                        .help("Which kind of diagnostic output to print when checking.")
                 )
                 .arg(
                     Arg::new("filename")
@@ -100,6 +115,17 @@ fn main() {
 
             debug!(watching);
 
+            let output = submatches
+                .get_one::<String>("output")
+                .unwrap();
+            let output = match output.as_str() {
+                "native" => Output::Native,
+                "none" => Output::Silent,
+                _ => panic!("Unrecognized --output value"),
+            };
+
+            debug!(?output);
+
             let filename = submatches
                 .get_one::<String>("filename")
                 .unwrap(); // argument are required by definition so always present
@@ -111,7 +137,9 @@ fn main() {
             let technique = parsing::parse(&filename, &content);
             // TODO continue with validation of the returned technique
 
-            println!("{:#?}", technique);
+            if let Output::Native = output {
+                println!("{:#?}", technique);
+            }
         }
         Some(("format", submatches)) => {
             let raw_output = *submatches
