@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod verify {
+    use std::path::Path;
     use std::vec;
 
     use technique::language::*;
@@ -1088,8 +1089,10 @@ before_leaving :
 
     #[test]
     fn section_parsing() {
-        let result = technique::parsing::parser::parse_via_taking(trim(
-            r#"
+        let result = technique::parsing::parser::parse_via_taking(
+            Path::new(""),
+            trim(
+                r#"
 main_procedure :
 
 I. First Section
@@ -1112,7 +1115,8 @@ second_section_second_procedure :
 
 # Two dot Two
             "#,
-        ));
+            ),
+        );
 
         let document = match result {
             Ok(document) => document,
@@ -1173,8 +1177,10 @@ second_section_second_procedure :
 
     #[test]
     fn section_with_procedures_only() {
-        let result = technique::parsing::parser::parse_via_taking(trim(
-            r#"
+        let result = technique::parsing::parser::parse_via_taking(
+            Path::new(""),
+            trim(
+                r#"
 main_procedure :
 
 I. First Section
@@ -1189,7 +1195,8 @@ procedure_three : Concept -> Requirements
 
 procedure_four : Concept -> Architecture
             "#,
-        ));
+            ),
+        );
 
         let document = match result {
             Ok(document) => document,
@@ -1241,8 +1248,10 @@ procedure_four : Concept -> Architecture
 
     #[test]
     fn section_with_procedures() {
-        let result = parser::parse_via_taking(trim(
-            r#"
+        let result = parser::parse_via_taking(
+            Path::new(""),
+            trim(
+                r#"
 main_procedure :
 
 I. Concept
@@ -1261,7 +1270,8 @@ determine_architecture : Concept -> Architecture
 
 III. Implementation
             "#,
-        ));
+            ),
+        );
 
         let document = match result {
             Ok(document) => document,

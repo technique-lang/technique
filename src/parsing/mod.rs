@@ -16,8 +16,8 @@ pub fn load(filename: &Path) -> String {
 }
 
 /// Parse text into a Technique object, or error out.
-pub fn parse(content: &str) -> Document {
-    let result = parser::parse_via_taking(content);
+pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Document<'i> {
+    let result = parser::parse_via_taking(filename, content);
 
     match result {
         Ok(document) => {
@@ -48,7 +48,7 @@ pub fn parse(content: &str) -> Document {
             document
         }
         Err(error) => {
-            eprintln!("error: {}", error);
+            eprintln!("{}", error.full_details());
             std::process::exit(1);
         }
     }

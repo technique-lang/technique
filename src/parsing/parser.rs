@@ -1,11 +1,15 @@
-#![allow(dead_code)]
+use std::path::Path;
 
 use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
 
-pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
+pub fn parse_via_taking<'i>(
+    path: &'i Path,
+    content: &'i str,
+) -> Result<Document<'i>, TechniqueError<'i>> {
     let mut input = Parser::new();
+    input.filename(path);
     input.initialize(content);
 
     let result = input.parse_from_start();
@@ -16,8 +20,11 @@ pub fn parse_via_taking(content: &str) -> Result<Document, TechniqueError> {
 }
 
 fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
+    let (problem, details) = error.message();
     TechniqueError {
-        problem: error.message(),
+        problem,
+        details,
+        filename: parser.filename,
         source: parser.original,
         offset: error.offset(),
         width: None,
@@ -30,6 +37,7 @@ pub enum ParsingError<'i> {
     Unimplemented(usize),
     Unrecognized(usize), // improve this
     Expected(usize, &'static str),
+    ExpectedMatchingChar(usize, &'static str, char, char),
     InvalidHeader(usize),
     InvalidCharacter(usize, char),
     UnexpectedEndOfInput(usize),
@@ -56,6 +64,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::Unimplemented(offset) => *offset,
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
+            ParsingError::ExpectedMatchingChar(offset, _, _, _) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
             ParsingError::InvalidCharacter(offset, _) => *offset,
             ParsingError::UnexpectedEndOfInput(offset) => *offset,
@@ -76,35 +85,316 @@ impl<'i> ParsingError<'i> {
         }
     }
 
-    fn message(&self) -> String {
+    fn message(&self) -> (String, String) {
         match self {
-            ParsingError::IllegalParserState(_) => "illegal parser state".to_string(),
-            ParsingError::Unimplemented(_) => "as yet unimplemented!".to_string(),
-            ParsingError::Unrecognized(_) => "unrecognized".to_string(),
-            ParsingError::Expected(_, value) => format!("expected {}", value),
-            ParsingError::InvalidHeader(_) => "invalid header".to_string(),
-            ParsingError::InvalidCharacter(_, c) => format!("invalid character '{}'", c),
-            ParsingError::UnexpectedEndOfInput(_) => "unexpected end of input".to_string(),
-            ParsingError::InvalidIdentifier(_, _) => "invalid identifier".to_string(),
-            ParsingError::InvalidForma(_) => "invalid forma".to_string(),
-            ParsingError::InvalidGenus(_) => "invalid genus".to_string(),
-            ParsingError::InvalidSignature(_) => "invalid signature".to_string(),
-            ParsingError::InvalidDeclaration(_) => "invalid procedure declaration".to_string(),
-            ParsingError::InvalidSection(_) => "invalid section heading".to_string(),
-            ParsingError::InvalidInvocation(_) => "invalid procedure invocation".to_string(),
-            ParsingError::InvalidFunction(_) => "invalid function call".to_string(),
-            ParsingError::InvalidCodeBlock(_) => "invalid code block".to_string(),
-            ParsingError::InvalidMultiline(_) => "invalid multi-line string".to_string(),
-            ParsingError::InvalidStep(_) => "invalid step".to_string(),
-            ParsingError::InvalidForeach(_) => "invalid foreach loop".to_string(),
-            ParsingError::InvalidResponse(_) => "invalid response literal".to_string(),
-            ParsingError::InvalidNumeric(_) => "invalid numeric literal".to_string(),
+            ParsingError::IllegalParserState(_) => (
+                "Illegal parser state".to_string(),
+                "Internal parser error. This should not have happened! Sorry.".to_string(),
+            ),
+            ParsingError::Unimplemented(_) => (
+                "Feature not yet implemented".to_string(),
+                "This feature is planned but not yet available.".to_string(),
+            ),
+            ParsingError::Unrecognized(_) => (
+                "Unrecognized input".to_string(),
+                "The parser encountered unexpected content".to_string(),
+            ),
+            ParsingError::Expected(_, value) => (
+                format!("Expected {}", value),
+                format!(
+                    "The parser was looking for {} but found something else.",
+                    value
+                ),
+            ),
+            ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
+                format!("Expected matching character '{}'", end),
+                format!(
+                    r#"
+The parser was expecting {} enclosed by '{}' and '{}' but there was no more
+input remaining in the current scope.
+                    "#,
+                    subject, start, end
+                )
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidHeader(_) => (
+                "Invalid header".to_string(),
+                r#"
+The metadata describing a Technique file must follow this format:
+
+    % technique v1
+    ! «license»; © «copyright»
+    & «template»
+
+The first line are the magic bytes identifying the Technique file format and
+current language version.
+
+The second line lists the System Package Data Exchange (SPDX) information
+about the ownership of the Technique in this file and permissions associated
+with it. The line is optional but if present it starts with a «license»
+declaration, conventionally an SPDX identifier like `MIT`, `CC-BY 4.0`, or
+`Proprietary`. A declaration of the «copyright» holder can optionally follow
+the license statement, separated from it by a semicolon. Copyright statements
+typically list the year and then the name of the person or entity holding the
+copyright.
+
+The third line optionally specifies the template to be used when rendering the
+Technique. Common templates include `checklist`, `nasa-flight-plan,v4.0`, and
+`recipe`.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidCharacter(_, c) => (
+                format!("Invalid character '{}'", c),
+                "This character is not allowed here.".to_string(),
+            ),
+            ParsingError::UnexpectedEndOfInput(_) => (
+                "Unexpected end of input".to_string(),
+                "The file ended before the parser expected it to".to_string(),
+            ),
+            ParsingError::InvalidIdentifier(_, _) => (
+                "Invalid identifier".to_string(),
+                r#"
+Identifiers must start with a lowercase letter and contain only lower case
+letters, numbers, and underscores. No uppercase letters, spaces, dashes, or
+other punctuation. Examples:
+
+    make_coffee
+    attempt1
+    i
+    l33t_hax0r
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidForma(_) => (
+                "Invalid forma name".to_string(),
+                r#"
+The names of Forma (the basic types in Technique) must start with an uppercase
+letter and cannot contain dashes, underscores, spaces, or other punctuation.
+For example:
+
+    Coffee
+    Ingredients
+    PatientRecord
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidGenus(_) => (
+                "Invalid genus".to_string(),
+                r#"
+Genus are the full types in Technique. They are either simple (just the name
+of a Forma) or compound (lists or tuples of Forma). Some examples:
+
+    Coffee
+    (Beans, Water)
+    Beans, Water
+    [Patient]
+    ()
+
+Tuples can be enclosed in parenthesis or "naked"; semantically they are the
+same. The final example is the syntax for the Unit genus, used when something
+doesn't have an input or result, per se.
+    "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSignature(_) => (
+                "Invalid procedure signature".to_string(),
+                r#"
+Signatures follow the pattern domain -> range, where domain and range are
+genus. Some examples:
+
+    A -> B
+    (Beans, Milk) -> Coffee
+    [FunctionalRequirement] -> Architecture
+
+Signatures are optional on procedure declarations but if present must follow
+this form.
+    "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidDeclaration(_) => (
+                "Invalid procedure declaration".to_string(),
+                r#"
+Procedures are declared by specifying an identifier as a name, followed by a
+colon:
+
+    f :
+    implementation :
+    make_coffee :
+
+A procedure can optionally have a signature, as in the following examples:
+
+    f : A -> B
+    implementation : Design -> Product
+    make_coffee : Beans, Milk -> Coffee
+    make_coffee : (Beans, Milk) -> Coffee
+
+Finally, variables can be assigned for the names of the input parameters:
+
+    make_coffee(b, m) : Beans, Milk -> Coffee
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSection(_) => (
+                "Invalid section heading".to_string(),
+                r#"
+Section headings use capital Roman numerals, followed by optional title:
+
+    I. First Section
+    II. Second Section
+    III.
+
+Conventionally such a title would be in Proper Case but that is left up to the
+author of the Technique.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidInvocation(_) => (
+                "Invalid procedure invocation".to_string(),
+                r#"
+To denote the invocation of another procedure, use angle brackets:
+
+    <make_coffee>
+
+If the procedure takes parameters they can be specified in parenthesis:
+
+    <check_vitals>(patient)
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidFunction(_) => (
+                "Invalid function call".to_string(),
+                r#"
+Function calls in code blocks are made by specifying the name of the function
+to be executed followed by parentheses, supplying values, variables, or other
+expressions as parameters as required:
+
+    exec("ls -la")
+    now()
+    calculate(a, b)
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidCodeBlock(_) => (
+                "Invalid code block".to_string(),
+                r#"
+Inline code blocks are enclosed in braces:
+
+    { exec("command") }
+    { repeat 5 }
+    { foreach patient in patients }
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidMultiline(_) => (
+                "Invalid multi-line string".to_string(),
+                r#"
+Multi-line strings can be written by surrounding the content in triple
+backticks:
+
+    ```
+    In those days spirits were brave, the stakes were high, men were real men,
+    women were real women and small furry creatures from Alpha Centauri were
+    real small furry creatures from Alpha Centauri.
+    ```
+
+The leading and trailing newline will be trimmed. In addition, any whitespace
+indenting the string will be removed. So
+
+    ```bash
+        if [ -f /etc/passwd ]
+        then
+            echo "Found the password file"
+        fi
+    ```
+
+would result in a string with the `if` on the left margin but `echo` indented
+by 4 spaces. This example also shows that the «language» of the content can be
+specified. Doing so does not change the meaning of the multi-line string, but
+it may be used by output templates when rendering the procedure.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidStep(_) => (
+                "Invalid step format".to_string(),
+                r#"
+Steps must start with a number or letter (in the case of dependent steps and
+sub-steps, respectively) followed by a '.', or a dash (for tasks that can
+execute in parallel):
+
+    1.  First step
+    2.  Second step
+        a.  First substep
+        b.  Second substep
+    -   Parallel task
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidForeach(_) => (
+                "Invalid foreach loop".to_string(),
+                r#"
+Loops follow this pattern:
+
+    { foreach patient in patients }
+    { foreach (name, value) in data }
+
+In the first example `patients` would be a list; in the latter case `data` is
+a list of tuples.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidResponse(_) => (
+                "Invalid response format".to_string(),
+                r#"
+The fixed choices that are valid for the result of a given step can be
+enumerated. These responses are each enclosed in single quotes, separated by
+the '|' character:
+
+    'Rock' | 'Paper' | 'Scissors'
+    'Confirmed'
+    'Yes' | 'No' but with explanation
+
+By convention the response values are Proper Case.
+
+The third example shows that additional context can be supplied when
+documenting a response to help the user understand what is expected of them.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidNumeric(_) => (
+                "Invalid numeric literal".to_string(),
+                r#"
+Numeric literals can be integers:
+
+    42
+    -123
+    0
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct Parser<'i> {
+    filename: &'i Path,
     original: &'i str,
     source: &'i str,
     offset: usize,
@@ -113,12 +403,16 @@ pub struct Parser<'i> {
 impl<'i> Parser<'i> {
     pub fn new() -> Parser<'i> {
         Parser {
+            filename: Path::new("-"),
             original: "",
             source: "",
             offset: 0,
         }
     }
 
+    pub fn filename(&mut self, filename: &'i Path) {
+        self.filename = filename;
+    }
     pub fn initialize(&mut self, content: &'i str) {
         self.original = content;
         self.source = content;
@@ -208,11 +502,6 @@ impl<'i> Parser<'i> {
         result
     }
 
-    #[deprecated]
-    fn entire(&self) -> &'i str {
-        self.source
-    }
-
     fn is_finished(&self) -> bool {
         self.source
             .is_empty()
@@ -272,6 +561,7 @@ impl<'i> Parser<'i> {
 
     fn take_block_chars<A, F>(
         &mut self,
+        subject: &'static str,
         start_char: char,
         end_char: char,
         function: F,
@@ -324,7 +614,12 @@ impl<'i> Parser<'i> {
             return Err(ParsingError::Expected(self.offset, "the start character"));
         }
         if l == 0 {
-            return Err(ParsingError::Expected(self.offset, "the end character"));
+            return Err(ParsingError::ExpectedMatchingChar(
+                self.offset,
+                subject,
+                start_char,
+                end_char,
+            ));
         }
 
         let block = &self.source[1..l - 1];
@@ -470,6 +765,7 @@ impl<'i> Parser<'i> {
     /// the caller needs to do that via one of the take_*() methods.
     fn subparser(&self, indent: usize, content: &'i str) -> Parser<'i> {
         let parser = Parser {
+            filename: self.filename,
             original: self.original,
             source: content,
             offset: indent + self.offset,
@@ -512,7 +808,7 @@ impl<'i> Parser<'i> {
     // versions then this will be a lot more complicated than just dealing with a
     // different natural number here.
     fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"%\s*technique\s+v1");
 
             if re.is_match(inner.source) {
@@ -526,12 +822,12 @@ impl<'i> Parser<'i> {
     // This one is awkward because if a SPDX line is present, then it really needs
     // to have a license, whereas the copyright part is optional.
     fn read_spdx_line(&mut self) -> Result<(Option<&'i str>, Option<&'i str>), ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"^!\s*([^;]+)(?:;\s*(?:\(c\)|\(C\)|©)\s*(.+))?$");
 
             let cap = re
                 .captures(inner.source)
-                .ok_or(ParsingError::InvalidHeader(0))?;
+                .ok_or(ParsingError::InvalidHeader(inner.offset))?;
 
             // Now to extracting the values we need. We get the license code from
             // the first capture. It must be present otherwise we don't have a
@@ -562,7 +858,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError<'i>> {
-        self.take_line(|inner| {
+        self.take_until(&['\n'], |inner| {
             let re = regex!(r"^&\s*(.+)$");
 
             let cap = re
@@ -582,22 +878,27 @@ impl<'i> Parser<'i> {
     pub fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError<'i>> {
         // Process magic line
         let version = if is_magic_line(self.source) {
-            self.read_magic_line()?
+            let result = self.read_magic_line()?;
+            self.require_newline()?;
+            result
         } else {
             Err(ParsingError::Expected(0, "The % symbol"))?
         };
 
         // Process SPDX line
-
         let (license, copyright) = if is_spdx_line(self.source) {
-            self.read_spdx_line()?
+            let result = self.read_spdx_line()?;
+            self.require_newline()?;
+            result
         } else {
             (None, None)
         };
 
         // Process template line
         let template = if is_template_line(self.source) {
-            self.read_template_line()?
+            let result = self.read_template_line()?;
+            self.require_newline()?;
+            result
         } else {
             None
         };
@@ -949,7 +1250,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars('{', '}', |outer| outer.read_expression())
+        self.take_block_chars("a code block", '{', '}', |outer| outer.read_expression())
     }
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
@@ -973,7 +1274,8 @@ impl<'i> Parser<'i> {
             let numeric = self.read_numeric()?;
             Ok(Expression::Number(numeric))
         } else if is_string_literal(content) {
-            let raw = self.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+            let raw =
+                self.take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
             Ok(Expression::String(raw))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
@@ -1025,7 +1327,7 @@ impl<'i> Parser<'i> {
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
-            self.take_block_chars('(', ')', |outer| {
+            self.take_block_chars("a list of identifiers", '(', ')', |outer| {
                 let mut identifiers = Vec::new();
 
                 loop {
@@ -1093,7 +1395,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars('[', ']', |outer| {
+        self.take_block_chars("a tablet", '[', ']', |outer| {
             let mut pairs = Vec::new();
 
             loop {
@@ -1117,7 +1419,8 @@ impl<'i> Parser<'i> {
                     ));
                 }
 
-                let label = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+                let label =
+                    outer.take_block_chars("a label", '"', '"', |inner| Ok(inner.source))?;
 
                 // Skip whitespace and expect '='
                 outer.trim_whitespace();
@@ -1193,7 +1496,7 @@ impl<'i> Parser<'i> {
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
-        self.take_block_chars('<', '>', |inner| {
+        self.take_block_chars("an invocation", '<', '>', |inner| {
             let content = inner.source;
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
@@ -1525,7 +1828,7 @@ impl<'i> Parser<'i> {
     /// ( ```lang some content``` )
     ///
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError<'i>> {
-        self.take_block_chars('(', ')', |outer| {
+        self.take_block_chars("parameters for a function", '(', ')', |outer| {
             let mut params = Vec::new();
 
             loop {
@@ -1541,7 +1844,8 @@ impl<'i> Parser<'i> {
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let raw = outer.take_block_chars('"', '"', |inner| Ok(inner.source))?;
+                    let raw = outer
+                        .take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
                     params.push(Expression::String(raw));
                 } else {
                     let name = outer.read_identifier()?;
@@ -1562,17 +1866,6 @@ impl<'i> Parser<'i> {
 
             Ok(params)
         })
-    }
-
-    fn ensure_nonempty(&mut self) -> Result<(), ParsingError<'i>> {
-        if self
-            .source
-            .len()
-            == 0
-        {
-            return Err(ParsingError::UnexpectedEndOfInput(self.offset));
-        }
-        Ok(())
     }
 
     /// Trim any leading whitespace (space, tab, newline) from the front of
@@ -1722,15 +2015,15 @@ fn is_magic_line(content: &str) -> bool {
 }
 
 fn is_spdx_line(content: &str) -> bool {
-    let re = regex!(r"!\s*[^;]+(?:;\s*.+)?");
-
-    re.is_match(content)
+    content
+        .trim_ascii_start()
+        .starts_with('!')
 }
 
 fn is_template_line(content: &str) -> bool {
-    let re = regex!(r"&\s*.+");
-
-    re.is_match(content)
+    content
+        .trim_ascii_start()
+        .starts_with('&')
 }
 
 fn is_identifier(content: &str) -> bool {
@@ -1744,6 +2037,7 @@ fn is_identifier(content: &str) -> bool {
 ///
 /// terminated by an end of line.
 
+#[allow(unused)]
 fn is_signature(content: &str) -> bool {
     let re = regex!(r"\s*.+?\s*->\s*.+?\s*$");
 
@@ -1902,6 +2196,7 @@ fn is_code_block(content: &str) -> bool {
     re.is_match(content)
 }
 
+#[allow(unused)]
 fn is_code_inline(content: &str) -> bool {
     let content = content.trim_ascii_start();
     content.starts_with('{')
@@ -2078,13 +2373,10 @@ mod check {
     fn check_not_eof() {
         let mut input = Parser::new();
         input.initialize("Hello World");
-        assert_eq!(input.ensure_nonempty(), Ok(()));
+        assert!(!input.is_finished());
 
         input.initialize("");
-        assert_eq!(
-            input.ensure_nonempty(),
-            Err(ParsingError::UnexpectedEndOfInput(input.offset))
-        );
+        assert!(input.is_finished());
     }
 
     #[test]
@@ -2248,7 +2540,7 @@ mod check {
         let mut input = Parser::new();
         input.initialize("{ todo() }");
 
-        let result = input.take_block_chars('{', '}', |parser| {
+        let result = input.take_block_chars("inline code", '{', '}', |parser| {
             let text = parser.source;
             assert_eq!(text, " todo() ");
             Ok(true)
@@ -2260,7 +2552,7 @@ mod check {
         // we find ourselves parsing them, so subparser() won't work.
         input.initialize("XhelloX world");
 
-        let result = input.take_block_chars('X', 'X', |parser| {
+        let result = input.take_block_chars("", 'X', 'X', |parser| {
             let text = parser.source;
             assert_eq!(text, "hello");
             Ok(true)
