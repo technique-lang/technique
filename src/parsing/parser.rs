@@ -477,8 +477,16 @@ impl<'i> Parser<'i> {
                 }
 
                 procedures.push(procedure);
+            } else if self.source.contains(':') {
+                // This might be a malformed procedure declaration - try parsing it 
+                // to get a more specific error message
+                let procedure = self.take_block_lines(
+                    |_| true, // Accept the line since it might be a malformed procedure
+                    |line| is_section(line) || is_procedure_declaration(line),
+                    |inner| inner.read_procedure(),
+                )?;
+                procedures.push(procedure);
             } else {
-                // TODO: Handle unexpected content properly
                 return Err(ParsingError::Unrecognized(self.offset));
             }
         }
@@ -979,7 +987,7 @@ impl<'i> Parser<'i> {
                 let mut params = Vec::new();
                 for item in list.split(',') {
                     let param = validate_identifier(item.trim_ascii())
-                        .ok_or(ParsingError::Unrecognized(self.offset))?;
+                        .ok_or(ParsingError::InvalidIdentifier(self.offset, item.trim_ascii()))?;
                     params.push(param);
                 }
                 Some(params)
