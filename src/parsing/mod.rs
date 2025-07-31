@@ -44,6 +44,7 @@ pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Document<'i> {
             } else {
                 debug!("No content found");
             }
+            eprintln!("Ok");
 
             document
         }

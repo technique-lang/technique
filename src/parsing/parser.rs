@@ -110,8 +110,8 @@ impl<'i> ParsingError<'i> {
                 format!("Expected matching character '{}'", end),
                 format!(
                     r#"
-The parser was expecting {} enclosed by '{}' and '{}' but there was no more
-input remaining in the current scope.
+The parser was expecting {} enclosed by '{}' and '{}' but
+there was no more input remaining in the current scope.
                     "#,
                     subject, start, end
                 )
@@ -477,15 +477,21 @@ impl<'i> Parser<'i> {
                 }
 
                 procedures.push(procedure);
-            } else if self.source.contains(':') {
-                // This might be a malformed procedure declaration - try parsing it 
-                // to get a more specific error message
-                let procedure = self.take_block_lines(
-                    |_| true, // Accept the line since it might be a malformed procedure
+            } else if self
+                .source
+                .contains(':')
+            {
+                // It might be that we've encountered a malformed procedure
+                // declaration, so we try parsing it anyway to get a more
+                // specific error message.
+                let _procedure = self.take_block_lines(
+                    |_| true, // Accept the line regardless
                     |line| is_section(line) || is_procedure_declaration(line),
                     |inner| inner.read_procedure(),
                 )?;
-                procedures.push(procedure);
+                // If we reach here, read_procedure() succeeded but
+                // is_procedure_declaration() failed, which is undefined.
+                return Err(ParsingError::IllegalParserState(self.offset));
             } else {
                 return Err(ParsingError::Unrecognized(self.offset));
             }
@@ -986,8 +992,9 @@ impl<'i> Parser<'i> {
             } else {
                 let mut params = Vec::new();
                 for item in list.split(',') {
-                    let param = validate_identifier(item.trim_ascii())
-                        .ok_or(ParsingError::InvalidIdentifier(self.offset, item.trim_ascii()))?;
+                    let param = validate_identifier(item.trim_ascii()).ok_or(
+                        ParsingError::InvalidIdentifier(self.offset, item.trim_ascii()),
+                    )?;
                     params.push(param);
                 }
                 Some(params)
@@ -1076,13 +1083,24 @@ impl<'i> Parser<'i> {
                         if !steps.is_empty() {
                             elements.push(Element::Steps(steps));
                         }
+                    } else if is_invalid_step_pattern(content) {
+                        // Detect and reject invalid step patterns
+                        return Err(ParsingError::InvalidStep(outer.offset));
                     } else {
                         // Handle descriptive text
                         let description = outer.take_block_lines(
                             |line| {
-                                !is_step(line) && !is_procedure_title(line) && !is_code_block(line)
+                                !is_step(line)
+                                    && !is_procedure_title(line)
+                                    && !is_code_block(line)
+                                    && !is_invalid_step_pattern(line)
                             },
-                            |line| is_step(line) || is_procedure_title(line) || is_code_block(line),
+                            |line| {
+                                is_step(line)
+                                    || is_procedure_title(line)
+                                    || is_code_block(line)
+                                    || is_invalid_step_pattern(line)
+                            },
                             |inner| {
                                 let content = inner.source;
                                 if !content.is_empty() {
@@ -1677,6 +1695,7 @@ impl<'i> Parser<'i> {
                     || is_subsubstep_dependent(line)
                     || is_role_assignment(line)
                     || is_enum_response(line)
+                    || is_invalid_response_pattern(line)
                     || is_code_block(line)
             },
             |outer| {
@@ -1708,6 +1727,12 @@ impl<'i> Parser<'i> {
                                 if c == '{' {
                                     let expression = parser.read_code_block()?;
                                     content.push(Descriptive::CodeInline(expression));
+                                } else if parser
+                                    .source
+                                    .starts_with("```")
+                                {
+                                    // Multiline blocks are not allowed in descriptive text
+                                    return Err(ParsingError::InvalidMultiline(parser.offset));
                                 } else if c == '<' {
                                     let invocation = parser.read_invocation()?;
                                     parser.trim_whitespace();
@@ -1725,9 +1750,16 @@ impl<'i> Parser<'i> {
                                 } else {
                                     let text =
                                         parser.take_until(&['{', '<', '~', '\n'], |inner| {
-                                            Ok(inner
+                                            let content = inner
                                                 .source
-                                                .trim_ascii())
+                                                .trim_ascii();
+                                            // Check for invalid multiline patterns in text
+                                            if content.contains("```") {
+                                                return Err(ParsingError::InvalidMultiline(
+                                                    inner.offset,
+                                                ));
+                                            }
+                                            Ok(content)
                                         })?;
                                     if text.is_empty() {
                                         continue;
@@ -1849,7 +1881,13 @@ impl<'i> Parser<'i> {
 
                 if content.starts_with("```") {
                     let (lang, lines) = outer
-                        .take_block_delimited("```", |inner| inner.parse_multiline_content())?;
+                        .take_block_delimited("```", |inner| inner.parse_multiline_content())
+                        .map_err(|err| match err {
+                            ParsingError::Expected(offset, "the corresponding end delimiter") => {
+                                ParsingError::InvalidMultiline(offset)
+                            }
+                            _ => err,
+                        })?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
                     let raw = outer
@@ -1970,6 +2008,8 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
+            } else if is_invalid_response_pattern(content) {
+                return Err(ParsingError::InvalidResponse(self.offset));
             } else if is_enum_response(content) {
                 let responses = self.read_responses()?;
                 scopes.push(Scope::ResponseBlock { responses });
@@ -2250,6 +2290,12 @@ fn is_step(content: &str) -> bool {
     is_step_dependent(content) || is_step_parallel(content)
 }
 
+/// Detect patterns that look like steps but are invalid at the top-level
+fn is_invalid_step_pattern(content: &str) -> bool {
+    let re = regex!(r"^\s*([a-zA-Z]|[ivxIVX]+)\.\s+");
+    re.is_match(content)
+}
+
 fn is_section(content: &str) -> bool {
     let re = regex!(r"^\s*([IVX]+)\.\s+");
     re.is_match(content)
@@ -2286,6 +2332,12 @@ fn is_role_assignment(content: &str) -> bool {
 
 fn is_enum_response(content: &str) -> bool {
     let re = regex!(r"^\s*'.+?'");
+    re.is_match(content)
+}
+
+/// Detect response patterns with double quotes
+fn is_invalid_response_pattern(content: &str) -> bool {
+    let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")*"#);
     re.is_match(content)
 }
 

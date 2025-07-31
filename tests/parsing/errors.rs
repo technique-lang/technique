@@ -142,7 +142,7 @@ making_coffee(BadParam) : Ingredients -> Coffee
  : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, ""),
+            ParsingError::InvalidDeclaration(0),
         );
     }
 
