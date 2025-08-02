@@ -56,6 +56,7 @@ pub enum ParsingError<'i> {
     InvalidCodeBlock(usize),
     InvalidMultiline(usize),
     InvalidStep(usize),
+    InvalidSubstep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
     InvalidNumeric(usize),
@@ -83,6 +84,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidCodeBlock(offset) => *offset,
             ParsingError::InvalidMultiline(offset) => *offset,
             ParsingError::InvalidStep(offset) => *offset,
+            ParsingError::InvalidSubstep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
             ParsingError::InvalidNumeric(offset) => *offset,
@@ -334,15 +336,45 @@ it may be used by output templates when rendering the procedure.
             ParsingError::InvalidStep(_) => (
                 "Invalid step format".to_string(),
                 r#"
-Steps must start with a number or letter (in the case of dependent steps and
-sub-steps, respectively) followed by a '.', or a dash (for tasks that can
-execute in parallel):
+Steps must start with a number or lower-case letter (in the case of dependent
+steps and sub-steps, respectively) followed by a '.':
 
     1.  First step
     2.  Second step
         a.  First substep
         b.  Second substep
-    -   Parallel task
+
+Steps or substeps that can execute in parallel can instead be marked with a
+dash. They can be done in either order, or concurrently:
+
+    -   Do one thing
+    -   And another
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSubstep(_) => (
+                "Invalid substep format".to_string(),
+                r#"
+Substeps can be nested below top-level depenent steps or top-level parallel
+steps. So both of these are valid:
+
+1.  First top-level step.
+    a.  First substep in first dependent step.
+    b.  Second substep in first dependent step.
+
+and
+
+-   First top-level step to be done in any order.
+    a.  First substep in first parallel step.
+    b.  Second substep in first parallel step.
+
+The ordinal must be a lowercase letter and not a roman numeral. By convention
+substeps are indented by 4 characters, but that is not required.
+
+Note also that the substeps can be consecutively numbered, which allows each
+substep to be uniquely identified when they are grouped under different
+parallel steps, but again this is not compulsory.
                 "#
                 .trim_ascii()
                 .to_string(),
@@ -2011,7 +2043,7 @@ impl<'i> Parser<'i> {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
             } else if malformed_step_pattern(content) {
-                return Err(ParsingError::InvalidStep(self.offset));
+                return Err(ParsingError::InvalidSubstep(self.offset));
             } else if malformed_response_pattern(content) {
                 return Err(ParsingError::InvalidResponse(self.offset));
             } else if is_enum_response(content) {

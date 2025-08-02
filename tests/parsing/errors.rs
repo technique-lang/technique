@@ -262,7 +262,7 @@ making_coffee :
         A. This should be lowercase
             "#
             .trim_ascii(),
-            ParsingError::InvalidStep(37),
+            ParsingError::InvalidSubstep(37),
         );
     }
 }
