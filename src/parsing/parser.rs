@@ -1917,8 +1917,6 @@ impl<'i> Parser<'i> {
     /// Trim any leading whitespace (space, tab, newline) from the front of
     /// the current parser text.
     fn trim_whitespace(&mut self) {
-        let mut l = 0;
-
         if self
             .source
             .is_empty()
@@ -1926,23 +1924,22 @@ impl<'i> Parser<'i> {
             return;
         }
 
-        for c in self
+        let bytes = self
             .source
-            .chars()
-        {
-            if c == '\n' {
-                l += 1;
-                continue;
-            } else if c.is_ascii_whitespace() {
-                l += 1;
-                continue;
-            } else {
-                break;
+            .as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b' ' | b'\t' | b'\n' | b'\r' => {
+                    i += 1;
+                }
+                _ => break,
             }
         }
 
-        self.source = &self.source[l..];
-        self.offset += l;
+        self.source = &self.source[i..];
+        self.offset += i;
     }
 
     /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
