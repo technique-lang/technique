@@ -1,5 +1,7 @@
 use std::{fmt, path::Path};
 
+use owo_colors::OwoColorize;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TechniqueError<'i> {
     pub problem: String,
@@ -32,25 +34,30 @@ impl<'i> TechniqueError<'i> {
 
         format!(
             r#"
-error: {}
+{}: {}
 {}:{}:{}
 
-{:width$} |
-{:width$} | {}
-{:width$} | {:>j$}
+{:width$} {}
+{:width$} {} {}
+{:width$} {} {:>j$}
 
 {}
             "#,
-            self.problem,
+            "error".bright_red(),
+            self.problem
+                .bold(),
             self.filename
                 .to_string_lossy(),
             line,
             column,
             ' ',
-            line,
+            '|'.bright_blue(),
+            line.bright_blue(),
+            '|'.bright_blue(),
             code,
             ' ',
-            '^',
+            '|'.bright_blue(),
+            '^'.bright_red(),
             self.details
         )
         .trim_ascii()

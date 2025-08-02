@@ -1,5 +1,6 @@
 //! parser for the Technique language
 
+use owo_colors::OwoColorize;
 use std::path::Path;
 use tracing::debug;
 
@@ -44,7 +45,7 @@ pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Document<'i> {
             } else {
                 debug!("No content found");
             }
-            eprintln!("Ok");
+            eprintln!("{}", "ok".bright_green());
 
             document
         }
