@@ -1,5 +1,6 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
+use owo_colors::OwoColorize;
 use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
@@ -136,6 +137,8 @@ fn main() {
             let content = parsing::load(filename);
             let technique = parsing::parse(&filename, &content);
             // TODO continue with validation of the returned technique
+
+            eprintln!("{}", "ok".bright_green());
 
             if let Output::Native = output {
                 println!("{:#?}", technique);
