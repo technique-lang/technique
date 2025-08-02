@@ -1,4 +1,5 @@
 use std::path::Path;
+use tracing::debug;
 
 use crate::error::*;
 use crate::language::*;
@@ -15,7 +16,10 @@ pub fn parse_via_taking<'i>(
     let result = input.parse_from_start();
     match result {
         Ok(technique) => Ok(technique),
-        Err(error) => Err(make_error(input, error)),
+        Err(error) => {
+            debug!(?error);
+            Err(make_error(input, error))
+        }
     }
 }
 
@@ -1083,7 +1087,7 @@ impl<'i> Parser<'i> {
                         if !steps.is_empty() {
                             elements.push(Element::Steps(steps));
                         }
-                    } else if is_invalid_step_pattern(content) {
+                    } else if malformed_step_pattern(content) {
                         // Detect and reject invalid step patterns
                         return Err(ParsingError::InvalidStep(outer.offset));
                     } else {
@@ -1093,13 +1097,13 @@ impl<'i> Parser<'i> {
                                 !is_step(line)
                                     && !is_procedure_title(line)
                                     && !is_code_block(line)
-                                    && !is_invalid_step_pattern(line)
+                                    && !malformed_step_pattern(line)
                             },
                             |line| {
                                 is_step(line)
                                     || is_procedure_title(line)
                                     || is_code_block(line)
-                                    || is_invalid_step_pattern(line)
+                                    || malformed_step_pattern(line)
                             },
                             |inner| {
                                 let content = inner.source;
@@ -1695,7 +1699,8 @@ impl<'i> Parser<'i> {
                     || is_subsubstep_dependent(line)
                     || is_role_assignment(line)
                     || is_enum_response(line)
-                    || is_invalid_response_pattern(line)
+                    || malformed_step_pattern(line)
+                    || malformed_response_pattern(line)
                     || is_code_block(line)
             },
             |outer| {
@@ -2005,7 +2010,9 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
-            } else if is_invalid_response_pattern(content) {
+            } else if malformed_step_pattern(content) {
+                return Err(ParsingError::InvalidStep(self.offset));
+            } else if malformed_response_pattern(content) {
                 return Err(ParsingError::InvalidResponse(self.offset));
             } else if is_enum_response(content) {
                 let responses = self.read_responses()?;
@@ -2288,7 +2295,7 @@ fn is_step(content: &str) -> bool {
 }
 
 /// Detect patterns that look like steps but are invalid at the top-level
-fn is_invalid_step_pattern(content: &str) -> bool {
+fn malformed_step_pattern(content: &str) -> bool {
     let re = regex!(r"^\s*([a-zA-Z]|[ivxIVX]+)\.\s+");
     re.is_match(content)
 }
@@ -2333,7 +2340,7 @@ fn is_enum_response(content: &str) -> bool {
 }
 
 /// Detect response patterns with double quotes
-fn is_invalid_response_pattern(content: &str) -> bool {
+fn malformed_response_pattern(content: &str) -> bool {
     let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")*"#);
     re.is_match(content)
 }

@@ -251,4 +251,18 @@ making_coffee :
             ParsingError::ExpectedMatchingChar(29, "an invocation", '<', '>'),
         );
     }
+
+    #[test]
+    fn invalid_substep_uppercase() {
+        expect_error(
+            r#"
+making_coffee :
+
+    1. First step
+        A. This should be lowercase
+            "#
+            .trim_ascii(),
+            ParsingError::InvalidStep(37),
+        );
+    }
 }
