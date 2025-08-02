@@ -1,4 +1,5 @@
 use std::path::Path;
+use tracing::debug;
 
 use crate::error::*;
 use crate::language::*;
@@ -15,7 +16,10 @@ pub fn parse_via_taking<'i>(
     let result = input.parse_from_start();
     match result {
         Ok(technique) => Ok(technique),
-        Err(error) => Err(make_error(input, error)),
+        Err(error) => {
+            debug!(?error);
+            Err(make_error(input, error))
+        }
     }
 }
 
@@ -52,6 +56,7 @@ pub enum ParsingError<'i> {
     InvalidCodeBlock(usize),
     InvalidMultiline(usize),
     InvalidStep(usize),
+    InvalidSubstep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
     InvalidNumeric(usize),
@@ -79,6 +84,7 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidCodeBlock(offset) => *offset,
             ParsingError::InvalidMultiline(offset) => *offset,
             ParsingError::InvalidStep(offset) => *offset,
+            ParsingError::InvalidSubstep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
             ParsingError::InvalidNumeric(offset) => *offset,
@@ -330,15 +336,45 @@ it may be used by output templates when rendering the procedure.
             ParsingError::InvalidStep(_) => (
                 "Invalid step format".to_string(),
                 r#"
-Steps must start with a number or letter (in the case of dependent steps and
-sub-steps, respectively) followed by a '.', or a dash (for tasks that can
-execute in parallel):
+Steps must start with a number or lower-case letter (in the case of dependent
+steps and sub-steps, respectively) followed by a '.':
 
     1.  First step
     2.  Second step
         a.  First substep
         b.  Second substep
-    -   Parallel task
+
+Steps or substeps that can execute in parallel can instead be marked with a
+dash. They can be done in either order, or concurrently:
+
+    -   Do one thing
+    -   And another
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidSubstep(_) => (
+                "Invalid substep format".to_string(),
+                r#"
+Substeps can be nested below top-level depenent steps or top-level parallel
+steps. So both of these are valid:
+
+1.  First top-level step.
+    a.  First substep in first dependent step.
+    b.  Second substep in first dependent step.
+
+and
+
+-   First top-level step to be done in any order.
+    a.  First substep in first parallel step.
+    b.  Second substep in first parallel step.
+
+The ordinal must be a lowercase letter and not a roman numeral. By convention
+substeps are indented by 4 characters, but that is not required.
+
+Note also that the substeps can be consecutively numbered, which allows each
+substep to be uniquely identified when they are grouped under different
+parallel steps, but again this is not compulsory.
                 "#
                 .trim_ascii()
                 .to_string(),
@@ -1083,7 +1119,7 @@ impl<'i> Parser<'i> {
                         if !steps.is_empty() {
                             elements.push(Element::Steps(steps));
                         }
-                    } else if is_invalid_step_pattern(content) {
+                    } else if malformed_step_pattern(content) {
                         // Detect and reject invalid step patterns
                         return Err(ParsingError::InvalidStep(outer.offset));
                     } else {
@@ -1093,13 +1129,13 @@ impl<'i> Parser<'i> {
                                 !is_step(line)
                                     && !is_procedure_title(line)
                                     && !is_code_block(line)
-                                    && !is_invalid_step_pattern(line)
+                                    && !malformed_step_pattern(line)
                             },
                             |line| {
                                 is_step(line)
                                     || is_procedure_title(line)
                                     || is_code_block(line)
-                                    || is_invalid_step_pattern(line)
+                                    || malformed_step_pattern(line)
                             },
                             |inner| {
                                 let content = inner.source;
@@ -1695,7 +1731,8 @@ impl<'i> Parser<'i> {
                     || is_subsubstep_dependent(line)
                     || is_role_assignment(line)
                     || is_enum_response(line)
-                    || is_invalid_response_pattern(line)
+                    || malformed_step_pattern(line)
+                    || malformed_response_pattern(line)
                     || is_code_block(line)
             },
             |outer| {
@@ -1917,8 +1954,6 @@ impl<'i> Parser<'i> {
     /// Trim any leading whitespace (space, tab, newline) from the front of
     /// the current parser text.
     fn trim_whitespace(&mut self) {
-        let mut l = 0;
-
         if self
             .source
             .is_empty()
@@ -1926,23 +1961,22 @@ impl<'i> Parser<'i> {
             return;
         }
 
-        for c in self
+        let bytes = self
             .source
-            .chars()
-        {
-            if c == '\n' {
-                l += 1;
-                continue;
-            } else if c.is_ascii_whitespace() {
-                l += 1;
-                continue;
-            } else {
-                break;
+            .as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b' ' | b'\t' | b'\n' | b'\r' => {
+                    i += 1;
+                }
+                _ => break,
             }
         }
 
-        self.source = &self.source[l..];
-        self.offset += l;
+        self.source = &self.source[i..];
+        self.offset += i;
     }
 
     /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
@@ -2008,7 +2042,9 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
-            } else if is_invalid_response_pattern(content) {
+            } else if malformed_step_pattern(content) {
+                return Err(ParsingError::InvalidSubstep(self.offset));
+            } else if malformed_response_pattern(content) {
                 return Err(ParsingError::InvalidResponse(self.offset));
             } else if is_enum_response(content) {
                 let responses = self.read_responses()?;
@@ -2233,7 +2269,7 @@ fn is_procedure_title(content: &str) -> bool {
 // I'm not sure about anchoring this one on start and end, seeing as how it
 // will be used when scanning.
 fn is_invocation(content: &str) -> bool {
-    let re = regex!(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$");
+    let re = regex!(r"^\s*<");
 
     re.is_match(content)
 }
@@ -2291,7 +2327,7 @@ fn is_step(content: &str) -> bool {
 }
 
 /// Detect patterns that look like steps but are invalid at the top-level
-fn is_invalid_step_pattern(content: &str) -> bool {
+fn malformed_step_pattern(content: &str) -> bool {
     let re = regex!(r"^\s*([a-zA-Z]|[ivxIVX]+)\.\s+");
     re.is_match(content)
 }
@@ -2336,7 +2372,7 @@ fn is_enum_response(content: &str) -> bool {
 }
 
 /// Detect response patterns with double quotes
-fn is_invalid_response_pattern(content: &str) -> bool {
+fn malformed_response_pattern(content: &str) -> bool {
     let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")*"#);
     re.is_match(content)
 }
