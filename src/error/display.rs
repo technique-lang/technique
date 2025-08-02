@@ -25,7 +25,7 @@ impl<'i> TechniqueError<'i> {
             .unwrap_or("?");
 
         let line = i + 1;
-        let column = j + 1;
+        let column = j;
 
         let width = line
             .to_string()
@@ -68,7 +68,7 @@ impl<'i> TechniqueError<'i> {
         let j = calculate_column_number(self.source, self.offset);
 
         let line = i + 1;
-        let column = j + 1;
+        let column = j;
 
         format!(
             "{}: {}:{}:{} {}",
