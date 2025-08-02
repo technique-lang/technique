@@ -34,8 +34,7 @@ impl<'i> TechniqueError<'i> {
 
         format!(
             r#"
-{}: {}
-{}:{}:{}
+{}: {}:{}:{} {}
 
 {:width$} {}
 {:width$} {} {}
@@ -44,12 +43,12 @@ impl<'i> TechniqueError<'i> {
 {}
             "#,
             "error".bright_red(),
-            self.problem
-                .bold(),
             self.filename
                 .to_string_lossy(),
             line,
             column,
+            self.problem
+                .bold(),
             ' ',
             '|'.bright_blue(),
             line.bright_blue(),
@@ -63,26 +62,31 @@ impl<'i> TechniqueError<'i> {
         .trim_ascii()
         .to_string()
     }
-}
 
-// Concise version for internal use
-impl<'i> fmt::Display for TechniqueError<'i> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub fn concise_error(&self) -> String {
         let i = calculate_line_number(self.source, self.offset);
         let j = calculate_column_number(self.source, self.offset);
 
         let line = i + 1;
         let column = j + 1;
 
-        write!(
-            f,
-            "error: {}:{}:{} {}",
+        format!(
+            "{}: {}:{}:{} {}",
+            "error".bright_red(),
             self.filename
                 .to_string_lossy(),
             line,
             column,
             self.problem
+                .bold(),
         )
+    }
+}
+
+// Concise version for internal use
+impl<'i> fmt::Display for TechniqueError<'i> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.concise_error())
     }
 }
 

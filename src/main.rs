@@ -135,7 +135,13 @@ fn main() {
 
             let filename = Path::new(filename);
             let content = parsing::load(filename);
-            let technique = parsing::parse(&filename, &content);
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(error) => {
+                    eprintln!("{}", error.full_details());
+                    std::process::exit(1);
+                }
+            };
             // TODO continue with validation of the returned technique
 
             eprintln!("{}", "ok".bright_green());
@@ -165,7 +171,13 @@ fn main() {
 
             let filename = Path::new(filename);
             let content = parsing::load(&filename);
-            let technique = parsing::parse(&filename, &content);
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(error) => {
+                    eprintln!("{}", error.concise_error());
+                    std::process::exit(1);
+                }
+            };
 
             let result = formatting::format(&technique, wrap_width);
             print!("{}", result);
