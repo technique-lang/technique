@@ -2230,7 +2230,7 @@ fn is_procedure_title(content: &str) -> bool {
 // I'm not sure about anchoring this one on start and end, seeing as how it
 // will be used when scanning.
 fn is_invocation(content: &str) -> bool {
-    let re = regex!(r"^\s*(<.+?>\s*(?:\(.*?\))?)\s*$");
+    let re = regex!(r"^\s*<");
 
     re.is_match(content)
 }

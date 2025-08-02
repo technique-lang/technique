@@ -238,4 +238,17 @@ making_coffee :
             ParsingError::ExpectedMatchingChar(43, "a function call", '(', ')'),
         );
     }
+
+    #[test]
+    fn invalid_invocation_in_repeat() {
+        expect_error(
+            r#"
+making_coffee :
+
+    1. { repeat <making_coffee }
+            "#
+            .trim_ascii(),
+            ParsingError::ExpectedMatchingChar(29, "an invocation", '<', '>'),
+        );
+    }
 }
