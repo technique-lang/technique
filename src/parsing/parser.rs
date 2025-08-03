@@ -1002,7 +1002,7 @@ impl<'i> Parser<'i> {
         // These capture groups use .+? to make "match more than one, but
         // lazily" so that the subsequent grabs of whitespace and the all
         // important ':' character are not absorbed.
-        let re = regex!(r"^\s*(.+?)\s*:\s*(.+?)?\s*$");
+        let re = regex!(r"(?s)^\s*(.+?)\s*:\s*(.+?)?\s*$");
 
         let cap = re
             .captures(self.source)
@@ -1079,7 +1079,7 @@ impl<'i> Parser<'i> {
                 // Extract the declaration, and parse it
                 let declaration = outer.take_block_lines(
                     is_procedure_declaration,
-                    |line| !is_procedure_declaration(line),
+                    |line| is_procedure_body(line),
                     |inner| inner.parse_procedure_declaration(),
                 )?;
 
@@ -2255,6 +2255,40 @@ fn is_procedure_declaration(content: &str) -> bool {
         }
         None => false,
     }
+}
+
+fn is_procedure_body(content: &str) -> bool {
+    let line = content.trim_ascii();
+
+    // Empty lines are not body content (continue reading declaration)
+    if line.is_empty() {
+        return false;
+    }
+
+    // Check for procedure body indicators. At the end, if it doesn't look like signature, it's body.
+    is_procedure_title(content)
+        || is_step(content)
+        || is_role_assignment(content)
+        || is_code_block(content)
+        || is_enum_response(content)
+        || (!is_signature_part(content))
+}
+
+fn is_signature_part(content: &str) -> bool {
+    let line = content.trim_ascii();
+
+    // Empty lines are part of multiline signatures
+    if line.is_empty() {
+        return true;
+    }
+
+    // Lines containing arrows are signature parts
+    if line.contains("->") {
+        return true;
+    }
+
+    // Otherwise, check if the entire line is a valid genus
+    is_genus(line)
 }
 
 fn is_procedure_title(content: &str) -> bool {
