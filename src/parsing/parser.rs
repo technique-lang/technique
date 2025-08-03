@@ -966,7 +966,10 @@ impl<'i> Parser<'i> {
 
         let cap = match re.captures(self.source) {
             Some(c) => c,
-            None => return Err(ParsingError::InvalidSignature(self.offset)),
+            None => {
+                let arrow_offset = analyse_malformed_signature(self.source);
+                return Err(ParsingError::InvalidSignature(self.offset + arrow_offset));
+            }
         };
 
         let one = cap
@@ -1045,7 +1048,7 @@ impl<'i> Parser<'i> {
 
         let signature = match cap.get(2) {
             Some(two) => {
-                let mut inner = self.subparser(0, two.as_str());
+                let mut inner = self.subparser(two.start(), two.as_str());
                 let result = inner.read_signature()?;
                 Some(result)
             }
@@ -2128,6 +2131,30 @@ fn is_signature(content: &str) -> bool {
     re.is_match(content)
 }
 
+fn analyse_malformed_signature(content: &str) -> usize {
+    let mut offset = 0;
+    let mut count = 0;
+
+    for token in content
+        .trim_ascii()
+        .split_ascii_whitespace()
+    {
+        if count == 1 {
+            // Found second token - point to where arrow should be (between tokens)
+            return offset;
+        }
+        offset += token.len();
+        // Skip whitespace to next token
+        offset += content[offset..]
+            .chars()
+            .take_while(|c| c.is_ascii_whitespace())
+            .count();
+        count += 1;
+    }
+
+    0 // fallback
+}
+
 /// Lightweight detection function for Genus patterns. This is necessary as an
 /// adjunct to is_procedure_declaration() in order to support recognizing
 /// multi-line procedure declarations. Each of these regexes unfortunately has
@@ -2176,7 +2203,7 @@ fn is_genus(content: &str) -> bool {
     }
 }
 
-/// declarations are of the form
+/// Correct declarations are of the form
 ///
 /// ```text
 /// name : signature
@@ -2203,12 +2230,15 @@ fn is_genus(content: &str) -> bool {
 /// as above. Crucially, it must not match within a procedure body, for
 /// example it must not match " a. And now: do something" or "b. Proceed
 /// with:".
-
+///
+/// This function, however, is permissive. It identifies lines that could be
+/// intended as procedure declarations (including malformed ones) so that
+/// proper validation and error messages can be provided during the actual
+/// parsing phase.
 fn is_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
-        Some((before, after)) => {
+        Some((before, _after)) => {
             let before = before.trim_ascii();
-            let after = after.trim_ascii();
 
             // Check if the name part is valid
             let has_valid_name = if let Some((name, params)) = before.split_once('(') {
@@ -2219,42 +2249,9 @@ fn is_procedure_declaration(content: &str) -> bool {
                 is_identifier(before)
             };
 
-            // Check content after ':' - either empty, procedure content, or valid signature
-            let has_valid_signature = if after.is_empty() {
-                true // No signature, just procedure content
-            } else {
-                // Check if the first token looks like a Genus
-                let token = after
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("");
-
-                if !is_genus(token) {
-                    // First token is not a Genus, so this is procedure content (title, description, etc.)
-                    true
-                } else {
-                    // First token is a Genus, so we expect a complete signature: Genus -> Genus
-                    // Find the arrow and extract domain and range
-                    if let Some(i) = after.find("->") {
-                        let domain = after[..i].trim_ascii();
-                        let range = after[i + 2..].trim_ascii();
-
-                        let range = if let Some(j) = range.find('\n') {
-                            &range[..j]
-                        } else {
-                            range
-                        };
-
-                        // Both parts must be valid Genus
-                        is_genus(domain) && is_genus(range)
-                    } else {
-                        // Has Genus but no arrow - malformed signature
-                        false
-                    }
-                }
-            };
-
-            has_valid_name && has_valid_signature
+            // For block isolation, we only need to check the identifier part.
+            // Actual signature validation happens during parsing.
+            has_valid_name
         }
         None => false,
     }
@@ -2603,7 +2600,10 @@ mod check {
         );
 
         let content = "f : B";
-        assert!(!is_procedure_declaration(content));
+        // we still need to detect procedure declarations with malformed
+        // signatures; the user's intent will be to declare a procedure though
+        // it will fail validation in the parser shortly after.
+        assert!(is_procedure_declaration(content));
 
         let content = r#"
     connectivity_check(e,s) : LocalEnvironment, TargetService -> NetworkHealth
