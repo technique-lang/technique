@@ -209,10 +209,10 @@ doesn't have an input or result, per se.
                 .to_string(),
             ),
             ParsingError::InvalidSignature(_) => (
-                "Invalid procedure signature".to_string(),
+                "Invalid signature".to_string(),
                 r#"
-Signatures follow the pattern domain -> range, where domain and range are
-genus. Some examples:
+Procedure signatures follow the pattern domain -> range, where domain and
+range are genus. Some examples:
 
     A -> B
     (Beans, Milk) -> Coffee
