@@ -14,42 +14,104 @@ pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Str
         output.format_technique(body);
     }
 
+    // Flush any remaining content
+    output.flush_current();
+
+    // Add final newline if needed
     if !output
-        .buffer
+        .fragments
         .is_empty()
-        && !output
-            .buffer
-            .ends_with('\n')
     {
-        output.append_char('\n');
+        if let Some((_, last_content)) = output
+            .fragments
+            .last()
+        {
+            if !last_content.ends_with('\n') {
+                output.append_fragment(Syntax::Description, "\n");
+            }
+        }
     }
-    output.buffer
+
+    output.fragments
 }
 
-struct Formatter<'a, R> {
-    renderer: &'a R,
-    buffer: String,
+struct Formatter {
+    fragments: Vec<(Syntax, String)>,
     nesting: u8,
     width: u8,
+    current: Syntax,
+    buffer: String,
 }
 
-impl<'a, R> Formatter<'a, R>
-where
-    R: Render,
-{
-    fn new(renderer: &'a R, width: u8) -> Formatter<'a, R> {
+impl Formatter {
+    fn new(width: u8) -> Formatter {
         Formatter {
-            renderer,
-            buffer: String::new(),
+            fragments: Vec::new(),
             nesting: 0,
             width,
+            current: Syntax::None,
+            buffer: String::new(),
         }
+    }
+
+    fn append_fragment(&mut self, syntax: Syntax, content: &str) {
+        self.fragments
+            .push((syntax, content.to_string()));
+    }
+
+    fn switch_syntax(&mut self, new_syntax: Syntax) {
+        if !self
+            .buffer
+            .is_empty()
+        {
+            self.fragments
+                .push((
+                    self.current,
+                    self.buffer
+                        .clone(),
+                ));
+            self.buffer
+                .clear();
+        }
+        self.current = new_syntax;
+    }
+
+    fn reset_syntax(&mut self) {
+        self.switch_syntax(Syntax::None);
+    }
+
+    fn flush_current(&mut self) {
+        if !self
+            .buffer
+            .is_empty()
+        {
+            self.fragments
+                .push((
+                    self.current,
+                    self.buffer
+                        .clone(),
+                ));
+            self.buffer
+                .clear();
+        }
+    }
+
+    fn to_string(&mut self) -> String {
+        self.flush_current();
+        let mut result = String::new();
+        for (_, content) in &self.fragments {
+            result.push_str(content);
+        }
+        result
     }
 
     #[cfg(test)]
     fn reset(&mut self) {
+        self.fragments
+            .clear();
         self.buffer
             .clear();
+        self.current = Syntax::None;
     }
 
     fn increase(&mut self, depth: u8) {
@@ -73,16 +135,17 @@ where
         }
     }
 
-    fn subformatter(&self) -> Formatter<'a, R> {
+    fn subformatter(&self) -> Formatter {
         Formatter {
-            buffer: String::new(),
+            fragments: Vec::new(),
             nesting: self.nesting,
             width: self.width,
-            renderer: &self.renderer,
+            current: Syntax::None,
+            buffer: String::new(),
         }
     }
 
-    fn builder(&mut self) -> Line<'_, 'a, R> {
+    fn builder(&mut self) -> Line {
         Line::new(self)
     }
 
@@ -99,7 +162,7 @@ where
                 sub.append_expression(expr);
                 sub.append_char(' ');
                 sub.append_char('}');
-                sub.buffer
+                sub.to_string()
             }
         }
     }
@@ -107,7 +170,7 @@ where
     fn render_application(&self, invocation: &Invocation) -> String {
         let mut sub = self.subformatter();
         sub.append_application(invocation);
-        sub.buffer
+        sub.to_string()
     }
 
     fn render_binding(
@@ -136,7 +199,7 @@ where
 
         sub.append_str(" ~ ");
         sub.append_variables(variables);
-        sub.buffer
+        sub.to_string()
     }
 
     fn append_char(&mut self, c: char) {
@@ -145,9 +208,11 @@ where
     }
 
     fn is_empty(&self) -> bool {
-        self.buffer
-            .len()
-            == 0
+        self.fragments
+            .is_empty()
+            && self
+                .buffer
+                .is_empty()
     }
 
     fn format_header(&mut self, metadata: &Metadata) {
@@ -201,7 +266,9 @@ where
         // declaration
 
         let name = &procedure.name;
+        self.switch_syntax(Syntax::Declaration);
         self.append_str(name.0);
+        self.reset_syntax();
 
         if let Some(parameters) = &procedure.parameters {
             // note that append_arguments() is for general expression
@@ -262,9 +329,13 @@ where
     }
 
     fn append_signature(&mut self, signature: &Signature) {
+        self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.domain);
+        self.reset_syntax();
         self.append_str(" -> ");
+        self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.range);
+        self.reset_syntax();
     }
 
     fn append_genus(&mut self, genus: &Genus) {
@@ -421,8 +492,10 @@ where
                 subscopes: scopes,
             } => {
                 self.indent();
+                self.switch_syntax(Syntax::StepItem);
                 self.append_str(ordinal);
                 self.append_char('.');
+                self.reset_syntax();
                 self.append_char(' ');
                 if ordinal.len() == 1 {
                     self.append_char(' ');
@@ -617,10 +690,16 @@ where
 
     fn append_expression(&mut self, expression: &Expression) {
         match expression {
-            Expression::Variable(identifier) => self.append_str(identifier.0),
+            Expression::Variable(identifier) => {
+                self.switch_syntax(Syntax::Variable);
+                self.append_str(identifier.0);
+                self.reset_syntax();
+            }
             Expression::String(text) => {
                 self.append_char('"');
+                self.switch_syntax(Syntax::String);
                 self.append_str(text);
+                self.reset_syntax();
                 self.append_char('"');
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
@@ -689,10 +768,12 @@ where
     }
 
     fn append_numeric(&mut self, numeric: &Numeric) {
+        self.switch_syntax(Syntax::Numeric);
         match numeric {
             Numeric::Integral(num) => self.append_str(&num.to_string()),
             Numeric::Scientific(_) => todo!(),
         }
+        self.reset_syntax();
     }
 
     fn append_application(&mut self, invocation: &Invocation) {
@@ -782,17 +863,14 @@ where
     }
 }
 
-struct Line<'a, 'b, R> {
-    output: &'a mut Formatter<'b, R>, // reference to parent
+struct Line<'a> {
+    output: &'a mut Formatter, // reference to parent
     current: String,
     position: u8,
 }
 
-impl<'a, 'b, R> Line<'a, 'b, R>
-where
-    R: Render,
-{
-    fn new(output: &'a mut Formatter<'b, R>) -> Self {
+impl<'a> Line<'a> {
+    fn new(output: &'a mut Formatter) -> Self {
         Line {
             current: String::new(),
             position: output.nesting,
@@ -920,7 +998,7 @@ mod check {
 
     #[test]
     fn genus() {
-        let mut output = Formatter::new(&Identity, 78);
+        let mut output = Formatter::new(78);
 
         output.append_forma(&Forma("Jedi"));
         assert_eq!(output.buffer, "Jedi");
@@ -951,7 +1029,7 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut output = Formatter::new(&Identity, 78);
+        let mut output = Formatter::new(78);
 
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("Alderaan")),
@@ -976,7 +1054,7 @@ mod check {
 
     #[test]
     fn numbers() {
-        let mut output = Formatter::new(&Identity, 78);
+        let mut output = Formatter::new(78);
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.buffer, "42");
