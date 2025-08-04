@@ -5,7 +5,7 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-use technique::formatting;
+use technique::formatting::{self, Identity};
 use technique::parsing;
 
 mod rendering;
@@ -179,7 +179,7 @@ fn main() {
                 }
             };
 
-            let result = formatting::format(&technique, wrap_width);
+            let result = formatting::format(&Identity, &technique, wrap_width);
             print!("{}", result);
         }
         Some(("render", submatches)) => {

@@ -63,30 +63,7 @@ impl Render for Terminal {
     }
 }
 
-pub fn format(technique: &Document, width: u8) -> String {
-    let mut output = Formatter::new(&Identity, width);
-
-    if let Some(metadata) = &technique.header {
-        output.format_header(metadata);
-    }
-
-    if let Some(body) = &technique.body {
-        output.format_technique(body);
-    }
-
-    if !output
-        .buffer
-        .is_empty()
-        && !output
-            .buffer
-            .ends_with('\n')
-    {
-        output.append_char('\n');
-    }
-    output.buffer
-}
-
-pub fn format_with_renderer(renderer: &impl Render, technique: &Document, width: u8) -> String {
+pub fn format(renderer: &impl Render, technique: &Document, width: u8) -> String {
     let mut output = Formatter::new(renderer, width);
 
     if let Some(metadata) = &technique.header {

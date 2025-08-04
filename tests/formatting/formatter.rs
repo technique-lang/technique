@@ -21,7 +21,7 @@ mod verify {
             body: None,
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -46,7 +46,7 @@ mod verify {
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -85,7 +85,7 @@ first : A -> B
             ])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -147,7 +147,7 @@ second : [Thing] -> (Who, Where, Why)
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -179,7 +179,7 @@ win_le_tour : Bicycle -> YellowJersey
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -227,7 +227,7 @@ vibe_coding :
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -287,7 +287,7 @@ We must take action!
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -376,7 +376,7 @@ Record everything, with timestamps.
                 ],
             }])),
         };
-        let result = format(&document, 60);
+        let result = format(&Identity, &document, 60);
 
         assert_eq!(
             result,
@@ -430,7 +430,7 @@ before_leaving :
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
@@ -494,7 +494,7 @@ III.
             }])),
         };
 
-        let result = format(&document, 78);
+        let result = format(&Identity, &document, 78);
         assert_eq!(
             result,
             trim(
