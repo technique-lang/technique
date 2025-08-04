@@ -60,3 +60,23 @@ impl Render for Terminal {
         }
     }
 }
+
+pub struct Typst;
+
+impl Render for Typst {
+    fn render(&self, syntax: Syntax, content: &str) -> String {
+        match syntax {
+            Syntax::Header => todo!(),
+            Syntax::Declaration => todo!(),
+            Syntax::Description => todo!(),
+            Syntax::Genus => todo!(),
+            Syntax::StepItem => todo!(),
+            Syntax::CodeBlock => todo!(),
+            Syntax::Variable => todo!(),
+            Syntax::Section => todo!(),
+            Syntax::String => todo!(),
+            Syntax::Numeric => todo!(),
+            Syntax::Syntax => todo!(),
+        }
+    }
+}

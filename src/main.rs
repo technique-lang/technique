@@ -5,7 +5,8 @@ use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-use technique::formatting::{self, Identity};
+use technique::formatting::*;
+use technique::formatting::{self};
 use technique::parsing;
 
 mod rendering;
@@ -179,7 +180,7 @@ fn main() {
                 }
             };
 
-            let result = formatting::format(&Identity, &technique, wrap_width);
+            let result = formatting::format(&Terminal, &technique, wrap_width);
             print!("{}", result);
         }
         Some(("render", submatches)) => {
@@ -202,7 +203,8 @@ fn main() {
                 }
             };
 
-            rendering::via_typst(&filename, &technique);
+            let result = formatting::format(&Typst, &technique, 70);
+            rendering::via_typst(&filename, &result);
         }
         Some(_) => {
             println!("No valid subcommand was used")
