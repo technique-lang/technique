@@ -49,7 +49,7 @@ impl Formatter {
             fragments: Vec::new(),
             nesting: 0,
             width,
-            current: Syntax::None,
+            current: Syntax::Neutral,
             buffer: String::new(),
         }
     }
@@ -77,7 +77,7 @@ impl Formatter {
     }
 
     fn reset_syntax(&mut self) {
-        self.switch_syntax(Syntax::None);
+        self.switch_syntax(Syntax::Neutral);
     }
 
     fn flush_current(&mut self) {
@@ -111,7 +111,7 @@ impl Formatter {
             .clear();
         self.buffer
             .clear();
-        self.current = Syntax::None;
+        self.current = Syntax::Neutral;
     }
 
     fn increase(&mut self, depth: u8) {
@@ -140,7 +140,7 @@ impl Formatter {
             fragments: Vec::new(),
             nesting: self.nesting,
             width: self.width,
-            current: Syntax::None,
+            current: Syntax::Neutral,
             buffer: String::new(),
         }
     }

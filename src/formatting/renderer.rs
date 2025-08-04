@@ -1,10 +1,12 @@
 //! Renderers for colourizing Technique language
 
+use crate::language::*;
 use owo_colors::OwoColorize;
 
 /// Types of content that can be rendered with different styles
 #[derive(Debug, Clone, Copy)]
 pub enum Syntax {
+    Neutral, // default
     Header,
     Declaration,
     Description,
@@ -18,13 +20,14 @@ pub enum Syntax {
     Syntax,
 }
 
-/// Trait for different rendering backends (Identity, ANSI, Typst)
+/// Trait for different rendering backends (the no-op no-markup one, ANSI
+/// escapes for terminal colouring, Typst markup for documents)
 pub trait Render {
     /// Render content with the specified type/style
     fn render(&self, content_type: Syntax, content: &str) -> String;
 }
 
-/// Identity renderer - returns content unchanged (no markup)
+/// Returns content unchanged, with no markup applied
 pub struct Identity;
 
 impl Render for Identity {
@@ -33,39 +36,61 @@ impl Render for Identity {
     }
 }
 
+/// Embellish fragments with ANSI escapes to create syntax highlighting in
+/// terminal output.
 pub struct Terminal;
 
 impl Render for Terminal {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
+            Syntax::Neutral => content.to_string(),
             Syntax::Header => content.to_string(),
-            Syntax::Declaration => content
-                .blue()
-                .to_string(),
-            Syntax::Genus => content
-                .black()
-                .to_string(),
-            Syntax::Description => content.to_string(),
-            Syntax::StepItem => content
+            Syntax::Declaration => content // entity.name.function - #3465a4 (blue) bold
+                .color(owo_colors::Rgb(52, 101, 164))
                 .bold()
                 .to_string(),
-            Syntax::CodeBlock => content.to_string(),
-            Syntax::Variable => content.to_string(),
-            Syntax::Section => content.to_string(),
-            Syntax::String => content
-                .green()
+            Syntax::Genus => content // entity.name.type.technique - #8f5902 (brown) bold
+                .color(owo_colors::Rgb(143, 89, 2))
+                .bold()
                 .to_string(),
-            Syntax::Numeric => content.to_string(),
+            Syntax::Description => content.to_string(),
+            Syntax::StepItem => content // markup.list.numbered/unnumbered - #000000 bold
+                .bright_white()
+                .bold()
+                .to_string(),
+            Syntax::CodeBlock => content // punctuation.section.braces - #999999 bold
+                .color(owo_colors::Rgb(153, 153, 153))
+                .bold()
+                .to_string(),
+            Syntax::Variable => content // variable.parameter.technique - #729fcf (light blue) bold
+                .color(owo_colors::Rgb(114, 159, 207))
+                .bold()
+                .to_string(),
+            Syntax::Section => content // markup.heading.technique - #000000 bold
+                .black()
+                .bold()
+                .to_string(),
+            Syntax::String => content // string - #4e9a06 (green) bold
+                .color(owo_colors::Rgb(78, 154, 6))
+                .bold()
+                .to_string(),
+            Syntax::Numeric => content // constant.numeric - #ad7fa8 (purple) bold
+                .color(owo_colors::Rgb(173, 127, 168))
+                .bold()
+                .to_string(),
             Syntax::Syntax => content.to_string(),
         }
     }
 }
 
+/// Add markup around syntactic elements for use when including
+/// Technique source in Typst documents.
 pub struct Typst;
 
 impl Render for Typst {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
+            Syntax::Neutral => content.to_string(),
             Syntax::Header => todo!(),
             Syntax::Declaration => todo!(),
             Syntax::Description => todo!(),
