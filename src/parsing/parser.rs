@@ -2666,6 +2666,55 @@ mod check {
     }
 
     #[test]
+    fn multiline_signature_parsing() {
+        let mut input = Parser::new();
+        let content = r#"
+making_coffee :
+   Ingredients
+     -> Coffee
+                    "#
+        .trim_ascii();
+
+        input.initialize(content);
+        let result = input.parse_procedure_declaration();
+
+        assert_eq!(
+            result,
+            Ok((
+                Identifier("making_coffee"),
+                None,
+                Some(Signature {
+                    domain: Genus::Single(Forma("Ingredients")),
+                    range: Genus::Single(Forma("Coffee"))
+                })
+            ))
+        );
+
+        // Test complex multiline signature with parameters and tuple
+        let content = r#"
+making_coffee(b, m) :
+       (Beans, Milk)
+         -> Coffee
+                    "#
+        .trim_ascii();
+
+        input.initialize(content);
+        let result = input.parse_procedure_declaration();
+
+        assert_eq!(
+            result,
+            Ok((
+                Identifier("making_coffee"),
+                Some(vec![Identifier("b"), Identifier("m")]),
+                Some(Signature {
+                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                    range: Genus::Single(Forma("Coffee"))
+                })
+            ))
+        );
+    }
+
+    #[test]
     fn character_delimited_blocks() {
         let mut input = Parser::new();
         input.initialize("{ todo() }");
