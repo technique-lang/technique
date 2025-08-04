@@ -1,9 +1,62 @@
 //! Code formatter for the Technique language
 
+use owo_colors::OwoColorize;
+
 use crate::language::*;
 
+/// Types of content that can be rendered with different styles
+#[derive(Debug, Clone, Copy)]
+pub enum Syntax {
+    Header,
+    Declaration,
+    Description,
+    Genus,
+    StepItem,
+    CodeBlock,
+    Variable,
+    Section,
+    String,
+    Numeric,
+    Syntax,
+}
+
+/// Trait for different rendering backends (Identity, ANSI, Typst)
+pub trait Render {
+    /// Render content with the specified type/style
+    fn render(&self, content_type: Syntax, content: &str) -> String;
+}
+
+/// Identity renderer - returns content unchanged (no markup)
+pub struct Identity;
+
+impl Render for Identity {
+    fn render(&self, _syntax: Syntax, content: &str) -> String {
+        content.to_string()
+    }
+}
+
+pub struct Terminal;
+
+impl Render for Terminal {
+    fn render(&self, syntax: Syntax, content: &str) -> String {
+        match syntax {
+            Syntax::Header => content.to_string(),
+            Syntax::Declaration => content.blue().to_string(),
+            Syntax::Genus => content.black().to_string(),
+            Syntax::Description => content.to_string(),
+            Syntax::StepItem => content.bold().to_string(),
+            Syntax::CodeBlock => content.to_string(),
+            Syntax::Variable => content.to_string(),
+            Syntax::Section => content.to_string(),
+            Syntax::String => content.green().to_string(),
+            Syntax::Numeric => content.to_string(),
+            Syntax::Syntax => content.to_string(),
+        }
+    }
+}
+
 pub fn format(technique: &Document, width: u8) -> String {
-    let mut output = Formatter::new(width);
+    let mut output = Formatter::new(Identity, width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);
@@ -25,15 +78,43 @@ pub fn format(technique: &Document, width: u8) -> String {
     output.buffer
 }
 
-struct Formatter {
+pub fn format_with_renderer<R: Render>(renderer: R, technique: &Document, width: u8) -> String {
+    let mut output = Formatter::new(renderer, width);
+
+    if let Some(metadata) = &technique.header {
+        output.format_header(metadata);
+    }
+
+    if let Some(body) = &technique.body {
+        output.format_technique(body);
+    }
+
+    if !output
+        .buffer
+        .is_empty()
+        && !output
+            .buffer
+            .ends_with('\n')
+    {
+        output.append_char('\n');
+    }
+    output.buffer
+}
+
+struct Formatter<R> {
+    renderer: R,
     buffer: String,
     nesting: u8,
     width: u8,
 }
 
-impl Formatter {
-    fn new(width: u8) -> Formatter {
+impl<R> Formatter<R>
+where
+    R: Render,
+{
+    fn new(renderer: R, width: u8) -> Formatter<R> {
         Formatter {
+            renderer,
             buffer: String::new(),
             nesting: 0,
             width,
@@ -67,15 +148,16 @@ impl Formatter {
         }
     }
 
-    fn subformatter(&self) -> Formatter {
+    fn subformatter(&self) -> Formatter<&R> {
         Formatter {
             buffer: String::new(),
             nesting: self.nesting,
             width: self.width,
+            renderer: &self.renderer,
         }
     }
 
-    fn builder(&mut self) -> Line {
+    fn builder(&mut self) -> Line<R> {
         Line::new(self)
     }
 
@@ -775,14 +857,17 @@ impl Formatter {
     }
 }
 
-struct Line<'a> {
-    output: &'a mut Formatter, // reference to parent
+struct Line<'a, R> {
+    output: &'a mut Formatter<R>, // reference to parent
     current: String,
     position: u8,
 }
 
-impl<'a> Line<'a> {
-    fn new(output: &'a mut Formatter) -> Self {
+impl<'a, R> Line<'a, R>
+where
+    R: Render,
+{
+    fn new(output: &'a mut Formatter<R>) -> Self {
         Line {
             current: String::new(),
             position: output.nesting,
@@ -910,7 +995,7 @@ mod check {
 
     #[test]
     fn genus() {
-        let mut output = Formatter::new(78);
+        let mut output = Formatter::new(Identity, 78);
 
         output.append_forma(&Forma("Jedi"));
         assert_eq!(output.buffer, "Jedi");
@@ -941,7 +1026,7 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut output = Formatter::new(78);
+        let mut output = Formatter::new(Identity, 78);
 
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("Alderaan")),
@@ -966,7 +1051,7 @@ mod check {
 
     #[test]
     fn numbers() {
-        let mut output = Formatter::new(78);
+        let mut output = Formatter::new(Identity, 78);
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.buffer, "42");

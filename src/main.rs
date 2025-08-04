@@ -189,7 +189,20 @@ fn main() {
 
             debug!(filename);
 
-            rendering::via_typst(&Path::new(filename));
+            let filename = Path::new(filename);
+            let content = parsing::load(filename);
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(error) => {
+                    // It is possible that we will want to render the error
+                    // into the PDF document rather than crashing here. We'll
+                    // see in the future.
+                    eprintln!("{}", error.full_details());
+                    std::process::exit(1);
+                }
+            };
+
+            rendering::via_typst(&filename, &technique);
         }
         Some(_) => {
             println!("No valid subcommand was used")
