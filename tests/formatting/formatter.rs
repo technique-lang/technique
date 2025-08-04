@@ -9,6 +9,14 @@ mod verify {
         tail
     }
 
+    fn combine(fragments: Vec<(Syntax, String)>) -> String {
+        let mut result = String::new();
+        for fragment in fragments {
+            result.push_str(&fragment.1);
+        }
+        result
+    }
+
     #[test]
     fn header_and_body() {
         let document = Document {
@@ -21,9 +29,9 @@ mod verify {
             body: None,
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 % technique v1
@@ -46,9 +54,9 @@ mod verify {
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 first : A -> B
@@ -85,9 +93,9 @@ first : A -> B
             ])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 % technique v1
@@ -147,9 +155,9 @@ second : [Thing] -> (Who, Where, Why)
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 win_le_tour : Bicycle -> YellowJersey
@@ -179,9 +187,9 @@ win_le_tour : Bicycle -> YellowJersey
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 vibe_coding :
@@ -227,9 +235,9 @@ vibe_coding :
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 action :
@@ -287,9 +295,9 @@ We must take action!
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 journal :
@@ -376,10 +384,10 @@ Record everything, with timestamps.
                 ],
             }])),
         };
-        let result = format(&Identity, &document, 60);
+        let result = format_with_renderer(&document, 60);
 
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 before_leaving :
@@ -430,9 +438,9 @@ before_leaving :
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 main_procedure :
@@ -494,9 +502,9 @@ III.
             }])),
         };
 
-        let result = format(&Identity, &document, 78);
+        let result = format_with_renderer(&document, 78);
         assert_eq!(
-            result,
+            combine(result),
             trim(
                 r#"
 test_procedure :

@@ -3,8 +3,8 @@
 use crate::formatting::*;
 use crate::language::*;
 
-pub fn format(renderer: &impl Render, technique: &Document, width: u8) -> String {
-    let mut output = Formatter::new(renderer, width);
+pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, String)> {
+    let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);

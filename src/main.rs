@@ -180,7 +180,7 @@ fn main() {
                 }
             };
 
-            let result = formatting::format(&Terminal, &technique, wrap_width);
+            let result = formatting::render(&Terminal, &technique, wrap_width);
             print!("{}", result);
         }
         Some(("render", submatches)) => {
@@ -203,7 +203,7 @@ fn main() {
                 }
             };
 
-            let result = formatting::format(&Typst, &technique, 70);
+            let result = formatting::render(&Typst, &technique, 70);
             rendering::via_typst(&filename, &result);
         }
         Some(_) => {
