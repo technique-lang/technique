@@ -41,14 +41,22 @@ impl Render for Terminal {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
             Syntax::Header => content.to_string(),
-            Syntax::Declaration => content.blue().to_string(),
-            Syntax::Genus => content.black().to_string(),
+            Syntax::Declaration => content
+                .blue()
+                .to_string(),
+            Syntax::Genus => content
+                .black()
+                .to_string(),
             Syntax::Description => content.to_string(),
-            Syntax::StepItem => content.bold().to_string(),
+            Syntax::StepItem => content
+                .bold()
+                .to_string(),
             Syntax::CodeBlock => content.to_string(),
             Syntax::Variable => content.to_string(),
             Syntax::Section => content.to_string(),
-            Syntax::String => content.green().to_string(),
+            Syntax::String => content
+                .green()
+                .to_string(),
             Syntax::Numeric => content.to_string(),
             Syntax::Syntax => content.to_string(),
         }
@@ -56,7 +64,7 @@ impl Render for Terminal {
 }
 
 pub fn format(technique: &Document, width: u8) -> String {
-    let mut output = Formatter::new(Identity, width);
+    let mut output = Formatter::new(&Identity, width);
 
     if let Some(metadata) = &technique.header {
         output.format_header(metadata);
@@ -78,7 +86,7 @@ pub fn format(technique: &Document, width: u8) -> String {
     output.buffer
 }
 
-pub fn format_with_renderer<R: Render>(renderer: R, technique: &Document, width: u8) -> String {
+pub fn format_with_renderer(renderer: &impl Render, technique: &Document, width: u8) -> String {
     let mut output = Formatter::new(renderer, width);
 
     if let Some(metadata) = &technique.header {
@@ -101,18 +109,18 @@ pub fn format_with_renderer<R: Render>(renderer: R, technique: &Document, width:
     output.buffer
 }
 
-struct Formatter<R> {
-    renderer: R,
+struct Formatter<'a, R> {
+    renderer: &'a R,
     buffer: String,
     nesting: u8,
     width: u8,
 }
 
-impl<R> Formatter<R>
+impl<'a, R> Formatter<'a, R>
 where
     R: Render,
 {
-    fn new(renderer: R, width: u8) -> Formatter<R> {
+    fn new(renderer: &'a R, width: u8) -> Formatter<'a, R> {
         Formatter {
             renderer,
             buffer: String::new(),
@@ -148,7 +156,7 @@ where
         }
     }
 
-    fn subformatter(&self) -> Formatter<&R> {
+    fn subformatter(&self) -> Formatter<'a, R> {
         Formatter {
             buffer: String::new(),
             nesting: self.nesting,
@@ -157,7 +165,7 @@ where
         }
     }
 
-    fn builder(&mut self) -> Line<R> {
+    fn builder(&mut self) -> Line<'_, 'a, R> {
         Line::new(self)
     }
 
@@ -857,17 +865,17 @@ where
     }
 }
 
-struct Line<'a, R> {
-    output: &'a mut Formatter<R>, // reference to parent
+struct Line<'a, 'b, R> {
+    output: &'a mut Formatter<'b, R>, // reference to parent
     current: String,
     position: u8,
 }
 
-impl<'a, R> Line<'a, R>
+impl<'a, 'b, R> Line<'a, 'b, R>
 where
     R: Render,
 {
-    fn new(output: &'a mut Formatter<R>) -> Self {
+    fn new(output: &'a mut Formatter<'b, R>) -> Self {
         Line {
             current: String::new(),
             position: output.nesting,
@@ -995,7 +1003,7 @@ mod check {
 
     #[test]
     fn genus() {
-        let mut output = Formatter::new(Identity, 78);
+        let mut output = Formatter::new(&Identity, 78);
 
         output.append_forma(&Forma("Jedi"));
         assert_eq!(output.buffer, "Jedi");
@@ -1026,7 +1034,7 @@ mod check {
 
     #[test]
     fn signatures() {
-        let mut output = Formatter::new(Identity, 78);
+        let mut output = Formatter::new(&Identity, 78);
 
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("Alderaan")),
@@ -1051,7 +1059,7 @@ mod check {
 
     #[test]
     fn numbers() {
-        let mut output = Formatter::new(Identity, 78);
+        let mut output = Formatter::new(&Identity, 78);
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.buffer, "42");

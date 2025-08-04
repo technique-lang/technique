@@ -22,7 +22,7 @@ impl Renderer {
         }
     }
 
-    fn render_metadata(&mut self, metadata: &Metadata) {
+    fn render_metadata(&mut self, _metadata: &Metadata) {
         
     }
 }
