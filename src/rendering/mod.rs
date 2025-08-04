@@ -5,6 +5,10 @@ use std::process::{Command, Stdio};
 use tinytemplate::TinyTemplate;
 use tracing::{debug, info};
 
+use technique::language::Document;
+
+mod source;
+
 static TEMPLATE: &'static str = r#"
 #show raw: set text(font: "Inconsolata")
 #show raw.where(lang: "technique"): set raw(
@@ -26,7 +30,7 @@ struct Context {
     filename: String,
 }
 
-pub(crate) fn via_typst(source: &Path) {
+pub(crate) fn via_typst(source: &Path, document: &Document) {
     let filename = source.display();
     info!("Printing file: {}", filename);
 
@@ -64,7 +68,13 @@ pub(crate) fn via_typst(source: &Path) {
         .unwrap();
     stdin
         .write(rendered.as_bytes())
-        .expect("Write header to child prcess");
+        .expect("Write header to child process");
+
+    let markup = source::render(document);
+    // write markup to stdin handle
+    stdin
+        .write(markup.as_bytes())
+        .expect("Write document to child process");
 
     drop(stdin);
 
