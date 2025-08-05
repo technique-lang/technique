@@ -26,7 +26,7 @@ struct Context {
     filename: String,
 }
 
-pub(crate) fn via_typst(source: &Path) {
+pub(crate) fn via_typst(source: &Path, markup: &str) {
     let filename = source.display();
     info!("Printing file: {}", filename);
 
@@ -64,7 +64,12 @@ pub(crate) fn via_typst(source: &Path) {
         .unwrap();
     stdin
         .write(rendered.as_bytes())
-        .expect("Write header to child prcess");
+        .expect("Write header to child process");
+
+    // write markup to stdin handle
+    stdin
+        .write(markup.as_bytes())
+        .expect("Write document to child process");
 
     drop(stdin);
 

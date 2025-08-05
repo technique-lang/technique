@@ -1,11 +1,13 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
+use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
 
-use technique::formatting;
+use technique::formatting::*;
+use technique::formatting::{self};
 use technique::parsing;
 
 mod rendering;
@@ -179,7 +181,13 @@ fn main() {
                 }
             };
 
-            let result = formatting::format(&technique, wrap_width);
+            let result;
+            if raw_output || std::io::stdout().is_terminal() {
+                result = formatting::render(&Terminal, &technique, wrap_width);
+            } else {
+                result = formatting::render(&Identity, &technique, wrap_width);
+            }
+
             print!("{}", result);
         }
         Some(("render", submatches)) => {
@@ -189,7 +197,21 @@ fn main() {
 
             debug!(filename);
 
-            rendering::via_typst(&Path::new(filename));
+            let filename = Path::new(filename);
+            let content = parsing::load(filename);
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(error) => {
+                    // It is possible that we will want to render the error
+                    // into the PDF document rather than crashing here. We'll
+                    // see in the future.
+                    eprintln!("{}", error.full_details());
+                    std::process::exit(1);
+                }
+            };
+
+            let result = formatting::render(&Typst, &technique, 70);
+            rendering::via_typst(&filename, &result);
         }
         Some(_) => {
             println!("No valid subcommand was used")
