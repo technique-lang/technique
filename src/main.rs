@@ -1,6 +1,7 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
+use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
 use tracing_subscriber;
@@ -180,7 +181,13 @@ fn main() {
                 }
             };
 
-            let result = formatting::render(&Terminal, &technique, wrap_width);
+            let result;
+            if raw_output || std::io::stdout().is_terminal() {
+                result = formatting::render(&Terminal, &technique, wrap_width);
+            } else {
+                result = formatting::render(&Identity, &technique, wrap_width);
+            }
+
             print!("{}", result);
         }
         Some(("render", submatches)) => {
