@@ -1341,7 +1341,8 @@ impl<'i> Parser<'i> {
         } else if is_string_literal(content) {
             let raw =
                 self.take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
-            Ok(Expression::String(raw))
+            let parts = self.parse_string_pieces(raw)?;
+            Ok(Expression::String(parts))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -1521,6 +1522,70 @@ impl<'i> Parser<'i> {
 
             Ok(Expression::Tablet(pairs))
         })
+    }
+
+    fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError<'i>> {
+        // Quick check: if no braces, just return a single text piece
+        if !raw.contains('{') {
+            return Ok(vec![Piece::Text(raw)]);
+        }
+
+        let mut pieces = Vec::new();
+        let mut current_pos = 0;
+
+        while current_pos < raw.len() {
+            // Look for the start of an interpolation
+            if let Some(brace_start) = raw[current_pos..].find('{') {
+                let absolute_brace_start = current_pos + brace_start;
+
+                // Add text before the brace if any
+                if brace_start > 0 {
+                    pieces.push(Piece::Text(&raw[current_pos..absolute_brace_start]));
+                }
+
+                // Find the matching closing brace
+                let mut brace_depth = 0;
+                let mut brace_end = None;
+
+                for (i, c) in raw[absolute_brace_start..].char_indices() {
+                    if c == '{' {
+                        brace_depth += 1;
+                    } else if c == '}' {
+                        brace_depth -= 1;
+                        if brace_depth == 0 {
+                            brace_end = Some(absolute_brace_start + i);
+                            break;
+                        }
+                    }
+                }
+
+                match brace_end {
+                    Some(end_pos) => {
+                        // Extract the content between braces
+                        let expr_content = &raw[absolute_brace_start + 1..end_pos];
+
+                        // Parse the expression using existing machinery
+                        let mut parser = self.subparser(absolute_brace_start + 1, expr_content);
+                        let expression = parser.read_expression()?;
+                        pieces.push(Piece::Interpolation(expression));
+
+                        current_pos = end_pos + 1;
+                    }
+                    None => {
+                        // Unmatched brace
+                        return Err(ParsingError::ExpectedMatchingChar(self.offset, "an interpolation", '{', '}'));
+                    }
+                }
+            } else {
+                // No more braces - add the rest as text
+                if current_pos < raw.len() {
+                    pieces.push(Piece::Text(&raw[current_pos..]));
+                }
+                break;
+            }
+        }
+
+        Ok(pieces)
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1932,7 +1997,8 @@ impl<'i> Parser<'i> {
                 } else if content.starts_with("\"") {
                     let raw = outer
                         .take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
-                    params.push(Expression::String(raw));
+                    let parts = outer.parse_string_pieces(raw)?;
+                    params.push(Expression::String(parts));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Variable(name));
@@ -3422,7 +3488,7 @@ This is the first one.
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("exec"),
-                parameters: vec![Expression::String("Hello, World")]
+                parameters: vec![Expression::String(vec![Piece::Text("Hello, World")])]
             }))
         );
 
@@ -3609,7 +3675,7 @@ echo test
             result,
             Ok(Expression::Tablet(vec![Pair {
                 label: "name",
-                value: Expression::String("Johannes Grammerly")
+                value: Expression::String(vec![Piece::Text("Johannes Grammerly")])
             }]))
         );
 
@@ -3626,11 +3692,11 @@ echo test
             Ok(Expression::Tablet(vec![
                 Pair {
                     label: "name",
-                    value: Expression::String("Alice of Chains")
+                    value: Expression::String(vec![Piece::Text("Alice of Chains")])
                 },
                 Pair {
                     label: "age",
-                    value: Expression::String("29")
+                    value: Expression::String(vec![Piece::Text("29")])
                 }
             ]))
         );
@@ -3683,7 +3749,7 @@ echo test
             Ok(Expression::Tablet(vec![
                 Pair {
                     label: "context",
-                    value: Expression::String("Details about the thing")
+                    value: Expression::String(vec![Piece::Text("Details about the thing")])
                 },
                 Pair {
                     label: "status",

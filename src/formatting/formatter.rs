@@ -468,6 +468,13 @@ impl Formatter {
                             line.add_word(Syntax::Structure, "}");
                         }
                         _ => {
+                            // Add space before inline code if line is not empty
+                            if !line
+                                .current
+                                .is_empty()
+                            {
+                                line.add_atomic(syntax, " ");
+                            }
                             line.add_inline_code(expr);
                         }
                     },
@@ -712,17 +719,21 @@ impl Formatter {
             Expression::Variable(identifier) => {
                 self.append(Syntax::Variable, identifier.0);
             }
-            Expression::String(text) => {
+            Expression::String(pieces) => {
                 self.append(Syntax::Quote, "\"");
-                // Break string content into words for wrapping
-                for (i, word) in text
-                    .split_ascii_whitespace()
-                    .enumerate()
-                {
-                    if i > 0 {
-                        self.append(Syntax::String, " ");
+                for piece in pieces {
+                    match piece {
+                        Piece::Text(text) => {
+                            // Preserve user string content exactly as written
+                            self.append(Syntax::String, text);
+                        }
+                        Piece::Interpolation(expr) => {
+                            let fragments = self.render_inline_code(expr);
+                            for (syntax, content) in fragments {
+                                self.append(syntax, &content);
+                            }
+                        }
                     }
-                    self.append(Syntax::String, word);
                 }
                 self.append(Syntax::Quote, "\"");
             }

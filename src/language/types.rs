@@ -184,9 +184,15 @@ pub struct Pair<'i> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum Piece<'i> {
+    Text(&'i str),
+    Interpolation(Expression<'i>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expression<'i> {
     Variable(Identifier<'i>),
-    String(&'i str),
+    String(Vec<Piece<'i>>),
     Number(Numeric<'i>),
     Multiline(Option<&'i str>, Vec<&'i str>),
     Repeat(Box<Expression<'i>>),
