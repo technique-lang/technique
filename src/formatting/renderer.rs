@@ -20,12 +20,14 @@ pub enum Syntax {
     Response,
     Invocation,
     Title,
+    Keyword,
     Function,
     Multiline,
     Label,
     Operator,
     Punctuation,
-    Syntax,
+    Attribute,
+    Structure,
 }
 
 /// Trait for different rendering backends (the no-op no-markup one, ANSI
@@ -54,7 +56,7 @@ impl Render for Terminal {
             Syntax::Neutral => content.to_string(),
             Syntax::Header => content.to_string(),
             Syntax::Declaration => content // entity.name.function - #3465a4 (blue) bold
-                .color(owo_colors::Rgb(52, 101, 164))
+                .color(owo_colors::Rgb(0x34, 0x65, 0xa4))
                 .bold()
                 .to_string(),
             Syntax::Genus => content // entity.name.type.technique - #8f5902 (brown) bold
@@ -74,9 +76,7 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(114, 159, 207))
                 .bold()
                 .to_string(),
-            Syntax::Section => content // markup.heading.technique - #000000 bold
-                .black()
-                .bold()
+            Syntax::Section => content // markup.heading.technique
                 .to_string(),
             Syntax::String => content // string - #4e9a06 (green) bold
                 .color(owo_colors::Rgb(78, 154, 6))
@@ -90,12 +90,16 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(78, 154, 6))
                 .bold()
                 .to_string(),
-            Syntax::Invocation => content // meta.function-call.technique - #3465a4 (blue) bold
-                .color(owo_colors::Rgb(52, 101, 164))
+            Syntax::Invocation => content // meta.function-call.technique
+                .color(owo_colors::Rgb(0x3b, 0x5d, 0x7d))
                 .bold()
                 .to_string(),
             Syntax::Title => content // markup.heading.technique - #000000 bold
-                .black()
+                .bright_white()
+                .bold()
+                .to_string(),
+            Syntax::Keyword => content // keyword.control.technique
+                .color(owo_colors::Rgb(0x75, 0x50, 0x7b))
                 .bold()
                 .to_string(),
             Syntax::Function => content // entity.name.function.technique - #3465a4 (blue) bold
@@ -105,8 +109,8 @@ impl Render for Terminal {
             Syntax::Multiline => content // string.multiline.technique - #4e9a06 (green)
                 .color(owo_colors::Rgb(78, 154, 6))
                 .to_string(),
-            Syntax::Label => content // entity.name.tag.technique - #ad7fa8 (purple) bold
-                .color(owo_colors::Rgb(173, 127, 168))
+            Syntax::Label => content // variable.other.tablet
+                .color(owo_colors::Rgb(0x60, 0x98, 0x9a))
                 .bold()
                 .to_string(),
             Syntax::Operator => content // keyword.operator.technique - #cc0000 (red) bold
@@ -115,8 +119,16 @@ impl Render for Terminal {
                 .to_string(),
             Syntax::Punctuation => content // punctuation.technique - #999999 (grey)
                 .color(owo_colors::Rgb(153, 153, 153))
+                .bold()
                 .to_string(),
-            Syntax::Syntax => content.to_string(),
+            Syntax::Attribute => content // entity.name.tag.attribute
+                .bright_white()
+                .bold()
+                .to_string(),
+            Syntax::Structure => content
+                .color(owo_colors::Rgb(153, 153, 153))
+                .bold()
+                .to_string(),
         }
     }
 }
@@ -142,12 +154,14 @@ impl Render for Typst {
             Syntax::Response => todo!(),
             Syntax::Invocation => todo!(),
             Syntax::Title => todo!(),
+            Syntax::Keyword => todo!(),
             Syntax::Function => todo!(),
             Syntax::Multiline => todo!(),
             Syntax::Label => todo!(),
             Syntax::Operator => todo!(),
             Syntax::Punctuation => todo!(),
-            Syntax::Syntax => todo!(),
+            Syntax::Attribute => todo!(),
+            Syntax::Structure => todo!(),
         }
     }
 }

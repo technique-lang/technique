@@ -134,6 +134,18 @@ impl Formatter {
         }
     }
 
+    fn append_breakable(&mut self, syntax: Syntax, text: &str) {
+        for (i, word) in text
+            .split_ascii_whitespace()
+            .enumerate()
+        {
+            if i > 0 {
+                self.append_char(' ');
+            }
+            self.append(syntax, word);
+        }
+    }
+
     fn subformatter(&self) -> Formatter {
         Formatter {
             fragments: Vec::new(),
@@ -156,11 +168,11 @@ impl Formatter {
             }
             _ => {
                 let mut sub = self.subformatter();
-                sub.append_char('{');
+                sub.append(Syntax::Structure, "{");
                 sub.append_char(' ');
                 sub.append_expression(expr);
                 sub.append_char(' ');
-                sub.append_char('}');
+                sub.append(Syntax::Structure, "}");
                 sub.flush_current();
                 sub.fragments
             }
@@ -182,13 +194,13 @@ impl Formatter {
         let mut sub = self.subformatter();
 
         match inner_descriptive {
-            Descriptive::Text(text) => sub.append_str(text),
+            Descriptive::Text(text) => sub.append_breakable(Syntax::Description, text),
             Descriptive::CodeInline(expr) => {
-                sub.append_char('{');
+                sub.append(Syntax::Structure, "{");
                 sub.append_char(' ');
                 sub.append_expression(expr);
                 sub.append_char(' ');
-                sub.append_char('}');
+                sub.append(Syntax::Structure, "}");
             }
             Descriptive::Application(invocation) => {
                 sub.append_application(invocation);
@@ -198,7 +210,7 @@ impl Formatter {
             }
         }
 
-        sub.append_str(" ~ ");
+        sub.append(Syntax::Structure, " ~ ");
         sub.append_variables(variables);
         sub.flush_current();
         sub.fragments
@@ -280,7 +292,7 @@ impl Formatter {
         }
 
         self.append_char(' ');
-        self.append(Syntax::Punctuation, ":");
+        self.append(Syntax::Structure, ":");
 
         if let Some(signature) = &procedure.signature {
             self.append_char(' ');
@@ -332,7 +344,7 @@ impl Formatter {
         self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.domain);
         self.reset_syntax();
-        self.append(Syntax::Operator, " -> ");
+        self.append(Syntax::Structure, " -> ");
         self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.range);
         self.reset_syntax();
@@ -381,18 +393,17 @@ impl Formatter {
 
     // Output names surrounded by parenthesis
     fn append_parameters(&mut self, variables: &Vec<Identifier>) {
-        self.append_char('(');
+        self.append(Syntax::Structure, "(");
         for (i, variable) in variables
             .iter()
             .enumerate()
         {
             if i > 0 {
-                self.append_char(',');
-                self.append_char(' ');
+                self.append(Syntax::Structure, ", ");
             }
-            self.append_identifier(variable);
+            self.append(Syntax::Variable, variable.0);
         }
-        self.append_char(')');
+        self.append(Syntax::Structure, ")");
     }
 
     fn append_forma(&mut self, forma: &Forma) {
@@ -414,17 +425,18 @@ impl Formatter {
     }
 
     fn append_descriptives(&mut self, descriptives: &Vec<Descriptive>) {
+        let syntax = self.current;
         let mut line = self.builder();
 
         for descriptive in descriptives {
             match descriptive {
                 Descriptive::Text(text) => {
-                    line.add_text(text);
+                    line.add_breakable(syntax, text);
                 }
                 Descriptive::CodeInline(expr) => match expr {
                     Expression::Tablet(_) => {
                         line.flush();
-                        self.append_char('{');
+                        self.append(Syntax::Structure, "{");
                         self.append_char('\n');
                         self.increase(4);
                         self.indent();
@@ -432,18 +444,18 @@ impl Formatter {
                         self.append_char('\n');
                         self.decrease(4);
                         line = self.builder();
-                        line.add_text("}");
+                        line.add_word(Syntax::Structure, "}");
                     }
                     Expression::Multiline(_, _) => {
                         line.flush();
-                        self.append_char('{');
+                        self.append(Syntax::Structure, "{");
                         self.increase(4);
                         self.append_expression(expr);
                         self.decrease(4);
                         self.append_char('\n');
                         self.indent();
                         line = self.builder();
-                        line.add_text("}");
+                        line.add_word(Syntax::Structure, "}");
                     }
                     _ => match expr {
                         Expression::Execution(func)
@@ -453,13 +465,11 @@ impl Formatter {
                                 .any(|p| matches!(p, Expression::Multiline(_, _))) =>
                         {
                             line.flush();
-                            self.append_char(' ');
-                            self.append_char('{');
-                            self.append_char(' ');
+                            self.append(Syntax::Structure, " { ");
                             self.append_expression(expr);
                             self.append_char(' ');
                             line = self.builder();
-                            line.add_text("}");
+                            line.add_word(Syntax::Structure, "}");
                         }
                         _ => {
                             line.add_inline_code(expr);
@@ -467,9 +477,23 @@ impl Formatter {
                     },
                 },
                 Descriptive::Application(invocation) => {
+                    // Add space before application if line is not empty
+                    if !line
+                        .current
+                        .is_empty()
+                    {
+                        line.add_atomic(syntax, " ");
+                    }
                     line.add_application(invocation);
                 }
                 Descriptive::Binding(inner_descriptive, variables) => {
+                    // Add space before binding if line is not empty
+                    if !line
+                        .current
+                        .is_empty()
+                    {
+                        line.add_atomic(syntax, " ");
+                    }
                     line.add_binding(inner_descriptive, variables);
                 }
             }
@@ -516,7 +540,7 @@ impl Formatter {
                 subscopes,
             } => {
                 self.indent();
-                self.append_char(*bullet);
+                self.append(Syntax::StepItem, &bullet.to_string());
                 self.append_char(' ');
                 self.append_char(' ');
                 self.append_char(' ');
@@ -543,7 +567,7 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.append(Syntax::Operator, " | ");
+                self.append(Syntax::Structure, " | ");
             }
             self.append(Syntax::Punctuation, "'");
             self.append(Syntax::Response, response.value);
@@ -594,7 +618,7 @@ impl Formatter {
                 match expression {
                     Expression::Tablet(_) => {
                         self.indent();
-                        self.append_char('{');
+                        self.append(Syntax::Structure, "{");
                         self.append_char('\n');
 
                         self.increase(4);
@@ -607,11 +631,11 @@ impl Formatter {
                     }
                     _ => {
                         self.indent();
-                        self.append_char('{');
+                        self.append(Syntax::Structure, "{");
                         self.append_char(' ');
                         self.append_expression(expression);
                         self.append_char(' ');
-                        self.append_char('}');
+                        self.append(Syntax::Structure, "}");
                     }
                 }
                 self.append_char('\n');
@@ -632,11 +656,13 @@ impl Formatter {
                 title,
                 body,
             } => {
-                self.append_str(numeral);
+                self.append(Syntax::StepItem, numeral);
                 self.append_char('.');
                 if let Some(paragraph) = title {
                     self.append_char(' ');
+                    self.switch_syntax(Syntax::Section);
                     self.append_descriptives(&paragraph.0);
+                    self.reset_syntax();
                 }
                 self.append_char('\n');
 
@@ -674,12 +700,12 @@ impl Formatter {
             }
             match attribute {
                 Attribute::Role(name) => {
-                    self.append_char('@');
-                    self.append_identifier(name);
+                    self.append(Syntax::Attribute, "@");
+                    self.append(Syntax::Attribute, name.0);
                 }
                 Attribute::Place(name) => {
-                    self.append_char('#');
-                    self.append_identifier(name);
+                    self.append(Syntax::Attribute, "#");
+                    self.append(Syntax::Attribute, name.0);
                 }
             }
         }
@@ -692,7 +718,16 @@ impl Formatter {
             }
             Expression::String(text) => {
                 self.append(Syntax::Punctuation, "\"");
-                self.append(Syntax::String, text);
+                // Break string content into words for wrapping
+                for (i, word) in text
+                    .split_ascii_whitespace()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        self.append(Syntax::String, " ");
+                    }
+                    self.append(Syntax::String, word);
+                }
                 self.append(Syntax::Punctuation, "\"");
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
@@ -709,7 +744,16 @@ impl Formatter {
                 self.increase(4);
                 for line in lines {
                     self.indent();
-                    self.append(Syntax::Multiline, line);
+                    // Break multiline content into words for wrapping
+                    for (i, word) in line
+                        .split_ascii_whitespace()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            self.append(Syntax::Multiline, " ");
+                        }
+                        self.append(Syntax::Multiline, word);
+                    }
                     self.append_char('\n');
                 }
                 self.decrease(4);
@@ -719,20 +763,20 @@ impl Formatter {
                 self.append_char('\n');
             }
             Expression::Repeat(expression) => {
-                self.append_str("repeat ");
+                self.append(Syntax::Keyword, "repeat ");
                 self.append_expression(expression);
             }
             Expression::Foreach(variables, expression) => {
-                self.append_str("foreach ");
+                self.append(Syntax::Keyword, "foreach ");
                 self.append_variables(variables);
-                self.append_str(" in ");
+                self.append(Syntax::Keyword, " in ");
                 self.append_expression(expression);
             }
             Expression::Application(invocation) => self.append_application(invocation),
             Expression::Execution(function) => self.append_function(function),
             Expression::Binding(expression, variables) => {
                 self.append_expression(expression);
-                self.append(Syntax::Operator, " ~ ");
+                self.append(Syntax::Structure, " ~ ");
                 self.append_variables(variables);
             }
             Expression::Tablet(pairs) => self.append_tablet(pairs),
@@ -753,7 +797,7 @@ impl Formatter {
                 self.append_char(',');
                 self.append_char(' ');
             }
-            self.append_identifier(variable);
+            self.append(Syntax::Variable, variable.0);
         }
         if variables.len() > 1 {
             self.append_char(')');
@@ -779,28 +823,23 @@ impl Formatter {
         }
     }
 
-    fn append_identifier(&mut self, identifier: &Identifier) {
-        self.append_str(identifier.0);
-    }
-
     // This is the one that is for the generalized case where the arguments to
     // a function can be Expressions themselves (though usually are just
     // variable names)
     fn append_arguments(&mut self, parameters: &Vec<Expression>) {
-        self.append_char('(');
+        self.append(Syntax::Structure, "(");
 
         for (i, parameter) in parameters
             .iter()
             .enumerate()
         {
             if i > 0 {
-                self.append_char(',');
-                self.append_char(' ');
+                self.append(Syntax::Structure, ", ");
             }
             self.append_expression(parameter);
         }
 
-        self.append_char(')');
+        self.append(Syntax::Structure, ")");
     }
 
     fn append_function(&mut self, function: &Function) {
@@ -810,7 +849,7 @@ impl Formatter {
                 .target
                 .0,
         );
-        self.append_char('(');
+        self.append(Syntax::Structure, "(");
 
         let mut has_multiline = false;
         for parameter in &function.parameters {
@@ -826,8 +865,7 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.append_char(',');
-                self.append_char(' ');
+                self.append(Syntax::Structure, ", ");
             }
             self.append_expression(parameter);
         }
@@ -835,11 +873,11 @@ impl Formatter {
         if has_multiline {
             self.indent();
         }
-        self.append_char(')');
+        self.append(Syntax::Structure, ")");
     }
 
     fn append_tablet(&mut self, pairs: &Vec<Pair>) {
-        self.append(Syntax::Punctuation, "[");
+        self.append(Syntax::Structure, "[");
         self.append_char('\n');
 
         self.increase(4);
@@ -848,14 +886,14 @@ impl Formatter {
             self.append(Syntax::Punctuation, "\"");
             self.append(Syntax::Label, pair.label);
             self.append(Syntax::Punctuation, "\"");
-            self.append(Syntax::Operator, " = ");
+            self.append(Syntax::Structure, " = ");
             self.append_expression(&pair.value);
             self.append_char('\n');
         }
         self.decrease(4);
 
         self.indent();
-        self.append(Syntax::Punctuation, "]");
+        self.append(Syntax::Structure, "]");
     }
 }
 
@@ -884,26 +922,57 @@ impl ToString for Formatter {
 
 struct Line<'a> {
     output: &'a mut Formatter, // reference to parent
-    current: String,
+    current: Vec<(Syntax, String)>,
     position: u8,
 }
 
 impl<'a> Line<'a> {
     fn new(output: &'a mut Formatter) -> Self {
         Line {
-            current: String::new(),
+            current: Vec::new(),
             position: output.nesting,
             output,
         }
     }
 
-    fn add_text(&mut self, text: &str) {
-        for word in text.split_ascii_whitespace() {
-            self.add_word(word);
+    fn add_atomic(&mut self, syntax: Syntax, content: &str) {
+        // Treat as atomic units - don't split them further
+        if !self
+            .current
+            .is_empty()
+        {
+            if self.position + content.len() as u8
+                > self
+                    .output
+                    .width
+            {
+                self.wrap_line();
+                self.current
+                    .push((syntax, content.to_string()));
+                self.position = self
+                    .output
+                    .nesting
+                    + content.len() as u8;
+            } else {
+                self.current
+                    .push((syntax, content.to_string()));
+                self.position += content.len() as u8;
+            }
+        } else {
+            self.current
+                .push((syntax, content.to_string()));
+            self.position += content.len() as u8;
         }
     }
 
-    fn add_word(&mut self, word: &str) {
+    fn add_breakable(&mut self, syntax: Syntax, content: &str) {
+        // Split content by whitespace for proper line wrapping
+        for word in content.split_ascii_whitespace() {
+            self.add_word(syntax, word);
+        }
+    }
+
+    fn add_word(&mut self, syntax: Syntax, word: &str) {
         if !self
             .current
             .is_empty()
@@ -915,21 +984,21 @@ impl<'a> Line<'a> {
             {
                 self.wrap_line();
                 self.current
-                    .push_str(word);
+                    .push((syntax, word.to_string()));
                 self.position = self
                     .output
                     .nesting
                     + word.len() as u8;
             } else {
                 self.current
-                    .push(' ');
+                    .push((Syntax::Description, " ".to_string()));
                 self.current
-                    .push_str(word);
+                    .push((syntax, word.to_string()));
                 self.position += 1 + word.len() as u8;
             }
         } else {
             self.current
-                .push_str(word);
+                .push((syntax, word.to_string()));
             self.position += word.len() as u8;
         }
     }
@@ -952,43 +1021,22 @@ impl<'a> Line<'a> {
         let fragments = self
             .output
             .render_binding(inner_descriptive, variables);
-        self.add_token(&binding_text);
+        self.add_fragments(fragments);
     }
 
-    fn add_token(&mut self, token: &str) {
-        if self
-            .current
-            .is_empty()
-        {
-            self.current
-                .push_str(token);
-            self.position += token.len() as u8;
-        } else {
-            if self.position + 1 + token.len() as u8
-                > self
-                    .output
-                    .width
-            {
-                self.wrap_line();
-                self.current
-                    .push_str(token);
-                self.position = self
-                    .output
-                    .nesting
-                    + token.len() as u8;
-            } else {
-                self.current
-                    .push(' ');
-                self.current
-                    .push_str(token);
-                self.position += 1 + token.len() as u8;
-            }
+    fn add_fragments(&mut self, fragments: Vec<(Syntax, String)>) {
+        // All fragments should be atomic - the formatter is responsible for breaking up content
+        for (syntax, content) in fragments {
+            self.add_atomic(syntax, &content);
         }
     }
 
     fn wrap_line(&mut self) {
-        self.output
-            .append_str(&self.current);
+        // Emit all current fragments to the output
+        for (syntax, content) in &self.current {
+            self.output
+                .append(*syntax, content);
+        }
         self.output
             .append_char('\n');
         self.output
@@ -1005,8 +1053,11 @@ impl<'a> Line<'a> {
             .current
             .is_empty()
         {
-            self.output
-                .append_str(&self.current);
+            // Emit all current fragments to the output
+            for (syntax, content) in &self.current {
+                self.output
+                    .append(*syntax, content);
+            }
         }
     }
 }
