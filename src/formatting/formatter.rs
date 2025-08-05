@@ -59,6 +59,14 @@ impl Formatter {
             .push((syntax, content.to_string()));
     }
 
+    /// Append content with specific syntax tagging, maintaining order
+    fn append(&mut self, syntax: Syntax, content: &str) {
+        // Flush any pending buffer content first to maintain order
+        self.flush_current();
+        self.fragments
+            .push((syntax, content.to_string()));
+    }
+
     fn switch_syntax(&mut self, new_syntax: Syntax) {
         if !self
             .buffer
@@ -140,11 +148,11 @@ impl Formatter {
         Line::new(self)
     }
 
-    fn render_inline_code(&self, expr: &Expression) -> String {
+    fn render_inline_code(&self, expr: &Expression) -> Vec<(Syntax, String)> {
         match expr {
             Expression::Tablet(_) | Expression::Multiline(_, _) => {
                 // These are not inline, caller should handle specially
-                String::new()
+                Vec::new()
             }
             _ => {
                 let mut sub = self.subformatter();
@@ -153,22 +161,24 @@ impl Formatter {
                 sub.append_expression(expr);
                 sub.append_char(' ');
                 sub.append_char('}');
-                sub.to_string()
+                sub.flush_current();
+                sub.fragments
             }
         }
     }
 
-    fn render_application(&self, invocation: &Invocation) -> String {
+    fn render_application(&self, invocation: &Invocation) -> Vec<(Syntax, String)> {
         let mut sub = self.subformatter();
         sub.append_application(invocation);
-        sub.to_string()
+        sub.flush_current();
+        sub.fragments
     }
 
     fn render_binding(
         &self,
         inner_descriptive: &Descriptive,
         variables: &Vec<Identifier>,
-    ) -> String {
+    ) -> Vec<(Syntax, String)> {
         let mut sub = self.subformatter();
 
         match inner_descriptive {
@@ -190,7 +200,8 @@ impl Formatter {
 
         sub.append_str(" ~ ");
         sub.append_variables(variables);
-        sub.to_string()
+        sub.flush_current();
+        sub.fragments
     }
 
     fn append_char(&mut self, c: char) {
@@ -257,9 +268,7 @@ impl Formatter {
         // declaration
 
         let name = &procedure.name;
-        self.switch_syntax(Syntax::Declaration);
-        self.append_str(name.0);
-        self.reset_syntax();
+        self.append(Syntax::Declaration, name.0);
 
         if let Some(parameters) = &procedure.parameters {
             // note that append_arguments() is for general expression
@@ -483,10 +492,7 @@ impl Formatter {
                 subscopes: scopes,
             } => {
                 self.indent();
-                self.switch_syntax(Syntax::StepItem);
-                self.append_str(ordinal);
-                self.append_char('.');
-                self.reset_syntax();
+                self.append(Syntax::StepItem, &format!("{}.", ordinal));
                 self.append_char(' ');
                 if ordinal.len() == 1 {
                     self.append_char(' ');
@@ -682,15 +688,11 @@ impl Formatter {
     fn append_expression(&mut self, expression: &Expression) {
         match expression {
             Expression::Variable(identifier) => {
-                self.switch_syntax(Syntax::Variable);
-                self.append_str(identifier.0);
-                self.reset_syntax();
+                self.append(Syntax::Variable, identifier.0);
             }
             Expression::String(text) => {
                 self.append_char('"');
-                self.switch_syntax(Syntax::String);
-                self.append_str(text);
-                self.reset_syntax();
+                self.append(Syntax::String, text);
                 self.append_char('"');
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
@@ -759,12 +761,10 @@ impl Formatter {
     }
 
     fn append_numeric(&mut self, numeric: &Numeric) {
-        self.switch_syntax(Syntax::Numeric);
         match numeric {
-            Numeric::Integral(num) => self.append_str(&num.to_string()),
+            Numeric::Integral(num) => self.append(Syntax::Numeric, &num.to_string()),
             Numeric::Scientific(_) => todo!(),
         }
-        self.reset_syntax();
     }
 
     fn append_application(&mut self, invocation: &Invocation) {
@@ -930,21 +930,21 @@ impl<'a> Line<'a> {
     }
 
     fn add_inline_code(&mut self, expr: &Expression) {
-        let code_text = self
+        let fragments = self
             .output
             .render_inline_code(expr);
-        self.add_token(&code_text);
+        self.add_fragments(fragments);
     }
 
     fn add_application(&mut self, invocation: &Invocation) {
-        let app_text = self
+        let fragments = self
             .output
             .render_application(invocation);
-        self.add_token(&app_text);
+        self.add_fragments(fragments);
     }
 
     fn add_binding(&mut self, inner_descriptive: &Descriptive, variables: &Vec<Identifier>) {
-        let binding_text = self
+        let fragments = self
             .output
             .render_binding(inner_descriptive, variables);
         self.add_token(&binding_text);
@@ -1075,5 +1075,51 @@ mod check {
 
         output.append_numeric(&Numeric::Integral(42));
         assert_eq!(output.to_string(), "42");
+    }
+
+    #[test]
+    fn to_string_handles_unflushed_content() {
+        let mut output = Formatter::new(78);
+
+        // Manually add content to buffer without flushing
+        output
+            .buffer
+            .push_str("unflushed content");
+
+        // to_string() should include both fragments and unflushed buffer
+        let result = output.to_string();
+        assert_eq!(result, "unflushed content");
+
+        // Add some fragments and more buffer content
+        output
+            .fragments
+            .push((Syntax::Declaration, "flushed content".to_string()));
+        output
+            .buffer
+            .push_str(" more unflushed");
+
+        let result2 = output.to_string();
+        assert_eq!(result2, "flushed contentunflushed content more unflushed");
+    }
+
+    #[test]
+    fn append_methods_flush_state() {
+        let mut output = Formatter::new(78);
+
+        // Check state after append_numeric
+        output.append_numeric(&Numeric::Integral(42));
+        println!("After append_numeric:");
+        println!("  Fragments: {:?}", output.fragments);
+        println!("  Buffer: '{}'", output.buffer);
+        println!("  Current syntax: {:?}", output.current);
+
+        // The number should be in fragments, buffer should be empty
+        assert!(!output
+            .fragments
+            .is_empty());
+        assert!(output
+            .buffer
+            .is_empty());
+        assert_eq!(output.current, Syntax::Neutral);
     }
 }
