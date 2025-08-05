@@ -4,7 +4,7 @@ use crate::language::*;
 use owo_colors::OwoColorize;
 
 /// Types of content that can be rendered with different styles
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Syntax {
     Neutral, // default
     Header,
@@ -17,6 +17,14 @@ pub enum Syntax {
     Section,
     String,
     Numeric,
+    Response,
+    Invocation,
+    Title,
+    Function,
+    Multiline,
+    Label,
+    Operator,
+    Punctuation,
     Syntax,
 }
 
@@ -78,6 +86,36 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(173, 127, 168))
                 .bold()
                 .to_string(),
+            Syntax::Response => content // string.quoted.single.technique - #4e9a06 (green) bold
+                .color(owo_colors::Rgb(78, 154, 6))
+                .bold()
+                .to_string(),
+            Syntax::Invocation => content // meta.function-call.technique - #3465a4 (blue) bold
+                .color(owo_colors::Rgb(52, 101, 164))
+                .bold()
+                .to_string(),
+            Syntax::Title => content // markup.heading.technique - #000000 bold
+                .black()
+                .bold()
+                .to_string(),
+            Syntax::Function => content // entity.name.function.technique - #3465a4 (blue) bold
+                .color(owo_colors::Rgb(52, 101, 164))
+                .bold()
+                .to_string(),
+            Syntax::Multiline => content // string.multiline.technique - #4e9a06 (green)
+                .color(owo_colors::Rgb(78, 154, 6))
+                .to_string(),
+            Syntax::Label => content // entity.name.tag.technique - #ad7fa8 (purple) bold
+                .color(owo_colors::Rgb(173, 127, 168))
+                .bold()
+                .to_string(),
+            Syntax::Operator => content // keyword.operator.technique - #cc0000 (red) bold
+                .color(owo_colors::Rgb(204, 0, 0))
+                .bold()
+                .to_string(),
+            Syntax::Punctuation => content // punctuation.technique - #999999 (grey)
+                .color(owo_colors::Rgb(153, 153, 153))
+                .to_string(),
             Syntax::Syntax => content.to_string(),
         }
     }
@@ -101,6 +139,14 @@ impl Render for Typst {
             Syntax::Section => todo!(),
             Syntax::String => todo!(),
             Syntax::Numeric => todo!(),
+            Syntax::Response => todo!(),
+            Syntax::Invocation => todo!(),
+            Syntax::Title => todo!(),
+            Syntax::Function => todo!(),
+            Syntax::Multiline => todo!(),
+            Syntax::Label => todo!(),
+            Syntax::Operator => todo!(),
+            Syntax::Punctuation => todo!(),
             Syntax::Syntax => todo!(),
         }
     }

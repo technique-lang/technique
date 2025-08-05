@@ -280,7 +280,7 @@ impl Formatter {
         }
 
         self.append_char(' ');
-        self.append_char(':');
+        self.append(Syntax::Punctuation, ":");
 
         if let Some(signature) = &procedure.signature {
             self.append_char(' ');
@@ -302,7 +302,7 @@ impl Formatter {
                 self.append_char('\n');
                 self.append_char('#');
                 self.append_char(' ');
-                self.append_str(title);
+                self.append(Syntax::Title, title);
                 self.append_char('\n');
             }
             Element::Description(paragraphs) => {
@@ -332,7 +332,7 @@ impl Formatter {
         self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.domain);
         self.reset_syntax();
-        self.append_str(" -> ");
+        self.append(Syntax::Operator, " -> ");
         self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.range);
         self.reset_syntax();
@@ -543,11 +543,11 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.append_str(" | ");
+                self.append(Syntax::Operator, " | ");
             }
-            self.append_char('\'');
-            self.append_str(response.value);
-            self.append_char('\'');
+            self.append(Syntax::Punctuation, "'");
+            self.append(Syntax::Response, response.value);
+            self.append(Syntax::Punctuation, "'");
 
             if let Some(text) = response.condition {
                 self.append_char(' ');
@@ -691,16 +691,16 @@ impl Formatter {
                 self.append(Syntax::Variable, identifier.0);
             }
             Expression::String(text) => {
-                self.append_char('"');
+                self.append(Syntax::Punctuation, "\"");
                 self.append(Syntax::String, text);
-                self.append_char('"');
+                self.append(Syntax::Punctuation, "\"");
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
             Expression::Multiline(lang, lines) => {
                 self.append_char('\n');
 
                 self.indent();
-                self.append_str("```");
+                self.append(Syntax::Punctuation, "```");
                 if let Some(which) = lang {
                     self.append_str(which);
                 }
@@ -709,13 +709,13 @@ impl Formatter {
                 self.increase(4);
                 for line in lines {
                     self.indent();
-                    self.append_str(line);
+                    self.append(Syntax::Multiline, line);
                     self.append_char('\n');
                 }
                 self.decrease(4);
 
                 self.indent();
-                self.append_str("```");
+                self.append(Syntax::Punctuation, "```");
                 self.append_char('\n');
             }
             Expression::Repeat(expression) => {
@@ -732,7 +732,7 @@ impl Formatter {
             Expression::Execution(function) => self.append_function(function),
             Expression::Binding(expression, variables) => {
                 self.append_expression(expression);
-                self.append_str(" ~ ");
+                self.append(Syntax::Operator, " ~ ");
                 self.append_variables(variables);
             }
             Expression::Tablet(pairs) => self.append_tablet(pairs),
@@ -768,12 +768,12 @@ impl Formatter {
     }
 
     fn append_application(&mut self, invocation: &Invocation) {
-        self.append_char('<');
+        self.append(Syntax::Punctuation, "<");
         match &invocation.target {
-            Target::Local(identifier) => self.append_str(identifier.0),
-            Target::Remote(external) => self.append_str(external.0),
+            Target::Local(identifier) => self.append(Syntax::Invocation, identifier.0),
+            Target::Remote(external) => self.append(Syntax::Invocation, external.0),
         }
-        self.append_char('>');
+        self.append(Syntax::Punctuation, ">");
         if let Some(parameters) = &invocation.parameters {
             self.append_arguments(parameters);
         }
@@ -804,7 +804,12 @@ impl Formatter {
     }
 
     fn append_function(&mut self, function: &Function) {
-        self.append_identifier(&function.target);
+        self.append(
+            Syntax::Function,
+            &function
+                .target
+                .0,
+        );
         self.append_char('(');
 
         let mut has_multiline = false;
@@ -834,23 +839,23 @@ impl Formatter {
     }
 
     fn append_tablet(&mut self, pairs: &Vec<Pair>) {
-        self.append_char('[');
+        self.append(Syntax::Punctuation, "[");
         self.append_char('\n');
 
         self.increase(4);
         for pair in pairs {
             self.indent();
-            self.append_char('"');
-            self.append_str(pair.label);
-            self.append_char('"');
-            self.append_str(" = ");
+            self.append(Syntax::Punctuation, "\"");
+            self.append(Syntax::Label, pair.label);
+            self.append(Syntax::Punctuation, "\"");
+            self.append(Syntax::Operator, " = ");
             self.append_expression(&pair.value);
             self.append_char('\n');
         }
         self.decrease(4);
 
         self.indent();
-        self.append_char(']');
+        self.append(Syntax::Punctuation, "]");
     }
 }
 
