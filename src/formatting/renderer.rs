@@ -10,7 +10,7 @@ pub enum Syntax {
     Header,
     Declaration,
     Description,
-    Genus,
+    Forma,
     StepItem,
     CodeBlock,
     Variable,
@@ -54,12 +54,14 @@ impl Render for Terminal {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
             Syntax::Neutral => content.to_string(),
-            Syntax::Header => content.to_string(),
+            Syntax::Header => content
+                .color(owo_colors::Rgb(0x75, 0x50, 0x7b))
+                .to_string(),
             Syntax::Declaration => content // entity.name.function - #3465a4 (blue) bold
                 .color(owo_colors::Rgb(0x34, 0x65, 0xa4))
                 .bold()
                 .to_string(),
-            Syntax::Genus => content // entity.name.type.technique - #8f5902 (brown) bold
+            Syntax::Forma => content // entity.name.type.technique - #8f5902 (brown) bold
                 .color(owo_colors::Rgb(143, 89, 2))
                 .bold()
                 .to_string(),
@@ -144,7 +146,7 @@ impl Render for Typst {
             Syntax::Header => todo!(),
             Syntax::Declaration => todo!(),
             Syntax::Description => todo!(),
-            Syntax::Genus => todo!(),
+            Syntax::Forma => todo!(),
             Syntax::StepItem => todo!(),
             Syntax::CodeBlock => todo!(),
             Syntax::Variable => todo!(),

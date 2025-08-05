@@ -230,6 +230,7 @@ impl Formatter {
     }
 
     fn format_header(&mut self, metadata: &Metadata) {
+        self.switch_syntax(Syntax::Header);
         self.append_str("% technique v1\n");
 
         if let Some(license) = metadata.license {
@@ -249,6 +250,7 @@ impl Formatter {
             self.append_str(template);
             self.append_char('\n');
         }
+        self.reset_syntax();
     }
 
     fn format_technique(&mut self, technique: &Technique) {
@@ -341,35 +343,30 @@ impl Formatter {
     }
 
     fn append_signature(&mut self, signature: &Signature) {
-        self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.domain);
-        self.reset_syntax();
         self.append(Syntax::Structure, " -> ");
-        self.switch_syntax(Syntax::Genus);
         self.append_genus(&signature.range);
-        self.reset_syntax();
     }
 
     fn append_genus(&mut self, genus: &Genus) {
         match genus {
             Genus::Unit => {
-                self.append_char('(');
-                self.append_char(')');
+                self.append(Syntax::Forma, "()");
             }
             Genus::Single(forma) => self.append_forma(forma),
             Genus::Tuple(formas) => {
-                self.append_char('(');
+                self.append(Syntax::Structure, "(");
                 for (i, forma) in formas
                     .iter()
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append_char(',');
+                        self.append(Syntax::Punctuation, ",");
                         self.append_char(' ');
                     }
                     self.append_forma(forma);
                 }
-                self.append_char(')');
+                self.append(Syntax::Structure, ")");
             }
             Genus::Naked(formas) => {
                 for (i, forma) in formas
@@ -377,16 +374,16 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append_char(',');
+                        self.append(Syntax::Punctuation, ",");
                         self.append_char(' ');
                     }
                     self.append_forma(forma);
                 }
             }
             Genus::List(forma) => {
-                self.append_char('[');
+                self.append(Syntax::Structure, "[");
                 self.append_forma(forma);
-                self.append_char(']');
+                self.append(Syntax::Structure, "]");
             }
         }
     }
@@ -407,7 +404,7 @@ impl Formatter {
     }
 
     fn append_forma(&mut self, forma: &Forma) {
-        self.append_str(forma.0)
+        self.append(Syntax::Forma, forma.0)
     }
 
     fn append_paragraphs(&mut self, paragraphs: &Vec<Paragraph>) {
