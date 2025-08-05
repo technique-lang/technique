@@ -96,15 +96,6 @@ impl Formatter {
         }
     }
 
-    fn to_string(&mut self) -> String {
-        self.flush_current();
-        let mut result = String::new();
-        for (_, content) in &self.fragments {
-            result.push_str(content);
-        }
-        result
-    }
-
     #[cfg(test)]
     fn reset(&mut self) {
         self.fragments
@@ -863,6 +854,29 @@ impl Formatter {
     }
 }
 
+impl ToString for Formatter {
+    fn to_string(&self) -> String {
+        let mut result = String::new();
+
+        // Start with all already accumulated fragments
+        for (_, content) in &self.fragments {
+            result.push_str(content);
+        }
+
+        // If there's unflushed content in the buffer, add it as well
+        // This ensures we get a complete representation even if the formatter
+        // hasn't been explicitly flushed
+        if !self
+            .buffer
+            .is_empty()
+        {
+            result.push_str(&self.buffer);
+        }
+
+        result
+    }
+}
+
 struct Line<'a> {
     output: &'a mut Formatter, // reference to parent
     current: String,
@@ -1001,19 +1015,19 @@ mod check {
         let mut output = Formatter::new(78);
 
         output.append_forma(&Forma("Jedi"));
-        assert_eq!(output.buffer, "Jedi");
+        assert_eq!(output.to_string(), "Jedi");
 
         output.reset();
         output.append_genus(&Genus::Unit);
-        assert_eq!(output.buffer, "()");
+        assert_eq!(output.to_string(), "()");
 
         output.reset();
         output.append_genus(&Genus::Single(Forma("Stormtrooper")));
-        assert_eq!(output.buffer, "Stormtrooper");
+        assert_eq!(output.to_string(), "Stormtrooper");
 
         output.reset();
         output.append_genus(&Genus::List(Forma("Pilot")));
-        assert_eq!(output.buffer, "[Pilot]");
+        assert_eq!(output.to_string(), "[Pilot]");
 
         output.reset();
         output.append_genus(&Genus::Tuple(vec![
@@ -1022,7 +1036,7 @@ mod check {
             Forma("Scoundrel"),
             Forma("Princess"),
         ]));
-        assert_eq!(output.buffer, "(Kid, Pilot, Scoundrel, Princess)");
+        assert_eq!(output.to_string(), "(Kid, Pilot, Scoundrel, Princess)");
 
         output.reset();
     }
@@ -1035,21 +1049,24 @@ mod check {
             domain: Genus::Single(Forma("Alderaan")),
             range: Genus::Single(Forma("AsteroidField")),
         });
-        assert_eq!(output.buffer, "Alderaan -> AsteroidField");
+        assert_eq!(output.to_string(), "Alderaan -> AsteroidField");
 
         output.reset();
         output.append_signature(&Signature {
             domain: Genus::List(Forma("Clone")),
             range: Genus::Single(Forma("Army")),
         });
-        assert_eq!(output.buffer, "[Clone] -> Army");
+        assert_eq!(output.to_string(), "[Clone] -> Army");
 
         output.reset();
         output.append_signature(&Signature {
             domain: Genus::Single(Forma("TaxationOfTradeRoutes")),
             range: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
         });
-        assert_eq!(output.buffer, "TaxationOfTradeRoutes -> (Rebels, Empire)");
+        assert_eq!(
+            output.to_string(),
+            "TaxationOfTradeRoutes -> (Rebels, Empire)"
+        );
     }
 
     #[test]
@@ -1057,6 +1074,6 @@ mod check {
         let mut output = Formatter::new(78);
 
         output.append_numeric(&Numeric::Integral(42));
-        assert_eq!(output.buffer, "42");
+        assert_eq!(output.to_string(), "42");
     }
 }
