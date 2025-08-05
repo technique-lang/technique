@@ -2,6 +2,7 @@
 
 use crate::language::*;
 use owo_colors::OwoColorize;
+use std::borrow::Cow;
 
 /// Types of content that can be rendered with different styles
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,7 +26,8 @@ pub enum Syntax {
     Multiline,
     Label,
     Operator,
-    Punctuation,
+    Quote,
+    Language,
     Attribute,
     Structure,
 }
@@ -62,7 +64,7 @@ impl Render for Terminal {
                 .bold()
                 .to_string(),
             Syntax::Forma => content // entity.name.type.technique - #8f5902 (brown) bold
-                .color(owo_colors::Rgb(143, 89, 2))
+                .color(owo_colors::Rgb(0x8f, 0x59, 0x02))
                 .bold()
                 .to_string(),
             Syntax::Description => content.to_string(),
@@ -75,17 +77,17 @@ impl Render for Terminal {
                 .bold()
                 .to_string(),
             Syntax::Variable => content // variable.parameter.technique - #729fcf (light blue) bold
-                .color(owo_colors::Rgb(114, 159, 207))
+                .color(owo_colors::Rgb(0x72, 0x9f, 0xcf))
                 .bold()
                 .to_string(),
             Syntax::Section => content // markup.heading.technique
                 .to_string(),
             Syntax::String => content // string - #4e9a06 (green) bold
-                .color(owo_colors::Rgb(78, 154, 6))
+                .color(owo_colors::Rgb(0x4e, 0x9a, 0x06))
                 .bold()
                 .to_string(),
             Syntax::Numeric => content // constant.numeric - #ad7fa8 (purple) bold
-                .color(owo_colors::Rgb(173, 127, 168))
+                .color(owo_colors::Rgb(0xad, 0x7f, 0xa8))
                 .bold()
                 .to_string(),
             Syntax::Response => content // string.quoted.single.technique - #4e9a06 (green) bold
@@ -109,7 +111,8 @@ impl Render for Terminal {
                 .bold()
                 .to_string(),
             Syntax::Multiline => content // string.multiline.technique - #4e9a06 (green)
-                .color(owo_colors::Rgb(78, 154, 6))
+                .color(owo_colors::Rgb(0x4e, 0x9a, 0x06))
+                .bold()
                 .to_string(),
             Syntax::Label => content // variable.other.tablet
                 .color(owo_colors::Rgb(0x60, 0x98, 0x9a))
@@ -119,8 +122,12 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(204, 0, 0))
                 .bold()
                 .to_string(),
-            Syntax::Punctuation => content // punctuation.technique - #999999 (grey)
-                .color(owo_colors::Rgb(153, 153, 153))
+            Syntax::Quote => content // punctuation.technique - #999999 (grey)
+                .color(owo_colors::Rgb(0x99, 0x99, 0x99))
+                .bold()
+                .to_string(),
+            Syntax::Language => content // storage.type.embedded
+                .color(owo_colors::Rgb(0xc4, 0xa0, 0x00))
                 .bold()
                 .to_string(),
             Syntax::Attribute => content // entity.name.tag.attribute
@@ -141,30 +148,86 @@ pub struct Typst;
 
 impl Render for Typst {
     fn render(&self, syntax: Syntax, content: &str) -> String {
+        let content = escape_typst(content);
         match syntax {
-            Syntax::Neutral => content.to_string(),
-            Syntax::Header => todo!(),
-            Syntax::Declaration => todo!(),
-            Syntax::Description => todo!(),
-            Syntax::Forma => todo!(),
-            Syntax::StepItem => todo!(),
-            Syntax::CodeBlock => todo!(),
-            Syntax::Variable => todo!(),
-            Syntax::Section => todo!(),
-            Syntax::String => todo!(),
-            Syntax::Numeric => todo!(),
-            Syntax::Response => todo!(),
-            Syntax::Invocation => todo!(),
-            Syntax::Title => todo!(),
-            Syntax::Keyword => todo!(),
-            Syntax::Function => todo!(),
-            Syntax::Multiline => todo!(),
-            Syntax::Label => todo!(),
-            Syntax::Operator => todo!(),
-            Syntax::Punctuation => todo!(),
-            Syntax::Attribute => todo!(),
-            Syntax::Structure => todo!(),
+            Syntax::Neutral => format!("#raw(\"{}\")", content),
+            Syntax::Header => format!("#text(fill: rgb(0x75, 0x50, 0x7b), raw(\"{}\"))", content),
+            Syntax::Declaration => {
+                format!(
+                    "#text(fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\", raw(\"{}\"))",
+                    content
+                )
+            }
+            Syntax::Description => format!("#raw(\"{}\")", content),
+            Syntax::Forma => format!(
+                "#text(fill: rgb(0x8f, 0x59, 0x02), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::StepItem => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
+            Syntax::CodeBlock => format!(
+                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Variable => format!(
+                "#text(fill: rgb(0x72, 0x9f, 0xcf), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Section => format!("#raw(\"{}\")", content),
+            Syntax::String => format!(
+                "#text(fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Numeric => format!(
+                "#text(fill: rgb(0xad, 0x7f, 0xa8), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Response => format!("#text(fill: red, raw(\"{}\"))", content),
+            Syntax::Invocation => format!(
+                "#text(fill: rgb(0x3b, 0x5d, 0x7d), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Title => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
+            Syntax::Keyword => format!(
+                "#text(fill: rgb(0x75, 0x50, 0x7b), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Function => format!(
+                "#text(fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Multiline => {
+                format!(
+                    "#text(fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\", raw(\"{}\"))",
+                    content
+                )
+            }
+            Syntax::Label => format!(
+                "#text(fill: rgb(0x60, 0x98, 0x9a), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Operator => format!("#text(fill: red, raw(\"{}\"))", content),
+            Syntax::Quote => format!(
+                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Language => format!(
+                "#text(fill: rgb(0xc4, 0xa0, 0x00), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
+            Syntax::Attribute => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
+            Syntax::Structure => format!(
+                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
+                content
+            ),
         }
+    }
+}
+
+fn escape_typst(content: &str) -> Cow<str> {
+    if content.contains('"') {
+        Cow::Owned(content.replace("\"", "\\\""))
+    } else {
+        Cow::Borrowed(content)
     }
 }
 
@@ -202,4 +265,24 @@ fn render_to_string(renderer: &impl Render, fragments: Vec<(Syntax, String)>) ->
     }
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_only_allocating_on_change() {
+        let input = "hello world";
+        let result = escape_typst(input);
+
+        assert!(matches!(result, Cow::Borrowed(_)));
+        assert_eq!(result, "Hello World");
+
+        let input = "Hello \"George\", if that's really your real name";
+        let result = escape_typst(input);
+
+        assert!(matches!(result, Cow::Owned(_)));
+        assert_eq!(result, "hello \\\"George\\\", if that's really your real name");
+    }
 }
