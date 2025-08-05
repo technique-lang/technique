@@ -150,75 +150,31 @@ impl Render for Typst {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         let content = escape_typst(content);
         match syntax {
-            Syntax::Neutral => format!("#raw(\"{}\")", content),
-            Syntax::Header => format!("#text(fill: rgb(0x75, 0x50, 0x7b), raw(\"{}\"))", content),
+            Syntax::Neutral => markup("", &content),
+            Syntax::Header => markup("fill: rgb(0x75, 0x50, 0x7b)", &content),
             Syntax::Declaration => {
-                format!(
-                    "#text(fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\", raw(\"{}\"))",
-                    content
-                )
+                markup("fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\"", &content)
             }
-            Syntax::Description => format!("#raw(\"{}\")", content),
-            Syntax::Forma => format!(
-                "#text(fill: rgb(0x8f, 0x59, 0x02), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::StepItem => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
-            Syntax::CodeBlock => format!(
-                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Variable => format!(
-                "#text(fill: rgb(0x72, 0x9f, 0xcf), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Section => format!("#raw(\"{}\")", content),
-            Syntax::String => format!(
-                "#text(fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Numeric => format!(
-                "#text(fill: rgb(0xad, 0x7f, 0xa8), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Response => format!("#text(fill: red, raw(\"{}\"))", content),
-            Syntax::Invocation => format!(
-                "#text(fill: rgb(0x3b, 0x5d, 0x7d), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Title => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
-            Syntax::Keyword => format!(
-                "#text(fill: rgb(0x75, 0x50, 0x7b), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Function => format!(
-                "#text(fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Multiline => {
-                format!(
-                    "#text(fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\", raw(\"{}\"))",
-                    content
-                )
-            }
-            Syntax::Label => format!(
-                "#text(fill: rgb(0x60, 0x98, 0x9a), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Operator => format!("#text(fill: red, raw(\"{}\"))", content),
-            Syntax::Quote => format!(
-                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Language => format!(
-                "#text(fill: rgb(0xc4, 0xa0, 0x00), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
-            Syntax::Attribute => format!("#text(weight: \"bold\", raw(\"{}\"))", content),
-            Syntax::Structure => format!(
-                "#text(fill: rgb(0x99, 0x99, 0x99), weight: \"bold\", raw(\"{}\"))",
-                content
-            ),
+            Syntax::Description => markup("", &content),
+            Syntax::Forma => markup("fill: rgb(0x8f, 0x59, 0x02), weight: \"bold\"", &content),
+            Syntax::StepItem => markup("weight: \"bold\"", &content),
+            Syntax::CodeBlock => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
+            Syntax::Variable => markup("fill: rgb(0x72, 0x9f, 0xcf), weight: \"bold\"", &content),
+            Syntax::Section => markup("", &content),
+            Syntax::String => markup("fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\"", &content),
+            Syntax::Numeric => markup("fill: rgb(0xad, 0x7f, 0xa8), weight: \"bold\"", &content),
+            Syntax::Response => markup("fill: red", &content),
+            Syntax::Invocation => markup("fill: rgb(0x3b, 0x5d, 0x7d), weight: \"bold\"", &content),
+            Syntax::Title => markup("weight: \"bold\"", &content),
+            Syntax::Keyword => markup("fill: rgb(0x75, 0x50, 0x7b), weight: \"bold\"", &content),
+            Syntax::Function => markup("fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\"", &content),
+            Syntax::Multiline => markup("fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\"", &content),
+            Syntax::Label => markup("fill: rgb(0x60, 0x98, 0x9a), weight: \"bold\"", &content),
+            Syntax::Operator => markup("fill: red", &content),
+            Syntax::Quote => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
+            Syntax::Language => markup("fill: rgb(0xc4, 0xa0, 0x00), weight: \"bold\"", &content),
+            Syntax::Attribute => markup("weight: \"bold\"", &content),
+            Syntax::Structure => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
         }
     }
 }
@@ -229,6 +185,19 @@ fn escape_typst(content: &str) -> Cow<str> {
     } else {
         Cow::Borrowed(content)
     }
+}
+
+fn markup(prefix: &str, content: &Cow<str>) -> String {
+    let mut result = String::with_capacity(6 + prefix.len() + 2 + 5 + content.len() + 3);
+    result.push_str("#text(");
+    if prefix.len() > 0 {
+        result.push_str(prefix);
+        result.push_str(", ");
+    }
+    result.push_str("raw(\"");
+    result.push_str(content);
+    result.push_str("\"))");
+    result
 }
 
 /// We do the code formatting in two passes. First we convert from our
@@ -272,17 +241,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn escape_only_allocating_on_change() {
+    fn escape_typst_no_allocation_when_no_quotes() {
         let input = "hello world";
         let result = escape_typst(input);
 
+        // Should return borrowed reference when no quotes to escape
         assert!(matches!(result, Cow::Borrowed(_)));
-        assert_eq!(result, "Hello World");
+        assert_eq!(result, "hello world");
+    }
 
-        let input = "Hello \"George\", if that's really your real name";
+    #[test]
+    fn escape_typst_allocates_when_quotes_present() {
+        let input = "hello \"world\"";
         let result = escape_typst(input);
 
+        // Should return owned string when quotes need escaping
         assert!(matches!(result, Cow::Owned(_)));
-        assert_eq!(result, "hello \\\"George\\\", if that's really your real name");
+        assert_eq!(result, "hello \\\"world\\\"");
+    }
+
+    #[test]
+    fn build_typst_markup_efficiently() {
+        // Test that build_typst_markup works correctly
+        let content = Cow::Borrowed("test content");
+        let result = markup("color: red", &content);
+        assert_eq!(result, "#text(color: red, raw(\"test content\"))");
+
+        // Test with escaped content
+        let content = Cow::Owned("escaped \"content\"".to_string());
+        let result = markup("", &content);
+        assert_eq!(result, "#text(raw(\"escaped \"content\"\"))");
     }
 }
