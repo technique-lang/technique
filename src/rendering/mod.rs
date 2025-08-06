@@ -5,6 +5,12 @@ use std::process::{Command, Stdio};
 use tinytemplate::TinyTemplate;
 use tracing::{debug, info};
 
+mod terminal;
+mod typst;
+
+pub use terminal::Terminal;
+pub use typst::Typst;
+
 static TEMPLATE: &'static str = r#"
 #show text: set text(font: "Inconsolata")
 #show raw: set block(breakable: true)

@@ -1,6 +1,7 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
+use rendering::{Terminal, Typst};
 use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
