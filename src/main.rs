@@ -136,7 +136,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
@@ -172,7 +178,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(&filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
@@ -198,7 +210,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {

@@ -2008,9 +2008,10 @@ impl<'i> Parser<'i> {
                         })?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let parts = outer.take_block_chars("a string literal", '"', '"', false, |inner| {
-                        inner.parse_string_pieces(inner.source)
-                    })?;
+                    let parts =
+                        outer.take_block_chars("a string literal", '"', '"', false, |inner| {
+                            inner.parse_string_pieces(inner.source)
+                        })?;
                     params.push(Expression::String(parts));
                 } else {
                     let name = outer.read_identifier()?;
@@ -2821,7 +2822,7 @@ making_coffee(b, m) :
     #[test]
     fn skip_string_content_flag() {
         let mut input = Parser::new();
-        
+
         // Test skip_string_content: true - should ignore braces inside strings
         input.initialize(r#"{ "string with { brace" }"#);
         let result = input.take_block_chars("code block", '{', '}', true, |parser| {

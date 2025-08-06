@@ -3,16 +3,38 @@
 use std::path::Path;
 use tracing::debug;
 
-use crate::{error::TechniqueError, language::{Document, Technique}};
+use crate::{
+    error::{LoadingError, TechniqueError},
+    language::{Document, Technique},
+};
 
 pub mod parser;
 mod scope;
 
-/// Read a file and return an owned String. We pass that ownership back to the main function so that
-/// the Technique object created by parse() below can have the same lifetime.
-pub fn load(filename: &Path) -> String {
-    let content = std::fs::read_to_string(filename).expect("Failed to read the source file");
-    content
+/// Read a file and return an owned String. We pass that ownership back to the
+/// main function so that the Technique object created by parse() below can
+/// have the same lifetime.
+pub fn load(filename: &Path) -> Result<String, LoadingError> {
+    match std::fs::read_to_string(filename) {
+        Ok(content) => Ok(content),
+        Err(error) => {
+            debug!(?error);
+            match error.kind() {
+                std::io::ErrorKind::NotFound => Err(LoadingError {
+                    problem: "File not found".to_string(),
+                    details: String::new(),
+                    filename,
+                }),
+                _ => Err(LoadingError {
+                    problem: "Failed reading".to_string(),
+                    details: error
+                        .kind()
+                        .to_string(),
+                    filename,
+                }),
+            }
+        }
+    }
 }
 
 /// Parse text into a Technique object, or error out.
