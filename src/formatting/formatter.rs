@@ -122,9 +122,11 @@ impl Formatter {
     }
 
     fn indent(&mut self) {
-        for _ in 0..self.nesting {
-            self.buffer
-                .push(' ');
+        if self.nesting > 0 {
+            // Flush any existing buffer before adding indentation
+            self.flush_current();
+            let spaces = " ".repeat(self.nesting as usize);
+            self.append_fragment(Syntax::Indent, &spaces);
         }
     }
 
@@ -217,8 +219,14 @@ impl Formatter {
     }
 
     fn append_char(&mut self, c: char) {
-        self.buffer
-            .push(c);
+        if c == '\n' {
+            // Flush any existing buffer before adding newline
+            self.flush_current();
+            self.append_fragment(Syntax::Newline, "\n");
+        } else {
+            self.buffer
+                .push(c);
+        }
     }
 
     fn is_empty(&self) -> bool {

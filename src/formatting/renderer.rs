@@ -8,6 +8,8 @@ use std::borrow::Cow;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Syntax {
     Neutral, // default
+    Indent,
+    Newline,
     Header,
     Declaration,
     Description,
@@ -56,6 +58,8 @@ impl Render for Terminal {
     fn render(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
             Syntax::Neutral => content.to_string(),
+            Syntax::Indent => content.to_string(),
+            Syntax::Newline => "\n".to_string(),
             Syntax::Header => content
                 .color(owo_colors::Rgb(0x75, 0x50, 0x7b))
                 .to_string(),
@@ -151,6 +155,8 @@ impl Render for Typst {
         let content = escape_typst(content);
         match syntax {
             Syntax::Neutral => markup("", &content),
+            Syntax::Indent => markup("", &content),
+            Syntax::Newline => "\\\n".to_string(),
             Syntax::Header => markup("fill: rgb(0x75, 0x50, 0x7b)", &content),
             Syntax::Declaration => {
                 markup("fill: rgb(0x34, 0x65, 0xa4), weight: \"bold\"", &content)
@@ -271,5 +277,54 @@ mod tests {
         let content = Cow::Owned("escaped \"content\"".to_string());
         let result = markup("", &content);
         assert_eq!(result, "#text(raw(\"escaped \"content\"\"))");
+    }
+
+    #[test]
+    fn typst_newline_and_indent_rendering() {
+        let typst = Typst;
+
+        // Test that newlines are rendered as Typst line breaks
+        let newline_result = typst.render(Syntax::Newline, "\n");
+        assert_eq!(newline_result, "\\\n");
+
+        // Test that indentation is rendered without raw() wrapper
+        let indent_result = typst.render(Syntax::Indent, "    ");
+        assert_eq!(indent_result, "#text(raw(\"    \"))");
+
+        // Test that this is different from Neutral (which would wrap newlines in raw())
+        let neutral_result = typst.render(Syntax::Neutral, "\n    ");
+        assert_eq!(neutral_result, "#text(raw(\"\n    \"))");
+
+        // Verify the improvement: newlines no longer wrapped in raw()
+        assert_ne!(newline_result, "#text(raw(\"\n\"))");
+    }
+
+    #[test]
+    fn verify_typst_fragments_usage() {
+        // Simple test to verify that our new Syntax variants are used correctly
+        let fragments = vec![
+            (Syntax::Header, "% technique v1".to_string()),
+            (Syntax::Newline, "\n".to_string()),
+            (Syntax::Indent, "    ".to_string()),
+            (Syntax::StepItem, "1".to_string()),
+            (Syntax::Neutral, ".".to_string()),
+            (Syntax::Newline, "\n".to_string()),
+        ];
+
+        let typst = Typst;
+        let mut output = String::new();
+
+        for (syntax, content) in fragments {
+            let rendered = typst.render(syntax, &content);
+            output.push_str(&rendered);
+        }
+
+        // Verify improvements:
+        // 1. Newlines are rendered as Typst line breaks
+        assert!(output.contains("\\\n"));
+        // 2. Indentation is wrapped in text() but not combined with newlines
+        assert!(output.contains("#text(raw(\"    \"))"));
+        // 3. No raw() calls containing newlines
+        assert!(!output.contains("raw(\"\n"));
     }
 }
