@@ -1,6 +1,7 @@
 //! Quantity types and parsing for scientific measurements with uncertainty and units
 
 use crate::regex::*;
+use std::fmt::{self, Display};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Quantity<'i> {
@@ -52,8 +53,7 @@ pub fn parse_quantity(input: &str) -> Option<Quantity> {
             .as_str();
     }
 
-    // Parse magnitude (× 10^n or x 10^n)
-
+    // Parse magnitude (× 10^n or x 10^n or * 10^n)
     let re = regex!(r"^(?:×|x|\*)\s*10(?:\^(-?[0-9]+)|([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+))\s*(.*)$");
     if let Some(cap) = re.captures(remainder) {
         let exp_str = if let Some(ascii_exp) = cap.get(1) {
@@ -81,8 +81,8 @@ pub fn parse_quantity(input: &str) -> Option<Quantity> {
         return None; // Quantities must have units
     }
 
-    // Validate unit symbol contains only allowed characters: [a-zA-Z°/]
-    let re = regex!(r"^[a-zA-Z°/]+$");
+    // Validate unit symbol contains only allowed characters
+    let re = regex!(r"^[a-zA-Z°/μ]+$");
     if !re.is_match(symbol) {
         return None;
     }
@@ -143,6 +143,70 @@ fn convert_superscript(input: &str) -> String {
             _ => c,
         })
         .collect()
+}
+
+fn to_superscript(num: i8) -> String {
+    num.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '⁰',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            '-' => '⁻',
+            _ => c,
+        })
+        .collect()
+}
+
+impl Display for Decimal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.precision == 0 {
+            write!(f, "{}", self.number)
+        } else {
+            let divisor = 10_i64.pow(self.precision as u32);
+            let whole = self.number / divisor;
+            let frac = self
+                .number
+                .abs()
+                % divisor;
+            write!(
+                f,
+                "{}.{:0width$}",
+                whole,
+                frac,
+                width = self.precision as usize
+            )
+        }
+    }
+}
+
+impl<'i> Display for Quantity<'i> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Start with mantissa
+        write!(f, "{}", self.mantissa)?;
+
+        // Add uncertainty if present
+        if let Some(uncertainty) = &self.uncertainty {
+            write!(f, " ± {}", uncertainty)?;
+        }
+
+        // Add magnitude if present
+        if let Some(magnitude) = &self.magnitude {
+            write!(f, " × 10{}", to_superscript(*magnitude))?;
+        }
+
+        // Add unit symbol
+        write!(f, " {}", self.symbol)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -259,6 +323,12 @@ mod tests {
                 .symbol,
             "°C"
         );
+        assert_eq!(
+            parse_quantity("5.5 μm")
+                .unwrap()
+                .symbol,
+            "μm"
+        );
     }
 
     #[test]
@@ -274,5 +344,102 @@ mod tests {
         assert!(parse_quantity("kg").is_none()); // No number
         assert!(parse_quantity("4 kg-meters").is_none()); // Invalid unit chars
         assert!(parse_quantity("4 kg_squared").is_none()); // Invalid unit chars
+    }
+
+    #[test]
+    fn decimal_display() {
+        assert_eq!(
+            Decimal {
+                number: 42,
+                precision: 0
+            }
+            .to_string(),
+            "42"
+        );
+        assert_eq!(
+            Decimal {
+                number: 59722,
+                precision: 4
+            }
+            .to_string(),
+            "5.9722"
+        );
+        assert_eq!(
+            Decimal {
+                number: -123,
+                precision: 0
+            }
+            .to_string(),
+            "-123"
+        );
+        assert_eq!(
+            Decimal {
+                number: -59722,
+                precision: 4
+            }
+            .to_string(),
+            "-5.9722"
+        );
+        assert_eq!(
+            Decimal {
+                number: 6,
+                precision: 4
+            }
+            .to_string(),
+            "0.0006"
+        );
+    }
+
+    #[test]
+    fn quantity_display() {
+        let simple = Quantity {
+            mantissa: Decimal {
+                number: 4,
+                precision: 0,
+            },
+            uncertainty: None,
+            magnitude: None,
+            symbol: "kg",
+        };
+        assert_eq!(simple.to_string(), "4 kg");
+
+        let with_uncertainty = Quantity {
+            mantissa: Decimal {
+                number: 4,
+                precision: 0,
+            },
+            uncertainty: Some(Decimal {
+                number: 1,
+                precision: 0,
+            }),
+            magnitude: None,
+            symbol: "kg",
+        };
+        assert_eq!(with_uncertainty.to_string(), "4 ± 1 kg");
+
+        let with_magnitude = Quantity {
+            mantissa: Decimal {
+                number: 4,
+                precision: 0,
+            },
+            uncertainty: None,
+            magnitude: Some(2),
+            symbol: "kg",
+        };
+        assert_eq!(with_magnitude.to_string(), "4 × 10² kg");
+
+        let full = Quantity {
+            mantissa: Decimal {
+                number: 59722,
+                precision: 4,
+            },
+            uncertainty: Some(Decimal {
+                number: 6,
+                precision: 4,
+            }),
+            magnitude: Some(24),
+            symbol: "kg",
+        };
+        assert_eq!(full.to_string(), "5.9722 ± 0.0006 × 10²⁴ kg");
     }
 }

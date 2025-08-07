@@ -2490,7 +2490,7 @@ fn malformed_response_pattern(content: &str) -> bool {
 
 fn is_numeric(content: &str) -> bool {
     let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
-    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°μ]|\s*±|\s*×|\s*x\s*10)");
+    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°/μ]|\s*±|\s*\+/-|\s*×|\s*x\s*10|\s*\*\s*10|\*\s*10)");
 
     integral.is_match(content) || scientific.is_match(content)
 }
