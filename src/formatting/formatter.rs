@@ -122,9 +122,11 @@ impl Formatter {
     }
 
     fn indent(&mut self) {
-        for _ in 0..self.nesting {
-            self.buffer
-                .push(' ');
+        if self.nesting > 0 {
+            // Flush any existing buffer before adding indentation
+            self.flush_current();
+            let spaces = " ".repeat(self.nesting as usize);
+            self.append_fragment(Syntax::Indent, &spaces);
         }
     }
 
@@ -217,8 +219,14 @@ impl Formatter {
     }
 
     fn append_char(&mut self, c: char) {
-        self.buffer
-            .push(c);
+        if c == '\n' {
+            // Flush any existing buffer before adding newline
+            self.flush_current();
+            self.append_fragment(Syntax::Newline, "\n");
+        } else {
+            self.buffer
+                .push(c);
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -314,8 +322,7 @@ impl Formatter {
         match element {
             Element::Title(title) => {
                 self.append_char('\n');
-                self.append_char('#');
-                self.append_char(' ');
+                self.append(Syntax::Header, "# ");
                 self.append(Syntax::Title, title);
                 self.append_char('\n');
             }
@@ -328,7 +335,7 @@ impl Formatter {
                 self.append_steps(steps);
             }
             Element::CodeBlock(expression) => {
-                self.append_char('{');
+                self.append(Syntax::Structure, "{");
                 self.append_char('\n');
 
                 self.increase(4);
@@ -337,7 +344,7 @@ impl Formatter {
                 self.append_char('\n');
                 self.decrease(4);
 
-                self.append_char('}');
+                self.append(Syntax::Structure, "}");
             }
         }
     }
@@ -361,7 +368,7 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append(Syntax::Punctuation, ",");
+                        self.append(Syntax::Quote, ",");
                         self.append_char(' ');
                     }
                     self.append_forma(forma);
@@ -374,7 +381,7 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append(Syntax::Punctuation, ",");
+                        self.append(Syntax::Quote, ",");
                         self.append_char(' ');
                     }
                     self.append_forma(forma);
@@ -469,6 +476,13 @@ impl Formatter {
                             line.add_word(Syntax::Structure, "}");
                         }
                         _ => {
+                            // Add space before inline code if line is not empty
+                            if !line
+                                .current
+                                .is_empty()
+                            {
+                                line.add_atomic(syntax, " ");
+                            }
                             line.add_inline_code(expr);
                         }
                     },
@@ -566,9 +580,9 @@ impl Formatter {
             if i > 0 {
                 self.append(Syntax::Structure, " | ");
             }
-            self.append(Syntax::Punctuation, "'");
+            self.append(Syntax::Quote, "'");
             self.append(Syntax::Response, response.value);
-            self.append(Syntax::Punctuation, "'");
+            self.append(Syntax::Quote, "'");
 
             if let Some(text) = response.condition {
                 self.append_char(' ');
@@ -713,28 +727,32 @@ impl Formatter {
             Expression::Variable(identifier) => {
                 self.append(Syntax::Variable, identifier.0);
             }
-            Expression::String(text) => {
-                self.append(Syntax::Punctuation, "\"");
-                // Break string content into words for wrapping
-                for (i, word) in text
-                    .split_ascii_whitespace()
-                    .enumerate()
-                {
-                    if i > 0 {
-                        self.append(Syntax::String, " ");
+            Expression::String(pieces) => {
+                self.append(Syntax::Quote, "\"");
+                for piece in pieces {
+                    match piece {
+                        Piece::Text(text) => {
+                            // Preserve user string content exactly as written
+                            self.append(Syntax::String, text);
+                        }
+                        Piece::Interpolation(expr) => {
+                            let fragments = self.render_inline_code(expr);
+                            for (syntax, content) in fragments {
+                                self.append(syntax, &content);
+                            }
+                        }
                     }
-                    self.append(Syntax::String, word);
                 }
-                self.append(Syntax::Punctuation, "\"");
+                self.append(Syntax::Quote, "\"");
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
             Expression::Multiline(lang, lines) => {
                 self.append_char('\n');
 
                 self.indent();
-                self.append(Syntax::Punctuation, "```");
+                self.append(Syntax::Quote, "```");
                 if let Some(which) = lang {
-                    self.append_str(which);
+                    self.append(Syntax::Language, which);
                 }
                 self.append_char('\n');
 
@@ -756,7 +774,7 @@ impl Formatter {
                 self.decrease(4);
 
                 self.indent();
-                self.append(Syntax::Punctuation, "```");
+                self.append(Syntax::Quote, "```");
                 self.append_char('\n');
             }
             Expression::Repeat(expression) => {
@@ -809,12 +827,12 @@ impl Formatter {
     }
 
     fn append_application(&mut self, invocation: &Invocation) {
-        self.append(Syntax::Punctuation, "<");
+        self.append(Syntax::Quote, "<");
         match &invocation.target {
             Target::Local(identifier) => self.append(Syntax::Invocation, identifier.0),
             Target::Remote(external) => self.append(Syntax::Invocation, external.0),
         }
-        self.append(Syntax::Punctuation, ">");
+        self.append(Syntax::Quote, ">");
         if let Some(parameters) = &invocation.parameters {
             self.append_arguments(parameters);
         }
@@ -880,9 +898,9 @@ impl Formatter {
         self.increase(4);
         for pair in pairs {
             self.indent();
-            self.append(Syntax::Punctuation, "\"");
+            self.append(Syntax::Quote, "\"");
             self.append(Syntax::Label, pair.label);
-            self.append(Syntax::Punctuation, "\"");
+            self.append(Syntax::Quote, "\"");
             self.append(Syntax::Structure, " = ");
             self.append_expression(&pair.value);
             self.append_char('\n');

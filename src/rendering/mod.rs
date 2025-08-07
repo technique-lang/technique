@@ -5,20 +5,15 @@ use std::process::{Command, Stdio};
 use tinytemplate::TinyTemplate;
 use tracing::{debug, info};
 
-static TEMPLATE: &'static str = r#"
-#show raw: set text(font: "Inconsolata")
-#show raw.where(lang: "technique"): set raw(
-        lang: "technique",
-        syntaxes: "technique.sublime-syntax",
-        theme: "technique.tmTheme",
-    )
+mod terminal;
+mod typst;
 
+pub use terminal::Terminal;
+pub use typst::Typst;
+
+static TEMPLATE: &'static str = r#"
+#show text: set text(font: "Inconsolata")
 #show raw: set block(breakable: true)
-#raw(
-        block: true,
-        lang: "technique",
-        read("{filename}")
-    )
 "#;
 
 #[derive(Serialize)]
@@ -26,16 +21,18 @@ struct Context {
     filename: String,
 }
 
-pub(crate) fn via_typst(source: &Path, markup: &str) {
-    let filename = source.display();
-    info!("Printing file: {}", filename);
+pub(crate) fn via_typst(filename: &Path, markup: &str) {
+    info!("Printing file: {}", filename.display());
 
     // Verify that the file actually exists
-    if !source.exists() {
-        panic!("Supplied procedure file does not exist: {}", filename);
+    if !filename.exists() {
+        panic!(
+            "Supplied procedure file does not exist: {}",
+            filename.display()
+        );
     }
 
-    let target = source.with_extension("pdf");
+    let target = filename.with_extension("pdf");
 
     let mut child = Command::new("typst")
         .arg("compile")
@@ -56,7 +53,9 @@ pub(crate) fn via_typst(source: &Path, markup: &str) {
         .unwrap();
 
     let context = Context {
-        filename: filename.to_string(),
+        filename: filename
+            .to_string_lossy()
+            .to_string(),
     };
 
     let rendered = tt
@@ -67,6 +66,7 @@ pub(crate) fn via_typst(source: &Path, markup: &str) {
         .expect("Write header to child process");
 
     // write markup to stdin handle
+
     stdin
         .write(markup.as_bytes())
         .expect("Write document to child process");

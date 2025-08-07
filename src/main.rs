@@ -1,10 +1,11 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
+use rendering::{Terminal, Typst};
 use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
-use tracing_subscriber;
+use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::*;
 use technique::formatting::{self};
@@ -21,8 +22,12 @@ enum Output {
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
-    // Initialize the tracing subscriber
-    tracing_subscriber::fmt::init();
+    // Initialize the tracing subscriber. This respects the RUST_LOG
+    // environment variable if present, or sets Level::ERROR as a fallback.
+    let filter = EnvFilter::from_default_env();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .init();
 
     let matches = Command::new("technique")
         .version(VERSION)
@@ -136,7 +141,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
@@ -172,7 +183,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(&filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
@@ -198,7 +215,13 @@ fn main() {
             debug!(filename);
 
             let filename = Path::new(filename);
-            let content = parsing::load(filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", error.concise_details());
+                    std::process::exit(1);
+                }
+            };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {

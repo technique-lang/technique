@@ -137,3 +137,34 @@ test
         assert_eq!(after, "test");
     }
 }
+
+#[derive(Debug)]
+pub struct LoadingError<'i> {
+    pub problem: String,
+    pub details: String,
+    pub filename: &'i Path,
+}
+
+impl<'i> LoadingError<'i> {
+    pub fn concise_details(&self) -> String {
+        format!(
+            "{}: {} {}{} {}",
+            "error".bright_red(),
+            self.filename
+                .to_string_lossy(),
+            self.problem
+                .bright_white()
+                .bold(),
+            if self
+                .details
+                .is_empty()
+            {
+                ""
+            } else {
+                ":"
+            },
+            self.details
+        )
+        .to_string()
+    }
+}

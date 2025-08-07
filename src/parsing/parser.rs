@@ -547,9 +547,9 @@ impl<'i> Parser<'i> {
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError<'i>>,
     {
-        let result = self.take_until(&['\n'], f);
+        let result = self.take_until(&['\n'], f)?;
         self.require_newline()?;
-        result
+        Ok(result)
     }
 
     fn is_finished(&self) -> bool {
@@ -614,6 +614,7 @@ impl<'i> Parser<'i> {
         subject: &'static str,
         start_char: char,
         end_char: char,
+        skip_string_content: bool,
         function: F,
     ) -> Result<A, ParsingError<'i>>
     where
@@ -638,6 +639,7 @@ impl<'i> Parser<'i> {
         } else {
             // Nesting case: different characters for start and end (like (...))
             let mut depth = 0;
+            let mut in_string = false;
 
             for (i, c) in self
                 .source
@@ -647,13 +649,17 @@ impl<'i> Parser<'i> {
                     begun = true;
                     depth = 1;
                 } else if begun {
-                    if c == start_char {
-                        depth += 1;
-                    } else if c == end_char {
-                        depth -= 1;
-                        if depth == 0 {
-                            l = i + 1; // add end character
-                            break;
+                    if skip_string_content && c == '"' {
+                        in_string = !in_string;
+                    } else if !skip_string_content || !in_string {
+                        if c == start_char {
+                            depth += 1;
+                        } else if c == end_char {
+                            depth -= 1;
+                            if depth == 0 {
+                                l = i + 1; // add end character
+                                break;
+                            }
                         }
                     }
                 }
@@ -1315,7 +1321,9 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars("a code block", '{', '}', |outer| outer.read_expression())
+        self.take_block_chars("a code block", '{', '}', true, |outer| {
+            outer.read_expression()
+        })
     }
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
@@ -1339,9 +1347,10 @@ impl<'i> Parser<'i> {
             let numeric = self.read_numeric()?;
             Ok(Expression::Number(numeric))
         } else if is_string_literal(content) {
-            let raw =
-                self.take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
-            Ok(Expression::String(raw))
+            let parts = self.take_block_chars("a string literal", '"', '"', false, |inner| {
+                inner.parse_string_pieces(inner.source)
+            })?;
+            Ok(Expression::String(parts))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
@@ -1392,7 +1401,7 @@ impl<'i> Parser<'i> {
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
-            self.take_block_chars("a list of identifiers", '(', ')', |outer| {
+            self.take_block_chars("a list of identifiers", '(', ')', true, |outer| {
                 let mut identifiers = Vec::new();
 
                 loop {
@@ -1460,7 +1469,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError<'i>> {
-        self.take_block_chars("a tablet", '[', ']', |outer| {
+        self.take_block_chars("a tablet", '[', ']', true, |outer| {
             let mut pairs = Vec::new();
 
             loop {
@@ -1485,7 +1494,7 @@ impl<'i> Parser<'i> {
                 }
 
                 let label =
-                    outer.take_block_chars("a label", '"', '"', |inner| Ok(inner.source))?;
+                    outer.take_block_chars("a label", '"', '"', false, |inner| Ok(inner.source))?;
 
                 // Skip whitespace and expect '='
                 outer.trim_whitespace();
@@ -1521,6 +1530,75 @@ impl<'i> Parser<'i> {
 
             Ok(Expression::Tablet(pairs))
         })
+    }
+
+    fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError<'i>> {
+        // Quick check: if no braces, just return a single text piece
+        if !raw.contains('{') {
+            return Ok(vec![Piece::Text(raw)]);
+        }
+
+        let mut pieces = Vec::new();
+        let mut current_pos = 0;
+
+        while current_pos < raw.len() {
+            // Look for the start of an interpolation
+            if let Some(brace_start) = raw[current_pos..].find('{') {
+                let absolute_brace_start = current_pos + brace_start;
+
+                // Add text before the brace if any
+                if brace_start > 0 {
+                    pieces.push(Piece::Text(&raw[current_pos..absolute_brace_start]));
+                }
+
+                // Find the matching closing brace
+                let mut brace_depth = 0;
+                let mut brace_end = None;
+
+                for (i, c) in raw[absolute_brace_start..].char_indices() {
+                    if c == '{' {
+                        brace_depth += 1;
+                    } else if c == '}' {
+                        brace_depth -= 1;
+                        if brace_depth == 0 {
+                            brace_end = Some(absolute_brace_start + i);
+                            break;
+                        }
+                    }
+                }
+
+                match brace_end {
+                    Some(end_pos) => {
+                        // Extract the content between braces
+                        let expr_content = &raw[absolute_brace_start + 1..end_pos];
+
+                        // Parse the expression using existing machinery
+                        let mut parser = self.subparser(absolute_brace_start + 1, expr_content);
+                        let expression = parser.read_expression()?;
+                        pieces.push(Piece::Interpolation(expression));
+
+                        current_pos = end_pos + 1;
+                    }
+                    None => {
+                        // Unmatched brace - point to end of string content (at closing quote)
+                        return Err(ParsingError::ExpectedMatchingChar(
+                            self.offset + raw.len(),
+                            "an interpolation",
+                            '{',
+                            '}',
+                        ));
+                    }
+                }
+            } else {
+                // No more braces - add the rest as text
+                if current_pos < raw.len() {
+                    pieces.push(Piece::Text(&raw[current_pos..]));
+                }
+                break;
+            }
+        }
+
+        Ok(pieces)
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -1561,7 +1639,7 @@ impl<'i> Parser<'i> {
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError<'i>> {
-        self.take_block_chars("an invocation", '<', '>', |inner| {
+        self.take_block_chars("an invocation", '<', '>', true, |inner| {
             let content = inner.source;
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
@@ -1908,7 +1986,7 @@ impl<'i> Parser<'i> {
     /// ( ```lang some content``` )
     ///
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError<'i>> {
-        self.take_block_chars("parameters for a function", '(', ')', |outer| {
+        self.take_block_chars("parameters for a function", '(', ')', true, |outer| {
             let mut params = Vec::new();
 
             loop {
@@ -1930,9 +2008,11 @@ impl<'i> Parser<'i> {
                         })?;
                     params.push(Expression::Multiline(lang, lines));
                 } else if content.starts_with("\"") {
-                    let raw = outer
-                        .take_block_chars("a string literal", '"', '"', |inner| Ok(inner.source))?;
-                    params.push(Expression::String(raw));
+                    let parts =
+                        outer.take_block_chars("a string literal", '"', '"', false, |inner| {
+                            inner.parse_string_pieces(inner.source)
+                        })?;
+                    params.push(Expression::String(parts));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Variable(name));
@@ -2719,7 +2799,7 @@ making_coffee(b, m) :
         let mut input = Parser::new();
         input.initialize("{ todo() }");
 
-        let result = input.take_block_chars("inline code", '{', '}', |parser| {
+        let result = input.take_block_chars("inline code", '{', '}', true, |parser| {
             let text = parser.source;
             assert_eq!(text, " todo() ");
             Ok(true)
@@ -2731,9 +2811,32 @@ making_coffee(b, m) :
         // we find ourselves parsing them, so subparser() won't work.
         input.initialize("XhelloX world");
 
-        let result = input.take_block_chars("", 'X', 'X', |parser| {
+        let result = input.take_block_chars("", 'X', 'X', false, |parser| {
             let text = parser.source;
             assert_eq!(text, "hello");
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn skip_string_content_flag() {
+        let mut input = Parser::new();
+
+        // Test skip_string_content: true - should ignore braces inside strings
+        input.initialize(r#"{ "string with { brace" }"#);
+        let result = input.take_block_chars("code block", '{', '}', true, |parser| {
+            let text = parser.source;
+            assert_eq!(text, r#" "string with { brace" "#);
+            Ok(true)
+        });
+        assert_eq!(result, Ok(true));
+
+        // Test skip_string_content: false - should treat braces normally
+        input.initialize(r#""string with } brace""#);
+        let result = input.take_block_chars("string content", '"', '"', false, |parser| {
+            let text = parser.source;
+            assert_eq!(text, "string with } brace");
             Ok(true)
         });
         assert_eq!(result, Ok(true));
@@ -3422,7 +3525,7 @@ This is the first one.
             result,
             Ok(Expression::Execution(Function {
                 target: Identifier("exec"),
-                parameters: vec![Expression::String("Hello, World")]
+                parameters: vec![Expression::String(vec![Piece::Text("Hello, World")])]
             }))
         );
 
@@ -3609,7 +3712,7 @@ echo test
             result,
             Ok(Expression::Tablet(vec![Pair {
                 label: "name",
-                value: Expression::String("Johannes Grammerly")
+                value: Expression::String(vec![Piece::Text("Johannes Grammerly")])
             }]))
         );
 
@@ -3626,11 +3729,11 @@ echo test
             Ok(Expression::Tablet(vec![
                 Pair {
                     label: "name",
-                    value: Expression::String("Alice of Chains")
+                    value: Expression::String(vec![Piece::Text("Alice of Chains")])
                 },
                 Pair {
                     label: "age",
-                    value: Expression::String("29")
+                    value: Expression::String(vec![Piece::Text("29")])
                 }
             ]))
         );
@@ -3683,7 +3786,7 @@ echo test
             Ok(Expression::Tablet(vec![
                 Pair {
                     label: "context",
-                    value: Expression::String("Details about the thing")
+                    value: Expression::String(vec![Piece::Text("Details about the thing")])
                 },
                 Pair {
                     label: "status",
