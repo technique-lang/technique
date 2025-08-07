@@ -1,6 +1,6 @@
 //! Types representing an Abstract Syntax Tree for the Technique language
 
-use crate::regex::*;
+use crate::{language::quantity::parse_quantity, regex::*};
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Document<'i> {
@@ -206,8 +206,7 @@ pub enum Expression<'i> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Numeric<'i> {
     Integral(i64),
-    // Scientific(Quantity<'i>), // TODO implement parsing for Quantity
-    Scientific(&'i str), // temporary placeholder
+    Scientific(Quantity<'i>),
 }
 
 // A Quantity is an amount, possibly with uncertainty, at the magnitude if
@@ -228,30 +227,7 @@ pub enum Numeric<'i> {
 // 5.9722 +/- 0.0006 × 10^24 kg
 //
 // so the parser and validation code has to have considerable flexibility.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Quantity<'i> {
-    pub mantissa: Decimal,
-    pub uncertainty: Option<Decimal>,
-    pub magnitude: Option<i8>,
-    pub symbol: Symbol<'i>,
-}
-
-// A decimal number with a fixed point resolution. The resolution (number of
-// decimal places) is arbitrary within the available range. This isn't really
-// for numerical analysis. It is for carrying information.
-//
-// Internally this is a floating point where the mantissa is 19 characters
-// wide (the width of a 64-bit int in base 10). Thus the biggest number
-// representable is 9223372036854775807 and the smallest is
-// 0.0000000000000000001. We could change this be arbitrary precision but meh.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Decimal {
-    pub number: i64,
-    pub precision: u8,
-}
-
-#[derive(Eq, Debug, PartialEq)]
-pub struct Symbol<'i>(pub &'i str);
+pub use crate::language::quantity::{Decimal, Quantity};
 
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
@@ -427,12 +403,17 @@ pub fn validate_numeric(input: &str) -> Option<Numeric> {
 
     let input = input.trim_ascii();
 
-    // Try to parse as a simple Integral
+    // Try to parse as a simple Integral first
     if let Ok(amount) = input.parse::<i64>() {
         return Some(Numeric::Integral(amount));
-    } else {
-        None
     }
+
+    // Try to parse as a Quantity (scientific notation with units)
+    if let Some(quantity) = parse_quantity(input) {
+        return Some(Numeric::Scientific(quantity));
+    }
+
+    None
 }
 
 #[cfg(test)]
