@@ -1,5 +1,5 @@
 //! Quantity types and parsing for scientific measurements with uncertainty and units
-//! 
+//!
 //! A Quantity is an amount, possibly with uncertainty, at the magnitude if
 //! given, of the units specified.
 //!

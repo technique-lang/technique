@@ -470,7 +470,7 @@ decimal point:
     42
     -123.45
     0.001
-    
+
 Values less than 1 must have a leading '0' before the decimal.
                 "#
                 .trim_ascii()
@@ -512,7 +512,7 @@ The base must be 10, and the exponent must be an integer.
 Symbols used to denote units can contain:
 
     Letters 'A'..'z'    kg, Hz, mol
-    Degrees '°':        °C, °F  
+    Degrees '°':        °C, °F
     Rates '/':          m/s, km/h
     SI prefix 'μ':      μg, μs
 
@@ -1070,7 +1070,7 @@ impl<'i> Parser<'i> {
         let cap = match re.captures(self.source) {
             Some(c) => c,
             None => {
-                let arrow_offset = analyse_malformed_signature(self.source);
+                let arrow_offset = analyze_malformed_signature(self.source);
                 return Err(ParsingError::InvalidSignature(self.offset + arrow_offset));
             }
         };
@@ -1827,7 +1827,6 @@ impl<'i> Parser<'i> {
         // Parse unit symbol (required) - consume everything remaining
         let symbol = self.read_units_symbol()?;
 
-
         let quantity = Quantity {
             mantissa,
             uncertainty,
@@ -1837,7 +1836,6 @@ impl<'i> Parser<'i> {
 
         Ok(Numeric::Scientific(quantity))
     }
-
 
     fn read_decimal_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
         use crate::regex::*;
@@ -1911,8 +1909,11 @@ impl<'i> Parser<'i> {
     fn read_units_symbol(&mut self) -> Result<&'i str, ParsingError<'i>> {
         // Scan through each character and find the first invalid one
         let mut valid_end = 0;
-        
-        for (byte_offset, ch) in self.source.char_indices() {
+
+        for (byte_offset, ch) in self
+            .source
+            .char_indices()
+        {
             if ch.is_whitespace() {
                 // Stop at whitespace
                 break;
@@ -1920,16 +1921,17 @@ impl<'i> Parser<'i> {
                 // Valid character
                 valid_end = byte_offset + ch.len_utf8();
             } else {
-                // Invalid character found - point directly at it  
-                // Add 1 because we want to point TO the character, not before it
-                return Err(ParsingError::InvalidQuantitySymbol(self.offset + byte_offset + 1));
+                // Invalid character found - point directly at it
+                return Err(ParsingError::InvalidQuantitySymbol(
+                    self.offset + byte_offset,
+                ));
             }
         }
-        
+
         if valid_end == 0 {
             return Err(ParsingError::InvalidQuantitySymbol(self.offset));
         }
-        
+
         let symbol = &self.source[..valid_end];
         self.advance(valid_end);
         Ok(symbol)
@@ -2509,25 +2511,21 @@ fn is_signature(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn analyse_malformed_signature(content: &str) -> usize {
-    let mut offset = 0;
-    let mut count = 0;
+fn analyze_malformed_signature(content: &str) -> usize {
+    let mut tokens = content.split_ascii_whitespace();
 
-    for token in content
-        .trim_ascii()
-        .split_ascii_whitespace()
-    {
-        if count == 1 {
-            // Found second token - point to where arrow should be (between tokens)
-            return offset;
+    // Skip the first token
+    let first_token = tokens.next();
+    if first_token.is_none() {
+        return 0;
+    }
+
+    // Find the second token
+    if let Some(second_token) = tokens.next() {
+        // Find where this token starts in the original content
+        if let Some(pos) = content.find(second_token) {
+            return pos;
         }
-        offset += token.len();
-        // Skip whitespace to next token
-        offset += content[offset..]
-            .chars()
-            .take_while(|c| c.is_ascii_whitespace())
-            .count();
-        count += 1;
     }
 
     0 // fallback
