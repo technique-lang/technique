@@ -420,6 +420,17 @@ Numeric literals can be integers:
     42
     -123
     0
+
+Or quantities with units:
+
+    84.2 kg
+    5.9722 ± 0.0006 × 10²⁴ kg
+    16.1 ± 1.5 °C
+    1.00001742096 yr
+    100 μg
+
+For ease of writing you can use +/- for uncertainty, * for multiplying the
+magnitude, and ^ for the exponent.
                 "#
                 .trim_ascii()
                 .to_string(),

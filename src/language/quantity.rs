@@ -342,8 +342,15 @@ mod tests {
     fn invalid_quantities() {
         assert!(parse_quantity("42").is_none()); // No units
         assert!(parse_quantity("kg").is_none()); // No number
-        assert!(parse_quantity("4 kg-meters").is_none()); // Invalid unit chars
-        assert!(parse_quantity("4 kg_squared").is_none()); // Invalid unit chars
+        assert!(parse_quantity("4 kg-meters").is_none()); // Invalid unit chars (hyphen)
+        assert!(parse_quantity("4 kg_squared").is_none()); // Invalid unit chars (underscore)
+        assert!(parse_quantity("4 × 11^2 kg").is_none()); // Invalid magnitude base (not 10)
+        assert!(parse_quantity("4 × kg").is_none()); // Missing magnitude
+        assert!(parse_quantity("4 ± kg").is_none()); // Missing uncertainty value
+        assert!(parse_quantity("4 k g").is_none()); // Space in unit symbol
+        assert!(parse_quantity("4 ± 1.5").is_none()); // No units after uncertainty
+        assert!(parse_quantity("").is_none()); // Empty string
+        assert!(parse_quantity("   ").is_none()); // Just whitespace
     }
 
     #[test]
