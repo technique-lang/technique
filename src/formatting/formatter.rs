@@ -822,7 +822,7 @@ impl Formatter {
     fn append_numeric(&mut self, numeric: &Numeric) {
         match numeric {
             Numeric::Integral(num) => self.append(Syntax::Numeric, &num.to_string()),
-            Numeric::Scientific(_) => todo!(),
+            Numeric::Scientific(quantity) => self.append(Syntax::Numeric, &quantity.to_string()),
         }
     }
 

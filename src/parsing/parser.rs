@@ -59,7 +59,12 @@ pub enum ParsingError<'i> {
     InvalidSubstep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
-    InvalidNumeric(usize),
+    InvalidIntegral(usize),
+    InvalidQuantity(usize),
+    InvalidQuantityDecimal(usize),
+    InvalidQuantityUncertainty(usize),
+    InvalidQuantityMagnitude(usize),
+    InvalidQuantitySymbol(usize),
 }
 
 impl<'i> ParsingError<'i> {
@@ -87,7 +92,12 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidSubstep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
-            ParsingError::InvalidNumeric(offset) => *offset,
+            ParsingError::InvalidIntegral(offset) => *offset,
+            ParsingError::InvalidQuantity(offset) => *offset,
+            ParsingError::InvalidQuantityDecimal(offset) => *offset,
+            ParsingError::InvalidQuantityUncertainty(offset) => *offset,
+            ParsingError::InvalidQuantityMagnitude(offset) => *offset,
+            ParsingError::InvalidQuantitySymbol(offset) => *offset,
         }
     }
 
@@ -356,7 +366,7 @@ dash. They can be done in either order, or concurrently:
             ParsingError::InvalidSubstep(_) => (
                 "Invalid substep format".to_string(),
                 r#"
-Substeps can be nested below top-level depenent steps or top-level parallel
+Substeps can be nested below top-level dependent steps or top-level parallel
 steps. So both of these are valid:
 
 1.  First top-level step.
@@ -412,14 +422,101 @@ documenting a response to help the user understand what is expected of them.
                 .trim_ascii()
                 .to_string(),
             ),
-            ParsingError::InvalidNumeric(_) => (
-                "Invalid numeric literal".to_string(),
+            ParsingError::InvalidIntegral(_) => (
+                "Invalid integer literal".to_string(),
                 r#"
-Numeric literals can be integers:
+Integer literals must be positive of negative whole numbers:
 
     42
     -123
     0
+    9223372036854775807
+
+Integers cannot contain decimal points or units.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantity(_) => (
+                "Invalid quantity format".to_string(),
+                r#"
+Quantities are measurements with units:
+
+    4.2 kg
+    100 m/s
+    20 °C
+
+They can optionally have uncertainty:
+
+    420 ± 10 kg
+
+a magnitude:
+
+    4.2 × 10² kg
+
+or both:
+
+    4.2 ± 0.1 × 10² kg
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityDecimal(_) => (
+                "Invalid number in quantity".to_string(),
+                r#"
+The numeric part of a quantity may be positive or negative, and may have a
+decimal point:
+
+    42
+    -123.45
+    0.001
+
+Values less than 1 must have a leading '0' before the decimal.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityUncertainty(_) => (
+                "Invalid uncertainty in quantity".to_string(),
+                r#"
+Uncertainty values must be positive numbers:
+
+    4.2 ± 0.1 kg    (valid)
+    100 +/- 5 m/s   (valid)
+
+You can use '±' or `+/-`, followed by a decimal.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityMagnitude(_) => (
+                "Invalid magnitude format".to_string(),
+                r#"
+The magnitude of a quantity can be expressed by in the usual scientific format
+× 10ⁿ; for ease of writing you can use ASCII to write * or x and 10^n, as in
+the following examples:
+
+    × 10^24
+    × 10²⁴
+    * 10^-6
+    x 10^12
+
+The base must be 10, and the exponent must be an integer.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantitySymbol(_) => (
+                "Invalid character in quantity units".to_string(),
+                r#"
+Symbols used to denote units can contain:
+
+    Letters 'A'..'z'    kg, Hz, mol
+    Degrees '°':        °C, °F
+    Rates '/':          m/s, km/h
+    SI prefix 'μ':      μg, μs
+
+Hyphens, underscores, and spaces are not valid in unit symbols.
                 "#
                 .trim_ascii()
                 .to_string(),
@@ -973,7 +1070,7 @@ impl<'i> Parser<'i> {
         let cap = match re.captures(self.source) {
             Some(c) => c,
             None => {
-                let arrow_offset = analyse_malformed_signature(self.source);
+                let arrow_offset = analyze_malformed_signature(self.source);
                 return Err(ParsingError::InvalidSignature(self.offset + arrow_offset));
             }
         };
@@ -1628,13 +1725,216 @@ impl<'i> Parser<'i> {
 
         let content = self.source;
 
-        // Parser is whitespace agnostic - consume entire remaining content
-        // The outer take_*() methods have already isolated the numeric content
-        let numeric = validate_numeric(content).ok_or(ParsingError::InvalidNumeric(self.offset))?;
+        if is_numeric_integral(content) {
+            self.read_numeric_integral()
+        } else if is_numeric_quantity(content) {
+            self.read_numeric_quantity()
+        } else {
+            Err(ParsingError::InvalidQuantity(self.offset))
+        }
+    }
 
-        self.advance(content.len());
+    /// Parse a simple integral number
+    fn read_numeric_integral(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        let content = self.source;
 
-        Ok(numeric)
+        if let Ok(amount) = content
+            .trim_ascii()
+            .parse::<i64>()
+        {
+            self.advance(content.len());
+            Ok(Numeric::Integral(amount))
+        } else {
+            Err(ParsingError::InvalidIntegral(self.offset))
+        }
+    }
+
+    /// Parse a scientific quantity with units
+    fn read_numeric_quantity(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        self.trim_whitespace();
+
+        // Parse mantissa (required)
+        let mantissa = self.read_decimal_part()?;
+        self.trim_whitespace();
+
+        // Parse optional uncertainty
+        let uncertainty = if self
+            .source
+            .starts_with('±')
+            || self
+                .source
+                .starts_with("+/-")
+        {
+            if self
+                .source
+                .starts_with("+/-")
+            {
+                self.advance(3); // Skip +/- (3 bytes)
+            } else {
+                self.advance(2); // Skip ± (2 bytes in UTF-8)
+            }
+            self.trim_whitespace();
+            Some(self.read_uncertainty_part()?)
+        } else {
+            None
+        };
+        self.trim_whitespace();
+
+        // Parse optional magnitude
+        let magnitude = if self
+            .source
+            .starts_with('×')
+            || self
+                .source
+                .starts_with('x')
+            || self
+                .source
+                .starts_with('*')
+        {
+            if self
+                .source
+                .starts_with('×')
+            {
+                self.advance(2); // Skip × (2 bytes in UTF-8)
+            } else {
+                self.advance(1); // Skip x or * (1 byte each)
+            }
+            self.trim_whitespace();
+            if !self
+                .source
+                .starts_with("10")
+            {
+                return Err(ParsingError::InvalidQuantityMagnitude(self.offset));
+            }
+            self.advance(2); // Skip "10"
+
+            if self
+                .source
+                .starts_with('^')
+            {
+                self.advance(1); // Skip ^
+                Some(self.read_exponent_ascii()?)
+            } else if let Some(exp) = self.read_exponent_superscript() {
+                Some(exp)
+            } else {
+                return Err(ParsingError::InvalidQuantityMagnitude(self.offset));
+            }
+        } else {
+            None
+        };
+        self.trim_whitespace();
+
+        // Parse unit symbol (required) - consume everything remaining
+        let symbol = self.read_units_symbol()?;
+
+        let quantity = Quantity {
+            mantissa,
+            uncertainty,
+            magnitude,
+            symbol,
+        };
+
+        Ok(Numeric::Scientific(quantity))
+    }
+
+    fn read_decimal_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+(\.[0-9]+)?");
+
+        if let Some(mat) = re.find(self.source) {
+            let decimal_str = mat.as_str();
+            if let Some(decimal) = crate::language::parse_decimal(decimal_str) {
+                self.advance(decimal_str.len());
+                Ok(decimal)
+            } else {
+                Err(ParsingError::InvalidQuantityDecimal(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidQuantityDecimal(self.offset))
+        }
+    }
+
+    fn read_uncertainty_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+(\.[0-9]+)?");
+
+        if let Some(mat) = re.find(self.source) {
+            let decimal_str = mat.as_str();
+            if let Some(decimal) = crate::language::parse_decimal(decimal_str) {
+                self.advance(decimal_str.len());
+                Ok(decimal)
+            } else {
+                Err(ParsingError::InvalidQuantityUncertainty(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidQuantityUncertainty(self.offset))
+        }
+    }
+
+    fn read_exponent_ascii(&mut self) -> Result<i8, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+");
+
+        if let Some(mat) = re.find(self.source) {
+            let exp_str = mat.as_str();
+            if let Ok(exp) = exp_str.parse::<i8>() {
+                self.advance(exp_str.len());
+                Ok(exp)
+            } else {
+                Err(ParsingError::InvalidQuantityMagnitude(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidQuantityMagnitude(self.offset))
+        }
+    }
+
+    fn read_exponent_superscript(&mut self) -> Option<i8> {
+        use crate::regex::*;
+        let re = regex!(r"^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+");
+
+        if let Some(mat) = re.find(self.source) {
+            let super_str = mat.as_str();
+            let converted = crate::language::convert_superscript(super_str);
+            if let Ok(exp) = converted.parse::<i8>() {
+                self.advance(super_str.len());
+                Some(exp)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn read_units_symbol(&mut self) -> Result<&'i str, ParsingError<'i>> {
+        // Scan through each character and find the first invalid one
+        let mut valid_end = 0;
+
+        for (byte_offset, ch) in self
+            .source
+            .char_indices()
+        {
+            if ch.is_whitespace() {
+                // Stop at whitespace
+                break;
+            } else if ch.is_ascii_alphabetic() || ch == '°' || ch == '/' || ch == 'μ' {
+                // Valid character
+                valid_end = byte_offset + ch.len_utf8();
+            } else {
+                // Invalid character found - point directly at it
+                return Err(ParsingError::InvalidQuantitySymbol(
+                    self.offset + byte_offset,
+                ));
+            }
+        }
+
+        if valid_end == 0 {
+            return Err(ParsingError::InvalidQuantitySymbol(self.offset));
+        }
+
+        let symbol = &self.source[..valid_end];
+        self.advance(valid_end);
+        Ok(symbol)
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
@@ -2211,25 +2511,21 @@ fn is_signature(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn analyse_malformed_signature(content: &str) -> usize {
-    let mut offset = 0;
-    let mut count = 0;
+fn analyze_malformed_signature(content: &str) -> usize {
+    let mut tokens = content.split_ascii_whitespace();
 
-    for token in content
-        .trim_ascii()
-        .split_ascii_whitespace()
-    {
-        if count == 1 {
-            // Found second token - point to where arrow should be (between tokens)
-            return offset;
+    // Skip the first token
+    let first_token = tokens.next();
+    if first_token.is_none() {
+        return 0;
+    }
+
+    // Find the second token
+    if let Some(second_token) = tokens.next() {
+        // Find where this token starts in the original content
+        if let Some(pos) = content.find(second_token) {
+            return pos;
         }
-        offset += token.len();
-        // Skip whitespace to next token
-        offset += content[offset..]
-            .chars()
-            .take_while(|c| c.is_ascii_whitespace())
-            .count();
-        count += 1;
     }
 
     0 // fallback
@@ -2489,10 +2785,19 @@ fn malformed_response_pattern(content: &str) -> bool {
 }
 
 fn is_numeric(content: &str) -> bool {
-    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
-    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°μ]|\s*±|\s*×|\s*x\s*10)");
+    is_numeric_integral(content) || is_numeric_quantity(content)
+}
 
-    integral.is_match(content) || scientific.is_match(content)
+fn is_numeric_integral(content: &str) -> bool {
+    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
+    integral.is_match(content)
+}
+
+fn is_numeric_quantity(content: &str) -> bool {
+    let scientific = regex!(
+        r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°/μ]|\s*±|\s*\+/-|\s*×|\s*x\s*10|\s*\*\s*10|\*\s*10)"
+    );
+    scientific.is_match(content)
 }
 
 fn is_string_literal(content: &str) -> bool {
