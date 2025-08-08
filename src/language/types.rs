@@ -209,25 +209,7 @@ pub enum Numeric<'i> {
     Scientific(Quantity<'i>),
 }
 
-// A Quantity is an amount, possibly with uncertainty, at the magnitude if
-// given, of the units specified.
-//
-// Valid Quantities include:
-//
-// 149 kg
-// 5.9722 × 10²⁴ kg"
-// 5.9722 ± 0.0006 kg
-// 5.9722 ± 0.0006 × 10²⁴ kg
-//
-// More conventional ASCII symbol characters are also supported when writing
-// Quantity values in a Technique file:
-//
-// 5.9722 * 10^24 kg"
-// 5.9722 +/- 0.0006 kg
-// 5.9722 +/- 0.0006 × 10^24 kg
-//
-// so the parser and validation code has to have considerable flexibility.
-pub use crate::language::quantity::{Decimal, Quantity};
+pub use crate::language::quantity::Quantity;
 
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.

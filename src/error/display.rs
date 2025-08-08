@@ -103,8 +103,18 @@ fn calculate_line_number(content: &str, offset: usize) -> usize {
 fn calculate_column_number(content: &str, offset: usize) -> usize {
     let before = &content[..offset];
     match before.rfind('\n') {
-        Some(start) => offset - start,
-        None => offset,
+        Some(start) => {
+            // Count Unicode characters from the start of the line to the offset
+            content[start + 1..offset]
+                .chars()
+                .count()
+        }
+        None => {
+            // No newline found, count characters from the beginning
+            before
+                .chars()
+                .count()
+        }
     }
 }
 
@@ -135,6 +145,35 @@ test
             .nth(n)
             .unwrap();
         assert_eq!(after, "test");
+    }
+
+    #[test]
+    fn counting_columns_ascii() {
+        let content = "This is a test";
+
+        let col = calculate_column_number(content, 5);
+        assert_eq!(col, 5); // After "This "
+    }
+
+    #[test]
+    fn counting_columns_unicode() {
+        // Test with Unicode characters like those in Three.t: "3.0 × 10⁸ m_s"
+        let content = "3.0 × 10⁸ m_s";
+
+        // At the underscore (× and ⁸ are multi-byte Unicode chars)
+        let offset = "3.0 × 10⁸ m".len();
+        let col = calculate_column_number(content, offset);
+        assert_eq!(col, 11); // Should count 11 characters, not bytes
+    }
+
+    #[test]
+    fn counting_columns_multiline() {
+        let content = "First line\nSecond × line";
+
+        // After "Second " on second line (× is multi-byte)
+        let offset = "First line\n".len();
+        let col = calculate_column_number(content, offset + 7);
+        assert_eq!(col, 7);
     }
 }
 

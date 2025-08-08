@@ -59,7 +59,12 @@ pub enum ParsingError<'i> {
     InvalidSubstep(usize),
     InvalidForeach(usize),
     InvalidResponse(usize),
-    InvalidNumeric(usize),
+    InvalidIntegral(usize),
+    InvalidQuantity(usize),
+    InvalidQuantityDecimal(usize),
+    InvalidQuantityUncertainty(usize),
+    InvalidQuantityMagnitude(usize),
+    InvalidQuantitySymbol(usize),
 }
 
 impl<'i> ParsingError<'i> {
@@ -87,7 +92,12 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidSubstep(offset) => *offset,
             ParsingError::InvalidForeach(offset) => *offset,
             ParsingError::InvalidResponse(offset) => *offset,
-            ParsingError::InvalidNumeric(offset) => *offset,
+            ParsingError::InvalidIntegral(offset) => *offset,
+            ParsingError::InvalidQuantity(offset) => *offset,
+            ParsingError::InvalidQuantityDecimal(offset) => *offset,
+            ParsingError::InvalidQuantityUncertainty(offset) => *offset,
+            ParsingError::InvalidQuantityMagnitude(offset) => *offset,
+            ParsingError::InvalidQuantitySymbol(offset) => *offset,
         }
     }
 
@@ -356,7 +366,7 @@ dash. They can be done in either order, or concurrently:
             ParsingError::InvalidSubstep(_) => (
                 "Invalid substep format".to_string(),
                 r#"
-Substeps can be nested below top-level depenent steps or top-level parallel
+Substeps can be nested below top-level dependent steps or top-level parallel
 steps. So both of these are valid:
 
 1.  First top-level step.
@@ -412,25 +422,101 @@ documenting a response to help the user understand what is expected of them.
                 .trim_ascii()
                 .to_string(),
             ),
-            ParsingError::InvalidNumeric(_) => (
-                "Invalid numeric literal".to_string(),
+            ParsingError::InvalidIntegral(_) => (
+                "Invalid integer literal".to_string(),
                 r#"
-Numeric literals can be integers:
+Integer literals must be positive of negative whole numbers:
 
     42
     -123
     0
+    9223372036854775807
 
-Or quantities with units:
+Integers cannot contain decimal points or units.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantity(_) => (
+                "Invalid quantity format".to_string(),
+                r#"
+Quantities are measurements with units:
 
-    84.2 kg
-    5.9722 ± 0.0006 × 10²⁴ kg
-    16.1 ± 1.5 °C
-    1.00001742096 yr
-    100 μg
+    4.2 kg
+    100 m/s
+    20 °C
 
-For ease of writing you can use +/- for uncertainty, * for multiplying the
-magnitude, and ^ for the exponent.
+They can optionally have uncertainty:
+
+    420 ± 10 kg
+
+a magnitude:
+
+    4.2 × 10² kg
+
+or both:
+
+    4.2 ± 0.1 × 10² kg
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityDecimal(_) => (
+                "Invalid number in quantity".to_string(),
+                r#"
+The numeric part of a quantity may be positive or negative, and may have a
+decimal point:
+
+    42
+    -123.45
+    0.001
+    
+Values less than 1 must have a leading '0' before the decimal.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityUncertainty(_) => (
+                "Invalid uncertainty in quantity".to_string(),
+                r#"
+Uncertainty values must be positive numbers:
+
+    4.2 ± 0.1 kg    (valid)
+    100 +/- 5 m/s   (valid)
+
+You can use '±' or `+/-`, followed by a decimal.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantityMagnitude(_) => (
+                "Invalid magnitude format".to_string(),
+                r#"
+The magnitude of a quantity can be expressed by in the usual scientific format
+× 10ⁿ; for ease of writing you can use ASCII to write * or x and 10^n, as in
+the following examples:
+
+    × 10^24
+    × 10²⁴
+    * 10^-6
+    x 10^12
+
+The base must be 10, and the exponent must be an integer.
+                "#
+                .trim_ascii()
+                .to_string(),
+            ),
+            ParsingError::InvalidQuantitySymbol(_) => (
+                "Invalid character in quantity units".to_string(),
+                r#"
+Symbols used to denote units can contain:
+
+    Letters 'A'..'z'    kg, Hz, mol
+    Degrees '°':        °C, °F  
+    Rates '/':          m/s, km/h
+    SI prefix 'μ':      μg, μs
+
+Hyphens, underscores, and spaces are not valid in unit symbols.
                 "#
                 .trim_ascii()
                 .to_string(),
@@ -1644,7 +1730,7 @@ impl<'i> Parser<'i> {
         } else if is_numeric_quantity(content) {
             self.read_numeric_quantity()
         } else {
-            Err(ParsingError::InvalidNumeric(self.offset))
+            Err(ParsingError::InvalidQuantity(self.offset))
         }
     }
 
@@ -1659,7 +1745,7 @@ impl<'i> Parser<'i> {
             self.advance(content.len());
             Ok(Numeric::Integral(amount))
         } else {
-            Err(ParsingError::InvalidNumeric(self.offset))
+            Err(ParsingError::InvalidIntegral(self.offset))
         }
     }
 
@@ -1669,7 +1755,7 @@ impl<'i> Parser<'i> {
 
         // Parse mantissa (required)
         let mantissa = self.read_decimal_part()?;
-        self.skip_whitespace();
+        self.trim_whitespace();
 
         // Parse optional uncertainty
         let uncertainty = if self
@@ -1687,12 +1773,12 @@ impl<'i> Parser<'i> {
             } else {
                 self.advance(2); // Skip ± (2 bytes in UTF-8)
             }
-            self.skip_whitespace();
-            Some(self.read_decimal_part()?)
+            self.trim_whitespace();
+            Some(self.read_uncertainty_part()?)
         } else {
             None
         };
-        self.skip_whitespace();
+        self.trim_whitespace();
 
         // Parse optional magnitude
         let magnitude = if self
@@ -1713,12 +1799,12 @@ impl<'i> Parser<'i> {
             } else {
                 self.advance(1); // Skip x or * (1 byte each)
             }
-            self.skip_whitespace();
+            self.trim_whitespace();
             if !self
                 .source
                 .starts_with("10")
             {
-                return Err(ParsingError::InvalidNumeric(self.offset));
+                return Err(ParsingError::InvalidQuantityMagnitude(self.offset));
             }
             self.advance(2); // Skip "10"
 
@@ -1731,25 +1817,16 @@ impl<'i> Parser<'i> {
             } else if let Some(exp) = self.read_exponent_superscript() {
                 Some(exp)
             } else {
-                return Err(ParsingError::InvalidNumeric(self.offset));
+                return Err(ParsingError::InvalidQuantityMagnitude(self.offset));
             }
         } else {
             None
         };
-        self.skip_whitespace();
+        self.trim_whitespace();
 
-        // Parse unit symbol (required)
+        // Parse unit symbol (required) - consume everything remaining
         let symbol = self.read_units_symbol()?;
 
-        // Verify we've consumed all the input - if there are remaining characters,
-        // it means there was invalid content after the unit symbol
-        if !self
-            .source
-            .trim_ascii()
-            .is_empty()
-        {
-            return Err(ParsingError::InvalidNumeric(self.offset));
-        }
 
         let quantity = Quantity {
             mantissa,
@@ -1761,17 +1838,6 @@ impl<'i> Parser<'i> {
         Ok(Numeric::Scientific(quantity))
     }
 
-    fn skip_whitespace(&mut self) {
-        while self
-            .source
-            .starts_with(' ')
-            || self
-                .source
-                .starts_with('\t')
-        {
-            self.advance(1);
-        }
-    }
 
     fn read_decimal_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
         use crate::regex::*;
@@ -1783,10 +1849,27 @@ impl<'i> Parser<'i> {
                 self.advance(decimal_str.len());
                 Ok(decimal)
             } else {
-                Err(ParsingError::InvalidNumeric(self.offset))
+                Err(ParsingError::InvalidQuantityDecimal(self.offset))
             }
         } else {
-            Err(ParsingError::InvalidNumeric(self.offset))
+            Err(ParsingError::InvalidQuantityDecimal(self.offset))
+        }
+    }
+
+    fn read_uncertainty_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+(\.[0-9]+)?");
+
+        if let Some(mat) = re.find(self.source) {
+            let decimal_str = mat.as_str();
+            if let Some(decimal) = crate::language::parse_decimal(decimal_str) {
+                self.advance(decimal_str.len());
+                Ok(decimal)
+            } else {
+                Err(ParsingError::InvalidQuantityUncertainty(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidQuantityUncertainty(self.offset))
         }
     }
 
@@ -1800,10 +1883,10 @@ impl<'i> Parser<'i> {
                 self.advance(exp_str.len());
                 Ok(exp)
             } else {
-                Err(ParsingError::InvalidNumeric(self.offset))
+                Err(ParsingError::InvalidQuantityMagnitude(self.offset))
             }
         } else {
-            Err(ParsingError::InvalidNumeric(self.offset))
+            Err(ParsingError::InvalidQuantityMagnitude(self.offset))
         }
     }
 
@@ -1826,17 +1909,30 @@ impl<'i> Parser<'i> {
     }
 
     fn read_units_symbol(&mut self) -> Result<&'i str, ParsingError<'i>> {
-        use crate::regex::*;
-        let re = regex!(r"^[a-zA-Z°/μ]+");
-
-        if let Some(mat) = re.find(self.source) {
-            let symbol = mat.as_str();
-            self.advance(symbol.len());
-            Ok(symbol)
-        } else {
-            // Point to the invalid character
-            Err(ParsingError::InvalidNumeric(self.offset))
+        // Scan through each character and find the first invalid one
+        let mut valid_end = 0;
+        
+        for (byte_offset, ch) in self.source.char_indices() {
+            if ch.is_whitespace() {
+                // Stop at whitespace
+                break;
+            } else if ch.is_ascii_alphabetic() || ch == '°' || ch == '/' || ch == 'μ' {
+                // Valid character
+                valid_end = byte_offset + ch.len_utf8();
+            } else {
+                // Invalid character found - point directly at it  
+                // Add 1 because we want to point TO the character, not before it
+                return Err(ParsingError::InvalidQuantitySymbol(self.offset + byte_offset + 1));
+            }
         }
+        
+        if valid_end == 0 {
+            return Err(ParsingError::InvalidQuantitySymbol(self.offset));
+        }
+        
+        let symbol = &self.source[..valid_end];
+        self.advance(valid_end);
+        Ok(symbol)
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
