@@ -17,3 +17,8 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 
 [build-dependencies]
+
+[profile.release]
+debug = "limited"
+strip = true
+lto = true
