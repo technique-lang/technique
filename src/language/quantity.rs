@@ -95,7 +95,7 @@ pub fn parse_quantity(input: &str) -> Option<Quantity> {
     })
 }
 
-fn parse_decimal(input: &str) -> Option<Decimal> {
+pub fn parse_decimal(input: &str) -> Option<Decimal> {
     if let Some(dot_pos) = input.find('.') {
         // Has decimal point
         let whole_part = &input[..dot_pos];
@@ -125,7 +125,8 @@ fn parse_decimal(input: &str) -> Option<Decimal> {
     }
 }
 
-fn convert_superscript(input: &str) -> String {
+/// Convert Unicode superscript characters to ASCII digits
+pub fn convert_superscript(input: &str) -> String {
     input
         .chars()
         .map(|c| match c {

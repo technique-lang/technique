@@ -1639,13 +1639,204 @@ impl<'i> Parser<'i> {
 
         let content = self.source;
 
-        // Parser is whitespace agnostic - consume entire remaining content
-        // The outer take_*() methods have already isolated the numeric content
-        let numeric = validate_numeric(content).ok_or(ParsingError::InvalidNumeric(self.offset))?;
+        if is_numeric_integral(content) {
+            self.read_numeric_integral()
+        } else if is_numeric_quantity(content) {
+            self.read_numeric_quantity()
+        } else {
+            Err(ParsingError::InvalidNumeric(self.offset))
+        }
+    }
 
-        self.advance(content.len());
+    /// Parse a simple integral number
+    fn read_numeric_integral(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        let content = self.source;
 
-        Ok(numeric)
+        if let Ok(amount) = content
+            .trim_ascii()
+            .parse::<i64>()
+        {
+            self.advance(content.len());
+            Ok(Numeric::Integral(amount))
+        } else {
+            Err(ParsingError::InvalidNumeric(self.offset))
+        }
+    }
+
+    /// Parse a scientific quantity with units
+    fn read_numeric_quantity(&mut self) -> Result<Numeric<'i>, ParsingError<'i>> {
+        self.trim_whitespace();
+
+        // Parse mantissa (required)
+        let mantissa = self.read_decimal_part()?;
+        self.skip_whitespace();
+
+        // Parse optional uncertainty
+        let uncertainty = if self
+            .source
+            .starts_with('±')
+            || self
+                .source
+                .starts_with("+/-")
+        {
+            if self
+                .source
+                .starts_with("+/-")
+            {
+                self.advance(3); // Skip +/- (3 bytes)
+            } else {
+                self.advance(2); // Skip ± (2 bytes in UTF-8)
+            }
+            self.skip_whitespace();
+            Some(self.read_decimal_part()?)
+        } else {
+            None
+        };
+        self.skip_whitespace();
+
+        // Parse optional magnitude
+        let magnitude = if self
+            .source
+            .starts_with('×')
+            || self
+                .source
+                .starts_with('x')
+            || self
+                .source
+                .starts_with('*')
+        {
+            if self
+                .source
+                .starts_with('×')
+            {
+                self.advance(2); // Skip × (2 bytes in UTF-8)
+            } else {
+                self.advance(1); // Skip x or * (1 byte each)
+            }
+            self.skip_whitespace();
+            if !self
+                .source
+                .starts_with("10")
+            {
+                return Err(ParsingError::InvalidNumeric(self.offset));
+            }
+            self.advance(2); // Skip "10"
+
+            if self
+                .source
+                .starts_with('^')
+            {
+                self.advance(1); // Skip ^
+                Some(self.read_exponent_ascii()?)
+            } else if let Some(exp) = self.read_exponent_superscript() {
+                Some(exp)
+            } else {
+                return Err(ParsingError::InvalidNumeric(self.offset));
+            }
+        } else {
+            None
+        };
+        self.skip_whitespace();
+
+        // Parse unit symbol (required)
+        let symbol = self.read_units_symbol()?;
+
+        // Verify we've consumed all the input - if there are remaining characters,
+        // it means there was invalid content after the unit symbol
+        if !self
+            .source
+            .trim_ascii()
+            .is_empty()
+        {
+            return Err(ParsingError::InvalidNumeric(self.offset));
+        }
+
+        let quantity = Quantity {
+            mantissa,
+            uncertainty,
+            magnitude,
+            symbol,
+        };
+
+        Ok(Numeric::Scientific(quantity))
+    }
+
+    fn skip_whitespace(&mut self) {
+        while self
+            .source
+            .starts_with(' ')
+            || self
+                .source
+                .starts_with('\t')
+        {
+            self.advance(1);
+        }
+    }
+
+    fn read_decimal_part(&mut self) -> Result<crate::language::Decimal, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+(\.[0-9]+)?");
+
+        if let Some(mat) = re.find(self.source) {
+            let decimal_str = mat.as_str();
+            if let Some(decimal) = crate::language::parse_decimal(decimal_str) {
+                self.advance(decimal_str.len());
+                Ok(decimal)
+            } else {
+                Err(ParsingError::InvalidNumeric(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidNumeric(self.offset))
+        }
+    }
+
+    fn read_exponent_ascii(&mut self) -> Result<i8, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^-?[0-9]+");
+
+        if let Some(mat) = re.find(self.source) {
+            let exp_str = mat.as_str();
+            if let Ok(exp) = exp_str.parse::<i8>() {
+                self.advance(exp_str.len());
+                Ok(exp)
+            } else {
+                Err(ParsingError::InvalidNumeric(self.offset))
+            }
+        } else {
+            Err(ParsingError::InvalidNumeric(self.offset))
+        }
+    }
+
+    fn read_exponent_superscript(&mut self) -> Option<i8> {
+        use crate::regex::*;
+        let re = regex!(r"^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+");
+
+        if let Some(mat) = re.find(self.source) {
+            let super_str = mat.as_str();
+            let converted = crate::language::convert_superscript(super_str);
+            if let Ok(exp) = converted.parse::<i8>() {
+                self.advance(super_str.len());
+                Some(exp)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn read_units_symbol(&mut self) -> Result<&'i str, ParsingError<'i>> {
+        use crate::regex::*;
+        let re = regex!(r"^[a-zA-Z°/μ]+");
+
+        if let Some(mat) = re.find(self.source) {
+            let symbol = mat.as_str();
+            self.advance(symbol.len());
+            Ok(symbol)
+        } else {
+            // Point to the invalid character
+            Err(ParsingError::InvalidNumeric(self.offset))
+        }
     }
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
@@ -2500,10 +2691,19 @@ fn malformed_response_pattern(content: &str) -> bool {
 }
 
 fn is_numeric(content: &str) -> bool {
-    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
-    let scientific = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°/μ]|\s*±|\s*\+/-|\s*×|\s*x\s*10|\s*\*\s*10|\*\s*10)");
+    is_numeric_integral(content) || is_numeric_quantity(content)
+}
 
-    integral.is_match(content) || scientific.is_match(content)
+fn is_numeric_integral(content: &str) -> bool {
+    let integral = regex!(r"^\s*-?[0-9]+(\.[0-9]+)?\s*$");
+    integral.is_match(content)
+}
+
+fn is_numeric_quantity(content: &str) -> bool {
+    let scientific = regex!(
+        r"^\s*-?[0-9]+(\.[0-9]+)?(\s*[a-zA-Z°/μ]|\s*±|\s*\+/-|\s*×|\s*x\s*10|\s*\*\s*10|\*\s*10)"
+    );
+    scientific.is_match(content)
 }
 
 fn is_string_literal(content: &str) -> bool {
