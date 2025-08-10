@@ -1120,7 +1120,7 @@ second_section_second_procedure :
 
         let document = match result {
             Ok(document) => document,
-            Err(e) => panic!("Parsing failed: {}", e),
+            Err(e) => panic!("Parsing failed: {:?}", e),
         };
 
         // Verify complete structure
@@ -1200,7 +1200,7 @@ procedure_four : Concept -> Architecture
 
         let document = match result {
             Ok(document) => document,
-            Err(e) => panic!("Parsing failed: {}", e),
+            Err(e) => panic!("Parsing failed: {:?}", e),
         };
 
         // Verify that both sections contain their respective procedures
@@ -1275,7 +1275,7 @@ III. Implementation
 
         let document = match result {
             Ok(document) => document,
-            Err(e) => panic!("Parsing failed: {}", e),
+            Err(e) => panic!("Parsing failed: {:?}", e),
         };
 
         assert_eq!(
