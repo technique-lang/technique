@@ -155,7 +155,7 @@ impl Present for Quantity<'_> {
 
         // Add uncertainty if present
         if let Some(uncertainty) = &self.uncertainty {
-            result.push_str(&renderer.style(crate::formatting::Syntax::Operator, " ± "));
+            result.push_str(&renderer.style(crate::formatting::Syntax::Numeric, " ± "));
             result.push_str(&renderer.style(
                 crate::formatting::Syntax::Numeric,
                 &format!("{}", uncertainty),
@@ -164,7 +164,7 @@ impl Present for Quantity<'_> {
 
         // Add magnitude if present
         if let Some(magnitude) = &self.magnitude {
-            result.push_str(&renderer.style(crate::formatting::Syntax::Operator, " × "));
+            result.push_str(&renderer.style(crate::formatting::Syntax::Numeric, " × "));
             result.push_str(&renderer.style(crate::formatting::Syntax::Numeric, "10"));
             result.push_str(&renderer.style(
                 crate::formatting::Syntax::Numeric,

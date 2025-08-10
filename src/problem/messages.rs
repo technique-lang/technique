@@ -768,8 +768,8 @@ The base must be 10, and the exponent must be an integer."#
             let examples = vec![
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
-                        number: 10,
-                        precision: 1,
+                        number: 84,
+                        precision: 0,
                     },
                     uncertainty: None,
                     magnitude: None,
@@ -777,21 +777,33 @@ The base must be 10, and the exponent must be an integer."#
                 }),
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
-                        number: 50,
-                        precision: 0,
+                        number: 30,
+                        precision: 1,
                     },
                     uncertainty: None,
-                    magnitude: None,
-                    symbol: "Hz",
+                    magnitude: Some(8),
+                    symbol: "m/s",
                 }),
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
-                        number: 25,
+                        number: 16,
                         precision: 0,
+                    },
+                    uncertainty: Some(Decimal {
+                        number: 15,
+                        precision: 1,
+                    }),
+                    magnitude: None,
+                    symbol: "°C",
+                }),
+                Numeric::Scientific(Quantity {
+                    mantissa: Decimal {
+                        number: 3126,
+                        precision: 1,
                     },
                     uncertainty: None,
                     magnitude: None,
-                    symbol: "°C",
+                    symbol: "μs",
                 }),
             ];
 
@@ -800,13 +812,18 @@ The base must be 10, and the exponent must be an integer."#
                 format!(
                     r#"
 Symbols used to denote units can contain:
-    Letters 'A'..'z'    {}
-    Degrees '°':        {}
-    And other valid characters.
 
-Hyphens, underscores, and spaces are not valid in unit symbols."#,
+    Letters 'A'..'z'    {}
+    Rates '/':          {}
+    Degrees '°':        {}
+    SI prefixes 'μ':    {}
+
+Hyphens, underscores, spaces, or subscripts are not valid in unit symbols.
+                    "#,
                     examples[0].present(renderer),
-                    examples[2].present(renderer)
+                    examples[1].present(renderer),
+                    examples[2].present(renderer),
+                    examples[3].present(renderer)
                 )
                 .trim_ascii()
                 .to_string(),
