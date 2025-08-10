@@ -35,15 +35,15 @@ pub enum Syntax {
 /// Trait for different rendering backends (the no-op no-markup one, ANSI
 /// escapes for terminal colouring, Typst markup for documents)
 pub trait Render {
-    /// Render content with the specified type/style
-    fn render(&self, content_type: Syntax, content: &str) -> String;
+    /// Apply styling to content with the specified syntax type
+    fn style(&self, content_type: Syntax, content: &str) -> String;
 }
 
 /// Returns content unchanged, with no markup applied
 pub struct Identity;
 
 impl Render for Identity {
-    fn render(&self, _syntax: Syntax, content: &str) -> String {
+    fn style(&self, _syntax: Syntax, content: &str) -> String {
         content.to_string()
     }
 }
@@ -68,12 +68,12 @@ fn format_to_fragments(technique: &Document, width: u8) -> Vec<(Syntax, String)>
     crate::formatting::formatter::format_with_renderer(technique, width)
 }
 
-/// Pass 2: apply markup to fragments via render() and combine.
+/// Pass 2: apply markup to fragments via style() and combine.
 fn render_to_string(renderer: &impl Render, fragments: Vec<(Syntax, String)>) -> String {
     let mut output = String::new();
 
     for (syntax, content) in fragments {
-        let rendered = renderer.render(syntax, &content);
+        let rendered = renderer.style(syntax, &content);
         output.push_str(&rendered);
     }
 

@@ -8,7 +8,7 @@ use technique::formatting::*;
 pub struct Terminal;
 
 impl Render for Terminal {
-    fn render(&self, syntax: Syntax, content: &str) -> String {
+    fn style(&self, syntax: Syntax, content: &str) -> String {
         match syntax {
             Syntax::Neutral => content.to_string(),
             Syntax::Indent => content.to_string(),
@@ -105,7 +105,7 @@ mod check {
 
     #[test]
     fn basic_handling() {
-        let result = Terminal.render(Syntax::Neutral, "hello world");
+        let result = Render::style(&Terminal, Syntax::Neutral, "hello world");
         assert_eq!(result, "hello world");
     }
 }
