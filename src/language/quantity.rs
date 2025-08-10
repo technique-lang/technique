@@ -166,26 +166,6 @@ pub fn convert_superscript(input: &str) -> String {
         .collect()
 }
 
-fn to_superscript(num: i8) -> String {
-    num.to_string()
-        .chars()
-        .map(|c| match c {
-            '0' => '⁰',
-            '1' => '¹',
-            '2' => '²',
-            '3' => '³',
-            '4' => '⁴',
-            '5' => '⁵',
-            '6' => '⁶',
-            '7' => '⁷',
-            '8' => '⁸',
-            '9' => '⁹',
-            '-' => '⁻',
-            _ => c,
-        })
-        .collect()
-}
-
 impl Display for Decimal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.precision == 0 {
@@ -230,8 +210,28 @@ impl<'i> Display for Quantity<'i> {
     }
 }
 
+fn to_superscript(num: i8) -> String {
+    num.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '⁰',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            '-' => '⁻',
+            _ => c,
+        })
+        .collect()
+}
+
 #[cfg(test)]
-mod tests {
+mod check {
     use super::*;
 
     #[test]

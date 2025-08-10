@@ -1,14 +1,14 @@
 //! Renderers for colourizing Technique language
 
-use technique::formatting::*;
 use std::borrow::Cow;
+use technique::formatting::*;
 
 /// Add markup around syntactic elements for use when including
 /// Technique source in Typst documents.
 pub struct Typst;
 
 impl Render for Typst {
-    fn render(&self, syntax: Syntax, content: &str) -> String {
+    fn style(&self, syntax: Syntax, content: &str) -> String {
         let content = escape_typst(content);
         match syntax {
             Syntax::Neutral => markup("", &content),
@@ -105,15 +105,15 @@ mod check {
         let typst = Typst;
 
         // Test that newlines are rendered as Typst line breaks
-        let newline_result = typst.render(Syntax::Newline, "\n");
+        let newline_result = typst.style(Syntax::Newline, "\n");
         assert_eq!(newline_result, "\\\n");
 
         // Test that indentation is rendered without raw() wrapper
-        let indent_result = typst.render(Syntax::Indent, "    ");
+        let indent_result = typst.style(Syntax::Indent, "    ");
         assert_eq!(indent_result, "#text(raw(\"    \"))");
 
         // Test that this is different from Neutral (which would wrap newlines in raw())
-        let neutral_result = typst.render(Syntax::Neutral, "\n    ");
+        let neutral_result = typst.style(Syntax::Neutral, "\n    ");
         assert_eq!(neutral_result, "#text(raw(\"\n    \"))");
 
         // Verify the improvement: newlines no longer wrapped in raw()
@@ -136,7 +136,7 @@ mod check {
         let mut output = String::new();
 
         for (syntax, content) in fragments {
-            let rendered = typst.render(syntax, &content);
+            let rendered = typst.style(syntax, &content);
             output.push_str(&rendered);
         }
 

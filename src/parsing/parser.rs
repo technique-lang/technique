@@ -1,38 +1,17 @@
 use std::path::Path;
-use tracing::debug;
 
-use crate::error::*;
 use crate::language::*;
 use crate::regex::*;
 
 pub fn parse_via_taking<'i>(
     path: &'i Path,
     content: &'i str,
-) -> Result<Document<'i>, TechniqueError<'i>> {
+) -> Result<Document<'i>, ParsingError<'i>> {
     let mut input = Parser::new();
     input.filename(path);
     input.initialize(content);
 
-    let result = input.parse_from_start();
-    match result {
-        Ok(technique) => Ok(technique),
-        Err(error) => {
-            debug!(?error);
-            Err(make_error(input, error))
-        }
-    }
-}
-
-fn make_error<'i>(parser: Parser<'i>, error: ParsingError<'i>) -> TechniqueError<'i> {
-    let (problem, details) = error.message();
-    TechniqueError {
-        problem,
-        details,
-        filename: parser.filename,
-        source: parser.original,
-        offset: error.offset(),
-        width: None,
-    }
+    input.parse_from_start()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,7 +47,7 @@ pub enum ParsingError<'i> {
 }
 
 impl<'i> ParsingError<'i> {
-    fn offset(&self) -> usize {
+    pub fn offset(&self) -> usize {
         match self {
             ParsingError::IllegalParserState(offset) => *offset,
             ParsingError::Unimplemented(offset) => *offset,
@@ -98,429 +77,6 @@ impl<'i> ParsingError<'i> {
             ParsingError::InvalidQuantityUncertainty(offset) => *offset,
             ParsingError::InvalidQuantityMagnitude(offset) => *offset,
             ParsingError::InvalidQuantitySymbol(offset) => *offset,
-        }
-    }
-
-    fn message(&self) -> (String, String) {
-        match self {
-            ParsingError::IllegalParserState(_) => (
-                "Illegal parser state".to_string(),
-                "Internal parser error. This should not have happened! Sorry.".to_string(),
-            ),
-            ParsingError::Unimplemented(_) => (
-                "Feature not yet implemented".to_string(),
-                "This feature is planned but not yet available.".to_string(),
-            ),
-            ParsingError::Unrecognized(_) => (
-                "Unrecognized input".to_string(),
-                "The parser encountered unexpected content".to_string(),
-            ),
-            ParsingError::Expected(_, value) => (
-                format!("Expected {}", value),
-                format!(
-                    "The parser was looking for {} but found something else.",
-                    value
-                ),
-            ),
-            ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
-                format!("Expected matching character '{}'", end),
-                format!(
-                    r#"
-The parser was expecting {} enclosed by '{}' and '{}' but
-there was no more input remaining in the current scope.
-                    "#,
-                    subject, start, end
-                )
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidHeader(_) => (
-                "Invalid header".to_string(),
-                r#"
-The metadata describing a Technique file must follow this format:
-
-    % technique v1
-    ! «license»; © «copyright»
-    & «template»
-
-The first line are the magic bytes identifying the Technique file format and
-current language version.
-
-The second line lists the System Package Data Exchange (SPDX) information
-about the ownership of the Technique in this file and permissions associated
-with it. The line is optional but if present it starts with a «license»
-declaration, conventionally an SPDX identifier like `MIT`, `CC-BY 4.0`, or
-`Proprietary`. A declaration of the «copyright» holder can optionally follow
-the license statement, separated from it by a semicolon. Copyright statements
-typically list the year and then the name of the person or entity holding the
-copyright.
-
-The third line optionally specifies the template to be used when rendering the
-Technique. Common templates include `checklist`, `nasa-flight-plan,v4.0`, and
-`recipe`.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidCharacter(_, c) => (
-                format!("Invalid character '{}'", c),
-                "This character is not allowed here.".to_string(),
-            ),
-            ParsingError::UnexpectedEndOfInput(_) => (
-                "Unexpected end of input".to_string(),
-                "The file ended before the parser expected it to".to_string(),
-            ),
-            ParsingError::InvalidIdentifier(_, _) => (
-                "Invalid identifier".to_string(),
-                r#"
-Identifiers must start with a lowercase letter and contain only lower case
-letters, numbers, and underscores. No uppercase letters, spaces, dashes, or
-other punctuation. Examples:
-
-    make_coffee
-    attempt1
-    i
-    l33t_hax0r
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidForma(_) => (
-                "Invalid forma name".to_string(),
-                r#"
-The names of Forma (the basic types in Technique) must start with an uppercase
-letter and cannot contain dashes, underscores, spaces, or other punctuation.
-For example:
-
-    Coffee
-    Ingredients
-    PatientRecord
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidGenus(_) => (
-                "Invalid genus".to_string(),
-                r#"
-Genus are the full types in Technique. They are either simple (just the name
-of a Forma) or compound (lists or tuples of Forma). Some examples:
-
-    Coffee
-    (Beans, Water)
-    Beans, Water
-    [Patient]
-    ()
-
-Tuples can be enclosed in parenthesis or "naked"; semantically they are the
-same. The final example is the syntax for the Unit genus, used when something
-doesn't have an input or result, per se.
-    "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidSignature(_) => (
-                "Invalid signature".to_string(),
-                r#"
-Procedure signatures follow the pattern domain -> range, where domain and
-range are genus. Some examples:
-
-    A -> B
-    (Beans, Milk) -> Coffee
-    [FunctionalRequirement] -> Architecture
-
-Signatures are optional on procedure declarations but if present must follow
-this form.
-    "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidDeclaration(_) => (
-                "Invalid procedure declaration".to_string(),
-                r#"
-Procedures are declared by specifying an identifier as a name, followed by a
-colon:
-
-    f :
-    implementation :
-    make_coffee :
-
-A procedure can optionally have a signature, as in the following examples:
-
-    f : A -> B
-    implementation : Design -> Product
-    make_coffee : Beans, Milk -> Coffee
-    make_coffee : (Beans, Milk) -> Coffee
-
-Finally, variables can be assigned for the names of the input parameters:
-
-    make_coffee(b, m) : Beans, Milk -> Coffee
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidSection(_) => (
-                "Invalid section heading".to_string(),
-                r#"
-Section headings use capital Roman numerals, followed by optional title:
-
-    I. First Section
-    II. Second Section
-    III.
-
-Conventionally such a title would be in Proper Case but that is left up to the
-author of the Technique.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidInvocation(_) => (
-                "Invalid procedure invocation".to_string(),
-                r#"
-To denote the invocation of another procedure, use angle brackets:
-
-    <make_coffee>
-
-If the procedure takes parameters they can be specified in parenthesis:
-
-    <check_vitals>(patient)
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidFunction(_) => (
-                "Invalid function call".to_string(),
-                r#"
-Function calls in code blocks are made by specifying the name of the function
-to be executed followed by parentheses, supplying values, variables, or other
-expressions as parameters as required:
-
-    exec("ls -la")
-    now()
-    calculate(a, b)
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidCodeBlock(_) => (
-                "Invalid code block".to_string(),
-                r#"
-Inline code blocks are enclosed in braces:
-
-    { exec("command") }
-    { repeat 5 }
-    { foreach patient in patients }
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidMultiline(_) => (
-                "Invalid multi-line string".to_string(),
-                r#"
-Multi-line strings can be written by surrounding the content in triple
-backticks:
-
-    ```
-    In those days spirits were brave, the stakes were high, men were real men,
-    women were real women and small furry creatures from Alpha Centauri were
-    real small furry creatures from Alpha Centauri.
-    ```
-
-The leading and trailing newline will be trimmed. In addition, any whitespace
-indenting the string will be removed. So
-
-    ```bash
-        if [ -f /etc/passwd ]
-        then
-            echo "Found the password file"
-        fi
-    ```
-
-would result in a string with the `if` on the left margin but `echo` indented
-by 4 spaces. This example also shows that the «language» of the content can be
-specified. Doing so does not change the meaning of the multi-line string, but
-it may be used by output templates when rendering the procedure.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidStep(_) => (
-                "Invalid step format".to_string(),
-                r#"
-Steps must start with a number or lower-case letter (in the case of dependent
-steps and sub-steps, respectively) followed by a '.':
-
-    1.  First step
-    2.  Second step
-        a.  First substep
-        b.  Second substep
-
-Steps or substeps that can execute in parallel can instead be marked with a
-dash. They can be done in either order, or concurrently:
-
-    -   Do one thing
-    -   And another
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidSubstep(_) => (
-                "Invalid substep format".to_string(),
-                r#"
-Substeps can be nested below top-level dependent steps or top-level parallel
-steps. So both of these are valid:
-
-1.  First top-level step.
-    a.  First substep in first dependent step.
-    b.  Second substep in first dependent step.
-
-and
-
--   First top-level step to be done in any order.
-    a.  First substep in first parallel step.
-    b.  Second substep in first parallel step.
-
-The ordinal must be a lowercase letter and not a roman numeral. By convention
-substeps are indented by 4 characters, but that is not required.
-
-Note also that the substeps can be consecutively numbered, which allows each
-substep to be uniquely identified when they are grouped under different
-parallel steps, but again this is not compulsory.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidForeach(_) => (
-                "Invalid foreach loop".to_string(),
-                r#"
-Loops follow this pattern:
-
-    { foreach patient in patients }
-    { foreach (name, value) in data }
-
-In the first example `patients` would be a list; in the latter case `data` is
-a list of tuples.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidResponse(_) => (
-                "Invalid response format".to_string(),
-                r#"
-The fixed choices that are valid for the result of a given step can be
-enumerated. These responses are each enclosed in single quotes, separated by
-the '|' character:
-
-    'Rock' | 'Paper' | 'Scissors'
-    'Confirmed'
-    'Yes' | 'No' but with explanation
-
-By convention the response values are Proper Case.
-
-The third example shows that additional context can be supplied when
-documenting a response to help the user understand what is expected of them.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidIntegral(_) => (
-                "Invalid integer literal".to_string(),
-                r#"
-Integer literals must be positive of negative whole numbers:
-
-    42
-    -123
-    0
-    9223372036854775807
-
-Integers cannot contain decimal points or units.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidQuantity(_) => (
-                "Invalid quantity format".to_string(),
-                r#"
-Quantities are measurements with units:
-
-    4.2 kg
-    100 m/s
-    20 °C
-
-They can optionally have uncertainty:
-
-    420 ± 10 kg
-
-a magnitude:
-
-    4.2 × 10² kg
-
-or both:
-
-    4.2 ± 0.1 × 10² kg
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidQuantityDecimal(_) => (
-                "Invalid number in quantity".to_string(),
-                r#"
-The numeric part of a quantity may be positive or negative, and may have a
-decimal point:
-
-    42
-    -123.45
-    0.001
-
-Values less than 1 must have a leading '0' before the decimal.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidQuantityUncertainty(_) => (
-                "Invalid uncertainty in quantity".to_string(),
-                r#"
-Uncertainty values must be positive numbers:
-
-    4.2 ± 0.1 kg    (valid)
-    100 +/- 5 m/s   (valid)
-
-You can use '±' or `+/-`, followed by a decimal.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidQuantityMagnitude(_) => (
-                "Invalid magnitude format".to_string(),
-                r#"
-The magnitude of a quantity can be expressed by in the usual scientific format
-× 10ⁿ; for ease of writing you can use ASCII to write * or x and 10^n, as in
-the following examples:
-
-    × 10^24
-    × 10²⁴
-    * 10^-6
-    x 10^12
-
-The base must be 10, and the exponent must be an integer.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
-            ParsingError::InvalidQuantitySymbol(_) => (
-                "Invalid character in quantity units".to_string(),
-                r#"
-Symbols used to denote units can contain:
-
-    Letters 'A'..'z'    kg, Hz, mol
-    Degrees '°':        °C, °F
-    Rates '/':          m/s, km/h
-    SI prefix 'μ':      μg, μs
-
-Hyphens, underscores, and spaces are not valid in unit symbols.
-                "#
-                .trim_ascii()
-                .to_string(),
-            ),
         }
     }
 }
@@ -967,7 +523,8 @@ impl<'i> Parser<'i> {
             if re.is_match(inner.source) {
                 Ok(1)
             } else {
-                Err(ParsingError::InvalidHeader(0))
+                let error_offset = analyze_magic_line(inner.source);
+                Err(ParsingError::InvalidHeader(inner.offset + error_offset))
             }
         })
     }
@@ -2476,9 +2033,9 @@ impl<'i> Parser<'i> {
 }
 
 fn is_magic_line(content: &str) -> bool {
-    let re = regex!(r"%\s*technique");
-
-    re.is_match(content)
+    content
+        .trim_ascii_start()
+        .starts_with('%')
 }
 
 fn is_spdx_line(content: &str) -> bool {
@@ -2529,6 +2086,35 @@ fn analyze_malformed_signature(content: &str) -> usize {
     }
 
     0 // fallback
+}
+
+fn analyze_magic_line(content: &str) -> usize {
+    let trimmed = content.trim();
+
+    // Point to start if doesn't begin with %
+    if !trimmed.starts_with('%') {
+        return 0;
+    }
+
+    // Point to where "technique" should be if missing or incorrect
+    if !trimmed.contains("technique") {
+        // Find position after % and whitespace
+        return content
+            .find('%')
+            .unwrap_or(0)
+            + 1;
+    }
+
+    // Point to where version should be if missing v1
+    if !trimmed.contains("v1") {
+        // Find position after "technique"
+        if let Some(pos) = content.find("technique") {
+            return pos + "technique".len();
+        }
+    }
+
+    // If structure is roughly correct but still invalid, point to start
+    0
 }
 
 /// Lightweight detection function for Genus patterns. This is necessary as an

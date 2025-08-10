@@ -11,6 +11,7 @@ use technique::formatting::*;
 use technique::formatting::{self};
 use technique::parsing;
 
+mod problem;
 mod rendering;
 
 #[derive(Eq, Debug, PartialEq)]
@@ -144,14 +145,17 @@ fn main() {
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
                 Err(error) => {
-                    eprintln!("{}", error.concise_details());
+                    eprintln!("{}", problem::concise_loading_error(&error));
                     std::process::exit(1);
                 }
             };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
-                    eprintln!("{}", error.full_details());
+                    eprintln!(
+                        "{}",
+                        problem::full_parsing_error(&error, &filename, &content, &Terminal)
+                    );
                     std::process::exit(1);
                 }
             };
@@ -186,14 +190,17 @@ fn main() {
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
                 Err(error) => {
-                    eprintln!("{}", error.concise_details());
+                    eprintln!("{}", problem::concise_loading_error(&error));
                     std::process::exit(1);
                 }
             };
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
                 Err(error) => {
-                    eprintln!("{}", error.concise_error());
+                    eprintln!(
+                        "{}",
+                        problem::concise_parsing_error(&error, &filename, &content, &Terminal)
+                    );
                     std::process::exit(1);
                 }
             };
@@ -218,7 +225,7 @@ fn main() {
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
                 Err(error) => {
-                    eprintln!("{}", error.concise_details());
+                    eprintln!("{}", problem::concise_loading_error(&error));
                     std::process::exit(1);
                 }
             };
@@ -228,7 +235,10 @@ fn main() {
                     // It is possible that we will want to render the error
                     // into the PDF document rather than crashing here. We'll
                     // see in the future.
-                    eprintln!("{}", error.full_details());
+                    eprintln!(
+                        "{}",
+                        problem::full_parsing_error(&error, &filename, &content, &Terminal)
+                    );
                     std::process::exit(1);
                 }
             };

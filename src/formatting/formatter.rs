@@ -912,6 +912,7 @@ impl Formatter {
     }
 }
 
+
 impl ToString for Formatter {
     fn to_string(&self) -> String {
         let mut result = String::new();
