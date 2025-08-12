@@ -518,7 +518,7 @@ impl<'i> Parser<'i> {
     // different natural number here.
     fn read_magic_line(&mut self) -> Result<u8, ParsingError<'i>> {
         self.take_until(&['\n'], |inner| {
-            let re = regex!(r"%\s*technique\s+v1");
+            let re = regex!(r"%\s*technique\s+v1\s*$");
 
             if re.is_match(inner.source) {
                 Ok(1)
@@ -2112,6 +2112,14 @@ fn analyze_magic_line(content: &str) -> usize {
         return 0;
     }
 
+    // If both "technique" and "v1" are present but still invalid (like "v1.0"),
+    // point to the character immediately after "v1"
+    if trimmed.contains("technique") && trimmed.contains("v1") {
+        if let Some(v1_pos) = content.find("v1") {
+            return v1_pos + 2; // Position after "v1"
+        }
+    }
+
     // Point to where version should be if missing v1
     if !trimmed.contains("v1") {
         // Find position after "technique"
@@ -2465,6 +2473,7 @@ mod check {
 
         // Test edge case where there's no "v" at all - should point to where version should start
         assert_eq!(analyze_magic_line("% technique 1.0"), 12); // Points to "1" when there's no "v"
+        assert_eq!(analyze_magic_line("% technique v1.0"), 14); // Points to "." when there is a "v1" but it has minor version
         assert_eq!(analyze_magic_line("% technique  2"), 13); // Points to "2" when there's no "v" with extra space
         assert_eq!(analyze_magic_line("% technique beta"), 12); // Points to "b" in "beta" when there's no "v"
     }
