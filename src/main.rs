@@ -9,6 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::*;
 use technique::formatting::{self};
+
 use technique::parsing;
 
 mod problem;
@@ -108,6 +109,15 @@ fn main() {
                     PDF. By default this will highlight the source of the \
                     input file for the purposes of reviewing the raw \
                     procedure.")
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_parser(["pdf", "typst"])
+                        .default_value("pdf")
+                        .action(ArgAction::Set)
+                        .help("Output format: pdf (default) or typst markup.")
+                )
                 .arg(
                     Arg::new("filename")
                         .required(true)
@@ -215,6 +225,12 @@ fn main() {
             print!("{}", result);
         }
         Some(("render", submatches)) => {
+            let output_format = submatches
+                .get_one::<String>("output")
+                .unwrap();
+
+            debug!(output_format);
+
             let filename = submatches
                 .get_one::<String>("filename")
                 .unwrap(); // argument are required by definition so always present
@@ -244,7 +260,17 @@ fn main() {
             };
 
             let result = formatting::render(&Typst, &technique, 70);
-            rendering::via_typst(&filename, &result);
+
+            match output_format.as_str() {
+                "typst" => {
+                    print!("{}", result);
+                    // and exit
+                    std::process::exit(0);
+                }
+                _ => {
+                    rendering::via_typst(&filename, &result);
+                }
+            }
         }
         Some(_) => {
             println!("No valid subcommand was used")
