@@ -3,6 +3,27 @@
 use crate::formatting::*;
 use crate::language::*;
 
+// Helper function to convert numbers to superscript
+fn to_superscript(num: i8) -> String {
+    num.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '⁰',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            '-' => '⁻',
+            _ => c,
+        })
+        .collect()
+}
+
 pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, String)> {
     let mut output = Formatter::new(width);
 
@@ -35,6 +56,112 @@ pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Str
     output.fragments
 }
 
+/// Utility functions for rendering individual AST types for Present trait implementations
+/// These functions create a sub-formatter, render the specific type, and return a styled string
+
+pub fn render_signature(signature: &Signature, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_signature(signature);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_genus(genus: &Genus, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_genus(genus);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_forma(forma: &Forma, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_forma(forma);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_identifier(identifier: &Identifier, renderer: &dyn Render) -> String {
+    renderer.style(Syntax::Declaration, identifier.0)
+}
+
+pub fn render_response(response: &Response, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append(Syntax::Quote, "'");
+    sub.append(Syntax::Response, response.value);
+    sub.append(Syntax::Quote, "'");
+    if let Some(condition) = response.condition {
+        sub.append_char(' ');
+        sub.append_str(condition);
+    }
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_numeric(numeric: &Numeric, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_numeric(numeric);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_quantity(quantity: &Quantity, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_quantity(quantity);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_invocation(invocation: &Invocation, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_application(invocation);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_function(function: &Function, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_function(function);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_expression(expression: &Expression, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_expression(expression);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+pub fn render_procedure_declaration(procedure: &Procedure, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append(
+        Syntax::Declaration,
+        procedure
+            .name
+            .0,
+    );
+    if let Some(parameters) = &procedure.parameters {
+        sub.append_parameters(parameters);
+    }
+    sub.append_char(' ');
+    sub.append(Syntax::Structure, ":");
+    if let Some(signature) = &procedure.signature {
+        sub.append_char(' ');
+        sub.append_signature(signature);
+    }
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
+/// Helper function to convert fragments to a styled string using a renderer
+fn render_fragments(fragments: &[(Syntax, String)], renderer: &dyn Render) -> String {
+    let mut result = String::new();
+    for (syntax, content) in fragments {
+        result.push_str(&renderer.style(*syntax, content));
+    }
+    result
+}
+
 struct Formatter {
     fragments: Vec<(Syntax, String)>,
     nesting: u8,
@@ -60,7 +187,7 @@ impl Formatter {
     }
 
     /// Append content with specific syntax tagging, maintaining order
-    fn append(&mut self, syntax: Syntax, content: &str) {
+    pub fn append(&mut self, syntax: Syntax, content: &str) {
         // Flush any pending buffer content first to maintain order
         self.flush_current();
         self.fragments
@@ -88,7 +215,7 @@ impl Formatter {
         self.switch_syntax(Syntax::Neutral);
     }
 
-    fn flush_current(&mut self) {
+    pub fn flush_current(&mut self) {
         if !self
             .buffer
             .is_empty()
@@ -130,7 +257,7 @@ impl Formatter {
         }
     }
 
-    fn append_str(&mut self, text: &str) {
+    pub fn append_str(&mut self, text: &str) {
         for c in text.chars() {
             self.append_char(c);
         }
@@ -218,7 +345,7 @@ impl Formatter {
         sub.fragments
     }
 
-    fn append_char(&mut self, c: char) {
+    pub fn append_char(&mut self, c: char) {
         if c == '\n' {
             // Flush any existing buffer before adding newline
             self.flush_current();
@@ -349,13 +476,13 @@ impl Formatter {
         }
     }
 
-    fn append_signature(&mut self, signature: &Signature) {
+    pub fn append_signature(&mut self, signature: &Signature) {
         self.append_genus(&signature.domain);
         self.append(Syntax::Structure, " -> ");
         self.append_genus(&signature.range);
     }
 
-    fn append_genus(&mut self, genus: &Genus) {
+    pub fn append_genus(&mut self, genus: &Genus) {
         match genus {
             Genus::Unit => {
                 self.append(Syntax::Forma, "()");
@@ -396,7 +523,7 @@ impl Formatter {
     }
 
     // Output names surrounded by parenthesis
-    fn append_parameters(&mut self, variables: &Vec<Identifier>) {
+    pub fn append_parameters(&mut self, variables: &Vec<Identifier>) {
         self.append(Syntax::Structure, "(");
         for (i, variable) in variables
             .iter()
@@ -410,7 +537,7 @@ impl Formatter {
         self.append(Syntax::Structure, ")");
     }
 
-    fn append_forma(&mut self, forma: &Forma) {
+    pub fn append_forma(&mut self, forma: &Forma) {
         self.append(Syntax::Forma, forma.0)
     }
 
@@ -722,7 +849,7 @@ impl Formatter {
         }
     }
 
-    fn append_expression(&mut self, expression: &Expression) {
+    pub fn append_expression(&mut self, expression: &Expression) {
         match expression {
             Expression::Variable(identifier) => {
                 self.append(Syntax::Variable, identifier.0);
@@ -819,14 +946,36 @@ impl Formatter {
         }
     }
 
-    fn append_numeric(&mut self, numeric: &Numeric) {
+    pub fn append_numeric(&mut self, numeric: &Numeric) {
         match numeric {
             Numeric::Integral(num) => self.append(Syntax::Numeric, &num.to_string()),
-            Numeric::Scientific(quantity) => self.append(Syntax::Numeric, &quantity.to_string()),
+            Numeric::Scientific(quantity) => self.append_quantity(quantity),
         }
     }
 
-    fn append_application(&mut self, invocation: &Invocation) {
+    pub fn append_quantity(&mut self, quantity: &Quantity) {
+        // Format the mantissa
+        self.append(Syntax::Numeric, &format!("{}", quantity.mantissa));
+
+        // Add uncertainty if present
+        if let Some(uncertainty) = &quantity.uncertainty {
+            self.append(Syntax::Numeric, " ± ");
+            self.append(Syntax::Numeric, &format!("{}", uncertainty));
+        }
+
+        // Add magnitude if present
+        if let Some(magnitude) = &quantity.magnitude {
+            self.append(Syntax::Numeric, " × ");
+            self.append(Syntax::Numeric, "10");
+            self.append(Syntax::Numeric, &to_superscript(*magnitude));
+        }
+
+        // Add unit symbol
+        self.append_char(' ');
+        self.append(Syntax::Numeric, quantity.symbol);
+    }
+
+    pub fn append_application(&mut self, invocation: &Invocation) {
         self.append(Syntax::Quote, "<");
         match &invocation.target {
             Target::Local(identifier) => self.append(Syntax::Invocation, identifier.0),
@@ -857,7 +1006,7 @@ impl Formatter {
         self.append(Syntax::Structure, ")");
     }
 
-    fn append_function(&mut self, function: &Function) {
+    pub fn append_function(&mut self, function: &Function) {
         self.append(
             Syntax::Function,
             &function
@@ -911,7 +1060,6 @@ impl Formatter {
         self.append(Syntax::Structure, "]");
     }
 }
-
 
 impl ToString for Formatter {
     fn to_string(&self) -> String {
