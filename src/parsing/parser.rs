@@ -2098,18 +2098,38 @@ fn analyze_magic_line(content: &str) -> usize {
 
     // Point to where "technique" should be if missing or incorrect
     if !trimmed.contains("technique") {
-        // Find position after % and whitespace
-        return content
-            .find('%')
-            .unwrap_or(0)
-            + 1;
+        // Find position after % and skip whitespace to point to first char of wrong keyword
+        if let Some(percent_pos) = content.find('%') {
+            let after_percent = percent_pos + 1;
+            let remaining = &content[after_percent..];
+            for (i, ch) in remaining.char_indices() {
+                if !ch.is_whitespace() {
+                    return after_percent + i;
+                }
+            }
+            return after_percent;
+        }
+        return 0;
     }
 
     // Point to where version should be if missing v1
     if !trimmed.contains("v1") {
         // Find position after "technique"
         if let Some(pos) = content.find("technique") {
-            return pos + "technique".len();
+            let after_technique = pos + "technique".len();
+            // Skip whitespace to find the actual version string
+            let remaining = &content[after_technique..];
+            for (i, ch) in remaining.char_indices() {
+                if !ch.is_whitespace() {
+                    // If we found a 'v', point to the character after it (the version number)
+                    if ch == 'v' && i + 1 < remaining.len() {
+                        return after_technique + i + 1;
+                    }
+                    // Otherwise point to where we found the non-whitespace character
+                    return after_technique + i;
+                }
+            }
+            return after_technique;
         }
     }
 
@@ -2416,6 +2436,37 @@ mod check {
         // this is rejected because the technique keyword isn't present.
         let result = input.read_magic_line();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn magic_line_wrong_keyword_error_position() {
+        // Test that error position points to the first character of the wrong keyword
+        assert_eq!(analyze_magic_line("% tecnique v1"), 2); // Points to "t" in "tecnique"
+        assert_eq!(analyze_magic_line("%  tecnique v1"), 3); // Points to "t" in "tecnique" with extra space
+        assert_eq!(analyze_magic_line("% \ttechniqe v1"), 3); // Points to "t" in "techniqe" with tab
+        assert_eq!(analyze_magic_line("%    wrong v1"), 5); // Points to "w" in "wrong" with multiple spaces
+        assert_eq!(analyze_magic_line("% foo v1"), 2); // Points to "f" in "foo"
+        assert_eq!(analyze_magic_line("% TECHNIQUE v1"), 2); // Points to "T" in uppercase "TECHNIQUE"
+
+        // Test missing keyword entirely - should point to position after %
+        assert_eq!(analyze_magic_line("% v1"), 2); // Points to "v" when keyword is missing
+        assert_eq!(analyze_magic_line("%  v1"), 3); // Points to "v" when keyword is missing with space
+    }
+
+    #[test]
+    fn magic_line_wrong_version_error_position() {
+        // Test that error position points to the version number after "v" in wrong version strings
+        assert_eq!(analyze_magic_line("% technique v0"), 13); // Points to "0" in "v0"
+        assert_eq!(analyze_magic_line("% technique  v2"), 14); // Points to "2" in "v2" with extra space
+        assert_eq!(analyze_magic_line("% technique\tv0"), 13); // Points to "0" in "v0" with tab
+        assert_eq!(analyze_magic_line("% technique   vX"), 15); // Points to "X" in "vX" with multiple spaces
+        assert_eq!(analyze_magic_line("% technique v99"), 13); // Points to "9" in "v99"
+        assert_eq!(analyze_magic_line("% technique   v0.5"), 15); // Points to "0" in "v0.5" with multiple spaces
+
+        // Test edge case where there's no "v" at all - should point to where version should start
+        assert_eq!(analyze_magic_line("% technique 1.0"), 12); // Points to "1" when there's no "v"
+        assert_eq!(analyze_magic_line("% technique  2"), 13); // Points to "2" when there's no "v" with extra space
+        assert_eq!(analyze_magic_line("% technique beta"), 12); // Points to "b" in "beta" when there's no "v"
     }
 
     #[test]
