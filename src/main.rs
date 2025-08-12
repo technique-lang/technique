@@ -18,6 +18,7 @@ mod rendering;
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
     Native,
+    Typst,
     Silent,
 }
 
@@ -113,8 +114,8 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
-                        .value_parser(["pdf", "typst"])
-                        .default_value("pdf")
+                        .value_parser(["typst", "none"])
+                        .default_value("none")
                         .action(ArgAction::Set)
                         .help("Output format: pdf (default) or typst markup.")
                 )
@@ -225,11 +226,16 @@ fn main() {
             print!("{}", result);
         }
         Some(("render", submatches)) => {
-            let output_format = submatches
+            let output = submatches
                 .get_one::<String>("output")
                 .unwrap();
+            let output = match output.as_str() {
+                "typst" => Output::Typst,
+                "none" => Output::Silent,
+                _ => panic!("Unrecognized --output value"),
+            };
 
-            debug!(output_format);
+            debug!(?output);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -261,16 +267,18 @@ fn main() {
 
             let result = formatting::render(&Typst, &technique, 70);
 
-            match output_format.as_str() {
-                "typst" => {
+            match output {
+                Output::Typst => {
                     print!("{}", result);
-                    // and exit
-                    std::process::exit(0);
                 }
                 _ => {
-                    rendering::via_typst(&filename, &result);
+                    // ignore; the default is to not output any intermediate
+                    // representations and instead proceed to invoke the
+                    // typesetter to generate the desired PDF.
                 }
             }
+
+            rendering::via_typst(&filename, &result);
         }
         Some(_) => {
             println!("No valid subcommand was used")
