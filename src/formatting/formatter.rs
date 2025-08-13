@@ -48,7 +48,7 @@ pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Str
             .last()
         {
             if !last_content.ends_with('\n') {
-                output.append_fragment(Syntax::Description, "\n");
+                output.add_fragment(Syntax::Description, "\n");
             }
         }
     }
@@ -134,13 +134,12 @@ pub fn render_procedure_declaration(procedure: &Procedure, renderer: &dyn Render
     if let Some(parameters) = &procedure.parameters {
         sub.append_parameters(parameters);
     }
-    sub.append_char(' ');
+    sub.add_fragment(Syntax::Neutral, " ");
     sub.append(Syntax::Structure, ":");
     if let Some(signature) = &procedure.signature {
-        sub.append_char(' ');
+        sub.add_fragment(Syntax::Neutral, " ");
         sub.append_signature(signature);
     }
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
@@ -288,9 +287,9 @@ impl Formatter {
             _ => {
                 let mut sub = self.subformatter();
                 sub.append(Syntax::Structure, "{");
-                sub.append_char(' ');
+                sub.add_fragment(Syntax::Neutral, " ");
                 sub.append_expression(expr);
-                sub.append_char(' ');
+                sub.add_fragment(Syntax::Neutral, " ");
                 sub.append(Syntax::Structure, "}");
                 sub.flush_current();
                 sub.fragments
@@ -316,9 +315,9 @@ impl Formatter {
             Descriptive::Text(text) => sub.append_breakable(Syntax::Description, text),
             Descriptive::CodeInline(expr) => {
                 sub.append(Syntax::Structure, "{");
-                sub.append_char(' ');
+                sub.add_fragment(Syntax::Neutral, " ");
                 sub.append_expression(expr);
-                sub.append_char(' ');
+                sub.add_fragment(Syntax::Neutral, " ");
                 sub.append(Syntax::Structure, "}");
             }
             Descriptive::Application(invocation) => {
@@ -339,7 +338,7 @@ impl Formatter {
         if c == '\n' {
             // Flush any existing buffer before adding newline
             self.flush_current();
-            self.append_fragment(Syntax::Newline, "\n");
+            self.add_fragment(Syntax::Newline, "\n");
         } else {
             self.buffer
                 .push(c);
@@ -485,8 +484,8 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append(Syntax::Quote, ",");
-                        self.append_char(' ');
+                        self.append(Syntax::Structure, ",");
+                        self.add_fragment(Syntax::Neutral, " ");
                     }
                     self.append_forma(forma);
                 }
@@ -498,8 +497,8 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.append(Syntax::Quote, ",");
-                        self.append_char(' ');
+                        self.append(Syntax::Structure, ",");
+                        self.add_fragment(Syntax::Neutral, " ");
                     }
                     self.append_forma(forma);
                 }
@@ -588,7 +587,7 @@ impl Formatter {
                             line.flush();
                             self.append(Syntax::Structure, " { ");
                             self.append_expression(expr);
-                            self.append_char(' ');
+                            self.add_fragment(Syntax::Neutral, " ");
                             line = self.builder();
                             line.add_word(Syntax::Structure, "}");
                         }
@@ -645,9 +644,9 @@ impl Formatter {
             } => {
                 self.indent();
                 self.append(Syntax::StepItem, &format!("{}.", ordinal));
-                self.append_char(' ');
+                self.add_fragment(Syntax::Neutral, " ");
                 if ordinal.len() == 1 {
-                    self.append_char(' ');
+                    self.add_fragment(Syntax::Neutral, " ");
                 }
 
                 self.increase(4);
@@ -669,9 +668,7 @@ impl Formatter {
             } => {
                 self.indent();
                 self.append(Syntax::StepItem, &bullet.to_string());
-                self.append_char(' ');
-                self.append_char(' ');
-                self.append_char(' ');
+                self.add_fragment(Syntax::Neutral, "   ");
 
                 self.increase(4);
 
@@ -760,9 +757,9 @@ impl Formatter {
                     _ => {
                         self.indent();
                         self.append(Syntax::Structure, "{");
-                        self.append_char(' ');
+                        self.add_fragment(Syntax::Neutral, " ");
                         self.append_expression(expression);
-                        self.append_char(' ');
+                        self.add_fragment(Syntax::Neutral, " ");
                         self.append(Syntax::Structure, "}");
                     }
                 }
@@ -927,7 +924,7 @@ impl Formatter {
         {
             if i > 0 {
                 self.append_char(',');
-                self.append_char(' ');
+                self.add_fragment(Syntax::Neutral, " ");
             }
             self.append(Syntax::Variable, variable.0);
         }
@@ -961,7 +958,7 @@ impl Formatter {
         }
 
         // Add unit symbol
-        self.append_char(' ');
+        self.add_fragment(Syntax::Neutral, " ");
         self.append(Syntax::Numeric, quantity.symbol);
     }
 

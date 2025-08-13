@@ -1,2 +1,2 @@
-mod parsing;
 mod formatting;
+mod parsing;
