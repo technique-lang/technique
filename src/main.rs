@@ -9,6 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::*;
 use technique::formatting::{self};
+
 use technique::parsing;
 
 mod problem;
@@ -17,6 +18,7 @@ mod rendering;
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
     Native,
+    Typst,
     Silent,
 }
 
@@ -108,6 +110,15 @@ fn main() {
                     PDF. By default this will highlight the source of the \
                     input file for the purposes of reviewing the raw \
                     procedure.")
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_parser(["typst", "none"])
+                        .default_value("none")
+                        .action(ArgAction::Set)
+                        .help("Output format: pdf (default) or typst markup.")
+                )
                 .arg(
                     Arg::new("filename")
                         .required(true)
@@ -215,6 +226,17 @@ fn main() {
             print!("{}", result);
         }
         Some(("render", submatches)) => {
+            let output = submatches
+                .get_one::<String>("output")
+                .unwrap();
+            let output = match output.as_str() {
+                "typst" => Output::Typst,
+                "none" => Output::Silent,
+                _ => panic!("Unrecognized --output value"),
+            };
+
+            debug!(?output);
+
             let filename = submatches
                 .get_one::<String>("filename")
                 .unwrap(); // argument are required by definition so always present
@@ -244,6 +266,18 @@ fn main() {
             };
 
             let result = formatting::render(&Typst, &technique, 70);
+
+            match output {
+                Output::Typst => {
+                    print!("{}", result);
+                }
+                _ => {
+                    // ignore; the default is to not output any intermediate
+                    // representations and instead proceed to invoke the
+                    // typesetter to generate the desired PDF.
+                }
+            }
+
             rendering::via_typst(&filename, &result);
         }
         Some(_) => {
