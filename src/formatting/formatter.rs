@@ -62,21 +62,18 @@ pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Str
 pub fn render_signature(signature: &Signature, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_signature(signature);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_genus(genus: &Genus, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_genus(genus);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_forma(forma: &Forma, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_forma(forma);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
@@ -90,45 +87,39 @@ pub fn render_response(response: &Response, renderer: &dyn Render) -> String {
     sub.append(Syntax::Response, response.value);
     sub.append(Syntax::Quote, "'");
     if let Some(condition) = response.condition {
-        sub.append_char(' ');
+        sub.add_fragment(Syntax::Neutral, " ");
         sub.append_str(condition);
     }
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_numeric(numeric: &Numeric, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_numeric(numeric);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_quantity(quantity: &Quantity, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_quantity(quantity);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_invocation(invocation: &Invocation, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_application(invocation);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_function(function: &Function, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_function(function);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
 pub fn render_expression(expression: &Expression, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_expression(expression);
-    sub.flush_current();
     render_fragments(&sub.fragments, renderer)
 }
 
@@ -181,17 +172,16 @@ impl Formatter {
         }
     }
 
-    fn append_fragment(&mut self, syntax: Syntax, content: &str) {
+    pub fn add_fragment(&mut self, syntax: Syntax, content: &str) {
         self.fragments
             .push((syntax, content.to_string()));
     }
 
-    /// Append content with specific syntax tagging, maintaining order
-    pub fn append(&mut self, syntax: Syntax, content: &str) {
+    /// Append content with a specific syntax tagging
+    fn append(&mut self, syntax: Syntax, content: &str) {
         // Flush any pending buffer content first to maintain order
         self.flush_current();
-        self.fragments
-            .push((syntax, content.to_string()));
+        self.add_fragment(syntax, content);
     }
 
     fn switch_syntax(&mut self, new_syntax: Syntax) {
@@ -253,7 +243,7 @@ impl Formatter {
             // Flush any existing buffer before adding indentation
             self.flush_current();
             let spaces = " ".repeat(self.nesting as usize);
-            self.append_fragment(Syntax::Indent, &spaces);
+            self.add_fragment(Syntax::Indent, &spaces);
         }
     }
 
@@ -1199,7 +1189,7 @@ impl<'a> Line<'a> {
         // Emit all current fragments to the output
         for (syntax, content) in &self.current {
             self.output
-                .append(*syntax, content);
+                .add_fragment(*syntax, content);
         }
         self.output
             .append_char('\n');
@@ -1220,7 +1210,7 @@ impl<'a> Line<'a> {
             // Emit all current fragments to the output
             for (syntax, content) in &self.current {
                 self.output
-                    .append(*syntax, content);
+                    .add_fragment(*syntax, content);
             }
         }
     }
