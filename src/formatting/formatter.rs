@@ -2,6 +2,7 @@
 
 use crate::formatting::*;
 use crate::language::*;
+use std::borrow::Cow;
 
 // Helper function to convert numbers to superscript
 fn to_superscript(num: i8) -> String {
@@ -24,7 +25,7 @@ fn to_superscript(num: i8) -> String {
         .collect()
 }
 
-pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, String)> {
+pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Cow<'static, str>)> {
     let mut output = Formatter::new(width);
 
     if let Some(metadata) = &technique.header {
@@ -48,7 +49,7 @@ pub fn format_with_renderer(technique: &Document, width: u8) -> Vec<(Syntax, Str
             .last()
         {
             if !last_content.ends_with('\n') {
-                output.add_fragment(Syntax::Description, "\n");
+                output.add_static(Syntax::Description, "\n");
             }
         }
     }
@@ -83,11 +84,11 @@ pub fn render_identifier(identifier: &Identifier, renderer: &dyn Render) -> Stri
 
 pub fn render_response(response: &Response, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
-    sub.add_fragment(Syntax::Quote, "'");
+    sub.add_static(Syntax::Quote, "'");
     sub.add_fragment(Syntax::Response, response.value);
-    sub.add_fragment(Syntax::Quote, "'");
+    sub.add_static(Syntax::Quote, "'");
     if let Some(condition) = response.condition {
-        sub.add_fragment(Syntax::Neutral, " ");
+        sub.add_static(Syntax::Neutral, " ");
         sub.append_str(condition);
     }
     render_fragments(&sub.fragments, renderer)
@@ -135,7 +136,7 @@ pub fn render_procedure_declaration(procedure: &Procedure, renderer: &dyn Render
         sub.append_parameters(parameters);
     }
     sub.append_char(' ');
-    sub.add_fragment(Syntax::Structure, ":");
+    sub.add_static(Syntax::Structure, ":");
     if let Some(signature) = &procedure.signature {
         sub.append_char(' ');
         sub.append_signature(signature);
@@ -144,7 +145,7 @@ pub fn render_procedure_declaration(procedure: &Procedure, renderer: &dyn Render
 }
 
 /// Helper function to convert fragments to a styled string using a renderer
-fn render_fragments(fragments: &[(Syntax, String)], renderer: &dyn Render) -> String {
+fn render_fragments(fragments: &[(Syntax, Cow<'static, str>)], renderer: &dyn Render) -> String {
     let mut result = String::new();
     for (syntax, content) in fragments {
         result.push_str(&renderer.style(*syntax, content));
@@ -153,7 +154,7 @@ fn render_fragments(fragments: &[(Syntax, String)], renderer: &dyn Render) -> St
 }
 
 struct Formatter {
-    fragments: Vec<(Syntax, String)>,
+    fragments: Vec<(Syntax, Cow<'static, str>)>,
     nesting: u8,
     width: u8,
     current: Syntax,
@@ -171,9 +172,28 @@ impl Formatter {
         }
     }
 
+    /// Add a fragment based on the supplied static string. This is
+    /// extensively used for adding whitespace and structural characters so we
+    /// avoid repeatedly allocating entire Strings just to hold a single known
+    /// character.
+    pub fn add_static(&mut self, syntax: Syntax, content: &'static str) {
+        self.fragments
+            .push((syntax, Cow::Borrowed(content)));
+    }
+
+    /// Add a fragment, taking ownership of the supplied String. This is
+    /// useful when we have just allocated a temporary string immediately
+    /// prior to passing it in.
+    pub fn add_string(&mut self, syntax: Syntax, content: String) {
+        self.fragments
+            .push((syntax, Cow::Owned(content)));
+    }
+
+    /// Add a fragment from a reference to the input string. This is typically
+    /// used when copying in user-supplied content.
     pub fn add_fragment(&mut self, syntax: Syntax, content: &str) {
         self.fragments
-            .push((syntax, content.to_string()));
+            .push((syntax, Cow::Owned(content.to_string())));
     }
 
     /// Append content with a specific syntax tagging
@@ -191,8 +211,10 @@ impl Formatter {
             self.fragments
                 .push((
                     self.current,
-                    self.buffer
-                        .clone(),
+                    Cow::Owned(
+                        self.buffer
+                            .clone(),
+                    ),
                 ));
             self.buffer
                 .clear();
@@ -212,8 +234,10 @@ impl Formatter {
             self.fragments
                 .push((
                     self.current,
-                    self.buffer
-                        .clone(),
+                    Cow::Owned(
+                        self.buffer
+                            .clone(),
+                    ),
                 ));
             self.buffer
                 .clear();
@@ -242,7 +266,7 @@ impl Formatter {
             // Flush any existing buffer before adding indentation
             self.flush_current();
             let spaces = " ".repeat(self.nesting as usize);
-            self.add_fragment(Syntax::Indent, &spaces);
+            self.add_string(Syntax::Indent, spaces);
         }
     }
 
@@ -278,7 +302,7 @@ impl Formatter {
         Line::new(self)
     }
 
-    fn render_inline_code(&self, expr: &Expression) -> Vec<(Syntax, String)> {
+    fn render_inline_code(&self, expr: &Expression) -> Vec<(Syntax, Cow<'static, str>)> {
         match expr {
             Expression::Tablet(_) | Expression::Multiline(_, _) => {
                 // These are not inline, caller should handle specially
@@ -286,18 +310,18 @@ impl Formatter {
             }
             _ => {
                 let mut sub = self.subformatter();
-                sub.add_fragment(Syntax::Structure, "{");
-                sub.add_fragment(Syntax::Neutral, " ");
+                sub.add_static(Syntax::Structure, "{");
+                sub.add_static(Syntax::Neutral, " ");
                 sub.append_expression(expr);
-                sub.add_fragment(Syntax::Neutral, " ");
-                sub.add_fragment(Syntax::Structure, "}");
+                sub.add_static(Syntax::Neutral, " ");
+                sub.add_static(Syntax::Structure, "}");
                 sub.flush_current();
                 sub.fragments
             }
         }
     }
 
-    fn render_application(&self, invocation: &Invocation) -> Vec<(Syntax, String)> {
+    fn render_application(&self, invocation: &Invocation) -> Vec<(Syntax, Cow<'static, str>)> {
         let mut sub = self.subformatter();
         sub.append_application(invocation);
         sub.flush_current();
@@ -308,17 +332,17 @@ impl Formatter {
         &self,
         inner_descriptive: &Descriptive,
         variables: &Vec<Identifier>,
-    ) -> Vec<(Syntax, String)> {
+    ) -> Vec<(Syntax, Cow<'static, str>)> {
         let mut sub = self.subformatter();
 
         match inner_descriptive {
             Descriptive::Text(text) => sub.append_breakable(Syntax::Description, text),
             Descriptive::CodeInline(expr) => {
-                sub.add_fragment(Syntax::Structure, "{");
-                sub.add_fragment(Syntax::Neutral, " ");
+                sub.add_static(Syntax::Structure, "{");
+                sub.add_static(Syntax::Neutral, " ");
                 sub.append_expression(expr);
-                sub.add_fragment(Syntax::Neutral, " ");
-                sub.add_fragment(Syntax::Structure, "}");
+                sub.add_static(Syntax::Neutral, " ");
+                sub.add_static(Syntax::Structure, "}");
             }
             Descriptive::Application(invocation) => {
                 sub.append_application(invocation);
@@ -328,9 +352,9 @@ impl Formatter {
             }
         }
 
-        sub.add_fragment(Syntax::Neutral, " ");
-        sub.add_fragment(Syntax::Structure, "~");
-        sub.add_fragment(Syntax::Neutral, " ");
+        sub.add_static(Syntax::Neutral, " ");
+        sub.add_static(Syntax::Structure, "~");
+        sub.add_static(Syntax::Neutral, " ");
         sub.append_variables(variables);
         sub.flush_current();
         sub.fragments
@@ -340,7 +364,7 @@ impl Formatter {
         if c == '\n' {
             // Flush any existing buffer before adding newline
             self.flush_current();
-            self.add_fragment(Syntax::Newline, "\n");
+            self.add_static(Syntax::Newline, "\n");
         } else {
             self.buffer
                 .push(c);
@@ -421,7 +445,7 @@ impl Formatter {
 
         self.append_char(' ');
         self.flush_current();
-        self.add_fragment(Syntax::Structure, ":");
+        self.add_static(Syntax::Structure, ":");
 
         if let Some(signature) = &procedure.signature {
             self.append_char(' ');
@@ -442,7 +466,7 @@ impl Formatter {
         match element {
             Element::Title(title) => {
                 self.append_char('\n');
-                self.add_fragment(Syntax::Header, "# ");
+                self.add_static(Syntax::Header, "# ");
                 self.add_fragment(Syntax::Title, title);
                 self.append_char('\n');
             }
@@ -455,7 +479,7 @@ impl Formatter {
                 self.append_steps(steps);
             }
             Element::CodeBlock(expression) => {
-                self.add_fragment(Syntax::Structure, "{");
+                self.add_static(Syntax::Structure, "{");
                 self.append_char('\n');
 
                 self.increase(4);
@@ -464,38 +488,38 @@ impl Formatter {
                 self.append_char('\n');
                 self.decrease(4);
 
-                self.add_fragment(Syntax::Structure, "}");
+                self.add_static(Syntax::Structure, "}");
             }
         }
     }
 
     pub fn append_signature(&mut self, signature: &Signature) {
         self.append_genus(&signature.domain);
-        self.add_fragment(Syntax::Neutral, " ");
-        self.add_fragment(Syntax::Structure, "->");
-        self.add_fragment(Syntax::Neutral, " ");
+        self.add_static(Syntax::Neutral, " ");
+        self.add_static(Syntax::Structure, "->");
+        self.add_static(Syntax::Neutral, " ");
         self.append_genus(&signature.range);
     }
 
     pub fn append_genus(&mut self, genus: &Genus) {
         match genus {
             Genus::Unit => {
-                self.add_fragment(Syntax::Forma, "()");
+                self.add_static(Syntax::Forma, "()");
             }
             Genus::Single(forma) => self.append_forma(forma),
             Genus::Tuple(formas) => {
-                self.add_fragment(Syntax::Structure, "(");
+                self.add_static(Syntax::Structure, "(");
                 for (i, forma) in formas
                     .iter()
                     .enumerate()
                 {
                     if i > 0 {
-                        self.add_fragment(Syntax::Structure, ",");
-                        self.add_fragment(Syntax::Neutral, " ");
+                        self.add_static(Syntax::Structure, ",");
+                        self.add_static(Syntax::Neutral, " ");
                     }
                     self.append_forma(forma);
                 }
-                self.add_fragment(Syntax::Structure, ")");
+                self.add_static(Syntax::Structure, ")");
             }
             Genus::Naked(formas) => {
                 for (i, forma) in formas
@@ -503,34 +527,34 @@ impl Formatter {
                     .enumerate()
                 {
                     if i > 0 {
-                        self.add_fragment(Syntax::Structure, ",");
-                        self.add_fragment(Syntax::Neutral, " ");
+                        self.add_static(Syntax::Structure, ",");
+                        self.add_static(Syntax::Neutral, " ");
                     }
                     self.append_forma(forma);
                 }
             }
             Genus::List(forma) => {
-                self.add_fragment(Syntax::Structure, "[");
+                self.add_static(Syntax::Structure, "[");
                 self.append_forma(forma);
-                self.add_fragment(Syntax::Structure, "]");
+                self.add_static(Syntax::Structure, "]");
             }
         }
     }
 
     // Output names surrounded by parenthesis
     pub fn append_parameters(&mut self, variables: &Vec<Identifier>) {
-        self.add_fragment(Syntax::Structure, "(");
+        self.add_static(Syntax::Structure, "(");
         for (i, variable) in variables
             .iter()
             .enumerate()
         {
             if i > 0 {
-                self.add_fragment(Syntax::Structure, ",");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Structure, ",");
+                self.add_static(Syntax::Neutral, " ");
             }
             self.add_fragment(Syntax::Variable, variable.0);
         }
-        self.add_fragment(Syntax::Structure, ")");
+        self.add_static(Syntax::Structure, ")");
     }
 
     pub fn append_forma(&mut self, forma: &Forma) {
@@ -563,7 +587,7 @@ impl Formatter {
                 Descriptive::CodeInline(expr) => match expr {
                     Expression::Tablet(_) => {
                         line.flush();
-                        self.add_fragment(Syntax::Structure, "{");
+                        self.add_static(Syntax::Structure, "{");
                         self.append_char('\n');
                         self.increase(4);
                         self.indent();
@@ -575,7 +599,7 @@ impl Formatter {
                     }
                     Expression::Multiline(_, _) => {
                         line.flush();
-                        self.add_fragment(Syntax::Structure, "{");
+                        self.add_static(Syntax::Structure, "{");
                         self.increase(4);
                         self.append_expression(expr);
                         self.decrease(4);
@@ -593,7 +617,7 @@ impl Formatter {
                         {
                             line.flush();
                             self.add_fragment(Syntax::Neutral, " ");
-                            self.add_fragment(Syntax::Structure, "{");
+                            self.add_static(Syntax::Structure, "{");
                             self.add_fragment(Syntax::Neutral, " ");
                             self.append_expression(expr);
                             self.add_fragment(Syntax::Neutral, " ");
@@ -653,9 +677,9 @@ impl Formatter {
             } => {
                 self.indent();
                 self.add_fragment(Syntax::StepItem, &format!("{}.", ordinal));
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Neutral, " ");
                 if ordinal.len() == 1 {
-                    self.add_fragment(Syntax::Neutral, " ");
+                    self.add_static(Syntax::Neutral, " ");
                 }
 
                 self.increase(4);
@@ -677,7 +701,7 @@ impl Formatter {
             } => {
                 self.indent();
                 self.add_fragment(Syntax::StepItem, &bullet.to_string());
-                self.add_fragment(Syntax::Neutral, "   ");
+                self.add_static(Syntax::Neutral, "   ");
 
                 self.increase(4);
 
@@ -701,13 +725,13 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.add_fragment(Syntax::Neutral, " ");
-                self.add_fragment(Syntax::Structure, "|");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Neutral, " ");
+                self.add_static(Syntax::Structure, "|");
+                self.add_static(Syntax::Neutral, " ");
             }
-            self.add_fragment(Syntax::Quote, "'");
+            self.add_static(Syntax::Quote, "'");
             self.add_fragment(Syntax::Response, response.value);
-            self.add_fragment(Syntax::Quote, "'");
+            self.add_static(Syntax::Quote, "'");
 
             if let Some(text) = response.condition {
                 self.append_char(' ');
@@ -754,7 +778,7 @@ impl Formatter {
                 match expression {
                     Expression::Tablet(_) => {
                         self.indent();
-                        self.add_fragment(Syntax::Structure, "{");
+                        self.add_static(Syntax::Structure, "{");
                         self.append_char('\n');
 
                         self.increase(4);
@@ -767,11 +791,11 @@ impl Formatter {
                     }
                     _ => {
                         self.indent();
-                        self.add_fragment(Syntax::Structure, "{");
-                        self.add_fragment(Syntax::Neutral, " ");
+                        self.add_static(Syntax::Structure, "{");
+                        self.add_static(Syntax::Neutral, " ");
                         self.append_expression(expression);
-                        self.add_fragment(Syntax::Neutral, " ");
-                        self.add_fragment(Syntax::Structure, "}");
+                        self.add_static(Syntax::Neutral, " ");
+                        self.add_static(Syntax::Structure, "}");
                     }
                 }
                 self.append_char('\n');
@@ -836,11 +860,11 @@ impl Formatter {
             }
             match attribute {
                 Attribute::Role(name) => {
-                    self.add_fragment(Syntax::Attribute, "@");
+                    self.add_static(Syntax::Attribute, "@");
                     self.add_fragment(Syntax::Attribute, name.0);
                 }
                 Attribute::Place(name) => {
-                    self.add_fragment(Syntax::Attribute, "#");
+                    self.add_static(Syntax::Attribute, "#");
                     self.add_fragment(Syntax::Attribute, name.0);
                 }
             }
@@ -853,7 +877,7 @@ impl Formatter {
                 self.add_fragment(Syntax::Variable, identifier.0);
             }
             Expression::String(pieces) => {
-                self.add_fragment(Syntax::Quote, "\"");
+                self.add_static(Syntax::Quote, "\"");
                 for piece in pieces {
                     match piece {
                         Piece::Text(text) => {
@@ -868,14 +892,14 @@ impl Formatter {
                         }
                     }
                 }
-                self.add_fragment(Syntax::Quote, "\"");
+                self.add_static(Syntax::Quote, "\"");
             }
             Expression::Number(numeric) => self.append_numeric(numeric),
             Expression::Multiline(lang, lines) => {
                 self.append_char('\n');
 
                 self.indent();
-                self.add_fragment(Syntax::Quote, "```");
+                self.add_static(Syntax::Quote, "```");
                 if let Some(which) = lang {
                     self.add_fragment(Syntax::Language, which);
                 }
@@ -890,7 +914,7 @@ impl Formatter {
                         .enumerate()
                     {
                         if i > 0 {
-                            self.add_fragment(Syntax::Multiline, " ");
+                            self.add_static(Syntax::Multiline, " ");
                         }
                         self.add_fragment(Syntax::Multiline, word);
                     }
@@ -899,30 +923,30 @@ impl Formatter {
                 self.decrease(4);
 
                 self.indent();
-                self.add_fragment(Syntax::Quote, "```");
+                self.add_static(Syntax::Quote, "```");
                 self.append_char('\n');
             }
             Expression::Repeat(expression) => {
-                self.add_fragment(Syntax::Keyword, "repeat");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Keyword, "repeat");
+                self.add_static(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
             Expression::Foreach(variables, expression) => {
-                self.add_fragment(Syntax::Keyword, "foreach");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Keyword, "foreach");
+                self.add_static(Syntax::Neutral, " ");
                 self.append_variables(variables);
-                self.add_fragment(Syntax::Neutral, " ");
-                self.add_fragment(Syntax::Keyword, "in");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Neutral, " ");
+                self.add_static(Syntax::Keyword, "in");
+                self.add_static(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
             Expression::Application(invocation) => self.append_application(invocation),
             Expression::Execution(function) => self.append_function(function),
             Expression::Binding(expression, variables) => {
                 self.append_expression(expression);
-                self.add_fragment(Syntax::Neutral, " ");
-                self.add_fragment(Syntax::Structure, "~");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Neutral, " ");
+                self.add_static(Syntax::Structure, "~");
+                self.add_static(Syntax::Neutral, " ");
                 self.append_variables(variables);
             }
             Expression::Tablet(pairs) => self.append_tablet(pairs),
@@ -941,7 +965,7 @@ impl Formatter {
         {
             if i > 0 {
                 self.append_char(',');
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Neutral, " ");
             }
             self.add_fragment(Syntax::Variable, variable.0);
         }
@@ -963,33 +987,33 @@ impl Formatter {
 
         // Add uncertainty if present
         if let Some(uncertainty) = &quantity.uncertainty {
-            self.add_fragment(Syntax::Neutral, " ");
-            self.add_fragment(Syntax::Numeric, "±");
-            self.add_fragment(Syntax::Neutral, " ");
+            self.add_static(Syntax::Neutral, " ");
+            self.add_static(Syntax::Numeric, "±");
+            self.add_static(Syntax::Neutral, " ");
             self.add_fragment(Syntax::Numeric, &format!("{}", uncertainty));
         }
 
         // Add magnitude if present
         if let Some(magnitude) = &quantity.magnitude {
-            self.add_fragment(Syntax::Neutral, " ");
-            self.add_fragment(Syntax::Numeric, "×");
-            self.add_fragment(Syntax::Neutral, " ");
-            self.add_fragment(Syntax::Numeric, "10");
+            self.add_static(Syntax::Neutral, " ");
+            self.add_static(Syntax::Numeric, "×");
+            self.add_static(Syntax::Neutral, " ");
+            self.add_static(Syntax::Numeric, "10");
             self.add_fragment(Syntax::Numeric, &to_superscript(*magnitude));
         }
 
         // Add unit symbol
-        self.add_fragment(Syntax::Neutral, " ");
+        self.add_static(Syntax::Neutral, " ");
         self.add_fragment(Syntax::Numeric, quantity.symbol);
     }
 
     pub fn append_application(&mut self, invocation: &Invocation) {
-        self.add_fragment(Syntax::Quote, "<");
+        self.add_static(Syntax::Quote, "<");
         match &invocation.target {
             Target::Local(identifier) => self.add_fragment(Syntax::Invocation, identifier.0),
             Target::Remote(external) => self.add_fragment(Syntax::Invocation, external.0),
         }
-        self.add_fragment(Syntax::Quote, ">");
+        self.add_static(Syntax::Quote, ">");
         if let Some(parameters) = &invocation.parameters {
             self.append_arguments(parameters);
         }
@@ -999,20 +1023,20 @@ impl Formatter {
     // a function can be Expressions themselves (though usually are just
     // variable names)
     fn append_arguments(&mut self, parameters: &Vec<Expression>) {
-        self.add_fragment(Syntax::Structure, "(");
+        self.add_static(Syntax::Structure, "(");
 
         for (i, parameter) in parameters
             .iter()
             .enumerate()
         {
             if i > 0 {
-                self.add_fragment(Syntax::Structure, ",");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Structure, ",");
+                self.add_static(Syntax::Neutral, " ");
             }
             self.append_expression(parameter);
         }
 
-        self.add_fragment(Syntax::Structure, ")");
+        self.add_static(Syntax::Structure, ")");
     }
 
     pub fn append_function(&mut self, function: &Function) {
@@ -1022,7 +1046,7 @@ impl Formatter {
                 .target
                 .0,
         );
-        self.add_fragment(Syntax::Structure, "(");
+        self.add_static(Syntax::Structure, "(");
 
         let mut has_multiline = false;
         for parameter in &function.parameters {
@@ -1038,8 +1062,8 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.add_fragment(Syntax::Structure, ",");
-                self.add_fragment(Syntax::Neutral, " ");
+                self.add_static(Syntax::Structure, ",");
+                self.add_static(Syntax::Neutral, " ");
             }
             self.append_expression(parameter);
         }
@@ -1047,29 +1071,29 @@ impl Formatter {
         if has_multiline {
             self.indent();
         }
-        self.add_fragment(Syntax::Structure, ")");
+        self.add_static(Syntax::Structure, ")");
     }
 
     fn append_tablet(&mut self, pairs: &Vec<Pair>) {
-        self.add_fragment(Syntax::Structure, "[");
+        self.add_static(Syntax::Structure, "[");
         self.append_char('\n');
 
         self.increase(4);
         for pair in pairs {
             self.indent();
-            self.add_fragment(Syntax::Quote, "\"");
+            self.add_static(Syntax::Quote, "\"");
             self.add_fragment(Syntax::Label, pair.label);
-            self.add_fragment(Syntax::Quote, "\"");
-            self.add_fragment(Syntax::Neutral, " ");
-            self.add_fragment(Syntax::Structure, "=");
-            self.add_fragment(Syntax::Neutral, " ");
+            self.add_static(Syntax::Quote, "\"");
+            self.add_static(Syntax::Neutral, " ");
+            self.add_static(Syntax::Structure, "=");
+            self.add_static(Syntax::Neutral, " ");
             self.append_expression(&pair.value);
             self.append_char('\n');
         }
         self.decrease(4);
 
         self.indent();
-        self.add_fragment(Syntax::Structure, "]");
+        self.add_static(Syntax::Structure, "]");
     }
 }
 
@@ -1098,7 +1122,7 @@ impl ToString for Formatter {
 
 struct Line<'a> {
     output: &'a mut Formatter, // reference to parent
-    current: Vec<(Syntax, String)>,
+    current: Vec<(Syntax, Cow<'static, str>)>,
     position: u8,
 }
 
@@ -1124,19 +1148,19 @@ impl<'a> Line<'a> {
             {
                 self.wrap_line();
                 self.current
-                    .push((syntax, content.to_string()));
+                    .push((syntax, Cow::Owned(content.to_string())));
                 self.position = self
                     .output
                     .nesting
                     + content.len() as u8;
             } else {
                 self.current
-                    .push((syntax, content.to_string()));
+                    .push((syntax, Cow::Owned(content.to_string())));
                 self.position += content.len() as u8;
             }
         } else {
             self.current
-                .push((syntax, content.to_string()));
+                .push((syntax, Cow::Owned(content.to_string())));
             self.position += content.len() as u8;
         }
     }
@@ -1160,21 +1184,21 @@ impl<'a> Line<'a> {
             {
                 self.wrap_line();
                 self.current
-                    .push((syntax, word.to_string()));
+                    .push((syntax, Cow::Owned(word.to_string())));
                 self.position = self
                     .output
                     .nesting
                     + word.len() as u8;
             } else {
                 self.current
-                    .push((Syntax::Description, " ".to_string()));
+                    .push((Syntax::Description, Cow::Borrowed(" ")));
                 self.current
-                    .push((syntax, word.to_string()));
+                    .push((syntax, Cow::Owned(word.to_string())));
                 self.position += 1 + word.len() as u8;
             }
         } else {
             self.current
-                .push((syntax, word.to_string()));
+                .push((syntax, Cow::Owned(word.to_string())));
             self.position += word.len() as u8;
         }
     }
@@ -1200,7 +1224,7 @@ impl<'a> Line<'a> {
         self.add_fragments(fragments);
     }
 
-    fn add_fragments(&mut self, fragments: Vec<(Syntax, String)>) {
+    fn add_fragments(&mut self, fragments: Vec<(Syntax, Cow<'static, str>)>) {
         // All fragments should be atomic - the formatter is responsible for breaking up content
         for (syntax, content) in fragments {
             self.add_atomic(syntax, &content);
@@ -1325,7 +1349,10 @@ mod check {
         // Add some fragments and more buffer content
         output
             .fragments
-            .push((Syntax::Declaration, "flushed content".to_string()));
+            .push((
+                Syntax::Declaration,
+                Cow::Owned("flushed content".to_string()),
+            ));
         output
             .buffer
             .push_str(" more unflushed");
