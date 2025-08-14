@@ -2,15 +2,15 @@
 mod examples {
     use std::fs;
     use std::path::Path;
-    use technique::formatting::*;
 
+    use technique::formatting::*;
     use technique::parsing;
 
     /// Golden test for the format command
     ///
     /// This test:
-    /// 1. Reads all .t files from examples/prototype/
-    /// 2. Runs the equivalent of the "format" command on each file
+    /// 1. Reads all .t files from examples/golden/
+    /// 2. Runs the equivalent of the `format` command on each file
     /// 3. Compares the formatted output with the original input
     /// 4. Shows clear diffs when differences are found
     ///
@@ -55,26 +55,18 @@ mod examples {
                 println!("+ {}", fmt_line);
             }
         }
-
-        if !differences_found {
-            println!("No line differences found (possibly trailing whitespace)");
-        }
     }
 
     #[test]
-    fn test_format_golden_files() {
+    fn ensure_identical_output() {
         // Read all .t files from examples/prototype/
         let dir = Path::new("examples/golden");
 
         // Ensure the directory exists
-        assert!(
-            dir.exists(),
-            "examples directory missing"
-        );
+        assert!(dir.exists(), "examples directory missing");
 
         // Get all .t files in the directory
-        let entries =
-            fs::read_dir(dir).expect("Failed to read examples directory");
+        let entries = fs::read_dir(dir).expect("Failed to read examples directory");
 
         let mut files = Vec::new();
         for entry in entries {
@@ -91,10 +83,7 @@ mod examples {
         }
 
         // Ensure we found some test files
-        assert!(
-            !files.is_empty(),
-            "No .t files found in examples directory"
-        );
+        assert!(!files.is_empty(), "No .t files found in examples directory");
 
         let mut failures = Vec::new();
 
