@@ -89,7 +89,7 @@ pub fn render_response(response: &Response, renderer: &dyn Render) -> String {
     sub.add_static(Syntax::Quote, "'");
     if let Some(condition) = response.condition {
         sub.add_static(Syntax::Neutral, " ");
-        sub.append_str(condition);
+        sub.add_fragment(Syntax::Description, condition);
     }
     render_fragments(&sub.fragments, renderer)
 }
@@ -135,10 +135,10 @@ pub fn render_procedure_declaration(procedure: &Procedure, renderer: &dyn Render
     if let Some(parameters) = &procedure.parameters {
         sub.append_parameters(parameters);
     }
-    sub.append_char(' ');
+    sub.add_static(Syntax::Neutral, " ");
     sub.add_static(Syntax::Structure, ":");
     if let Some(signature) = &procedure.signature {
-        sub.append_char(' ');
+        sub.add_static(Syntax::Neutral, " ");
         sub.append_signature(signature);
     }
     render_fragments(&sub.fragments, renderer)
@@ -282,7 +282,7 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.append_char(' ');
+                self.add_static(Syntax::Neutral, " ");
             }
             self.add_fragment(syntax, word);
         }
@@ -443,13 +443,11 @@ impl Formatter {
             self.append_parameters(parameters);
         }
 
-        self.append_char(' ');
-        self.flush_current();
+        self.add_static(Syntax::Neutral, " ");
         self.add_static(Syntax::Structure, ":");
 
         if let Some(signature) = &procedure.signature {
-            self.append_char(' ');
-            self.flush_current();
+            self.add_static(Syntax::Neutral, " ");
             self.append_signature(signature);
         }
 
@@ -465,27 +463,27 @@ impl Formatter {
     fn append_element(&mut self, element: &Element) {
         match element {
             Element::Title(title) => {
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
                 self.add_static(Syntax::Header, "# ");
                 self.add_fragment(Syntax::Title, title);
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
             }
             Element::Description(paragraphs) => {
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
                 self.append_paragraphs(paragraphs);
             }
             Element::Steps(steps) => {
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
                 self.append_steps(steps);
             }
             Element::CodeBlock(expression) => {
                 self.add_static(Syntax::Structure, "{");
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
 
                 self.increase(4);
                 self.indent();
                 self.append_expression(expression);
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
                 self.decrease(4);
 
                 self.add_static(Syntax::Structure, "}");
@@ -734,8 +732,8 @@ impl Formatter {
             self.add_static(Syntax::Quote, "'");
 
             if let Some(text) = response.condition {
-                self.append_char(' ');
-                self.append_str(text);
+                self.add_static(Syntax::Neutral, " ");
+                self.add_fragment(Syntax::Description, text);
             }
         }
         self.append_char('\n');
@@ -751,7 +749,7 @@ impl Formatter {
                 subscopes,
             } => {
                 self.append_attributes(attributes);
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
 
                 if subscopes.len() == 0 {
                     return;
@@ -779,15 +777,15 @@ impl Formatter {
                     Expression::Tablet(_) => {
                         self.indent();
                         self.add_static(Syntax::Structure, "{");
-                        self.append_char('\n');
+                        self.add_static(Syntax::Newline, "\n");
 
                         self.increase(4);
                         self.indent();
                         self.append_expression(expression);
-                        self.append_char('\n');
+                        self.add_static(Syntax::Newline, "\n");
                         self.decrease(4);
                         self.indent();
-                        self.append_char('}');
+                        self.add_static(Syntax::Structure, "}");
                     }
                     _ => {
                         self.indent();
@@ -798,7 +796,7 @@ impl Formatter {
                         self.add_static(Syntax::Structure, "}");
                     }
                 }
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
 
                 // Format subscopes below this code block, if there are any.
                 self.increase(4);
@@ -817,14 +815,14 @@ impl Formatter {
                 body,
             } => {
                 self.add_fragment(Syntax::StepItem, numeral);
-                self.append_char('.');
+                self.add_static(Syntax::Structure, ".");
                 if let Some(paragraph) = title {
-                    self.append_char(' ');
+                    self.add_static(Syntax::Neutral, " ");
                     self.switch_syntax(Syntax::Section);
                     self.append_descriptives(&paragraph.0);
                     self.reset_syntax();
                 }
-                self.append_char('\n');
+                self.add_static(Syntax::Newline, "\n");
 
                 // Sections headings always reset back to left margin
                 let saved = self.nesting;
@@ -856,7 +854,7 @@ impl Formatter {
             .enumerate()
         {
             if i > 0 {
-                self.append_str(" + ");
+                self.add_static(Syntax::Neutral, " + ");
             }
             match attribute {
                 Attribute::Role(name) => {
@@ -957,20 +955,20 @@ impl Formatter {
     // there only being one name being bound to.
     fn append_variables(&mut self, variables: &Vec<Identifier>) {
         if variables.len() > 1 {
-            self.append_char('(');
+            self.add_static(Syntax::Structure, "(");
         }
         for (i, variable) in variables
             .iter()
             .enumerate()
         {
             if i > 0 {
-                self.append_char(',');
+                self.add_static(Syntax::Structure, ",");
                 self.add_static(Syntax::Neutral, " ");
             }
             self.add_fragment(Syntax::Variable, variable.0);
         }
         if variables.len() > 1 {
-            self.append_char(')');
+            self.add_static(Syntax::Structure, ")");
         }
     }
 
