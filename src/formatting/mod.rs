@@ -1,4 +1,4 @@
-mod formatter;
+pub mod formatter;
 mod renderer;
 
 // Re-export all public symbols

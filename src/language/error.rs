@@ -7,7 +7,6 @@ pub struct LoadingError<'i> {
     pub filename: &'i Path,
 }
 
-
 impl<'i> fmt::Display for LoadingError<'i> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.problem, self.details)
