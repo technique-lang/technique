@@ -765,6 +765,9 @@ impl<'i> Parser<'i> {
                     } else if is_code_block(content) {
                         let expression = outer.read_code_block()?;
                         elements.push(Element::CodeBlock(expression));
+                    } else if is_role_assignment(content) {
+                        let attribute_block = outer.read_attribute_scope()?;
+                        elements.push(Element::Steps(vec![attribute_block]));
                     } else if is_step(content) {
                         let mut steps = vec![];
                         while !outer.is_finished() && is_step(outer.source) {
@@ -793,12 +796,14 @@ impl<'i> Parser<'i> {
                                     && !is_procedure_title(line)
                                     && !is_code_block(line)
                                     && !malformed_step_pattern(line)
+                                    && !is_role_assignment(line)
                             },
                             |line| {
                                 is_step(line)
                                     || is_procedure_title(line)
                                     || is_code_block(line)
                                     || malformed_step_pattern(line)
+                                    || is_role_assignment(line)
                             },
                             |inner| {
                                 let content = inner.source;
