@@ -25,6 +25,21 @@ fn to_superscript(num: i8) -> String {
         .collect()
 }
 
+// Pre-allocated common indent strings to avoid repeated allocations
+const INDENT_CACHE: &[&str] = &[
+    "",
+    "    ",
+    "        ",
+    "            ",
+    "                ",
+    "                    ",
+    "                        ",
+    "                            ",
+    "                                ",
+    "                                    ",
+    "                                        ",
+];
+
 pub fn format_with_renderer<'i>(technique: &'i Document, width: u8) -> Vec<(Syntax, Cow<'i, str>)> {
     let mut output = Formatter::new(width);
 
@@ -266,8 +281,14 @@ impl<'i> Formatter<'i> {
         if self.nesting > 0 {
             // Flush any existing buffer before adding indentation
             self.flush_current();
-            let spaces = " ".repeat(self.nesting as usize);
-            self.add_fragment_string(Syntax::Indent, spaces);
+            let indent_level = (self.nesting as usize) / 4;
+            if indent_level < INDENT_CACHE.len() {
+                self.add_fragment_reference(Syntax::Indent, INDENT_CACHE[indent_level]);
+            } else {
+                // Fallback for deep nesting
+                let spaces = " ".repeat(self.nesting as usize);
+                self.add_fragment_string(Syntax::Indent, spaces);
+            }
         }
     }
 
