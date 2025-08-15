@@ -220,20 +220,11 @@ impl<'i> Formatter<'i> {
     }
 
     fn switch_syntax(&mut self, new_syntax: Syntax) {
-        if !self
-            .buffer
-            .is_empty()
-        {
-            self.fragments
-                .push((
-                    self.current,
-                    Cow::Owned(
-                        self.buffer
-                            .clone(),
-                    ),
-                ));
-            self.buffer
-                .clear();
+        if !self.buffer.is_empty() {
+            self.fragments.push((
+                self.current,
+                Cow::Owned(std::mem::take(&mut self.buffer)),
+            ));
         }
         self.current = new_syntax;
     }
@@ -243,20 +234,11 @@ impl<'i> Formatter<'i> {
     }
 
     pub fn flush_current(&mut self) {
-        if !self
-            .buffer
-            .is_empty()
-        {
-            self.fragments
-                .push((
-                    self.current,
-                    Cow::Owned(
-                        self.buffer
-                            .clone(),
-                    ),
-                ));
-            self.buffer
-                .clear();
+        if !self.buffer.is_empty() {
+            self.fragments.push((
+                self.current,
+                Cow::Owned(std::mem::take(&mut self.buffer)),
+            ));
         }
     }
 
