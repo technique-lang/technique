@@ -1137,32 +1137,37 @@ impl<'a, 'i> Line<'a, 'i> {
     }
 
     fn add_atomic(&mut self, syntax: Syntax, content: &'i str) {
+        self.add_atomic_cow(syntax, Cow::Borrowed(content));
+    }
+
+    fn add_atomic_cow(&mut self, syntax: Syntax, content: Cow<'i, str>) {
         // Treat as atomic units - don't split them further
+        let len = content.len() as u8;
         if !self
             .current
             .is_empty()
         {
-            if self.position + content.len() as u8
+            if self.position + len
                 > self
                     .output
                     .width
             {
                 self.wrap_line();
                 self.current
-                    .push((syntax, Cow::Borrowed(content)));
+                    .push((syntax, content));
                 self.position = self
                     .output
                     .nesting
-                    + content.len() as u8;
+                    + len;
             } else {
                 self.current
-                    .push((syntax, Cow::Borrowed(content)));
-                self.position += content.len() as u8;
+                    .push((syntax, content));
+                self.position += len;
             }
         } else {
             self.current
-                .push((syntax, Cow::Borrowed(content)));
-            self.position += content.len() as u8;
+                .push((syntax, content));
+            self.position += len;
         }
     }
 
@@ -1228,41 +1233,7 @@ impl<'a, 'i> Line<'a, 'i> {
     fn add_fragments(&mut self, fragments: Vec<(Syntax, Cow<'i, str>)>) {
         // All fragments should be atomic - the formatter is responsible for breaking up content
         for (syntax, content) in fragments {
-            match content {
-                Cow::Borrowed(s) => self.add_atomic(syntax, s),
-                Cow::Owned(s) => self.add_atomic_owned(syntax, s),
-            }
-        }
-    }
-
-    fn add_atomic_owned(&mut self, syntax: Syntax, content: String) {
-        // Treat as atomic units - don't split them further
-        let len = content.len() as u8;
-        if !self
-            .current
-            .is_empty()
-        {
-            if self.position + len
-                > self
-                    .output
-                    .width
-            {
-                self.wrap_line();
-                self.current
-                    .push((syntax, Cow::Owned(content)));
-                self.position = self
-                    .output
-                    .nesting
-                    + len;
-            } else {
-                self.current
-                    .push((syntax, Cow::Owned(content)));
-                self.position += len;
-            }
-        } else {
-            self.current
-                .push((syntax, Cow::Owned(content)));
-            self.position += len;
+            self.add_atomic_cow(syntax, content);
         }
     }
 
