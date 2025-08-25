@@ -1476,8 +1476,8 @@ impl<'i> Parser<'i> {
             .source
             .char_indices()
         {
-            if ch.is_whitespace() {
-                // Stop at whitespace
+            if ch.is_whitespace() || ch == ',' || ch == ')' {
+                // Stop at whitespace, comma, or closing parameter boundary
                 break;
             } else if ch.is_ascii_alphabetic() || ch == '°' || ch == '/' || ch == 'μ' {
                 // Valid character
@@ -1875,6 +1875,9 @@ impl<'i> Parser<'i> {
                             inner.parse_string_pieces(inner.source)
                         })?;
                     params.push(Expression::String(parts));
+                } else if is_numeric(content) {
+                    let numeric = outer.read_numeric()?;
+                    params.push(Expression::Number(numeric));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Variable(name));
@@ -3500,6 +3503,58 @@ echo "Done"```) }"#,
                     Some("bash"),
                     vec!["ls -l", "echo \"Done\""]
                 )]
+            }))
+        );
+
+        // Test function with quantity parameter (like timer with duration)
+        input.initialize("{ timer(3 hr) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("timer"),
+                parameters: vec![Expression::Number(Numeric::Scientific(Quantity {
+                    mantissa: Decimal {
+                        number: 3,
+                        precision: 0
+                    },
+                    uncertainty: None,
+                    magnitude: None,
+                    symbol: "hr"
+                }))]
+            }))
+        );
+
+        // Test function with integer quantity parameter
+        input.initialize("{ measure(100) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("measure"),
+                parameters: vec![Expression::Number(Numeric::Integral(100))]
+            }))
+        );
+
+        // Test function with decimal quantity parameter
+        input.initialize("{ wait(2.5 s, \"yes\") }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("wait"),
+                parameters: vec![
+                    Expression::Number(Numeric::Scientific(Quantity {
+                        mantissa: Decimal {
+                            number: 25,
+                            precision: 1
+                        },
+                        uncertainty: None,
+                        magnitude: None,
+                        symbol: "s"
+                    })),
+                    Expression::String(vec![Piece::Text("yes")])
+                ]
             }))
         );
     }
