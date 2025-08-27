@@ -2399,7 +2399,7 @@ fn is_enum_response(content: &str) -> bool {
 
 /// Detect response patterns with double quotes
 fn malformed_response_pattern(content: &str) -> bool {
-    let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")*"#);
+    let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")+\s*$"#);
     re.is_match(content)
 }
 
@@ -4283,5 +4283,70 @@ echo test
                 ]
             }
         );
+    }
+
+    #[test]
+    fn multiline_code_inline() {
+        let mut input = Parser::new();
+
+        // Test multiline code inline in descriptive text
+        let source = r#"
+This is { exec(a,
+ b, c)
+ } a valid inline.
+            "#;
+
+        input.initialize(source);
+        let result = input.read_descriptive();
+
+        assert!(
+            result.is_ok(),
+            "Multiline code inline should parse successfully"
+        );
+
+        let paragraphs = result.unwrap();
+        assert_eq!(paragraphs.len(), 1, "Should have exactly one paragraph");
+
+        let descriptives = &paragraphs[0].0;
+        assert_eq!(
+            descriptives.len(),
+            3,
+            "Should have 3 descriptive elements: text, code inline, text"
+        );
+
+        // First element should be "This is"
+        match &descriptives[0] {
+            Descriptive::Text(text) => assert_eq!(*text, "This is"),
+            _ => panic!("First element should be text"),
+        }
+
+        // Second element should be the multiline code inline
+        match &descriptives[1] {
+            Descriptive::CodeInline(Expression::Execution(func)) => {
+                assert_eq!(
+                    func.target
+                        .0,
+                    "exec"
+                );
+                assert_eq!(
+                    func.parameters
+                        .len(),
+                    3
+                );
+                // Check that all parameters were parsed correctly
+                if let Expression::Variable(Identifier(name)) = &func.parameters[0] {
+                    assert_eq!(*name, "a");
+                } else {
+                    panic!("First parameter should be variable 'a'");
+                }
+            }
+            _ => panic!("Second element should be code inline with function execution"),
+        }
+
+        // Third element should be "a valid inline."
+        match &descriptives[2] {
+            Descriptive::Text(text) => assert_eq!(*text, "a valid inline."),
+            _ => panic!("Third element should be text"),
+        }
     }
 }
