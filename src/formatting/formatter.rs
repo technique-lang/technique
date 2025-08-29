@@ -866,7 +866,7 @@ impl<'i> Formatter<'i> {
                     self.add_fragment_reference(Syntax::Attribute, name.0);
                 }
                 Attribute::Place(name) => {
-                    self.add_fragment_reference(Syntax::Attribute, "#");
+                    self.add_fragment_reference(Syntax::Attribute, "^");
                     self.add_fragment_reference(Syntax::Attribute, name.0);
                 }
             }
