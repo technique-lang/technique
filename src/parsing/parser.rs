@@ -765,7 +765,7 @@ impl<'i> Parser<'i> {
                     } else if is_code_block(content) {
                         let expression = outer.read_code_block()?;
                         elements.push(Element::CodeBlock(expression));
-                    } else if is_role_assignment(content) {
+                    } else if is_attribute_assignment(content) {
                         let attribute_block = outer.read_attribute_scope()?;
                         elements.push(Element::Steps(vec![attribute_block]));
                     } else if is_step(content) {
@@ -796,14 +796,14 @@ impl<'i> Parser<'i> {
                                     && !is_procedure_title(line)
                                     && !is_code_block(line)
                                     && !malformed_step_pattern(line)
-                                    && !is_role_assignment(line)
+                                    && !is_attribute_assignment(line)
                             },
                             |line| {
                                 is_step(line)
                                     || is_procedure_title(line)
                                     || is_code_block(line)
                                     || malformed_step_pattern(line)
-                                    || is_role_assignment(line)
+                                    || is_attribute_assignment(line)
                             },
                             |inner| {
                                 let content = inner.source;
@@ -1672,7 +1672,7 @@ impl<'i> Parser<'i> {
                     || is_substep_dependent(line)
                     || is_substep_parallel(line)
                     || is_subsubstep_dependent(line)
-                    || is_role_assignment(line)
+                    || is_attribute_assignment(line)
                     || is_enum_response(line)
                     || malformed_step_pattern(line)
                     || malformed_response_pattern(line)
@@ -1972,7 +1972,7 @@ impl<'i> Parser<'i> {
 
             let content = self.source;
 
-            if is_role_assignment(content) {
+            if is_attribute_assignment(content) {
                 let block = self.read_attribute_scope()?;
                 scopes.push(block);
             } else if is_substep_dependent(content) {
@@ -2425,6 +2425,16 @@ fn is_numeric_quantity(content: &str) -> bool {
 fn is_string_literal(content: &str) -> bool {
     let re = regex!(r#"^\s*".*"\s*$"#);
     re.is_match(content)
+}
+
+fn is_place_assignment(input: &str) -> bool {
+    input
+        .trim_ascii_start()
+        .starts_with('^')
+}
+
+fn is_attribute_assignment(input: &str) -> bool {
+    is_role_assignment(input) || is_place_assignment(input)
 }
 
 #[cfg(test)]
