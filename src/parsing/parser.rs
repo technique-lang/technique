@@ -1927,32 +1927,43 @@ impl<'i> Parser<'i> {
         self.offset += i;
     }
 
-    /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
-    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
+    /// Parse attributes (roles and/or places) like @surgeon, ^kitchen, or @chef + ^bathroom
+    fn read_attributes(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
         self.take_line(|inner| {
             let mut attributes = Vec::new();
 
             let line = inner.source;
 
-            // Handle multiple roles separated by +
-            let role_parts: Vec<&str> = line
+            // Handle multiple attributes separated by +
+            let parts: Vec<&str> = line
                 .split('+')
                 .collect();
 
-            for part in role_parts {
-                let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
-                let cap = re
-                    .captures(part.trim_ascii())
-                    .ok_or(ParsingError::InvalidStep(inner.offset))?;
+            for part in parts {
+                let trimmed = part.trim_ascii();
 
-                let role_name = cap
-                    .get(1)
-                    .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
-                    .as_str();
-
-                let identifier = validate_identifier(role_name)
-                    .ok_or(ParsingError::InvalidIdentifier(inner.offset, role_name))?;
-                attributes.push(Attribute::Role(identifier));
+                // Check if it's a role '@'
+                if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
+                    let role_name = captures
+                        .get(1)
+                        .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
+                        .as_str();
+                    let identifier = validate_identifier(role_name)
+                        .ok_or(ParsingError::InvalidIdentifier(inner.offset, role_name))?;
+                    attributes.push(Attribute::Role(identifier));
+                }
+                // Check if it's a place '^'
+                else if let Some(captures) = regex!(r"^\^([a-z][a-z0-9_]*)$").captures(trimmed) {
+                    let place_name = captures
+                        .get(1)
+                        .ok_or(ParsingError::Expected(inner.offset, "place name after ^"))?
+                        .as_str();
+                    let identifier = validate_identifier(place_name)
+                        .ok_or(ParsingError::InvalidIdentifier(inner.offset, place_name))?;
+                    attributes.push(Attribute::Place(identifier));
+                } else {
+                    return Err(ParsingError::InvalidStep(inner.offset));
+                }
             }
 
             Ok(attributes)
@@ -2004,10 +2015,10 @@ impl<'i> Parser<'i> {
         Ok(scopes)
     }
 
-    /// Parse an attribute block (role assignment) with its subscopes
+    /// Parse an attribute block (role or place assignment) with its subscopes
     fn read_attribute_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
-        self.take_block_lines(is_role_assignment, is_role_assignment, |outer| {
-            let attributes = outer.read_role_assignments()?;
+        self.take_block_lines(is_attribute_assignment, is_attribute_assignment, |outer| {
+            let attributes = outer.read_attributes()?;
             let subscopes = outer.read_scopes()?;
 
             Ok(Scope::AttributeBlock {
@@ -2266,7 +2277,7 @@ fn is_procedure_body(content: &str) -> bool {
     // Check for procedure body indicators. At the end, if it doesn't look like signature, it's body.
     is_procedure_title(content)
         || is_step(content)
-        || is_role_assignment(content)
+        || is_attribute_assignment(content)
         || is_code_block(content)
         || is_enum_response(content)
         || (!is_signature_part(content))
@@ -2390,11 +2401,6 @@ fn is_subsubstep_dependent(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_role_assignment(content: &str) -> bool {
-    let re = regex!(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*");
-    re.is_match(content)
-}
-
 fn is_enum_response(content: &str) -> bool {
     let re = regex!(r"^\s*'.+?'");
     re.is_match(content)
@@ -2427,14 +2433,10 @@ fn is_string_literal(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_place_assignment(input: &str) -> bool {
-    input
-        .trim_ascii_start()
-        .starts_with('^')
-}
-
 fn is_attribute_assignment(input: &str) -> bool {
-    is_role_assignment(input) || is_place_assignment(input)
+    // Matches any combination of @ and ^ attributes separated by +
+    let re = regex!(r"^\s*[@^][a-z][a-z0-9_]*(\s*\+\s*[@^][a-z][a-z0-9_]*)*");
+    re.is_match(input)
 }
 
 #[cfg(test)]
@@ -2965,11 +2967,16 @@ making_coffee(b, m) :
         assert!(is_subsubstep_dependent("xi. Eleven"));
         assert!(is_subsubstep_dependent("xxxix. Thirty-nine"));
 
-        // Test role assignments
-        assert!(is_role_assignment("@surgeon"));
-        assert!(is_role_assignment("  @nursing_team"));
-        assert!(!is_role_assignment("surgeon"));
-        assert!(!is_role_assignment("@123invalid"));
+        // Test attribute assignments
+        assert!(is_attribute_assignment("@surgeon"));
+        assert!(is_attribute_assignment("  @nursing_team"));
+        assert!(is_attribute_assignment("^kitchen"));
+        assert!(is_attribute_assignment("  ^garden  "));
+        assert!(is_attribute_assignment("@chef + ^kitchen"));
+        assert!(is_attribute_assignment("^room1 + @barista"));
+        assert!(!is_attribute_assignment("surgeon"));
+        assert!(!is_attribute_assignment("@123invalid"));
+        assert!(!is_attribute_assignment("^InvalidPlace"));
 
         // Test enum responses
         assert!(is_enum_response("'Yes'"));
@@ -4136,68 +4143,84 @@ echo test
     }
 
     #[test]
-    fn reading_role_assignments() {
+    fn reading_attributes() {
         let mut input = Parser::new();
 
-        // Test simple role assignment
-        input.initialize("@surgeon");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("surgeon"))]));
+        // Test simple role
+        input.initialize("@chef");
+        let result = input.read_attributes();
+        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("chef"))]));
 
-        // Test role assignment with whitespace
-        input.initialize("  @nurse  ");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("nurse"))]));
+        // Test simple place
+        input.initialize("^kitchen");
+        let result = input.read_attributes();
+        assert_eq!(result, Ok(vec![Attribute::Place(Identifier("kitchen"))]));
 
-        // Test role assignment with underscores
-        input.initialize("@nursing_team");
-        let result = input.read_role_assignments();
-        assert_eq!(
-            result,
-            Ok(vec![Attribute::Role(Identifier("nursing_team"))])
-        );
-
-        // Test role assignment with numbers
-        input.initialize("@team1");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("team1"))]));
-
-        // Test multiple roles with +
-        input.initialize("@marketing + @sales");
-        let result = input.read_role_assignments();
+        // Test multiple roles
+        input.initialize("@master_chef + @barista");
+        let result = input.read_attributes();
         assert_eq!(
             result,
             Ok(vec![
-                Attribute::Role(Identifier("marketing")),
-                Attribute::Role(Identifier("sales"))
+                Attribute::Role(Identifier("master_chef")),
+                Attribute::Role(Identifier("barista"))
             ])
         );
 
-        // Test multiple roles with + and extra whitespace
-        input.initialize("@operators + @users + @management");
-        let result = input.read_role_assignments();
+        // Test multiple places
+        input.initialize("^kitchen + ^bath_room");
+        let result = input.read_attributes();
         assert_eq!(
             result,
             Ok(vec![
-                Attribute::Role(Identifier("operators")),
-                Attribute::Role(Identifier("users")),
-                Attribute::Role(Identifier("management"))
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Place(Identifier("bath_room"))
             ])
         );
 
-        // Test invalid role assignment - uppercase
-        input.initialize("@Surgeon");
-        let result = input.read_role_assignments();
+        // Test mixed roles and places
+        input.initialize("@chef + ^bathroom");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Role(Identifier("chef")),
+                Attribute::Place(Identifier("bathroom"))
+            ])
+        );
+
+        // Test mixed places and roles
+        input.initialize("^kitchen + @barista");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Role(Identifier("barista"))
+            ])
+        );
+
+        // Test complex mixed attributes
+        input.initialize("@chef + ^kitchen + @barista + ^dining_room");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Role(Identifier("chef")),
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Role(Identifier("barista")),
+                Attribute::Place(Identifier("dining_room"))
+            ])
+        );
+
+        // Test invalid - uppercase
+        input.initialize("^Kitchen");
+        let result = input.read_attributes();
         assert!(result.is_err());
 
-        // Test invalid role assignment - missing @
-        input.initialize("surgeon");
-        let result = input.read_role_assignments();
-        assert!(result.is_err());
-
-        // Test invalid role assignment - empty
-        input.initialize("@");
-        let result = input.read_role_assignments();
+        // Test invalid - no marker
+        input.initialize("kitchen");
+        let result = input.read_attributes();
         assert!(result.is_err());
     }
 
