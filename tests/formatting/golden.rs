@@ -60,7 +60,7 @@ mod examples {
     #[test]
     fn ensure_identical_output() {
         // Read all .tq files from examples/prototype/
-        let dir = Path::new("examples/golden");
+        let dir = Path::new("tests/golden/");
 
         // Ensure the directory exists
         assert!(dir.exists(), "examples directory missing");
