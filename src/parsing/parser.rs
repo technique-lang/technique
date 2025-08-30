@@ -124,6 +124,7 @@ impl<'i> Parser<'i> {
 
         // Parse zero or more procedures, handling sections if they exist
         let mut procedures = Vec::new();
+        let mut sections = Vec::new();
 
         while !self.is_finished() {
             self.trim_whitespace();
@@ -132,7 +133,25 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            if is_procedure_declaration(self.source) {
+            // Check if this Technique is a a single set of one or more
+            // top-level Scope::SectionChunk
+
+            if is_section(self.source) && procedures.is_empty() {
+                while !self.is_finished() {
+                    self.trim_whitespace();
+                    if self.is_finished() {
+                        break;
+                    }
+
+                    if is_section(self.source) {
+                        let section = self.read_section()?;
+                        sections.push(section);
+                    } else {
+                        return Err(ParsingError::Unrecognized(self.offset));
+                    }
+                }
+                break;
+            } else if is_procedure_declaration(self.source) {
                 let mut procedure = self.take_block_lines(
                     is_procedure_declaration,
                     |line| is_section(line) || is_procedure_declaration(line),
@@ -186,10 +205,12 @@ impl<'i> Parser<'i> {
             }
         }
 
-        let body = if procedures.is_empty() {
-            None
-        } else {
+        let body = if !sections.is_empty() {
+            Some(Technique::Steps(sections))
+        } else if !procedures.is_empty() {
             Some(Technique::Procedures(procedures))
+        } else {
+            None
         };
 
         Ok(Document { header, body })
@@ -890,11 +911,11 @@ impl<'i> Parser<'i> {
                     }
 
                     // Try to parse steps
-                    if is_substep_dependent(outer.source) {
-                        let step = outer.read_substep_dependent()?;
+                    if is_step_dependent(outer.source) {
+                        let step = outer.read_step_dependent()?;
                         steps.push(step);
-                    } else if is_substep_parallel(outer.source) {
-                        let step = outer.read_substep_parallel()?;
+                    } else if is_step_parallel(outer.source) {
+                        let step = outer.read_step_parallel()?;
                         steps.push(step);
                     } else {
                         // Skip unrecognized content line by line
