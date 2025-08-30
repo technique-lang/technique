@@ -59,13 +59,13 @@ mod examples {
 
     #[test]
     fn ensure_identical_output() {
-        // Read all .t files from examples/prototype/
+        // Read all .tq files from examples/prototype/
         let dir = Path::new("examples/golden");
 
         // Ensure the directory exists
         assert!(dir.exists(), "examples directory missing");
 
-        // Get all .t files in the directory
+        // Get all .tq files in the directory
         let entries = fs::read_dir(dir).expect("Failed to read examples directory");
 
         let mut files = Vec::new();
@@ -76,14 +76,14 @@ mod examples {
             if path
                 .extension()
                 .and_then(|s| s.to_str())
-                == Some("t")
+                == Some("tq")
             {
                 files.push(path);
             }
         }
 
         // Ensure we found some test files
-        assert!(!files.is_empty(), "No .t files found in examples directory");
+        assert!(!files.is_empty(), "No .tq files found in examples directory");
 
         let mut failures = Vec::new();
 
