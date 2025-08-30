@@ -1,0 +1,12 @@
+% technique v1
+
+another_example(e) : Input -> Output
+{
+    [
+        "answer" = 42
+        "Question Time" = "What is the question?"
+        "timestamp" = now()
+        "message" = e
+        "interpolation" = "The value is { e "
+    ]
+}
