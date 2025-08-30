@@ -220,11 +220,12 @@ impl<'i> Formatter<'i> {
     }
 
     fn switch_syntax(&mut self, new_syntax: Syntax) {
-        if !self.buffer.is_empty() {
-            self.fragments.push((
-                self.current,
-                Cow::Owned(std::mem::take(&mut self.buffer)),
-            ));
+        if !self
+            .buffer
+            .is_empty()
+        {
+            self.fragments
+                .push((self.current, Cow::Owned(std::mem::take(&mut self.buffer))));
         }
         self.current = new_syntax;
     }
@@ -234,11 +235,12 @@ impl<'i> Formatter<'i> {
     }
 
     pub fn flush_current(&mut self) {
-        if !self.buffer.is_empty() {
-            self.fragments.push((
-                self.current,
-                Cow::Owned(std::mem::take(&mut self.buffer)),
-            ));
+        if !self
+            .buffer
+            .is_empty()
+        {
+            self.fragments
+                .push((self.current, Cow::Owned(std::mem::take(&mut self.buffer))));
         }
     }
 
@@ -410,6 +412,11 @@ impl<'i> Formatter<'i> {
     fn format_technique(&mut self, technique: &'i Technique) {
         match technique {
             Technique::Steps(steps) => {
+                // if a header has already been added,
+                // separate the upcoming steps with a blank line.
+                if !self.is_empty() {
+                    self.append_char('\n');
+                }
                 self.append_steps(steps);
             }
             Technique::Procedures(procedures) => {
@@ -1242,7 +1249,10 @@ impl<'a, 'i> Line<'a, 'i> {
 
     fn wrap_line(&mut self) {
         // Emit all current fragments to the output
-        for (syntax, content) in self.current.drain(..) {
+        for (syntax, content) in self
+            .current
+            .drain(..)
+        {
             self.output
                 .add_fragment(syntax, content);
         }
@@ -1261,7 +1271,10 @@ impl<'a, 'i> Line<'a, 'i> {
             .is_empty()
         {
             // Emit all current fragments to the output
-            for (syntax, content) in self.current.drain(..) {
+            for (syntax, content) in self
+                .current
+                .drain(..)
+            {
                 self.output
                     .add_fragment(syntax, content);
             }
