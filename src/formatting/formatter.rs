@@ -410,6 +410,11 @@ impl<'i> Formatter<'i> {
     fn format_technique(&mut self, technique: &'i Technique) {
         match technique {
             Technique::Steps(steps) => {
+                // if a header has already been added,
+                // separate the upcoming steps with a blank line.
+                if !self.is_empty() {
+                    self.append_char('\n');
+                }
                 self.append_steps(steps);
             }
             Technique::Procedures(procedures) => {
