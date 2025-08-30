@@ -63,18 +63,18 @@ pub fn render(renderer: &impl Render, technique: &Document, width: u8) -> String
 }
 
 /// Pass 1: Convert AST to semantic fragments.
-fn format_to_fragments(
-    technique: &Document,
+fn format_to_fragments<'i>(
+    technique: &'i Document,
     width: u8,
-) -> Vec<(Syntax, std::borrow::Cow<'static, str>)> {
+) -> Vec<(Syntax, std::borrow::Cow<'i, str>)> {
     // Use the existing formatter.rs logic but collect fragments instead
     crate::formatting::formatter::format_with_renderer(technique, width)
 }
 
 /// Pass 2: apply markup to fragments via style() and combine.
-fn render_to_string(
+fn render_to_string<'i>(
     renderer: &impl Render,
-    fragments: Vec<(Syntax, std::borrow::Cow<'static, str>)>,
+    fragments: Vec<(Syntax, std::borrow::Cow<'i, str>)>,
 ) -> String {
     let mut output = String::new();
 

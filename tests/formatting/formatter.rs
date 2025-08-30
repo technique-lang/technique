@@ -9,7 +9,7 @@ mod verify {
         tail
     }
 
-    fn combine(fragments: Vec<(Syntax, std::borrow::Cow<'static, str>)>) -> String {
+    fn combine<'i>(fragments: Vec<(Syntax, std::borrow::Cow<'i, str>)>) -> String {
         let mut result = String::new();
         for fragment in fragments {
             result.push_str(&fragment.1);

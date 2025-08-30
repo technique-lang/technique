@@ -124,6 +124,7 @@ impl<'i> Parser<'i> {
 
         // Parse zero or more procedures, handling sections if they exist
         let mut procedures = Vec::new();
+        let mut sections = Vec::new();
 
         while !self.is_finished() {
             self.trim_whitespace();
@@ -132,7 +133,25 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            if is_procedure_declaration(self.source) {
+            // Check if this Technique is a a single set of one or more
+            // top-level Scope::SectionChunk
+
+            if is_section(self.source) && procedures.is_empty() {
+                while !self.is_finished() {
+                    self.trim_whitespace();
+                    if self.is_finished() {
+                        break;
+                    }
+
+                    if is_section(self.source) {
+                        let section = self.read_section()?;
+                        sections.push(section);
+                    } else {
+                        return Err(ParsingError::Unrecognized(self.offset));
+                    }
+                }
+                break;
+            } else if is_procedure_declaration(self.source) {
                 let mut procedure = self.take_block_lines(
                     is_procedure_declaration,
                     |line| is_section(line) || is_procedure_declaration(line),
@@ -186,10 +205,12 @@ impl<'i> Parser<'i> {
             }
         }
 
-        let body = if procedures.is_empty() {
-            None
-        } else {
+        let body = if !sections.is_empty() {
+            Some(Technique::Steps(sections))
+        } else if !procedures.is_empty() {
             Some(Technique::Procedures(procedures))
+        } else {
+            None
         };
 
         Ok(Document { header, body })
@@ -765,7 +786,7 @@ impl<'i> Parser<'i> {
                     } else if is_code_block(content) {
                         let expression = outer.read_code_block()?;
                         elements.push(Element::CodeBlock(expression));
-                    } else if is_role_assignment(content) {
+                    } else if is_attribute_assignment(content) {
                         let attribute_block = outer.read_attribute_scope()?;
                         elements.push(Element::Steps(vec![attribute_block]));
                     } else if is_step(content) {
@@ -796,14 +817,14 @@ impl<'i> Parser<'i> {
                                     && !is_procedure_title(line)
                                     && !is_code_block(line)
                                     && !malformed_step_pattern(line)
-                                    && !is_role_assignment(line)
+                                    && !is_attribute_assignment(line)
                             },
                             |line| {
                                 is_step(line)
                                     || is_procedure_title(line)
                                     || is_code_block(line)
                                     || malformed_step_pattern(line)
-                                    || is_role_assignment(line)
+                                    || is_attribute_assignment(line)
                             },
                             |inner| {
                                 let content = inner.source;
@@ -890,11 +911,11 @@ impl<'i> Parser<'i> {
                     }
 
                     // Try to parse steps
-                    if is_substep_dependent(outer.source) {
-                        let step = outer.read_substep_dependent()?;
+                    if is_step_dependent(outer.source) {
+                        let step = outer.read_step_dependent()?;
                         steps.push(step);
-                    } else if is_substep_parallel(outer.source) {
-                        let step = outer.read_substep_parallel()?;
+                    } else if is_step_parallel(outer.source) {
+                        let step = outer.read_step_parallel()?;
                         steps.push(step);
                     } else {
                         // Skip unrecognized content line by line
@@ -1476,8 +1497,8 @@ impl<'i> Parser<'i> {
             .source
             .char_indices()
         {
-            if ch.is_whitespace() {
-                // Stop at whitespace
+            if ch.is_whitespace() || ch == ',' || ch == ')' {
+                // Stop at whitespace, comma, or closing parameter boundary
                 break;
             } else if ch.is_ascii_alphabetic() || ch == '°' || ch == '/' || ch == 'μ' {
                 // Valid character
@@ -1672,7 +1693,7 @@ impl<'i> Parser<'i> {
                     || is_substep_dependent(line)
                     || is_substep_parallel(line)
                     || is_subsubstep_dependent(line)
-                    || is_role_assignment(line)
+                    || is_attribute_assignment(line)
                     || is_enum_response(line)
                     || malformed_step_pattern(line)
                     || malformed_response_pattern(line)
@@ -1875,6 +1896,9 @@ impl<'i> Parser<'i> {
                             inner.parse_string_pieces(inner.source)
                         })?;
                     params.push(Expression::String(parts));
+                } else if is_numeric(content) {
+                    let numeric = outer.read_numeric()?;
+                    params.push(Expression::Number(numeric));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Variable(name));
@@ -1924,32 +1948,43 @@ impl<'i> Parser<'i> {
         self.offset += i;
     }
 
-    /// Parse role assignments like @surgeon, @nurse, or @marketing + @sales
-    fn read_role_assignments(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
+    /// Parse attributes (roles and/or places) like @surgeon, ^kitchen, or @chef + ^bathroom
+    fn read_attributes(&mut self) -> Result<Vec<Attribute<'i>>, ParsingError<'i>> {
         self.take_line(|inner| {
             let mut attributes = Vec::new();
 
             let line = inner.source;
 
-            // Handle multiple roles separated by +
-            let role_parts: Vec<&str> = line
+            // Handle multiple attributes separated by +
+            let parts: Vec<&str> = line
                 .split('+')
                 .collect();
 
-            for part in role_parts {
-                let re = regex!(r"^\s*@([a-z][a-z0-9_]*)\s*$");
-                let cap = re
-                    .captures(part.trim_ascii())
-                    .ok_or(ParsingError::InvalidStep(inner.offset))?;
+            for part in parts {
+                let trimmed = part.trim_ascii();
 
-                let role_name = cap
-                    .get(1)
-                    .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
-                    .as_str();
-
-                let identifier = validate_identifier(role_name)
-                    .ok_or(ParsingError::InvalidIdentifier(inner.offset, role_name))?;
-                attributes.push(Attribute::Role(identifier));
+                // Check if it's a role '@'
+                if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
+                    let role_name = captures
+                        .get(1)
+                        .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
+                        .as_str();
+                    let identifier = validate_identifier(role_name)
+                        .ok_or(ParsingError::InvalidIdentifier(inner.offset, role_name))?;
+                    attributes.push(Attribute::Role(identifier));
+                }
+                // Check if it's a place '^'
+                else if let Some(captures) = regex!(r"^\^([a-z][a-z0-9_]*)$").captures(trimmed) {
+                    let place_name = captures
+                        .get(1)
+                        .ok_or(ParsingError::Expected(inner.offset, "place name after ^"))?
+                        .as_str();
+                    let identifier = validate_identifier(place_name)
+                        .ok_or(ParsingError::InvalidIdentifier(inner.offset, place_name))?;
+                    attributes.push(Attribute::Place(identifier));
+                } else {
+                    return Err(ParsingError::InvalidStep(inner.offset));
+                }
             }
 
             Ok(attributes)
@@ -1969,7 +2004,7 @@ impl<'i> Parser<'i> {
 
             let content = self.source;
 
-            if is_role_assignment(content) {
+            if is_attribute_assignment(content) {
                 let block = self.read_attribute_scope()?;
                 scopes.push(block);
             } else if is_substep_dependent(content) {
@@ -2001,10 +2036,10 @@ impl<'i> Parser<'i> {
         Ok(scopes)
     }
 
-    /// Parse an attribute block (role assignment) with its subscopes
+    /// Parse an attribute block (role or place assignment) with its subscopes
     fn read_attribute_scope(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
-        self.take_block_lines(is_role_assignment, is_role_assignment, |outer| {
-            let attributes = outer.read_role_assignments()?;
+        self.take_block_lines(is_attribute_assignment, is_attribute_assignment, |outer| {
+            let attributes = outer.read_attributes()?;
             let subscopes = outer.read_scopes()?;
 
             Ok(Scope::AttributeBlock {
@@ -2263,7 +2298,7 @@ fn is_procedure_body(content: &str) -> bool {
     // Check for procedure body indicators. At the end, if it doesn't look like signature, it's body.
     is_procedure_title(content)
         || is_step(content)
-        || is_role_assignment(content)
+        || is_attribute_assignment(content)
         || is_code_block(content)
         || is_enum_response(content)
         || (!is_signature_part(content))
@@ -2387,11 +2422,6 @@ fn is_subsubstep_dependent(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_role_assignment(content: &str) -> bool {
-    let re = regex!(r"^\s*@[a-z][a-z0-9_]*(\s*\+\s*@[a-z][a-z0-9_]*)*");
-    re.is_match(content)
-}
-
 fn is_enum_response(content: &str) -> bool {
     let re = regex!(r"^\s*'.+?'");
     re.is_match(content)
@@ -2399,7 +2429,7 @@ fn is_enum_response(content: &str) -> bool {
 
 /// Detect response patterns with double quotes
 fn malformed_response_pattern(content: &str) -> bool {
-    let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")*"#);
+    let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")+\s*$"#);
     re.is_match(content)
 }
 
@@ -2422,6 +2452,12 @@ fn is_numeric_quantity(content: &str) -> bool {
 fn is_string_literal(content: &str) -> bool {
     let re = regex!(r#"^\s*".*"\s*$"#);
     re.is_match(content)
+}
+
+fn is_attribute_assignment(input: &str) -> bool {
+    // Matches any combination of @ and ^ attributes separated by +
+    let re = regex!(r"^\s*[@^][a-z][a-z0-9_]*(\s*\+\s*[@^][a-z][a-z0-9_]*)*");
+    re.is_match(input)
 }
 
 #[cfg(test)]
@@ -2952,11 +2988,16 @@ making_coffee(b, m) :
         assert!(is_subsubstep_dependent("xi. Eleven"));
         assert!(is_subsubstep_dependent("xxxix. Thirty-nine"));
 
-        // Test role assignments
-        assert!(is_role_assignment("@surgeon"));
-        assert!(is_role_assignment("  @nursing_team"));
-        assert!(!is_role_assignment("surgeon"));
-        assert!(!is_role_assignment("@123invalid"));
+        // Test attribute assignments
+        assert!(is_attribute_assignment("@surgeon"));
+        assert!(is_attribute_assignment("  @nursing_team"));
+        assert!(is_attribute_assignment("^kitchen"));
+        assert!(is_attribute_assignment("  ^garden  "));
+        assert!(is_attribute_assignment("@chef + ^kitchen"));
+        assert!(is_attribute_assignment("^room1 + @barista"));
+        assert!(!is_attribute_assignment("surgeon"));
+        assert!(!is_attribute_assignment("@123invalid"));
+        assert!(!is_attribute_assignment("^InvalidPlace"));
 
         // Test enum responses
         assert!(is_enum_response("'Yes'"));
@@ -3500,6 +3541,58 @@ echo "Done"```) }"#,
                     Some("bash"),
                     vec!["ls -l", "echo \"Done\""]
                 )]
+            }))
+        );
+
+        // Test function with quantity parameter (like timer with duration)
+        input.initialize("{ timer(3 hr) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("timer"),
+                parameters: vec![Expression::Number(Numeric::Scientific(Quantity {
+                    mantissa: Decimal {
+                        number: 3,
+                        precision: 0
+                    },
+                    uncertainty: None,
+                    magnitude: None,
+                    symbol: "hr"
+                }))]
+            }))
+        );
+
+        // Test function with integer quantity parameter
+        input.initialize("{ measure(100) }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("measure"),
+                parameters: vec![Expression::Number(Numeric::Integral(100))]
+            }))
+        );
+
+        // Test function with decimal quantity parameter
+        input.initialize("{ wait(2.5 s, \"yes\") }");
+        let result = input.read_code_block();
+        assert_eq!(
+            result,
+            Ok(Expression::Execution(Function {
+                target: Identifier("wait"),
+                parameters: vec![
+                    Expression::Number(Numeric::Scientific(Quantity {
+                        mantissa: Decimal {
+                            number: 25,
+                            precision: 1
+                        },
+                        uncertainty: None,
+                        magnitude: None,
+                        symbol: "s"
+                    })),
+                    Expression::String(vec![Piece::Text("yes")])
+                ]
             }))
         );
     }
@@ -4071,68 +4164,84 @@ echo test
     }
 
     #[test]
-    fn reading_role_assignments() {
+    fn reading_attributes() {
         let mut input = Parser::new();
 
-        // Test simple role assignment
-        input.initialize("@surgeon");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("surgeon"))]));
+        // Test simple role
+        input.initialize("@chef");
+        let result = input.read_attributes();
+        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("chef"))]));
 
-        // Test role assignment with whitespace
-        input.initialize("  @nurse  ");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("nurse"))]));
+        // Test simple place
+        input.initialize("^kitchen");
+        let result = input.read_attributes();
+        assert_eq!(result, Ok(vec![Attribute::Place(Identifier("kitchen"))]));
 
-        // Test role assignment with underscores
-        input.initialize("@nursing_team");
-        let result = input.read_role_assignments();
-        assert_eq!(
-            result,
-            Ok(vec![Attribute::Role(Identifier("nursing_team"))])
-        );
-
-        // Test role assignment with numbers
-        input.initialize("@team1");
-        let result = input.read_role_assignments();
-        assert_eq!(result, Ok(vec![Attribute::Role(Identifier("team1"))]));
-
-        // Test multiple roles with +
-        input.initialize("@marketing + @sales");
-        let result = input.read_role_assignments();
+        // Test multiple roles
+        input.initialize("@master_chef + @barista");
+        let result = input.read_attributes();
         assert_eq!(
             result,
             Ok(vec![
-                Attribute::Role(Identifier("marketing")),
-                Attribute::Role(Identifier("sales"))
+                Attribute::Role(Identifier("master_chef")),
+                Attribute::Role(Identifier("barista"))
             ])
         );
 
-        // Test multiple roles with + and extra whitespace
-        input.initialize("@operators + @users + @management");
-        let result = input.read_role_assignments();
+        // Test multiple places
+        input.initialize("^kitchen + ^bath_room");
+        let result = input.read_attributes();
         assert_eq!(
             result,
             Ok(vec![
-                Attribute::Role(Identifier("operators")),
-                Attribute::Role(Identifier("users")),
-                Attribute::Role(Identifier("management"))
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Place(Identifier("bath_room"))
             ])
         );
 
-        // Test invalid role assignment - uppercase
-        input.initialize("@Surgeon");
-        let result = input.read_role_assignments();
+        // Test mixed roles and places
+        input.initialize("@chef + ^bathroom");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Role(Identifier("chef")),
+                Attribute::Place(Identifier("bathroom"))
+            ])
+        );
+
+        // Test mixed places and roles
+        input.initialize("^kitchen + @barista");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Role(Identifier("barista"))
+            ])
+        );
+
+        // Test complex mixed attributes
+        input.initialize("@chef + ^kitchen + @barista + ^dining_room");
+        let result = input.read_attributes();
+        assert_eq!(
+            result,
+            Ok(vec![
+                Attribute::Role(Identifier("chef")),
+                Attribute::Place(Identifier("kitchen")),
+                Attribute::Role(Identifier("barista")),
+                Attribute::Place(Identifier("dining_room"))
+            ])
+        );
+
+        // Test invalid - uppercase
+        input.initialize("^Kitchen");
+        let result = input.read_attributes();
         assert!(result.is_err());
 
-        // Test invalid role assignment - missing @
-        input.initialize("surgeon");
-        let result = input.read_role_assignments();
-        assert!(result.is_err());
-
-        // Test invalid role assignment - empty
-        input.initialize("@");
-        let result = input.read_role_assignments();
+        // Test invalid - no marker
+        input.initialize("kitchen");
+        let result = input.read_attributes();
         assert!(result.is_err());
     }
 
@@ -4283,5 +4392,70 @@ echo test
                 ]
             }
         );
+    }
+
+    #[test]
+    fn multiline_code_inline() {
+        let mut input = Parser::new();
+
+        // Test multiline code inline in descriptive text
+        let source = r#"
+This is { exec(a,
+ b, c)
+ } a valid inline.
+            "#;
+
+        input.initialize(source);
+        let result = input.read_descriptive();
+
+        assert!(
+            result.is_ok(),
+            "Multiline code inline should parse successfully"
+        );
+
+        let paragraphs = result.unwrap();
+        assert_eq!(paragraphs.len(), 1, "Should have exactly one paragraph");
+
+        let descriptives = &paragraphs[0].0;
+        assert_eq!(
+            descriptives.len(),
+            3,
+            "Should have 3 descriptive elements: text, code inline, text"
+        );
+
+        // First element should be "This is"
+        match &descriptives[0] {
+            Descriptive::Text(text) => assert_eq!(*text, "This is"),
+            _ => panic!("First element should be text"),
+        }
+
+        // Second element should be the multiline code inline
+        match &descriptives[1] {
+            Descriptive::CodeInline(Expression::Execution(func)) => {
+                assert_eq!(
+                    func.target
+                        .0,
+                    "exec"
+                );
+                assert_eq!(
+                    func.parameters
+                        .len(),
+                    3
+                );
+                // Check that all parameters were parsed correctly
+                if let Expression::Variable(Identifier(name)) = &func.parameters[0] {
+                    assert_eq!(*name, "a");
+                } else {
+                    panic!("First parameter should be variable 'a'");
+                }
+            }
+            _ => panic!("Second element should be code inline with function execution"),
+        }
+
+        // Third element should be "a valid inline."
+        match &descriptives[2] {
+            Descriptive::Text(text) => assert_eq!(*text, "a valid inline."),
+            _ => panic!("Third element should be text"),
+        }
     }
 }
