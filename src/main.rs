@@ -56,12 +56,12 @@ fn main() {
                 .action(ArgAction::Version))
         .subcommand(
             Command::new("check")
-                .about("Syntax- and type-check the given procedure")
+                .about("Validate the syntax, structure, and types in the given Technique document.")
                 .arg(
                     Arg::new("watch")
                         .long("watch")
                         .action(clap::ArgAction::SetTrue)
-                        .help("Watch the given procedure file and recompile if changes are detected."),
+                        .help("Watch the given file containing a Technique document and recompile if changes are detected."),
                 )
                 .arg(
                     Arg::new("output")
@@ -75,12 +75,12 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the procedure you want to type-check."),
+                        .help("The file containing the code for the Technique you want to type-check."),
                 ),
         )
         .subcommand(
             Command::new("format")
-                .about("Code format the given procedure")
+                .about("Format the code in the given Technique document.")
                 .arg(
                     Arg::new("raw-control-chars")
                         .short('R')
@@ -100,16 +100,16 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the procedure you want to format."),
+                        .help("The file containing the code for the Technique you want to format."),
                 ),
         )
         .subcommand(
             Command::new("render")
-                .about("Render the Technique procedure into a printable PDF")
-                .long_about("Render the Technique procedure into a printable \
+                .about("Render the Technique document into a printable PDF.")
+                .long_about("Render the Technique document into a printable \
                     PDF. By default this will highlight the source of the \
                     input file for the purposes of reviewing the raw \
-                    procedure.")
+                    procedure in code form.")
                 .arg(
                     Arg::new("output")
                         .short('o')
@@ -117,12 +117,12 @@ fn main() {
                         .value_parser(["typst", "none"])
                         .default_value("none")
                         .action(ArgAction::Set)
-                        .help("Output format: pdf (default) or typst markup.")
+                        .help("Which kind of diagnostic output to print when rendering.")
                 )
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the procedure you want to print."),
+                        .help("The file containing the code for the Technique you want to print."),
                 ),
         )
         .get_matches();
