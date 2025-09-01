@@ -3,6 +3,28 @@ use std::path::Path;
 use crate::language::*;
 use crate::regex::*;
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseResult<'i> {
+    pub document: Document<'i>,
+    pub errors: Vec<ParsingError<'i>>,
+}
+
+impl<'i> ParseResult<'i> {
+    pub fn has_errors(&self) -> bool {
+        !self
+            .errors
+            .is_empty()
+    }
+}
+
+pub fn parse_with_recovery<'i>(path: &'i Path, content: &'i str) -> ParseResult<'i> {
+    let mut input = Parser::new();
+    input.filename(path);
+    input.initialize(content);
+
+    input.parse_collecting_errors()
+}
+
 pub fn parse_via_taking<'i>(
     path: &'i Path,
     content: &'i str,
@@ -87,6 +109,7 @@ pub struct Parser<'i> {
     original: &'i str,
     source: &'i str,
     offset: usize,
+    problems: Vec<ParsingError<'i>>,
 }
 
 impl<'i> Parser<'i> {
@@ -96,6 +119,7 @@ impl<'i> Parser<'i> {
             original: "",
             source: "",
             offset: 0,
+            problems: Vec::new(),
         }
     }
 
@@ -106,6 +130,8 @@ impl<'i> Parser<'i> {
         self.original = content;
         self.source = content;
         self.offset = 0;
+        self.problems
+            .clear();
     }
 
     fn advance(&mut self, width: usize) {
@@ -499,6 +525,7 @@ impl<'i> Parser<'i> {
             original: self.original,
             source: content,
             offset: indent + self.offset,
+            problems: Vec::new(),
         };
 
         // and return

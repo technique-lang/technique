@@ -160,16 +160,17 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let technique = match parsing::parse(&filename, &content) {
-                Ok(document) => document,
-                Err(error) => {
+            let result = parsing::parser::parse_with_recovery(&filename, &content);
+            if result.has_errors() {
+                for error in &result.errors {
                     eprintln!(
                         "{}",
-                        problem::full_parsing_error(&error, &filename, &content, &Terminal)
+                        problem::full_parsing_error(error, &filename, &content, &Terminal)
                     );
-                    std::process::exit(1);
                 }
-            };
+                std::process::exit(1);
+            }
+            let technique = result.document;
             // TODO continue with validation of the returned technique
 
             eprintln!("{}", "ok".bright_green());
