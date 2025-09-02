@@ -139,14 +139,38 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
+    /// Skip to the beginning of the next line (or end of input). This is used
+    /// when an error is encountered; we attempt to recover back to a newline
+    /// as that may well be in a parent scope and we can continue.
+    fn skip_to_next_line(&mut self) {
+        if let Some(pos) = self
+            .source
+            .find('\n')
+        {
+            self.advance(pos + 1);
+        } else {
+            self.advance(
+                self.source
+                    .len(),
+            );
+        }
+    }
+
     fn parse_collecting_errors(&mut self) -> ParseResult<'i> {
         // Clear any existing errors
         self.problems
             .clear();
 
-        // Parse header, collecting errors instead of propagating
+        // Parse header, collecting errors if encountered
         let header = if is_magic_line(self.source) {
-            Some(self.read_technique_header()?)
+            match self.read_technique_header() {
+                Ok(header) => Some(header),
+                Err(error) => {
+                    self.problems
+                        .push(error);
+                    None
+                }
+            }
         } else {
             None
         };
@@ -162,9 +186,8 @@ impl<'i> Parser<'i> {
                 break;
             }
 
-            // Check if this Technique is a a single set of one or more
+            // Check if this Technique is a single set of one or more
             // top-level Scope::SectionChunk
-
             if is_section(self.source) && procedures.is_empty() {
                 while !self.is_finished() {
                     self.trim_whitespace();
@@ -173,10 +196,18 @@ impl<'i> Parser<'i> {
                     }
 
                     if is_section(self.source) {
-                        let section = self.read_section()?;
-                        sections.push(section);
+                        match self.read_section() {
+                            Ok(section) => sections.push(section),
+                            Err(error) => {
+                                self.problems
+                                    .push(error);
+                                self.skip_to_next_line();
+                            }
+                        }
                     } else {
-                        return Err(ParsingError::Unrecognized(self.offset));
+                        self.problems
+                            .push(ParsingError::Unrecognized(self.offset));
+                        self.skip_to_next_line();
                     }
                 }
                 break;
@@ -230,7 +261,9 @@ impl<'i> Parser<'i> {
                 // is_procedure_declaration() failed, which is undefined.
                 return Err(ParsingError::IllegalParserState(self.offset));
             } else {
-                return Err(ParsingError::Unrecognized(self.offset));
+                self.problems
+                    .push(ParsingError::Unrecognized(self.offset));
+                self.skip_to_next_line();
             }
         }
 
@@ -242,7 +275,9 @@ impl<'i> Parser<'i> {
             None
         };
 
-        Ok(Document { header, body })
+        let document = Document { header, body };
+        let errors = std::mem::take(&mut self.problems);
+        ParseResult { document, errors }
     }
 
     /// consume up to but not including newline (or end), then take newline
