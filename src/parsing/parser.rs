@@ -4460,6 +4460,41 @@ echo test
     }
 
     #[test]
+    fn test_multiple_error_collection() {
+        use std::path::Path;
+
+        // Create a string with 3 procedures: 2 with errors and 1 valid
+        let content = r#"
+broken_proc1 : A ->
+    # This procedure has incomplete signature
+
+    1. Do something
+
+valid_proc : A -> B
+    # This is a valid procedure
+
+    1. Valid step
+    2. Another valid step
+
+broken_proc2 : -> B
+    # This procedure has incomplete signature (missing domain)
+
+    1. Do something else
+        "#;
+
+        let result = parse_with_recovery(Path::new("test.t"), content);
+
+        // Assert that there are at least 2 errors (from the broken procedures)
+        match result {
+            Ok(_) => panic!("Result should have errors"),
+            Err(errors) => {
+                let l = errors.len();
+                assert!(l >= 2, "Should have at least 2 errors, got {}", l)
+            }
+        };
+    }
+
+    #[test]
     fn multiline_code_inline() {
         let mut input = Parser::new();
 
