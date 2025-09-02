@@ -4,8 +4,8 @@ use crate::language::*;
 use crate::regex::*;
 
 #[derive(Debug, PartialEq, Eq)]
-struct ParseResult<'i> {
-    pub document: Document<'i>,
+struct ParseResult<'i, T> {
+    pub value: T,
     pub errors: Vec<ParsingError<'i>>,
 }
 
@@ -29,7 +29,7 @@ pub fn parse_with_recovery<'i>(
         .errors
         .is_empty()
     {
-        Ok(result.document)
+        Ok(result.value)
     } else {
         Err(result.errors)
     }
@@ -156,7 +156,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn parse_collecting_errors(&mut self) -> ParseResult<'i> {
+    fn parse_collecting_errors(&mut self) -> ParseResult<'i, Document<'i>> {
         // Clear any existing errors
         self.problems
             .clear();
@@ -212,21 +212,11 @@ impl<'i> Parser<'i> {
                 }
                 break;
             } else if is_procedure_declaration(self.source) {
-                match self
-                    .take_block_lines(
-                        is_procedure_declaration,
-                        |line| is_section(line) || potential_procedure_declaration(line),
-                        |inner| {
-                            let result = inner.read_procedure();
-                            let errors = std::mem::take(&mut inner.problems);
-                            Ok((result, errors))
-                        },
-                    )
-                    .and_then(|(result, errors)| {
-                        self.problems
-                            .extend(errors);
-                        result
-                    }) {
+                match self.take_block_lines(
+                    is_procedure_declaration,
+                    |line| is_section(line) || potential_procedure_declaration(line),
+                    |inner| inner.read_procedure(),
+                ) {
                     Ok(mut procedure) => {
                         // Check if there are sections following this procedure
                         while !self.is_finished() {
@@ -276,21 +266,11 @@ impl<'i> Parser<'i> {
                 // It might be that we've encountered a malformed procedure
                 // declaration, so we try parsing it anyway to get a more
                 // specific error message.
-                match self
-                    .take_block_lines(
-                        |_| true, // Accept the line regardless
-                        |line| is_section(line) || potential_procedure_declaration(line),
-                        |inner| {
-                            let result = inner.read_procedure();
-                            let errors = std::mem::take(&mut inner.problems);
-                            Ok((result, errors))
-                        },
-                    )
-                    .and_then(|(result, errors)| {
-                        self.problems
-                            .extend(errors);
-                        result
-                    }) {
+                match self.take_block_lines(
+                    |_| true, // Accept the line regardless
+                    |line| is_section(line) || potential_procedure_declaration(line),
+                    |inner| inner.read_procedure(),
+                ) {
                     Ok(procedure) => {
                         procedures.push(procedure);
                     }
@@ -316,7 +296,10 @@ impl<'i> Parser<'i> {
 
         let document = Document { header, body };
         let errors = std::mem::take(&mut self.problems);
-        ParseResult { document, errors }
+        ParseResult {
+            value: document,
+            errors,
+        }
     }
 
     /// consume up to but not including newline (or end), then take newline
@@ -377,13 +360,17 @@ impl<'i> Parser<'i> {
         let mut parser = self.subparser(0, block);
 
         // Pass to closure for processing
-        let result = function(&mut parser)?;
+        let result = function(&mut parser);
+
+        // Merge any errors from the subparser into the parent
+        self.problems
+            .extend(parser.problems);
 
         // Advance parser state
         self.source = &self.source[i..];
         self.offset += i;
 
-        Ok(result)
+        result
     }
 
     fn take_block_chars<A, F>(
@@ -4744,11 +4731,11 @@ echo test
             0
         );
         assert!(result
-            .document
+            .value
             .header
             .is_some());
         assert!(result
-            .document
+            .value
             .body
             .is_some());
 
@@ -4766,13 +4753,13 @@ echo test
             .iter()
             .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
         assert!(result
-            .document
+            .value
             .header
             .is_none());
 
         // Test that the method returns ParseResult instead of Result
         input.initialize("some content");
-        let _result: ParseResult = input.parse_collecting_errors();
+        let _result: ParseResult<Document> = input.parse_collecting_errors();
         // If this compiles, the method signature is correct
     }
 
