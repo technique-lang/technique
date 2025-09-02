@@ -212,39 +212,73 @@ impl<'i> Parser<'i> {
                 }
                 break;
             } else if is_procedure_declaration(self.source) {
-                let mut procedure = self.take_block_lines(
-                    is_procedure_declaration,
-                    |line| is_section(line) || is_procedure_declaration(line),
-                    |inner| inner.read_procedure(),
-                )?;
-
-                // Check if there are sections following this procedure
-                while !self.is_finished() {
-                    self.trim_whitespace();
-                    if self.is_finished() {
-                        break;
-                    }
-
-                    if is_section(self.source) {
-                        let section = self.read_section()?;
-                        if let Some(Element::Steps(ref mut steps)) = procedure
-                            .elements
-                            .last_mut()
-                        {
-                            steps.push(section);
-                        } else {
-                            // Create a new Steps element if one doesn't exist
-                            procedure
-                                .elements
-                                .push(Element::Steps(vec![section]));
+                let procedure_result = self
+                    .take_block_lines(
+                        is_procedure_declaration,
+                        |line| is_section(line) || potential_procedure_declaration(line),
+                        |inner| {
+                            match inner.read_procedure() {
+                                Ok(proc) => {
+                                    // Return both the procedure and the errors
+                                    Ok((Some(proc), std::mem::take(&mut inner.problems)))
+                                }
+                                Err(_err) => {
+                                    // Return None for procedure but still collect errors
+                                    Ok((None, std::mem::take(&mut inner.problems)))
+                                }
+                            }
+                        },
+                    )
+                    .map(|(maybe_procedure, errors)| {
+                        // Transfer errors from subparser to main parser
+                        self.problems
+                            .extend(errors);
+                        maybe_procedure
+                    })
+                    .unwrap_or_else(|error| {
+                        self.problems
+                            .push(error);
+                        // Return None on error
+                        None
+                    });
+                
+                if let Some(mut procedure) = procedure_result {
+                    // Check if there are sections following this procedure
+                    while !self.is_finished() {
+                        self.trim_whitespace();
+                        if self.is_finished() {
+                            break;
                         }
-                    } else {
-                        // If we hit something that's not a section, stop parsing sections
-                        break;
-                    }
-                }
 
-                procedures.push(procedure);
+                        if is_section(self.source) {
+                            match self.read_section() {
+                                Ok(section) => {
+                                    if let Some(Element::Steps(ref mut steps)) = procedure
+                                        .elements
+                                        .last_mut()
+                                    {
+                                        steps.push(section);
+                                    } else {
+                                        // Create a new Steps element if one doesn't exist
+                                        procedure
+                                            .elements
+                                            .push(Element::Steps(vec![section]));
+                                    }
+                                }
+                                Err(error) => {
+                                    self.problems
+                                        .push(error);
+                                    break;
+                                }
+                            }
+                        } else {
+                            // If we hit something that's not a section, stop parsing sections
+                            break;
+                        }
+                    }
+
+                    procedures.push(procedure);
+                }
             } else if self
                 .source
                 .contains(':')
@@ -252,14 +286,40 @@ impl<'i> Parser<'i> {
                 // It might be that we've encountered a malformed procedure
                 // declaration, so we try parsing it anyway to get a more
                 // specific error message.
-                let _procedure = self.take_block_lines(
-                    |_| true, // Accept the line regardless
-                    |line| is_section(line) || is_procedure_declaration(line),
-                    |inner| inner.read_procedure(),
-                )?;
-                // If we reach here, read_procedure() succeeded but
-                // is_procedure_declaration() failed, which is undefined.
-                return Err(ParsingError::IllegalParserState(self.offset));
+                let procedure_result = self
+                    .take_block_lines(
+                        |_| true, // Accept the line regardless
+                        |line| is_section(line) || potential_procedure_declaration(line),
+                        |inner| {
+                            match inner.read_procedure() {
+                                Ok(proc) => {
+                                    // Return both the procedure and the errors
+                                    Ok((Some(proc), std::mem::take(&mut inner.problems)))
+                                }
+                                Err(_err) => {
+                                    // Return None for procedure but still collect errors
+                                    Ok((None, std::mem::take(&mut inner.problems)))
+                                }
+                            }
+                        },
+                    )
+                    .map(|(maybe_proc, errors)| {
+                        // Transfer errors from subparser to main parser
+                        self.problems
+                            .extend(errors);
+                        maybe_proc
+                    })
+                    .unwrap_or_else(|error| {
+                        self.problems
+                            .push(error);
+                        // Return None on error
+                        None
+                    });
+
+                // Only add procedure if recovery was successful
+                if let Some(procedure) = procedure_result {
+                    procedures.push(procedure);
+                }
             } else {
                 self.problems
                     .push(ParsingError::Unrecognized(self.offset));
@@ -817,105 +877,246 @@ impl<'i> Parser<'i> {
         }
     }
 
+    /// Parse a procedure with error recovery - collects multiple errors instead of stopping at the first one
     pub fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError<'i>> {
-        let procedure = self.take_block_lines(
-            is_procedure_declaration,
-            is_procedure_declaration,
-            |outer| {
-                // Extract the declaration, and parse it
-                let declaration = outer.take_block_lines(
-                    is_procedure_declaration,
-                    |line| is_procedure_body(line),
-                    |inner| inner.parse_procedure_declaration(),
-                )?;
+        // Find the procedure block boundaries
+        let mut i = 0;
+        let mut begun = false;
 
-                // Parse procedure elements in order
-                let mut elements = vec![];
+        for line in self
+            .source
+            .lines()
+        {
+            if !begun && is_procedure_declaration(line) {
+                begun = true;
+                i += line.len() + 1;
+                continue;
+            } else if begun && is_procedure_declaration(line) {
+                // don't include this line
+                break;
+            }
 
-                while !outer.is_finished() {
-                    let content = outer.source;
+            i += line.len() + 1;
+        }
 
-                    if is_procedure_title(content) {
-                        let title = outer.take_block_lines(
-                            |line| {
-                                line.trim_ascii_start()
-                                    .starts_with('#')
-                            },
-                            |line| !line.starts_with('#'),
-                            |inner| {
-                                let text = inner.parse_procedure_title()?;
-                                Ok(text)
-                            },
-                        )?;
-                        elements.push(Element::Title(title));
-                    } else if is_code_block(content) {
-                        let expression = outer.read_code_block()?;
-                        elements.push(Element::CodeBlock(expression));
-                    } else if is_attribute_assignment(content) {
-                        let attribute_block = outer.read_attribute_scope()?;
-                        elements.push(Element::Steps(vec![attribute_block]));
-                    } else if is_step(content) {
-                        let mut steps = vec![];
-                        while !outer.is_finished() && is_step(outer.source) {
-                            let content = outer.source;
-                            if is_step_dependent(content) {
-                                let step = outer.read_step_dependent()?;
-                                steps.push(step);
-                            } else if is_step_parallel(content) {
-                                let step = outer.read_step_parallel()?;
-                                steps.push(step);
-                            } else {
+        if i > self
+            .source
+            .len()
+        {
+            i -= 1;
+        }
+
+        // Extract the procedure block
+        let block = &self.source[..i];
+        let mut parser = self.subparser(0, block);
+
+        // Parse the procedure with recovery
+        let result = self.parse_procedure_block(&mut parser);
+
+        // Collect errors from the subparser
+        self.problems
+            .extend(std::mem::take(&mut parser.problems));
+
+        // Advance main parser state
+        self.source = &self.source[i..];
+        self.offset += i;
+
+        result
+    }
+
+
+    fn parse_procedure_block(&mut self, parser: &mut Parser<'i>) -> Result<Procedure<'i>, ParsingError<'i>> {
+        // Extract the declaration with recovery
+        let declaration = match self.parse_declaration(parser) {
+            Ok(decl) => decl,
+            Err(err) => return Err(err),
+        };
+
+        // Parse procedure elements in order with recovery
+        let mut elements = vec![];
+
+        while !parser.is_finished() {
+            let content = parser.source;
+
+            if is_procedure_title(content) {
+                match parser.take_block_lines(
+                    |line| {
+                        line.trim_ascii_start()
+                            .starts_with('#')
+                    },
+                    |line| !line.starts_with('#'),
+                    |inner| {
+                        let text = inner.parse_procedure_title()?;
+                        Ok(text)
+                    },
+                ) {
+                    Ok(title) => elements.push(Element::Title(title)),
+                    Err(error) => {
+                        self.problems
+                            .push(error);
+                        parser.skip_to_next_line();
+                    }
+                }
+            } else if is_code_block(content) {
+                match parser.read_code_block() {
+                    Ok(expression) => elements.push(Element::CodeBlock(expression)),
+                    Err(error) => {
+                        self.problems
+                            .push(error);
+                        parser.skip_to_next_line();
+                    }
+                }
+            } else if is_attribute_assignment(content) {
+                match parser.read_attribute_scope() {
+                    Ok(attribute_block) => elements.push(Element::Steps(vec![attribute_block])),
+                    Err(error) => {
+                        self.problems
+                            .push(error);
+                        parser.skip_to_next_line();
+                    }
+                }
+            } else if is_step(content) {
+                let mut steps = vec![];
+                while !parser.is_finished() && is_step(parser.source) {
+                    let content = parser.source;
+                    if is_step_dependent(content) {
+                        match parser.read_step_dependent() {
+                            Ok(step) => steps.push(step),
+                            Err(error) => {
+                                self.problems
+                                    .push(error);
+                                parser.skip_to_next_line();
                                 break;
                             }
                         }
-                        if !steps.is_empty() {
-                            elements.push(Element::Steps(steps));
+                    } else if is_step_parallel(content) {
+                        match parser.read_step_parallel() {
+                            Ok(step) => steps.push(step),
+                            Err(error) => {
+                                self.problems
+                                    .push(error);
+                                parser.skip_to_next_line();
+                                break;
+                            }
                         }
-                    } else if malformed_step_pattern(content) {
-                        // Detect and reject invalid step patterns
-                        return Err(ParsingError::InvalidStep(outer.offset));
                     } else {
-                        // Handle descriptive text
-                        let description = outer.take_block_lines(
-                            |line| {
-                                !is_step(line)
-                                    && !is_procedure_title(line)
-                                    && !is_code_block(line)
-                                    && !malformed_step_pattern(line)
-                                    && !is_attribute_assignment(line)
-                            },
-                            |line| {
-                                is_step(line)
-                                    || is_procedure_title(line)
-                                    || is_code_block(line)
-                                    || malformed_step_pattern(line)
-                                    || is_attribute_assignment(line)
-                            },
-                            |inner| {
-                                let content = inner.source;
-                                if !content.is_empty() {
-                                    inner.read_descriptive()
-                                } else {
-                                    Ok(vec![])
-                                }
-                            },
-                        )?;
+                        break;
+                    }
+                }
+                if !steps.is_empty() {
+                    elements.push(Element::Steps(steps));
+                }
+            } else if malformed_step_pattern(content) {
+                // Store error but continue parsing
+                self.problems
+                    .push(ParsingError::InvalidStep(parser.offset));
+                parser.skip_to_next_line();
+            } else {
+                match parser.take_block_lines(
+                    |line| {
+                        !is_step(line)
+                            && !is_procedure_title(line)
+                            && !is_code_block(line)
+                            && !malformed_step_pattern(line)
+                            && !is_attribute_assignment(line)
+                    },
+                    |line| {
+                        is_step(line)
+                            || is_procedure_title(line)
+                            || is_code_block(line)
+                            || malformed_step_pattern(line)
+                            || is_attribute_assignment(line)
+                    },
+                    |inner| {
+                        let content = inner.source;
+                        if !content.is_empty() {
+                            inner.read_descriptive()
+                        } else {
+                            Ok(vec![])
+                        }
+                    },
+                ) {
+                    Ok(description) => {
                         if !description.is_empty() {
                             elements.push(Element::Description(description));
                         }
                     }
+                    Err(error) => {
+                        self.problems
+                            .push(error);
+                        parser.skip_to_next_line();
+                    }
                 }
+            }
+        }
 
-                Ok(Procedure {
-                    name: declaration.0,
-                    parameters: declaration.1,
-                    signature: declaration.2,
-                    elements,
-                })
-            },
-        )?;
+        Ok(Procedure {
+            name: declaration.0,
+            parameters: declaration.1,
+            signature: declaration.2,
+            elements,
+        })
+    }
 
-        Ok(procedure)
+    fn parse_declaration(
+        &mut self,
+        parser: &mut Parser<'i>,
+    ) -> Result<(
+        Identifier<'i>,
+        Option<Vec<Identifier<'i>>>,
+        Option<Signature<'i>>,
+    ), ParsingError<'i>> {
+        // Find declaration block boundaries
+        let mut i = 0;
+        let mut begun = false;
+
+        for line in parser
+            .source
+            .lines()
+        {
+            if !begun && is_procedure_declaration(line) {
+                begun = true;
+                i += line.len() + 1;
+                continue;
+            } else if begun && is_procedure_body(line) {
+                // don't include this line
+                break;
+            }
+
+            i += line.len() + 1;
+        }
+
+        if i > parser
+            .source
+            .len()
+        {
+            i -= 1;
+        }
+
+        // Extract declaration block
+        let block = &parser.source[..i];
+        let mut inner = parser.subparser(0, block);
+
+        // Try to parse declaration
+        match inner.parse_procedure_declaration() {
+            Ok(decl) => {
+                // Advance parser past declaration
+                parser.source = &parser.source[i..];
+                parser.offset += i;
+                Ok(decl)
+            }
+            Err(err) => {
+                // Clone the error to store it in problems and return it
+                let error_copy = err.clone();
+                self.problems
+                    .push(err);
+                // Advance parser past declaration anyway
+                parser.source = &parser.source[i..];
+                parser.offset += i;
+                // Return the error
+                Err(error_copy)
+            }
+        }
     }
 
     fn read_section(&mut self) -> Result<Scope<'i>, ParsingError<'i>> {
@@ -943,22 +1144,16 @@ impl<'i> Parser<'i> {
                         break;
                     }
                     if is_procedure_declaration(outer.source) {
-                        let procedure = outer.read_procedure()?;
-                        procedures.push(procedure);
+                        match outer.read_procedure() {
+                            Ok(procedure) => procedures.push(procedure),
+                            Err(_err) => {
+                                // Error is already collected in outer.problems
+                                // Just skip adding this procedure and continue
+                            }
+                        }
                     } else {
                         // Skip non-procedure content line by line
-                        if let Some(newline_pos) = outer
-                            .source
-                            .find('\n')
-                        {
-                            outer.advance(newline_pos + 1);
-                        } else {
-                            outer.advance(
-                                outer
-                                    .source
-                                    .len(),
-                            );
-                        }
+                        outer.skip_to_next_line();
                     }
                 }
                 Ok(Scope::SectionChunk {
@@ -984,18 +1179,7 @@ impl<'i> Parser<'i> {
                         steps.push(step);
                     } else {
                         // Skip unrecognized content line by line
-                        if let Some(newline_pos) = outer
-                            .source
-                            .find('\n')
-                        {
-                            outer.advance(newline_pos + 1);
-                        } else {
-                            outer.advance(
-                                outer
-                                    .source
-                                    .len(),
-                            );
-                        }
+                        outer.skip_to_next_line();
                     }
                 }
                 Ok(Scope::SectionChunk {

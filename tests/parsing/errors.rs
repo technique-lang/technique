@@ -1,24 +1,28 @@
 #[cfg(test)]
 mod syntax {
-    use technique::parsing::parser::{Parser, ParsingError};
+    use std::path::Path;
+    use technique::parsing::parser::{parse_with_recovery, ParsingError};
 
     /// Helper function to check if parsing produces the expected error type
     fn expect_error(content: &str, expected: ParsingError) {
-        let mut input = Parser::new();
-        input.initialize(content);
-
-        let result = input.read_procedure();
+        let result = parse_with_recovery(Path::new("test.tq"), content);
         match result {
             Ok(_) => panic!(
                 "Expected parsing to fail, but it succeeded for input: {}",
                 content
             ),
-            Err(error) => {
-                // Compare error types by discriminant
-                if std::mem::discriminant(&error) != std::mem::discriminant(&expected) {
+            Err(errors) => {
+                // Check if any error matches the expected type
+                let found_expected = errors
+                    .iter()
+                    .any(|error| {
+                        std::mem::discriminant(error) == std::mem::discriminant(&expected)
+                    });
+
+                if !found_expected {
                     panic!(
                         "Expected error type like {:?} but got: {:?} for input '{}'",
-                        expected, error, content
+                        expected, errors, content
                     );
                 }
             }
@@ -120,7 +124,7 @@ making_coffee : Ingredients Coffee
 making_coffee Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidDeclaration(0),
+            ParsingError::Unrecognized(0),
         );
     }
 
