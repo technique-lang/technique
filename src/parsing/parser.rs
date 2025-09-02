@@ -2352,6 +2352,43 @@ fn is_procedure_declaration(content: &str) -> bool {
     }
 }
 
+/// Detects any line that could potentially be a procedure declaration,
+/// including malformed ones. Used for detecting the end-boundary of a
+/// procedure.
+///
+/// The specific motivating case for using this instead of the strict
+/// is_procedure_declaration() is that a malformed attempted declaration like
+///
+/// MyProcedure :
+///
+/// would be consumed as part of the previous procedure's body,
+/// preventing us from attempting to parse it as a separate procedure and
+/// reporting what turns out to be a better error.
+fn potential_procedure_declaration(content: &str) -> bool {
+    match content.split_once(':') {
+        Some((before, _after)) => {
+            let before = before.trim_ascii();
+            // Check if it looks like an identifier (possibly with parameters)
+            // Accept any single token that could be an attempted identifier
+            if let Some((name, params)) = before.split_once('(') {
+                // Has parameters: check if params end with ')'
+                !name
+                    .trim_ascii()
+                    .is_empty()
+                    && params.ends_with(')')
+            } else {
+                // No parameters: must be a single token (no spaces) that
+                // looks identifier-ish This excludes sentences like "Ask
+                // these questions: ..."
+                !before.is_empty() &&
+                !before.contains(' ') &&  // Single token only
+                before.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            }
+        }
+        None => false,
+    }
+}
+
 fn is_procedure_body(content: &str) -> bool {
     let line = content.trim_ascii();
 
@@ -3502,6 +3539,72 @@ This is the first one.
     }
 
     #[test]
+    fn test_potential_procedure_declaration_is_superset() {
+        // All valid procedure declarations must be matched by potential_procedure_declaration
+
+        // Valid simple declarations
+        assert!(is_procedure_declaration("foo : A -> B"));
+        assert!(potential_procedure_declaration("foo : A -> B"));
+
+        assert!(is_procedure_declaration("my_proc :"));
+        assert!(potential_procedure_declaration("my_proc :"));
+
+        assert!(is_procedure_declaration("step123 : Input -> Output"));
+        assert!(potential_procedure_declaration("step123 : Input -> Output"));
+
+        // Valid with parameters
+        assert!(is_procedure_declaration("process(a, b) : X -> Y"));
+        assert!(potential_procedure_declaration("process(a, b) : X -> Y"));
+
+        assert!(is_procedure_declaration("calc(x) :"));
+        assert!(potential_procedure_declaration("calc(x) :"));
+
+        // Invalid that should only match potential_
+        assert!(!is_procedure_declaration("MyProcedure :")); // Capital letter
+        assert!(potential_procedure_declaration("MyProcedure :"));
+
+        assert!(!is_procedure_declaration("123foo :")); // Starts with digit
+        assert!(potential_procedure_declaration("123foo :"));
+
+        // Neither should match sentences with spaces
+        assert!(!is_procedure_declaration("Ask these questions :"));
+        assert!(!potential_procedure_declaration("Ask these questions :"));
+
+        // Edge cases with whitespace
+        assert!(!is_procedure_declaration("  :")); // No name
+        assert!(!potential_procedure_declaration("  :"));
+
+        assert!(is_procedure_declaration("  foo  :  ")); // Whitespace around
+        assert!(potential_procedure_declaration("  foo  :  "));
+
+        // Verify the superset property systematically
+        let test_cases = vec![
+            "a :",
+            "z :",
+            "abc :",
+            "test_123 :",
+            "foo_bar_baz :",
+            "x() :",
+            "func(a) :",
+            "proc(a, b, c) :",
+            "test(x,y,z) :",
+            "a_1 :",
+            "test_ :",
+            "_test :", // Underscores
+        ];
+
+        for case in test_cases {
+            if is_procedure_declaration(case) {
+                assert!(
+                    potential_procedure_declaration(case),
+                    "potential_procedure_declaration must match all valid declarations: {}",
+                    case
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_take_block_lines_procedure_wrapper() {
         let mut input = Parser::new();
 
@@ -4457,6 +4560,52 @@ echo test
                 ]
             }
         );
+    }
+
+    #[test]
+    fn parse_collecting_errors_basic() {
+        let mut input = Parser::new();
+
+        // Test with valid content - should have no errors
+        input.initialize("% technique v1\nvalid_proc : A -> B\n# Title\nDescription");
+        let result = input.parse_collecting_errors();
+        assert_eq!(
+            result
+                .errors
+                .len(),
+            0
+        );
+        assert!(result
+            .document
+            .header
+            .is_some());
+        assert!(result
+            .document
+            .body
+            .is_some());
+
+        // Test with invalid header - should collect header error
+        input.initialize("% wrong v1");
+        let result = input.parse_collecting_errors();
+        assert!(
+            result
+                .errors
+                .len()
+                > 0
+        );
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
+        assert!(result
+            .document
+            .header
+            .is_none());
+
+        // Test that the method returns ParseResult instead of Result
+        input.initialize("some content");
+        let _result: ParseResult = input.parse_collecting_errors();
+        // If this compiles, the method signature is correct
     }
 
     #[test]
