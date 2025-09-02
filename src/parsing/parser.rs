@@ -4,36 +4,35 @@ use crate::language::*;
 use crate::regex::*;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ParseResult<'i> {
+struct ParseResult<'i> {
     pub document: Document<'i>,
     pub errors: Vec<ParsingError<'i>>,
 }
 
-impl<'i> ParseResult<'i> {
-    pub fn has_errors(&self) -> bool {
-        !self
-            .errors
-            .is_empty()
-    }
-}
-
-pub fn parse_with_recovery<'i>(path: &'i Path, content: &'i str) -> ParseResult<'i> {
-    let mut input = Parser::new();
-    input.filename(path);
-    input.initialize(content);
-
-    input.parse_collecting_errors()
-}
-
-pub fn parse_via_taking<'i>(
+// This could be adapted to return both the partial document and the errors.
+// But for our purposes if the parse fails then there's no point trying to do
+// deeper validation or analysis; the input syntax is broken and the user
+// needs to fix it. Should a partial parse turn out have meaning then the
+// return type of this can change to ParseResult<'i> but for now it is fine
+// to use Result.
+pub fn parse_with_recovery<'i>(
     path: &'i Path,
     content: &'i str,
-) -> Result<Document<'i>, ParsingError<'i>> {
+) -> Result<Document<'i>, Vec<ParsingError<'i>>> {
     let mut input = Parser::new();
     input.filename(path);
     input.initialize(content);
 
-    input.parse_from_start()
+    let result = input.parse_collecting_errors();
+
+    if result
+        .errors
+        .is_empty()
+    {
+        Ok(result.document)
+    } else {
+        Err(result.errors)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,8 +139,12 @@ impl<'i> Parser<'i> {
         self.offset += width;
     }
 
-    fn parse_from_start(&mut self) -> Result<Document<'i>, ParsingError<'i>> {
-        // Check if header is present by looking for magic line
+    fn parse_collecting_errors(&mut self) -> ParseResult<'i> {
+        // Clear any existing errors
+        self.problems
+            .clear();
+
+        // Parse header, collecting errors instead of propagating
         let header = if is_magic_line(self.source) {
             Some(self.read_technique_header()?)
         } else {

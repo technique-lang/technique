@@ -35,9 +35,13 @@ pub fn load(filename: &Path) -> Result<String, LoadingError> {
     }
 }
 
-/// Parse text into a Technique object, or error out.
-pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Result<Document<'i>, ParsingError<'i>> {
-    let result = parser::parse_via_taking(filename, content);
+/// Parse text into a Document object, or return the list of errors
+/// encountered.
+pub fn parse<'i>(
+    filename: &'i Path,
+    content: &'i str,
+) -> Result<Document<'i>, Vec<ParsingError<'i>>> {
+    let result = parser::parse_with_recovery(filename, content);
 
     match result {
         Ok(document) => {
@@ -66,9 +70,9 @@ pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Result<Document<'i>, P
             }
             Ok(document)
         }
-        Err(error) => {
-            debug!("error: {:?}", error);
-            Err(error)
+        Err(errors) => {
+            debug!("errors: {}", errors.len());
+            Err(errors)
         }
     }
 }
