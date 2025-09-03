@@ -37,10 +37,7 @@ pub fn load(filename: &Path) -> Result<String, LoadingError> {
 
 /// Parse text into a Document object, or return the list of errors
 /// encountered.
-pub fn parse<'i>(
-    filename: &'i Path,
-    content: &'i str,
-) -> Result<Document<'i>, Vec<ParsingError<'i>>> {
+pub fn parse<'i>(filename: &'i Path, content: &'i str) -> Result<Document<'i>, Vec<ParsingError>> {
     let result = parser::parse_with_recovery(filename, content);
 
     match result {

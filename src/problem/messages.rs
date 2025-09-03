@@ -2,10 +2,7 @@ use crate::problem::Present;
 use technique::{formatting::Render, language::*, parsing::parser::ParsingError};
 
 /// Generate problem and detail messages for parsing errors using AST construction
-pub fn generate_error_message<'i>(
-    error: &ParsingError<'i>,
-    renderer: &dyn Render,
-) -> (String, String) {
+pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
     match error {
         ParsingError::IllegalParserState(_) => (
             "Illegal parser state".to_string(),

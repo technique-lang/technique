@@ -36,7 +36,7 @@ mod syntax {
 Making_Coffee : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, ""),
+            ParsingError::InvalidIdentifier(0, "".to_string()),
         );
     }
 
@@ -47,7 +47,7 @@ Making_Coffee : Ingredients -> Coffee
 makeCoffee : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, ""),
+            ParsingError::InvalidIdentifier(0, "".to_string()),
         );
     }
 
@@ -58,7 +58,7 @@ makeCoffee : Ingredients -> Coffee
 make-coffee : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, ""),
+            ParsingError::InvalidIdentifier(0, "".to_string()),
         );
     }
 
@@ -69,7 +69,7 @@ make-coffee : Ingredients -> Coffee
 make coffee : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, ""),
+            ParsingError::InvalidIdentifier(0, "".to_string()),
         );
     }
 
@@ -135,7 +135,7 @@ making_coffee Ingredients -> Coffee
 making_coffee(BadParam) : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(14, ""),
+            ParsingError::InvalidIdentifier(14, "".to_string()),
         );
     }
 
