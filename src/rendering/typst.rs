@@ -42,7 +42,7 @@ impl Render for Typst {
     }
 }
 
-fn escape_typst(content: &str) -> Cow<str> {
+fn escape_typst(content: &str) -> Cow<'_, str> {
     if content.contains('"') {
         Cow::Owned(content.replace("\"", "\\\""))
     } else {

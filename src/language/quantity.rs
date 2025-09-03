@@ -38,7 +38,7 @@ pub struct Decimal {
 }
 
 /// Parse a string as a Quantity if it matches the expected format
-pub fn parse_quantity(input: &str) -> Option<Quantity> {
+pub fn parse_quantity(input: &str) -> Option<Quantity<'_>> {
     // Look for patterns that indicate a quantity:
     // - decimal number followed by space and unit symbol
     // - decimal number with uncertainty (±)

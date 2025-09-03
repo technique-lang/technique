@@ -12,7 +12,7 @@ mod scope;
 /// Read a file and return an owned String. We pass that ownership back to the
 /// main function so that the Technique object created by parse() below can
 /// have the same lifetime.
-pub fn load(filename: &Path) -> Result<String, LoadingError> {
+pub fn load(filename: &Path) -> Result<String, LoadingError<'_>> {
     match std::fs::read_to_string(filename) {
         Ok(content) => Ok(content),
         Err(error) => {
