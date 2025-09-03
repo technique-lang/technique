@@ -3,12 +3,6 @@ use std::path::Path;
 use crate::language::*;
 use crate::regex::*;
 
-#[derive(Debug, PartialEq, Eq)]
-struct ParseResult<T> {
-    pub value: T,
-    pub errors: Vec<ParsingError>,
-}
-
 // This could be adapted to return both the partial document and the errors.
 // But for our purposes if the parse fails then there's no point trying to do
 // deeper validation or analysis; the input syntax is broken and the user
@@ -23,16 +17,7 @@ pub fn parse_with_recovery<'i>(
     input.filename(path);
     input.initialize(content);
 
-    let result = input.parse_collecting_errors();
-
-    if result
-        .errors
-        .is_empty()
-    {
-        Ok(result.value)
-    } else {
-        Err(result.errors)
-    }
+    input.parse_collecting_errors()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,7 +141,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn parse_collecting_errors(&mut self) -> ParseResult<Document<'i>> {
+    fn parse_collecting_errors(&mut self) -> Result<Document<'i>, Vec<ParsingError>> {
         // Clear any existing errors
         self.problems
             .clear();
@@ -296,9 +281,11 @@ impl<'i> Parser<'i> {
 
         let document = Document { header, body };
         let errors = std::mem::take(&mut self.problems);
-        ParseResult {
-            value: document,
-            errors,
+
+        if errors.is_empty() {
+            Ok(document)
+        } else {
+            Err(errors)
         }
     }
 
@@ -362,7 +349,6 @@ impl<'i> Parser<'i> {
         // Pass to closure for processing
         let result = function(&mut parser);
 
-        // Merge any errors from the subparser into the parent
         self.problems
             .extend(parser.problems);
 
@@ -449,6 +435,9 @@ impl<'i> Parser<'i> {
         // Pass to closure for processing
         let result = function(&mut parser)?;
 
+        self.problems
+            .extend(parser.problems);
+
         // Advance parser state
         self.source = &self.source[l..];
         self.offset += l;
@@ -492,6 +481,9 @@ impl<'i> Parser<'i> {
         // Pass to closure for processing
         let result = function(&mut parser)?;
 
+        self.problems
+            .extend(parser.problems);
+
         // Advance parser state past the entire delimited block
         let end = end + width;
         self.source = &self.source[end..];
@@ -514,6 +506,9 @@ impl<'i> Parser<'i> {
 
         // Pass to closure for processing
         let result = function(&mut parser)?;
+
+        self.problems
+            .extend(parser.problems);
 
         // Advance parser state
         self.source = &self.source[end_pos..];
@@ -539,6 +534,8 @@ impl<'i> Parser<'i> {
             }
             let mut parser = self.subparser(0, trimmed);
             results.push(function(&mut parser)?);
+            self.problems
+                .extend(parser.problems);
         }
 
         // Advance parser past all consumed content
@@ -560,6 +557,9 @@ impl<'i> Parser<'i> {
 
         let mut parser = self.subparser(0, paragraph);
         let result = function(&mut parser)?;
+
+        self.problems
+            .extend(parser.problems);
 
         // Advance past this paragraph and the \n\n delimiter if present
         if i < content.len() {
@@ -4725,42 +4725,34 @@ echo test
         // Test with valid content - should have no errors
         input.initialize("% technique v1\nvalid_proc : A -> B\n# Title\nDescription");
         let result = input.parse_collecting_errors();
-        assert_eq!(
-            result
-                .errors
-                .len(),
-            0
-        );
-        assert!(result
-            .value
-            .header
-            .is_some());
-        assert!(result
-            .value
-            .body
-            .is_some());
+        match result {
+            Ok(document) => {
+                assert!(document
+                    .header
+                    .is_some());
+                assert!(document
+                    .body
+                    .is_some());
+            }
+            Err(_) => panic!("Expected successful parse for valid content"),
+        }
 
         // Test with invalid header - should collect header error
         input.initialize("% wrong v1");
         let result = input.parse_collecting_errors();
-        assert!(
-            result
-                .errors
-                .len()
-                > 0
-        );
-        assert!(result
-            .errors
-            .iter()
-            .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
-        assert!(result
-            .value
-            .header
-            .is_none());
+        match result {
+            Ok(_) => panic!("Expected errors for invalid content"),
+            Err(errors) => {
+                assert!(errors.len() > 0);
+                assert!(errors
+                    .iter()
+                    .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
+            }
+        }
 
-        // Test that the method returns ParseResult instead of Result
+        // Test that the method returns Result instead of ParseResult
         input.initialize("some content");
-        let _result: ParseResult<Document> = input.parse_collecting_errors();
+        let _result: Result<Document, Vec<ParsingError>> = input.parse_collecting_errors();
         // If this compiles, the method signature is correct
     }
 
