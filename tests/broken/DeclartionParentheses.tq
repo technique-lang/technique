@@ -1,0 +1,5 @@
+% technique v1
+
+make_coffee beans : Beans -> Espresso
+
+make_coffee beans water : Beans, Water -> Cappuccino
