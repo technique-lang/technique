@@ -39,6 +39,7 @@ pub enum ParsingError {
     InvalidForma(usize),
     InvalidGenus(usize),
     InvalidSignature(usize),
+    InvalidParameters(usize),
     InvalidDeclaration(usize),
     InvalidSection(usize),
     InvalidInvocation(usize),
@@ -76,6 +77,7 @@ impl ParsingError {
             ParsingError::InvalidGenus(offset) => *offset,
             ParsingError::InvalidSignature(offset) => *offset,
             ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidParameters(offset) => *offset,
             ParsingError::InvalidSection(offset) => *offset,
             ParsingError::InvalidInvocation(offset) => *offset,
             ParsingError::InvalidFunction(offset) => *offset,
@@ -281,15 +283,12 @@ impl<'i> Parser<'i> {
                             .push(error);
                     }
                 }
-            } else if self
-                .source
-                .contains(':')
-            {
+            } else if potential_procedure_declaration(self.source) {
                 // It might be that we've encountered a malformed procedure
                 // declaration, so we try parsing it anyway to get a more
                 // specific error message.
                 match self.take_block_lines(
-                    |_| true, // Accept the line regardless
+                    potential_procedure_declaration,
                     |line| is_section(line) || potential_procedure_declaration(line),
                     |inner| inner.read_procedure(),
                 ) {
@@ -856,6 +855,25 @@ impl<'i> Parser<'i> {
 
             (name, parameters)
         } else {
+            // Check if there are multiple words (procedure name + anything
+            // else) which would indicates parameters without parentheses
+            let words: Vec<&str> = text
+                .trim()
+                .split_whitespace()
+                .collect();
+            if words.len() > 1 {
+                // Calculate position of first mistaken parameter-ish thing
+                let first_space_pos = text
+                    .find(' ')
+                    .unwrap_or(0);
+                let first_param_pos = text[first_space_pos..]
+                    .trim_start()
+                    .as_ptr() as isize
+                    - text.as_ptr() as isize;
+                let error_offset = self.offset + one.start() + first_param_pos as usize;
+                return Err(ParsingError::InvalidParameters(error_offset));
+            }
+
             let name = validate_identifier(text).ok_or(ParsingError::InvalidIdentifier(
                 self.offset,
                 text.to_string(),
@@ -2559,24 +2577,37 @@ fn is_procedure_declaration(content: &str) -> bool {
 /// reporting what turns out to be a better error.
 fn potential_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
-        Some((before, _after)) => {
+        Some((before, after)) => {
             let before = before.trim_ascii();
-            // Check if it looks like an identifier (possibly with parameters)
-            // Accept any single token that could be an attempted identifier
-            if let Some((name, params)) = before.split_once('(') {
-                // Has parameters: check if params end with ')'
-                !name
+
+            // Empty before colon -> only a declaration if there's something after
+            if before.is_empty() {
+                return !after
                     .trim_ascii()
-                    .is_empty()
-                    && params.ends_with(')')
-            } else {
-                // No parameters: must be a single token (no spaces) that
-                // looks identifier-ish This excludes sentences like "Ask
-                // these questions: ..."
-                !before.is_empty() &&
-                !before.contains(' ') &&  // Single token only
-                before.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    .is_empty();
             }
+
+            // Has parentheses -> likely trying to be a procedure with parameters
+            if before.contains('(') {
+                return true;
+            }
+
+            // Check if it looks like prose vs an identifier attempt
+            // Prose typically: starts with capital, has multiple space-separated words
+            // Identifiers: lowercase, possibly with underscores
+            let first_char = before
+                .chars()
+                .next()
+                .unwrap();
+            let has_spaces = before.contains(' ');
+
+            // If it starts with uppercase AND has spaces, it's probably prose
+            if first_char.is_uppercase() && has_spaces {
+                return false;
+            }
+
+            // Otherwise, could be a procedure declaration attempt
+            true
         }
         None => false,
     }

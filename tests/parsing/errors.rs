@@ -69,7 +69,7 @@ make-coffee : Ingredients -> Coffee
 make coffee : Ingredients -> Coffee
             "#
             .trim_ascii(),
-            ParsingError::InvalidIdentifier(0, "".to_string()),
+            ParsingError::InvalidParameters(0),
         );
     }
 

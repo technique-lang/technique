@@ -350,6 +350,65 @@ Finally, variables can be assigned for the names of the input parameters:
                 .to_string(),
             )
         }
+        ParsingError::InvalidParameters(_) => {
+            let examples = vec![
+                Procedure {
+                    name: Identifier("create_bypass"),
+                    parameters: Some(vec![Identifier("a"), Identifier("b")]),
+                    signature: None,
+                    elements: Vec::new(),
+                },
+                Procedure {
+                    name: Identifier("bulldoze"),
+                    parameters: Some(vec![Identifier("c")]),
+                    signature: None,
+                    elements: Vec::new(),
+                },
+                Procedure {
+                    name: Identifier("lawsuit"),
+                    parameters: None,
+                    signature: Some(Signature {
+                        domain: Genus::Single(Forma("Council")),
+                        range: Genus::List(Forma("Penny")),
+                    }),
+                    elements: Vec::new(),
+                },
+                Procedure {
+                    name: Identifier("lawsuit"),
+                    parameters: Some(vec![Identifier("c")]),
+                    signature: Some(Signature {
+                        domain: Genus::Single(Forma("Council")),
+                        range: Genus::List(Forma("Penny")),
+                    }),
+                    elements: Vec::new(),
+                },
+            ];
+
+            (
+                "Parameters must be enclosed in parentheses".to_string(),
+                format!(
+                    r#"
+Parameters to a procedure must be variables, and enclosed in parentheses. For
+example:
+
+    {}
+    {}
+
+Naming the input genus is optional, however; these are both valid procedure
+declarations (and in fact the same):
+
+    {}
+    {}
+                    "#,
+                    examples[0].present(renderer),
+                    examples[1].present(renderer),
+                    examples[2].present(renderer),
+                    examples[3].present(renderer)
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         ParsingError::InvalidSection(_) => {
             // Roman numeral sections don't have AST representation
             (
