@@ -5,7 +5,7 @@ use technique::{formatting::Render, language::LoadingError, parsing::parser::Par
 
 /// Format a parsing error with full details including source code context
 pub fn full_parsing_error<'i>(
-    error: &ParsingError<'i>,
+    error: &ParsingError,
     filename: &'i Path,
     source: &'i str,
     renderer: &impl Render,
@@ -58,7 +58,7 @@ pub fn full_parsing_error<'i>(
 
 /// Format a parsing error with concise single-line output
 pub fn concise_parsing_error<'i>(
-    error: &ParsingError<'i>,
+    error: &ParsingError,
     filename: &'i Path,
     source: &'i str,
     renderer: &impl Render,

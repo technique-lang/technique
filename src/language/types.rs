@@ -244,7 +244,7 @@ pub fn validate_template(input: &str) -> Option<&str> {
     }
 }
 
-pub fn validate_identifier(input: &str) -> Option<Identifier> {
+pub fn validate_identifier(input: &str) -> Option<Identifier<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -257,7 +257,7 @@ pub fn validate_identifier(input: &str) -> Option<Identifier> {
     }
 }
 
-pub fn validate_forma(input: &str) -> Option<Forma> {
+pub fn validate_forma(input: &str) -> Option<Forma<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -281,7 +281,7 @@ pub fn validate_forma(input: &str) -> Option<Forma> {
     Some(Forma(input))
 }
 
-fn parse_tuple(input: &str) -> Option<Vec<Forma>> {
+fn parse_tuple(input: &str) -> Option<Vec<Forma<'_>>> {
     let mut formas: Vec<Forma> = Vec::new();
 
     for text in input.split(",") {
@@ -294,7 +294,7 @@ fn parse_tuple(input: &str) -> Option<Vec<Forma>> {
 }
 
 /// This one copes with (and discards) any internal whitespace encountered.
-pub fn validate_genus(input: &str) -> Option<Genus> {
+pub fn validate_genus(input: &str) -> Option<Genus<'_>> {
     let first = input
         .chars()
         .next()
@@ -349,7 +349,7 @@ pub fn validate_genus(input: &str) -> Option<Genus> {
     }
 }
 
-pub fn validate_response(input: &str) -> Option<Response> {
+pub fn validate_response(input: &str) -> Option<Response<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -371,14 +371,14 @@ pub fn validate_response(input: &str) -> Option<Response> {
     Some(Response { value, condition })
 }
 
-fn _validate_decimal(_input: &str) -> Option<Numeric> {
+fn _validate_decimal(_input: &str) -> Option<Numeric<'_>> {
     // Test the regex macro availability within types.rs
     let _decimal_regex = regex!(r"^\s*-?[0-9]+\.[0-9]+\s*$");
     // For now, just return None since we removed Decimal variant
     None
 }
 
-pub fn validate_numeric(input: &str) -> Option<Numeric> {
+pub fn validate_numeric(input: &str) -> Option<Numeric<'_>> {
     if input.is_empty() {
         return None;
     }

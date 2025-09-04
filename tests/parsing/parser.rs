@@ -4,7 +4,7 @@ mod verify {
     use std::vec;
 
     use technique::language::*;
-    use technique::parsing::parser::{self, Parser};
+    use technique::parsing::parser::Parser;
 
     fn trim(s: &str) -> &str {
         s.strip_prefix('\n')
@@ -1089,7 +1089,7 @@ before_leaving :
 
     #[test]
     fn section_parsing() {
-        let result = technique::parsing::parser::parse_via_taking(
+        let result = technique::parsing::parser::parse_with_recovery(
             Path::new(""),
             trim(
                 r#"
@@ -1177,7 +1177,7 @@ second_section_second_procedure :
 
     #[test]
     fn section_with_procedures_only() {
-        let result = technique::parsing::parser::parse_via_taking(
+        let result = technique::parsing::parser::parse_with_recovery(
             Path::new(""),
             trim(
                 r#"
@@ -1248,7 +1248,7 @@ procedure_four : Concept -> Architecture
 
     #[test]
     fn section_with_procedures() {
-        let result = parser::parse_via_taking(
+        let result = technique::parsing::parser::parse_with_recovery(
             Path::new(""),
             trim(
                 r#"

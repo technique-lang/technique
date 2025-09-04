@@ -1,0 +1,32 @@
+% technique v1
+! MIT; © 2024 ACME, Inc
+& checklist
+
+making_coffee : Ingredients -> Coffee
+
+# Heading
+
+Ask these questions: are you really sure you want a coffee?
+
+Assuming you do, then:
+
+    1.  { repeat <making_coffee>(e) ~ cups }
+        a.  First task
+        b.  Second another task
+                'Yes' | 'No'
+    2.  Do things { exec(
+        ```bash
+            ./stuff
+        ```
+        ) }
+
+another_example(e) : Input -> Output
+{
+    [
+        "answer" = 42
+        "Question Time" = "What is the question?"
+        "timestamp" = now()
+        "message" = e
+        "interpolation" = "The value is { e }"
+    ]
+}
