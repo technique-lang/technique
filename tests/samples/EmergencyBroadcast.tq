@@ -1,0 +1,26 @@
+% technique v1
+! Super Secret Squirrel Private Not License
+
+immediate_action :
+
+# Immediate Action
+
+This is a test of the Emergency Broadcast System. Do not be alarmed
+by the alarm you hear.
+
+    1. <activate_crisis_management>
+    2. <restore_normalcy>
+
+activate_crisis_management a : Alarm -> Emergency
+
+This first thing you need to do in a crisis is sound the alarm.
+
+    - <sound_alarm>
+
+sound_alarm d : Detection -> Alarm
+
+Sound the alarm!
+
+restore_normalcy e : Emergency -> Peace
+
+# Aftermath
