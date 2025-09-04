@@ -133,6 +133,7 @@ Technique. Common templates include {}, {}, and
                     r#"
 Identifiers must start with a lowercase letter and contain only lower case
 letters, numbers, and underscores. Valid examples include:
+
     {}
     {}
     {}
