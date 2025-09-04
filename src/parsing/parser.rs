@@ -858,21 +858,23 @@ impl<'i> Parser<'i> {
 
             (name, parameters)
         } else {
-            // Check if the text contains multiple space-separated identifiers
-            // which would indicate parameters without parentheses
+            // Check if there are multiple words (procedure name + anything
+            // else) which would indicates parameters without parentheses
             let words: Vec<&str> = text
                 .trim()
                 .split_whitespace()
                 .collect();
             if words.len() > 1 {
-                // Check if all words look like valid identifiers
-                let all_valid_identifiers = words
-                    .iter()
-                    .all(|word| validate_identifier(word).is_some());
-
-                if all_valid_identifiers {
-                    return Err(ParsingError::InvalidParameters(self.offset));
-                }
+                // Calculate position of first mistaken parameter-ish thing
+                let first_space_pos = text
+                    .find(' ')
+                    .unwrap_or(0);
+                let first_param_pos = text[first_space_pos..]
+                    .trim_start()
+                    .as_ptr() as isize
+                    - text.as_ptr() as isize;
+                let error_offset = self.offset + one.start() + first_param_pos as usize;
+                return Err(ParsingError::InvalidParameters(error_offset));
             }
 
             let name = validate_identifier(text).ok_or(ParsingError::InvalidIdentifier(
