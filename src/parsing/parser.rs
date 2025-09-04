@@ -39,6 +39,7 @@ pub enum ParsingError {
     InvalidForma(usize),
     InvalidGenus(usize),
     InvalidSignature(usize),
+    InvalidParameters(usize),
     InvalidDeclaration(usize),
     InvalidSection(usize),
     InvalidInvocation(usize),
@@ -76,6 +77,7 @@ impl ParsingError {
             ParsingError::InvalidGenus(offset) => *offset,
             ParsingError::InvalidSignature(offset) => *offset,
             ParsingError::InvalidDeclaration(offset) => *offset,
+            ParsingError::InvalidParameters(offset) => *offset,
             ParsingError::InvalidSection(offset) => *offset,
             ParsingError::InvalidInvocation(offset) => *offset,
             ParsingError::InvalidFunction(offset) => *offset,
@@ -856,6 +858,23 @@ impl<'i> Parser<'i> {
 
             (name, parameters)
         } else {
+            // Check if the text contains multiple space-separated identifiers
+            // which would indicate parameters without parentheses
+            let words: Vec<&str> = text
+                .trim()
+                .split_whitespace()
+                .collect();
+            if words.len() > 1 {
+                // Check if all words look like valid identifiers
+                let all_valid_identifiers = words
+                    .iter()
+                    .all(|word| validate_identifier(word).is_some());
+
+                if all_valid_identifiers {
+                    return Err(ParsingError::InvalidParameters(self.offset));
+                }
+            }
+
             let name = validate_identifier(text).ok_or(ParsingError::InvalidIdentifier(
                 self.offset,
                 text.to_string(),
