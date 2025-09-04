@@ -20,17 +20,20 @@ pub fn parse_with_recovery<'i>(
     input.parse_collecting_errors()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Most general errors first, most specific last (for deduplication, we prefer
+// being able to give a more specific error message to the user)
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ParsingError {
+    // lowest priority
     IllegalParserState(usize),
     Unimplemented(usize),
     Unrecognized(usize), // improve this
+    UnexpectedEndOfInput(usize),
     Expected(usize, &'static str),
     ExpectedMatchingChar(usize, &'static str, char, char),
-    UnclosedInterpolation(usize),
-    InvalidHeader(usize),
+    // more specific errors
     InvalidCharacter(usize, char),
-    UnexpectedEndOfInput(usize),
+    InvalidHeader(usize),
     InvalidIdentifier(usize, String),
     InvalidForma(usize),
     InvalidGenus(usize),
@@ -40,17 +43,19 @@ pub enum ParsingError {
     InvalidInvocation(usize),
     InvalidFunction(usize),
     InvalidCodeBlock(usize),
-    InvalidMultiline(usize),
     InvalidStep(usize),
     InvalidSubstep(usize),
-    InvalidForeach(usize),
     InvalidResponse(usize),
+    InvalidMultiline(usize),
+    InvalidForeach(usize),
     InvalidIntegral(usize),
     InvalidQuantity(usize),
     InvalidQuantityDecimal(usize),
     InvalidQuantityUncertainty(usize),
     InvalidQuantityMagnitude(usize),
     InvalidQuantitySymbol(usize),
+    // highest priority when deduplicating
+    UnclosedInterpolation(usize),
 }
 
 impl ParsingError {
@@ -87,6 +92,35 @@ impl ParsingError {
             ParsingError::InvalidQuantitySymbol(offset) => *offset,
         }
     }
+}
+
+/// Deduplicate errors, preferring more specific errors over generic ones at the same offset.
+/// When multiple errors occur at the same offset, keep only the most specific one.
+/// Since ParsingError derives Ord with general errors first and specific errors last,
+/// we use > to prefer the higher Ord value (more specific) errors.
+fn deduplicate_errors(errors: Vec<ParsingError>) -> Vec<ParsingError> {
+    let mut deduped = Vec::new();
+
+    for error in errors {
+        let error_offset = error.offset();
+
+        // Check if we have an existing error at this offset
+        if let Some(existing_idx) = deduped
+            .iter()
+            .position(|e: &ParsingError| e.offset() == error_offset)
+        {
+            // Keep the more specific error (higher Ord value, since specific errors come last)
+            if error > deduped[existing_idx] {
+                deduped[existing_idx] = error;
+            }
+            // Otherwise, keep the existing more specific error
+        } else {
+            // No error at this offset yet, add it
+            deduped.push(error);
+        }
+    }
+
+    deduped
 }
 
 #[derive(Debug)]
@@ -283,6 +317,10 @@ impl<'i> Parser<'i> {
 
         let document = Document { header, body };
         let errors = std::mem::take(&mut self.problems);
+
+        // Deduplicate errors, preferring more specific errors over generic
+        // ones at the same offset
+        let errors = deduplicate_errors(errors);
 
         if errors.is_empty() {
             Ok(document)
@@ -4788,6 +4826,30 @@ broken_proc2 : -> B
                 assert!(l >= 2, "Should have at least 2 errors, got {}", l)
             }
         };
+    }
+
+    #[test]
+    fn test_error_deduplication_unclosed_interpolation() {
+        let mut input = Parser::new();
+
+        // Test that UnclosedInterpolation error takes precedence over generic
+        // ExpectedMatchingChar
+        input.initialize(r#"{ "string with {unclosed interpolation" }"#);
+        let result = input.read_code_block();
+
+        // Should get the specific UnclosedInterpolation error, not a generic
+        // one
+        match result {
+            Err(ParsingError::UnclosedInterpolation(_)) => {
+                // Good - we got the specific error
+            }
+            Err(other) => {
+                panic!("Expected UnclosedInterpolation error, got: {:?}", other);
+            }
+            Ok(_) => {
+                panic!("Expected error for unclosed interpolation, but parsing succeeded");
+            }
+        }
     }
 
     #[test]
