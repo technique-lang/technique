@@ -160,16 +160,26 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
-                Err(error) => {
-                    eprintln!(
-                        "{}",
-                        problem::full_parsing_error(&error, &filename, &content, &Terminal)
-                    );
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::full_parsing_error(&error, &filename, &content, &Terminal)
+                        );
+                    }
                     std::process::exit(1);
                 }
             };
+
             // TODO continue with validation of the returned technique
 
             eprintln!("{}", "ok".bright_green());
@@ -205,12 +215,26 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
-                Err(error) => {
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_parsing_error(&error, &filename, &content, &Terminal)
+                        );
+                    }
+
                     eprintln!(
-                        "{}",
-                        problem::concise_parsing_error(&error, &filename, &content, &Terminal)
+                        "\nUnable to parse input file. Try `technique check {}` for details.",
+                        &filename.to_string_lossy()
                     );
                     std::process::exit(1);
                 }
@@ -251,16 +275,27 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
             let technique = match parsing::parse(&filename, &content) {
                 Ok(document) => document,
-                Err(error) => {
+                Err(errors) => {
                     // It is possible that we will want to render the error
                     // into the PDF document rather than crashing here. We'll
                     // see in the future.
-                    eprintln!(
-                        "{}",
-                        problem::full_parsing_error(&error, &filename, &content, &Terminal)
-                    );
+
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+
+                        eprintln!(
+                            "{}",
+                            problem::concise_parsing_error(&error, &filename, &content, &Terminal)
+                        );
+                    }
                     std::process::exit(1);
                 }
             };

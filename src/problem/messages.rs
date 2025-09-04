@@ -2,10 +2,7 @@ use crate::problem::Present;
 use technique::{formatting::Render, language::*, parsing::parser::ParsingError};
 
 /// Generate problem and detail messages for parsing errors using AST construction
-pub fn generate_error_message<'i>(
-    error: &ParsingError<'i>,
-    renderer: &dyn Render,
-) -> (String, String) {
+pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
     match error {
         ParsingError::IllegalParserState(_) => (
             "Illegal parser state".to_string(),
@@ -35,6 +32,16 @@ there was no more input remaining in the current scope.
                 "#,
                 subject, start, end
             )
+            .trim_ascii()
+            .to_string(),
+        ),
+        ParsingError::UnclosedInterpolation(_) => (
+            "Unclosed string interpolation".to_string(),
+            r#"
+Every '{' that starts an interpolation within a string must have a
+corresponding '}' to mark where the interpolation ends and the string
+literal resumes.
+            "#
             .trim_ascii()
             .to_string(),
         ),
@@ -126,6 +133,7 @@ Technique. Common templates include {}, {}, and
                     r#"
 Identifiers must start with a lowercase letter and contain only lower case
 letters, numbers, and underscores. Valid examples include:
+
     {}
     {}
     {}
