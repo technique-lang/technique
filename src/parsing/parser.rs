@@ -20,8 +20,9 @@ pub fn parse_with_recovery<'i>(
     input.parse_collecting_errors()
 }
 
-// Most general errors first, most specific last (for deduplication, we prefer
-// being able to give a more specific error message to the user)
+// Most general errors first, most specific last (when removing redundant
+// errors, we prefer being able to give a more specific error message to the
+// user)
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ParsingError {
     // lowest priority
@@ -54,7 +55,7 @@ pub enum ParsingError {
     InvalidQuantityUncertainty(usize),
     InvalidQuantityMagnitude(usize),
     InvalidQuantitySymbol(usize),
-    // highest priority when deduplicating
+    // highest priority
     UnclosedInterpolation(usize),
 }
 
@@ -94,11 +95,11 @@ impl ParsingError {
     }
 }
 
-/// Deduplicate errors, preferring more specific errors over generic ones at the same offset.
+/// Remove redundant errors, keeping only the most specific error at each offset.
 /// When multiple errors occur at the same offset, keep only the most specific one.
 /// Since ParsingError derives Ord with general errors first and specific errors last,
 /// we use > to prefer the higher Ord value (more specific) errors.
-fn deduplicate_errors(errors: Vec<ParsingError>) -> Vec<ParsingError> {
+fn remove_redundant_errors(errors: Vec<ParsingError>) -> Vec<ParsingError> {
     let mut deduped = Vec::new();
 
     for error in errors {
@@ -109,11 +110,11 @@ fn deduplicate_errors(errors: Vec<ParsingError>) -> Vec<ParsingError> {
             .iter()
             .position(|e: &ParsingError| e.offset() == error_offset)
         {
-            // Keep the more specific error (higher Ord value, since specific errors come last)
+            // Keep the more specific error
             if error > deduped[existing_idx] {
                 deduped[existing_idx] = error;
             }
-            // Otherwise, keep the existing more specific error
+            // Otherwise, keep the existing error
         } else {
             // No error at this offset yet, add it
             deduped.push(error);
@@ -318,13 +319,12 @@ impl<'i> Parser<'i> {
         let document = Document { header, body };
         let errors = std::mem::take(&mut self.problems);
 
-        // Deduplicate errors, preferring more specific errors over generic
-        // ones at the same offset
-        let errors = deduplicate_errors(errors);
-
         if errors.is_empty() {
             Ok(document)
         } else {
+            // Remove redundant errors, keeping only the most specific error
+            // at each offset
+            let errors = remove_redundant_errors(errors);
             Err(errors)
         }
     }
@@ -4829,7 +4829,47 @@ broken_proc2 : -> B
     }
 
     #[test]
-    fn test_error_deduplication_unclosed_interpolation() {
+    fn test_redundant_error_removal_needed() {
+        use std::path::Path;
+
+        // Create a malformed procedure that could generate multiple errors at the same offset
+        let content = r#"
+% technique v1
+
+broken :
+    This is not a valid signature line
+
+    1. Step one
+        "#;
+
+        let result = parse_with_recovery(Path::new("test.tq"), content);
+
+        // Check that we get an error about the invalid signature
+        match result {
+            Err(errors) => {
+                // Debug: print what errors we actually get
+                eprintln!("Errors: {:?}", errors);
+
+                // Verify no redundant errors at the same offset
+                let mut offsets = errors
+                    .iter()
+                    .map(|e| e.offset())
+                    .collect::<Vec<_>>();
+                offsets.sort();
+                let original_len = offsets.len();
+                offsets.dedup();
+                assert_eq!(
+                    offsets.len(),
+                    original_len,
+                    "Found redundant errors at same offset"
+                );
+            }
+            Ok(_) => panic!("Expected errors for malformed content"),
+        }
+    }
+
+    #[test]
+    fn test_redundant_error_removal_unclosed_interpolation() {
         let mut input = Parser::new();
 
         // Test that UnclosedInterpolation error takes precedence over generic
