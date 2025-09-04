@@ -35,6 +35,16 @@ there was no more input remaining in the current scope.
             .trim_ascii()
             .to_string(),
         ),
+        ParsingError::UnclosedInterpolation(_) => (
+            "Unclosed string interpolation".to_string(),
+            r#"
+Every '{' that starts an interpolation within a string must have a
+corresponding '}' to mark where the interpolation ends and the string
+literal resumes.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidHeader(_) => {
             // Format the sample metadata using the same code as the formatter
             let mut formatted_example = String::new();

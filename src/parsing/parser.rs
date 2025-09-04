@@ -27,6 +27,7 @@ pub enum ParsingError {
     Unrecognized(usize), // improve this
     Expected(usize, &'static str),
     ExpectedMatchingChar(usize, &'static str, char, char),
+    UnclosedInterpolation(usize),
     InvalidHeader(usize),
     InvalidCharacter(usize, char),
     UnexpectedEndOfInput(usize),
@@ -60,6 +61,7 @@ impl ParsingError {
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
             ParsingError::ExpectedMatchingChar(offset, _, _, _) => *offset,
+            ParsingError::UnclosedInterpolation(offset) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
             ParsingError::InvalidCharacter(offset, _) => *offset,
             ParsingError::UnexpectedEndOfInput(offset) => *offset,
@@ -1479,12 +1481,9 @@ impl<'i> Parser<'i> {
                         current_pos = end_pos + 1;
                     }
                     None => {
-                        // Unmatched brace - point to end of string content (at closing quote)
-                        return Err(ParsingError::ExpectedMatchingChar(
-                            self.offset + raw.len(),
-                            "an interpolation",
-                            '{',
-                            '}',
+                        // Unmatched brace - point to the opening brace position
+                        return Err(ParsingError::UnclosedInterpolation(
+                            self.offset + absolute_brace_start,
                         ));
                     }
                 }
