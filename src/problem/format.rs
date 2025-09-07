@@ -1,7 +1,7 @@
 use super::messages::generate_error_message;
 use owo_colors::OwoColorize;
 use std::path::Path;
-use technique::{formatting::Render, language::LoadingError, parsing::parser::ParsingError};
+use technique::{formatting::Render, language::LoadingError, parsing::ParsingError};
 
 /// Format a parsing error with full details including source code context
 pub fn full_parsing_error<'i>(

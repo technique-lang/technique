@@ -1,5 +1,5 @@
 use crate::problem::Present;
-use technique::{formatting::Render, language::*, parsing::parser::ParsingError};
+use technique::{formatting::Render, language::*, parsing::ParsingError};
 
 /// Generate problem and detail messages for parsing errors using AST construction
 pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {

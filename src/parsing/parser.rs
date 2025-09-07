@@ -136,7 +136,7 @@ pub struct Parser<'i> {
 }
 
 impl<'i> Parser<'i> {
-    pub fn new() -> Parser<'i> {
+    fn new() -> Parser<'i> {
         Parser {
             filename: Path::new("-"),
             original: "",
@@ -146,10 +146,10 @@ impl<'i> Parser<'i> {
         }
     }
 
-    pub fn filename(&mut self, filename: &'i Path) {
+    fn filename(&mut self, filename: &'i Path) {
         self.filename = filename;
     }
-    pub fn initialize(&mut self, content: &'i str) {
+    fn initialize(&mut self, content: &'i str) {
         self.original = content;
         self.source = content;
         self.offset = 0;
@@ -732,7 +732,7 @@ impl<'i> Parser<'i> {
         })
     }
 
-    pub fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
+    fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
         // Process magic line
         let version = if is_magic_line(self.source) {
             let result = self.read_magic_line()?;
@@ -907,7 +907,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a procedure with error recovery - collects multiple errors instead of stopping at the first one
-    pub fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
+    fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
         // Find the procedure block boundaries
         let mut i = 0;
         let mut begun = false;
@@ -1821,7 +1821,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse top-level ordered step
-    pub fn read_step_dependent(&mut self) -> Result<Scope<'i>, ParsingError> {
+    fn read_step_dependent(&mut self) -> Result<Scope<'i>, ParsingError> {
         self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
 
@@ -1860,7 +1860,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Parse a top-level concurrent step
-    pub fn read_step_parallel(&mut self) -> Result<Scope<'i>, ParsingError> {
+    fn read_step_parallel(&mut self) -> Result<Scope<'i>, ParsingError> {
         self.take_block_lines(is_step_parallel, is_step_parallel, |outer| {
             outer.trim_whitespace();
 
@@ -1961,7 +1961,7 @@ impl<'i> Parser<'i> {
         )
     }
 
-    pub fn read_descriptive(&mut self) -> Result<Vec<Paragraph<'i>>, ParsingError> {
+    fn read_descriptive(&mut self) -> Result<Vec<Paragraph<'i>>, ParsingError> {
         self.take_block_lines(
             |_| true,
             |line| {
