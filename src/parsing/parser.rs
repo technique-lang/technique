@@ -2791,5 +2791,13 @@ fn is_attribute_assignment(input: &str) -> bool {
 // subdirectory with the same name as this module.
 
 #[cfg(test)]
-#[path = "checks.rs"]
+#[path = "checks/parser.rs"]
 mod check;
+
+#[cfg(test)]
+#[path = "checks/verify.rs"]
+mod verify;
+
+#[cfg(test)]
+#[path = "checks/errors.rs"]
+mod errors;

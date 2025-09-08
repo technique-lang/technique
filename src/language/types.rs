@@ -1,6 +1,6 @@
 //! Types representing an Abstract Syntax Tree for the Technique language
 
-use crate::{language::quantity::parse_quantity, regex::*};
+use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Document<'i> {
