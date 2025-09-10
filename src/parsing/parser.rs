@@ -2279,8 +2279,13 @@ impl<'i> Parser<'i> {
             for part in parts {
                 let trimmed = part.trim_ascii();
 
-                // Check if it's a role '@'
-                if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
+                // Check if it's the special @* "reset attribute" role
+                if trimmed == "@*" {
+                    let identifier = Identifier("*");
+                    attributes.push(Attribute::Role(identifier));
+                }
+                // Check if it's a regular role '@'
+                else if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
                     let role_name = captures
                         .get(1)
                         .ok_or(ParsingError::Expected(inner.offset, "role name after @"))?
@@ -2830,7 +2835,8 @@ fn is_string_literal(content: &str) -> bool {
 
 fn is_attribute_assignment(input: &str) -> bool {
     // Matches any combination of @ and ^ attributes separated by +
-    let re = regex!(r"^\s*[@^][a-z][a-z0-9_]*(\s*\+\s*[@^][a-z][a-z0-9_]*)*");
+    // Also matches the special @* "reset to all" role
+    let re = regex!(r"^\s*(@\*|[@^][a-z][a-z0-9_]*)(\s*\+\s*[@^][a-z][a-z0-9_]*)*");
     re.is_match(input)
 }
 
