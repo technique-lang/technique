@@ -967,6 +967,12 @@ impl<'i> Parser<'i> {
         let mut elements = vec![];
 
         while !parser.is_finished() {
+            parser.trim_whitespace();
+
+            if parser.is_finished() {
+                break;
+            }
+
             let content = parser.source;
 
             if is_procedure_title(content) {
