@@ -125,6 +125,14 @@ fn main() {
                         .help("The file containing the code for the Technique you want to print."),
                 ),
         )
+        .subcommand(
+            Command::new("language")
+                .about("Language Server Protocol integration for editors and IDEs.")
+                .long_about("Run a Language Server Protocol (LSP) service \
+                   for Technique documents. This accepts commands and code \
+                   input via stdin and returns compilation errors and other \
+                   diagnostics.")
+        )
         .get_matches();
 
     match matches.subcommand() {
@@ -314,6 +322,17 @@ fn main() {
             }
 
             rendering::via_typst(&filename, &result);
+        }
+        Some(("language", _)) => {
+            debug!("Starting Language Server");
+
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    debug!("Started");
+                });
         }
         Some(_) => {
             println!("No valid subcommand was used")
