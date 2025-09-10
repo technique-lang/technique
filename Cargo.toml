@@ -1,6 +1,6 @@
 [package]
 name = "technique"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 description = "A domain specific language for procedures."
 authors = [ "Andrew Cowie" ]
@@ -13,6 +13,7 @@ owo-colors = "4"
 regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }
 tinytemplate = "1.2.1"
+tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 
