@@ -12,6 +12,7 @@ use technique::formatting::{self};
 
 use technique::parsing;
 
+mod editor;
 mod problem;
 mod rendering;
 
@@ -331,7 +332,7 @@ fn main() {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    debug!("Started");
+                    editor::run_language_server().await;
                 });
         }
         Some(_) => {
