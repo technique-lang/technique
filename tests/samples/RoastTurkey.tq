@@ -1,0 +1,8 @@
+roast_turkey(i) : Ingredients -> Turkey
+
+# Roast Turkey
+
+    @chef
+        1.  Set oven temperature { <oven>(180 °C) ~ temp }
+        2.  Place bacon strips onto bird
+        3.  Put bird into oven

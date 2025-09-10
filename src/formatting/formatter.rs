@@ -127,6 +127,12 @@ pub fn render_invocation<'i>(invocation: &'i Invocation, renderer: &dyn Render) 
     render_fragments(&sub.fragments, renderer)
 }
 
+pub fn render_descriptive<'i>(descriptive: &'i Descriptive, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_descriptive(descriptive);
+    render_fragments(&sub.fragments, renderer)
+}
+
 pub fn render_function<'i>(function: &'i Function, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_function(function);
@@ -322,16 +328,41 @@ impl<'i> Formatter<'i> {
                 sub.add_fragment_reference(Syntax::Neutral, " ");
                 sub.add_fragment_reference(Syntax::Structure, "}");
                 sub.flush_current();
-                sub.fragments
+
+                let mut combined = String::new();
+                for (_syntax, content) in &sub.fragments {
+                    combined.push_str(&content);
+                }
+
+                vec![(Syntax::Structure, Cow::Owned(combined))]
             }
         }
+    }
+
+    fn render_string_interpolation(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
+        let mut sub = self.subformatter();
+        sub.add_fragment_reference(Syntax::Structure, "{");
+        sub.add_fragment_reference(Syntax::Neutral, " ");
+        sub.append_expression(expr);
+        sub.add_fragment_reference(Syntax::Neutral, " ");
+        sub.add_fragment_reference(Syntax::Structure, "}");
+        sub.flush_current();
+        sub.fragments
     }
 
     fn render_application(&self, invocation: &'i Invocation) -> Vec<(Syntax, Cow<'i, str>)> {
         let mut sub = self.subformatter();
         sub.append_application(invocation);
         sub.flush_current();
-        sub.fragments
+
+        // Combine all fragments into a single atomic fragment to prevent wrapping
+        let mut combined = String::new();
+        for (_syntax, content) in &sub.fragments {
+            combined.push_str(&content);
+        }
+
+        // Return as a single fragment
+        vec![(Syntax::Invocation, Cow::Owned(combined))]
     }
 
     fn render_binding(
@@ -363,7 +394,14 @@ impl<'i> Formatter<'i> {
         sub.add_fragment_reference(Syntax::Neutral, " ");
         sub.append_variables(variables);
         sub.flush_current();
-        sub.fragments
+
+        // Combine all fragments into a single atomic fragment to prevent wrapping
+        let mut combined = String::new();
+        for (_syntax, content) in &sub.fragments {
+            combined.push_str(&content);
+        }
+
+        vec![(Syntax::Structure, Cow::Owned(combined))]
     }
 
     pub fn append_char(&mut self, c: char) {
@@ -584,7 +622,16 @@ impl<'i> Formatter<'i> {
         }
     }
 
-    fn append_descriptives(&mut self, descriptives: &'i Vec<Descriptive>) {
+    // This is a helper for rendering a single descriptives in error messages.
+    // The real method is append_decriptives() below; this method simply
+    // creates a single element slice that can be passed to it.
+    fn append_descriptive(&mut self, descriptive: &'i Descriptive) {
+        use std::slice;
+        let slice = slice::from_ref(descriptive);
+        self.append_descriptives(slice);
+    }
+
+    fn append_descriptives(&mut self, descriptives: &'i [Descriptive<'i>]) {
         let syntax = self.current;
         let mut line = self.builder();
 
@@ -894,7 +941,7 @@ impl<'i> Formatter<'i> {
                             self.add_fragment_reference(Syntax::String, text);
                         }
                         Piece::Interpolation(expr) => {
-                            let fragments = self.render_inline_code(expr);
+                            let fragments = self.render_string_interpolation(expr);
                             for (syntax, content) in fragments {
                                 self.add_fragment(syntax, content);
                             }
@@ -1223,28 +1270,39 @@ impl<'a, 'i> Line<'a, 'i> {
         let fragments = self
             .output
             .render_inline_code(expr);
-        self.add_fragments(fragments);
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
     }
 
     fn add_application(&mut self, invocation: &'i Invocation) {
         let fragments = self
             .output
             .render_application(invocation);
-        self.add_fragments(fragments);
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
     }
 
     fn add_binding(&mut self, inner_descriptive: &'i Descriptive, variables: &'i Vec<Identifier>) {
         let fragments = self
             .output
             .render_binding(inner_descriptive, variables);
-        self.add_fragments(fragments);
+        // Bindings should not wrap - add as a single non-wrapping unit
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
     }
 
-    fn add_fragments(&mut self, fragments: Vec<(Syntax, Cow<'i, str>)>) {
-        // All fragments should be atomic - the formatter is responsible for breaking up content
-        for (syntax, content) in fragments {
-            self.add_atomic_cow(syntax, content);
-        }
+    fn add_no_wrap(&mut self, syntax: Syntax, content: Cow<'i, str>) {
+        // Add content that must never wrap mid-construct (inline code,
+        // applications, bindings) Unlike add_atomic_cow(), this bypasses
+        // width checking entirely to preserve the integrity of these language
+        // constructs on single lines
+        let len = content.len() as u8;
+        self.current
+            .push((syntax, content));
+        self.position += len;
     }
 
     fn wrap_line(&mut self) {

@@ -1,5 +1,5 @@
 use crate::problem::Present;
-use technique::{formatting::Render, language::*, parsing::parser::ParsingError};
+use technique::{formatting::Render, language::*, parsing::ParsingError};
 
 /// Generate problem and detail messages for parsing errors using AST construction
 pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
@@ -35,6 +35,30 @@ there was no more input remaining in the current scope.
             .trim_ascii()
             .to_string(),
         ),
+        ParsingError::MissingParenthesis(_) => {
+            let examples = vec![Descriptive::Binding(
+                Box::new(Descriptive::Application(Invocation {
+                    target: Target::Local(Identifier("mix_pangalactic_gargle_blaster")),
+                    parameters: None,
+                })),
+                vec![Identifier("zaphod"), Identifier("trillian")],
+            )];
+
+            (
+                "Lists of binding variables must be enclosed in parentheses".to_string(),
+                format!(
+                    r#"
+If you bind the result of an invocation to more than one variable, you must
+enclose those names in parenthesis. For example:
+
+    {}
+                    "#,
+                    examples[0].present(renderer),
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         ParsingError::UnclosedInterpolation(_) => (
             "Unclosed string interpolation".to_string(),
             r#"

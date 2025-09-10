@@ -4,12 +4,12 @@ use std::path::Path;
 use technique::parsing;
 
 #[test]
-fn ensure_parse() {
-    let dir = Path::new("tests/samples/");
+fn ensure_fail() {
+    let dir = Path::new("tests/broken/");
 
-    assert!(dir.exists(), "samples directory missing");
+    assert!(dir.exists(), "broken directory missing");
 
-    let entries = fs::read_dir(dir).expect("Failed to read samples directory");
+    let entries = fs::read_dir(dir).expect("Failed to read broken directory");
 
     let mut files = Vec::new();
     for entry in entries {
@@ -25,27 +25,27 @@ fn ensure_parse() {
         }
     }
 
-    assert!(!files.is_empty(), "No .tq files found in samples directory");
+    assert!(!files.is_empty(), "No .tq files found in broken directory");
 
-    let mut failures = Vec::new();
+    let mut unexpected_successes = Vec::new();
 
     for file in &files {
         let content = parsing::load(&file)
             .unwrap_or_else(|e| panic!("Failed to load file {:?}: {:?}", file, e));
 
         match parsing::parse(&file, &content) {
-            Ok(_) => {}
-            Err(e) => {
-                println!("File {:?} failed to parse: {:?}", file, e);
-                failures.push(file.clone());
+            Ok(_) => {
+                println!("File {:?} unexpectedly parsed successfully", file);
+                unexpected_successes.push(file.clone());
             }
+            Err(_) => {}
         }
     }
 
-    if !failures.is_empty() {
+    if !unexpected_successes.is_empty() {
         panic!(
-            "Sample files should parse successfully, but {} files failed",
-            failures.len()
+            "Broken files should not to parse successfully, but {} files passed",
+            unexpected_successes.len()
         );
     }
 }

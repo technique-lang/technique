@@ -1,6 +1,6 @@
 //! Types representing an Abstract Syntax Tree for the Technique language
 
-use crate::{language::quantity::parse_quantity, regex::*};
+use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Document<'i> {
@@ -214,7 +214,7 @@ pub use crate::language::quantity::Quantity;
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.
 
-pub fn validate_license(input: &str) -> Option<&str> {
+pub(crate) fn validate_license(input: &str) -> Option<&str> {
     let re = regex!(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$");
 
     if re.is_match(input) {
@@ -224,7 +224,7 @@ pub fn validate_license(input: &str) -> Option<&str> {
     }
 }
 
-pub fn validate_copyright(input: &str) -> Option<&str> {
+pub(crate) fn validate_copyright(input: &str) -> Option<&str> {
     let re = regex!(r"^[A-Za-z0-9.,\-_ \(\)\[\]]+$");
 
     if re.is_match(input) {
@@ -234,7 +234,7 @@ pub fn validate_copyright(input: &str) -> Option<&str> {
     }
 }
 
-pub fn validate_template(input: &str) -> Option<&str> {
+pub(crate) fn validate_template(input: &str) -> Option<&str> {
     let re = regex!(r"^[A-Za-z0-9.,\-]+$");
 
     if re.is_match(input) {
@@ -244,7 +244,7 @@ pub fn validate_template(input: &str) -> Option<&str> {
     }
 }
 
-pub fn validate_identifier(input: &str) -> Option<Identifier<'_>> {
+pub(crate) fn validate_identifier(input: &str) -> Option<Identifier<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -257,7 +257,7 @@ pub fn validate_identifier(input: &str) -> Option<Identifier<'_>> {
     }
 }
 
-pub fn validate_forma(input: &str) -> Option<Forma<'_>> {
+pub(crate) fn validate_forma(input: &str) -> Option<Forma<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -294,7 +294,7 @@ fn parse_tuple(input: &str) -> Option<Vec<Forma<'_>>> {
 }
 
 /// This one copes with (and discards) any internal whitespace encountered.
-pub fn validate_genus(input: &str) -> Option<Genus<'_>> {
+pub(crate) fn validate_genus(input: &str) -> Option<Genus<'_>> {
     let first = input
         .chars()
         .next()
@@ -369,33 +369,6 @@ pub fn validate_response(input: &str) -> Option<Response<'_>> {
     };
 
     Some(Response { value, condition })
-}
-
-fn _validate_decimal(_input: &str) -> Option<Numeric<'_>> {
-    // Test the regex macro availability within types.rs
-    let _decimal_regex = regex!(r"^\s*-?[0-9]+\.[0-9]+\s*$");
-    // For now, just return None since we removed Decimal variant
-    None
-}
-
-pub fn validate_numeric(input: &str) -> Option<Numeric<'_>> {
-    if input.is_empty() {
-        return None;
-    }
-
-    let input = input.trim_ascii();
-
-    // Try to parse as a simple Integral first
-    if let Ok(amount) = input.parse::<i64>() {
-        return Some(Numeric::Integral(amount));
-    }
-
-    // Try to parse as a Quantity (scientific notation with units)
-    if let Some(quantity) = parse_quantity(input) {
-        return Some(Numeric::Scientific(quantity));
-    }
-
-    None
 }
 
 #[cfg(test)]
@@ -580,18 +553,6 @@ mod check {
         };
 
         t1
-    }
-
-    #[test]
-    fn numeric_rules() {
-        // Test simple integers
-        assert_eq!(validate_numeric("42"), Some(Numeric::Integral(42)));
-        assert_eq!(validate_numeric("0"), Some(Numeric::Integral(0)));
-        assert_eq!(validate_numeric("-123"), Some(Numeric::Integral(-123)));
-        assert_eq!(
-            validate_numeric("9223372036854775807"),
-            Some(Numeric::Integral(9223372036854775807))
-        );
     }
 
     #[test]
