@@ -127,6 +127,12 @@ pub fn render_invocation<'i>(invocation: &'i Invocation, renderer: &dyn Render) 
     render_fragments(&sub.fragments, renderer)
 }
 
+pub fn render_descriptive<'i>(descriptive: &'i Descriptive, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_descriptive(descriptive);
+    render_fragments(&sub.fragments, renderer)
+}
+
 pub fn render_function<'i>(function: &'i Function, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_function(function);
@@ -584,7 +590,16 @@ impl<'i> Formatter<'i> {
         }
     }
 
-    fn append_descriptives(&mut self, descriptives: &'i Vec<Descriptive>) {
+    // This is a helper for rendering a single descriptives in error messages.
+    // The real method is append_decriptives() below; this method simply
+    // creates a single element slice that can be passed to it.
+    fn append_descriptive(&mut self, descriptive: &'i Descriptive) {
+        use std::slice;
+        let slice = slice::from_ref(descriptive);
+        self.append_descriptives(slice);
+    }
+
+    fn append_descriptives(&mut self, descriptives: &'i [Descriptive<'i>]) {
         let syntax = self.current;
         let mut line = self.builder();
 

@@ -32,6 +32,7 @@ pub enum ParsingError {
     UnexpectedEndOfInput(usize),
     Expected(usize, &'static str),
     ExpectedMatchingChar(usize, &'static str, char, char),
+    MissingParenthesis(usize),
     // more specific errors
     InvalidCharacter(usize, char),
     InvalidHeader(usize),
@@ -68,6 +69,7 @@ impl ParsingError {
             ParsingError::Unrecognized(offset) => *offset,
             ParsingError::Expected(offset, _) => *offset,
             ParsingError::ExpectedMatchingChar(offset, _, _, _) => *offset,
+            ParsingError::MissingParenthesis(offset) => *offset,
             ParsingError::UnclosedInterpolation(offset) => *offset,
             ParsingError::InvalidHeader(offset) => *offset,
             ParsingError::InvalidCharacter(offset, _) => *offset,
@@ -1297,6 +1299,15 @@ impl<'i> Parser<'i> {
 
         if is_binding(content) {
             self.read_binding_expression()
+        } else if malformed_binding_pattern(content) {
+            if let Some(tilde_pos) = self
+                .source
+                .find('~')
+            {
+                self.advance(tilde_pos + 1); // Move past ~
+                self.trim_whitespace();
+            }
+            return Err(ParsingError::MissingParenthesis(self.offset));
         } else if is_repeat_keyword(content) {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
@@ -2022,7 +2033,20 @@ impl<'i> Parser<'i> {
                                     if parser.peek_next_char() == Some('~') {
                                         parser.advance(1);
                                         parser.trim_whitespace();
+                                        let start_pos = parser.offset;
                                         let variable = parser.read_identifier()?;
+
+                                        // Check for malformed tuple binding (missing parentheses)
+                                        parser.trim_whitespace();
+                                        if parser
+                                            .source
+                                            .starts_with(',')
+                                        {
+                                            return Err(ParsingError::MissingParenthesis(
+                                                start_pos,
+                                            ));
+                                        }
+
                                         content.push(Descriptive::Binding(
                                             Box::new(Descriptive::Application(invocation)),
                                             vec![variable],
@@ -2049,7 +2073,19 @@ impl<'i> Parser<'i> {
                                     } else if parser.peek_next_char() == Some('~') {
                                         parser.advance(1);
                                         parser.trim_whitespace();
+                                        let start_pos = parser.offset;
                                         let variable = parser.read_identifier()?;
+
+                                        parser.trim_whitespace();
+                                        if parser
+                                            .source
+                                            .starts_with(',')
+                                        {
+                                            return Err(ParsingError::MissingParenthesis(
+                                                start_pos,
+                                            ));
+                                        }
+
                                         content.push(Descriptive::Binding(
                                             Box::new(Descriptive::Text(text)),
                                             vec![variable],
@@ -2702,6 +2738,12 @@ fn is_function(content: &str) -> bool {
 fn is_binding(content: &str) -> bool {
     let re = regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*$");
 
+    re.is_match(content)
+}
+
+fn malformed_binding_pattern(content: &str) -> bool {
+    // Detect ~ identifier, identifier (missing parentheses)
+    let re = regex!(r"~\s+[a-z][a-z0-9_]*\s*,\s*[a-z]");
     re.is_match(content)
 }
 

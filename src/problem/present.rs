@@ -70,6 +70,12 @@ impl Present for Invocation<'_> {
     }
 }
 
+impl Present for Descriptive<'_> {
+    fn present(&self, renderer: &dyn Render) -> String {
+        formatter::render_descriptive(self, renderer)
+    }
+}
+
 impl Present for Function<'_> {
     fn present(&self, renderer: &dyn Render) -> String {
         formatter::render_function(self, renderer)
