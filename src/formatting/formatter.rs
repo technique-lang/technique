@@ -1294,13 +1294,6 @@ impl<'a, 'i> Line<'a, 'i> {
         }
     }
 
-    fn add_fragments(&mut self, fragments: Vec<(Syntax, Cow<'i, str>)>) {
-        // All fragments should be atomic - the formatter is responsible for breaking up content
-        for (syntax, content) in fragments {
-            self.add_atomic_cow(syntax, content);
-        }
-    }
-
     fn add_no_wrap(&mut self, syntax: Syntax, content: Cow<'i, str>) {
         // Add content that must never wrap mid-construct (inline code,
         // applications, bindings) Unlike add_atomic_cow(), this bypasses
