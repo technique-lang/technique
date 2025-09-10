@@ -1,0 +1,11 @@
+prepare_meal(i) : Ingredients -> Meal
+
+# Prepare Meal
+
+Coordinating the preparation of all meal components.
+
+    @chef
+        1.  Roast the turkey { <roast_turkey>(i) ~ turkey }
+        2.  Roast potatoes { <roast_potatoes>(i) ~ potatoes }
+        3.  Prepare vegetables { <prepare_vegetables>(i) ~ raw }
+        4.  Cook vegetables { <cook_vegetables>(raw) ~ veggies, water }
