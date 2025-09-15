@@ -95,14 +95,14 @@ pub fn concise_loading_error<'i>(error: &LoadingError<'i>) -> String {
 }
 
 // Helper functions for line/column calculation
-fn calculate_line_number(content: &str, offset: usize) -> usize {
+pub fn calculate_line_number(content: &str, offset: usize) -> usize {
     content[..offset]
         .bytes()
         .filter(|&b| b == b'\n')
         .count()
 }
 
-fn calculate_column_number(content: &str, offset: usize) -> usize {
+pub fn calculate_column_number(content: &str, offset: usize) -> usize {
     let before = &content[..offset];
     match before.rfind('\n') {
         Some(start) => content[start + 1..offset]
