@@ -34,12 +34,12 @@ impl TechniqueLanguageServer {
         mut self,
         connection: Connection,
     ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-        info!("Starting Technique Language Server main loop");
+        info!("Starting Language Server main loop");
 
-        for msg in &connection.receiver {
-            match msg {
-                Message::Request(req) => {
-                    if let Err(err) = self.handle_request(req, &|msg| {
+        for message in &connection.receiver {
+            match message {
+                Message::Request(request) => {
+                    if let Err(err) = self.handle_request(request, &|msg| {
                         connection
                             .sender
                             .send(msg)
@@ -47,13 +47,17 @@ impl TechniqueLanguageServer {
                         error!("Error handling request: {}", err);
                     }
                 }
-                Message::Notification(not) => {
-                    if let Err(err) = self.handle_notification(not, &|msg| {
+                Message::Notification(notification) => {
+                    if notification.method == "exit" {
+                        break;
+                    }
+
+                    if let Err(error) = self.handle_notification(notification, &|message| {
                         connection
                             .sender
-                            .send(msg)
+                            .send(message)
                     }) {
-                        error!("Error handling notification: {}", err);
+                        error!("Error handling notification: {}", error);
                     }
                 }
                 Message::Response(_resp) => {
@@ -102,10 +106,9 @@ impl TechniqueLanguageServer {
                 }
             }
             "shutdown" => {
-                info!("Technique Language Server shutting down");
+                info!("Language Server received shutdown request");
                 let response = Response::new_ok(req.id, Value::Null);
                 sender(Message::Response(response))?;
-                return Ok(());
             }
             _ => {
                 warn!("Unhandled request method: {}", req.method);
@@ -163,7 +166,7 @@ impl TechniqueLanguageServer {
         &self,
         _params: InitializeParams,
     ) -> Result<InitializeResult, Box<dyn std::error::Error + Sync + Send>> {
-        info!("Technique Language Server initializing");
+        info!("Language Server initializing");
 
         Ok(InitializeResult {
             server_info: None,
