@@ -1,3 +1,4 @@
+use owo_colors::OwoColorize;
 use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
@@ -25,6 +26,13 @@ pub(crate) fn via_typst(filename: &Path, markup: &str) {
     info!("Printing file: {}", filename.display());
 
     // Verify that the file actually exists
+    if filename.to_str() == Some("-") {
+        eprintln!(
+            "{}: Unable to render to PDF from standard input.",
+            "error".bright_red()
+        );
+        std::process::exit(1);
+    }
     if !filename.exists() {
         panic!(
             "Supplied procedure file does not exist: {}",

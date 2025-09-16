@@ -76,7 +76,7 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to type-check."),
+                        .help("The file containing the code for the Technique you want to parse and type check, or - to read from standard input."),
                 ),
         )
         .subcommand(
@@ -101,7 +101,7 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to format."),
+                        .help("The file containing the code for the Technique you want to format, or - to read from standard input."),
                 ),
         )
         .subcommand(
