@@ -11,6 +11,7 @@ pub fn full_parsing_error<'i>(
     renderer: &impl Render,
 ) -> String {
     let (problem, details) = generate_error_message(error, renderer);
+    let input = generate_filename(filename);
     let offset = error.offset();
     let width = error.width();
 
@@ -44,7 +45,7 @@ pub fn full_parsing_error<'i>(
 {}
         "#,
         "error".bright_red(),
-        filename.to_string_lossy(),
+        input,
         line,
         column,
         problem.bold(),
@@ -71,6 +72,7 @@ pub fn concise_parsing_error<'i>(
     renderer: &impl Render,
 ) -> String {
     let (problem, _) = generate_error_message(error, renderer);
+    let input = generate_filename(filename);
     let offset = error.offset();
     let i = calculate_line_number(source, offset);
     let j = calculate_column_number(source, offset);
@@ -80,7 +82,7 @@ pub fn concise_parsing_error<'i>(
     format!(
         "{}: {}:{}:{} {}",
         "error".bright_red(),
-        filename.to_string_lossy(),
+        input,
         line,
         column,
         problem.bold(),
@@ -99,6 +101,16 @@ pub fn concise_loading_error<'i>(error: &LoadingError<'i>) -> String {
             .problem
             .bold()
     )
+}
+
+fn generate_filename(filename: &Path) -> String {
+    if filename.to_str() == Some("-") {
+        "<stdin>".to_string()
+    } else {
+        filename
+            .display()
+            .to_string()
+    }
 }
 
 // Helper functions for line/column calculation
