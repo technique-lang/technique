@@ -1,20 +1,37 @@
-use tower_lsp::{LspService, Server};
+use lsp_server::Connection;
+use lsp_types::{
+    InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+};
 use tracing::{debug, info};
 
 mod server;
 
-pub(crate) async fn run_language_server() {
+pub(crate) fn run_language_server() {
     debug!("Starting Technique Language Server");
 
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+    let (connection, threads) = Connection::stdio();
 
-    let (service, socket) =
-        LspService::build(|client| server::TechniqueLanguageServer::new(client)).finish();
+    let capabilities = serde_json::to_value(ServerCapabilities {
+        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+        document_formatting_provider: Some(OneOf::Left(true)),
+        ..Default::default()
+    })
+    .unwrap();
 
-    info!("Technique Language Server starting on stdio");
+    // extract any initialization parameters passed from the editor.
+    if let Ok(params) = connection.initialize(capabilities) {
+        let _params = serde_json::from_value::<InitializeParams>(params).unwrap();
 
-    Server::new(stdin, stdout, socket)
-        .serve(service)
-        .await;
+        info!("Technique Language Server starting on stdin");
+
+        let server = server::TechniqueLanguageServer::new();
+
+        if let Err(e) = server.run(connection) {
+            eprintln!("Server error: {}", e);
+        }
+    }
+
+    threads
+        .join()
+        .unwrap();
 }

@@ -327,13 +327,7 @@ fn main() {
         Some(("language", _)) => {
             debug!("Starting Language Server");
 
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(async {
-                    editor::run_language_server().await;
-                });
+            editor::run_language_server();
         }
         Some(_) => {
             println!("No valid subcommand was used")
