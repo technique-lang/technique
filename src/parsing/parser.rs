@@ -1862,20 +1862,25 @@ impl<'i> Parser<'i> {
             if ch.is_whitespace() || ch == ',' || ch == ')' {
                 // Stop at whitespace, comma, or closing parameter boundary
                 break;
-            } else if ch.is_ascii_alphabetic() || ch == '°' || ch == '/' || ch == 'μ' {
+            } else if ch.is_ascii_alphabetic()
+                || ch == '°'
+                || ch == '/'
+                || ch == 'μ'
+                || "⁰¹²³⁴⁵⁶⁷⁸⁹".contains(ch)
+            {
                 // Valid character
                 valid_end = byte_offset + ch.len_utf8();
             } else {
                 // Invalid character found - point directly at it
                 return Err(ParsingError::InvalidQuantitySymbol(
                     self.offset + byte_offset,
-                    0,
+                    ch.len_utf8(),
                 ));
             }
         }
 
         if valid_end == 0 {
-            return Err(ParsingError::InvalidQuantitySymbol(self.offset, 0));
+            return Err(ParsingError::InvalidQuantitySymbol(self.offset, 1));
         }
 
         let symbol = &self.source[..valid_end];
