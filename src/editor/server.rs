@@ -1,18 +1,22 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 
+use technique::formatting::Identity;
 use tokio::sync::Mutex;
-use tower_lsp::jsonrpc::Result;
+use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{
     Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, MessageType, Position, Range, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url,
+    DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
+    InitializeParams, InitializeResult, InitializedParams, MessageType, OneOf, Position, Range,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
 };
 use tower_lsp::{Client, LanguageServer};
 use tracing::{debug, info};
 
-use crate::parsing::{parse_with_recovery, ParsingError};
+use crate::formatting;
+use crate::parsing;
+use crate::parsing::ParsingError;
 use crate::problem::{calculate_column_number, calculate_line_number};
 
 pub struct TechniqueLanguageServer {
@@ -189,7 +193,7 @@ impl TechniqueLanguageServer {
             .to_file_path()
             .unwrap_or_else(|_| Path::new("-").to_path_buf());
 
-        match parse_with_recovery(&path, &content) {
+        match parsing::parse_with_recovery(&path, &content) {
             Ok(_document) => {
                 self.client
                     .publish_diagnostics(uri, vec![], None)
@@ -223,6 +227,7 @@ impl LanguageServer for TechniqueLanguageServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
         })
@@ -322,6 +327,67 @@ impl LanguageServer for TechniqueLanguageServer {
         self.client
             .publish_diagnostics(uri, vec![], None)
             .await;
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params
+            .text_document
+            .uri;
+
+        debug!("Format request: {}", uri);
+
+        // Get content from our documents map
+        let documents = self
+            .documents
+            .lock()
+            .await;
+        let content = match documents.get(&uri) {
+            Some(c) => c,
+            None => {
+                return Err(Error {
+                    code: ErrorCode::InvalidRequest,
+                    message: Cow::Borrowed("Document not open"),
+                    data: None,
+                })
+            }
+        };
+
+        let path = match uri.to_file_path() {
+            Ok(buf) => buf,
+            Err(_) => Path::new("-").to_path_buf(),
+        };
+
+        let document = match parsing::parse_with_recovery(&path, content) {
+            Ok(document) => document,
+            Err(_) => {
+                return Err(Error {
+                    code: ErrorCode::ParseError,
+                    message: Cow::Borrowed(
+                        "Document must be free of parse errors before formatting",
+                    ),
+                    data: None,
+                })
+            }
+        };
+
+        let result = formatting::render(&Identity, &document, 78);
+
+        // convert to tower-lsp type for return to editor.
+        let edit = TextEdit {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: u32::MAX,
+                    character: 0,
+                },
+            },
+            new_text: result,
+        };
+
+        Ok(Some(vec![edit]))
     }
 }
 
