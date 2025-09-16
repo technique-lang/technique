@@ -9,12 +9,14 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
+lsp-server = "0.7.9"
+lsp-types = "0.95"
 owo-colors = "4"
 regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }
+serde_json = "1.0"
 tinytemplate = "1.2.1"
-tokio = { version = "1.47.1", features = ["full"] }
-tower-lsp = "0.20.0"
+
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 
