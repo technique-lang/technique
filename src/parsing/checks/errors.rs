@@ -240,6 +240,32 @@ making_coffee :
 }
 
 #[test]
+fn invalid_function_with_space_in_name() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { re peat() }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidFunction(38, 0),
+    );
+}
+
+#[test]
+fn invalid_function_with_space_and_invocation() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { re peat <thing>() }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidFunction(38, 0),
+    );
+}
+
+#[test]
 fn invalid_invocation_in_repeat() {
     expect_error(
         r#"
@@ -263,5 +289,18 @@ making_coffee :
             "#
         .trim_ascii(),
         ParsingError::InvalidSubstep(37, 0),
+    );
+}
+
+#[test]
+fn invalid_code_block_with_leftover_content() {
+    expect_error(
+        r#"
+robot :
+
+Your plastic pal who's fun to be with! { re peat <jingle> }
+        "#
+        .trim_ascii(),
+        ParsingError::InvalidCodeBlock(43, 7),
     );
 }

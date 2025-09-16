@@ -1353,8 +1353,56 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
-        self.take_block_chars("a code block", '{', '}', true, |outer| {
-            outer.read_expression()
+        self.take_block_chars("a code block", '{', '}', true, |inner| {
+            // Save the start position (accounting for leading whitespace that read_expression will trim)
+            inner.trim_whitespace();
+            let start = inner.offset;
+
+            let expression = inner.read_expression()?;
+
+            // Check if there's leftover content
+            let offset_before_trim = inner.offset;
+            inner.trim_whitespace();
+            if !inner
+                .source
+                .is_empty()
+            {
+                let mut width = offset_before_trim - start; // Width of what we parsed
+
+                // Check if leftover looks like continuation of identifier
+                let leftover = inner
+                    .source
+                    .chars()
+                    .next()
+                    .map(|ch| {
+                        ch.is_ascii_lowercase()
+                            && !inner
+                                .source
+                                .starts_with("in ")
+                    })
+                    .unwrap_or(false);
+
+                if leftover {
+                    // Include the space(s) between parts
+                    width = inner.offset - start;
+
+                    // Add identifier-like characters from leftover
+                    for ch in inner
+                        .source
+                        .chars()
+                    {
+                        if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' {
+                            width += ch.len_utf8();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                return Err(ParsingError::InvalidCodeBlock(start, width));
+            }
+
+            Ok(expression)
         })
     }
 
@@ -1396,7 +1444,19 @@ impl<'i> Parser<'i> {
             let invocation = self.read_invocation()?;
             Ok(Expression::Application(invocation))
         } else if is_function(content) {
-            let target = self.read_identifier()?;
+            // Extract the entire text before the opening parenthesis
+            self.trim_whitespace();
+            let content = self.source;
+            let paren = content
+                .find('(')
+                .unwrap(); // is_function() already checked
+            let text = &content[0..paren];
+
+            // Validate that the entire text is a valid identifier
+            let target = validate_identifier(text)
+                .ok_or(ParsingError::InvalidFunction(self.offset, text.len()))?;
+
+            self.advance(text.len());
             let parameters = self.read_parameters()?;
 
             let function = Function { target, parameters };
@@ -1892,12 +1952,17 @@ impl<'i> Parser<'i> {
 
     /// Parse a target like <procedure_name> or <https://example.com/proc>
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
+        let start_offset = self.offset;
         self.take_block_chars("an invocation", '<', '>', true, |inner| {
-            let content = inner.source;
+            let content = inner
+                .source
+                .trim();
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
             } else {
-                let identifier = inner.read_identifier()?;
+                let identifier = validate_identifier(content).ok_or_else(|| {
+                    ParsingError::InvalidInvocation(start_offset + 1, content.len())
+                })?;
                 Ok(Target::Local(identifier))
             }
         })

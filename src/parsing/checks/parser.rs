@@ -1587,8 +1587,8 @@ fn test_foreach_keyword_boundary() {
     input.initialize("{ foreachitem in items }");
 
     let result = input.read_code_block();
-    // Should parse as identifier, not foreach
-    assert_eq!(result, Ok(Expression::Variable(Identifier("foreachitem"))));
+    // Should fail because "foreachitem" is parsed but "in items" is leftover content
+    assert_eq!(result, Err(ParsingError::InvalidCodeBlock(2, 11)));
 }
 
 #[test]
