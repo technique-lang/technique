@@ -891,7 +891,7 @@ impl<'i> Parser<'i> {
             let before = before.trim();
             let name = validate_identifier(before).ok_or(ParsingError::InvalidIdentifier(
                 self.offset,
-                0,
+                before.len(),
                 before.to_string(),
             ))?;
 
@@ -909,7 +909,8 @@ impl<'i> Parser<'i> {
                     let param = validate_identifier(item.trim_ascii()).ok_or(
                         ParsingError::InvalidIdentifier(
                             self.offset,
-                            0,
+                            item.trim_ascii()
+                                .len(),
                             item.trim_ascii()
                                 .to_string(),
                         ),
@@ -937,12 +938,13 @@ impl<'i> Parser<'i> {
                     .as_ptr() as isize
                     - text.as_ptr() as isize;
                 let error_offset = self.offset + one.start() + first_param_pos as usize;
-                return Err(ParsingError::InvalidParameters(error_offset, 0));
+                let param_width = text.len() - first_param_pos as usize;
+                return Err(ParsingError::InvalidParameters(error_offset, param_width));
             }
 
             let name = validate_identifier(text).ok_or(ParsingError::InvalidIdentifier(
                 self.offset,
-                0,
+                text.len(),
                 text.to_string(),
             ))?;
             (name, None)
@@ -1655,7 +1657,7 @@ impl<'i> Parser<'i> {
 
         let identifier = validate_identifier(possible).ok_or(ParsingError::InvalidIdentifier(
             self.offset,
-            0,
+            possible.len(),
             possible.to_string(),
         ))?;
 
@@ -2370,9 +2372,12 @@ impl<'i> Parser<'i> {
                         .get(1)
                         .ok_or(ParsingError::Expected(inner.offset, 0, "role name after @"))?
                         .as_str();
-                    let identifier = validate_identifier(role_name).ok_or(
-                        ParsingError::InvalidIdentifier(inner.offset, 0, role_name.to_string()),
-                    )?;
+                    let identifier =
+                        validate_identifier(role_name).ok_or(ParsingError::InvalidIdentifier(
+                            inner.offset,
+                            role_name.len(),
+                            role_name.to_string(),
+                        ))?;
                     attributes.push(Attribute::Role(identifier));
                 }
                 // Check if it's a place '^'
@@ -2385,9 +2390,12 @@ impl<'i> Parser<'i> {
                             "place name after ^",
                         ))?
                         .as_str();
-                    let identifier = validate_identifier(place_name).ok_or(
-                        ParsingError::InvalidIdentifier(inner.offset, 0, place_name.to_string()),
-                    )?;
+                    let identifier =
+                        validate_identifier(place_name).ok_or(ParsingError::InvalidIdentifier(
+                            inner.offset,
+                            place_name.len(),
+                            place_name.to_string(),
+                        ))?;
                     attributes.push(Attribute::Place(identifier));
                 } else {
                     return Err(ParsingError::InvalidStep(inner.offset, 0));
