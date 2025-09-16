@@ -608,7 +608,7 @@ fn read_toplevel_steps() {
     // Test invalid step
     input.initialize("Not a step");
     let result = input.read_step_dependent();
-    assert_eq!(result, Err(ParsingError::InvalidStep(0)));
+    assert_eq!(result, Err(ParsingError::InvalidStep(0, 0)));
 }
 
 #[test]
@@ -1660,7 +1660,7 @@ fn splitting_by() {
     // different split character
     input.initialize("'Yes'|'No'|'Maybe'");
     let result = input.take_split_by('|', |inner| {
-        validate_response(inner.source).ok_or(ParsingError::IllegalParserState(inner.offset))
+        validate_response(inner.source).ok_or(ParsingError::IllegalParserState(inner.offset, 0))
     });
     assert_eq!(
         result,
@@ -2022,7 +2022,7 @@ fn parse_collecting_errors_basic() {
             assert!(errors.len() > 0);
             assert!(errors
                 .iter()
-                .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
+                .any(|e| matches!(e, ParsingError::InvalidHeader(_, _))));
         }
     }
 
@@ -2119,7 +2119,7 @@ fn test_redundant_error_removal_unclosed_interpolation() {
     // Should get the specific UnclosedInterpolation error, not a generic
     // one
     match result {
-        Err(ParsingError::UnclosedInterpolation(_)) => {
+        Err(ParsingError::UnclosedInterpolation(_, _)) => {
             // Good - we got the specific error
         }
         Err(other) => {

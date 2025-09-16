@@ -12,6 +12,7 @@ pub fn full_parsing_error<'i>(
 ) -> String {
     let (problem, details) = generate_error_message(error, renderer);
     let offset = error.offset();
+    let width = error.width();
 
     let i = calculate_line_number(source, offset);
     let j = calculate_column_number(source, offset);
@@ -22,18 +23,23 @@ pub fn full_parsing_error<'i>(
         .unwrap_or("?");
     let line = i + 1;
     let column = j + 1;
-    let width = 3.max(
+    let indent = 3.max(
         line.to_string()
             .len(),
     );
+
+    // Create underline string based on error width
+    let spacer = " ".repeat(j);
+    let width = if width > 0 { width } else { 1 };
+    let underline = "^".repeat(width);
 
     format!(
         r#"
 {}: {}:{}:{} {}
 
-{:width$} {}
-{:width$} {} {}
-{:width$} {} {:>column$}
+{:indent$} {}
+{:indent$} {} {}
+{:indent$} {} {}{}
 
 {}
         "#,
@@ -49,7 +55,8 @@ pub fn full_parsing_error<'i>(
         code,
         ' ',
         '|'.bright_blue(),
-        '^'.bright_red(),
+        spacer,
+        underline.bright_red(),
         details
     )
     .trim_ascii()
