@@ -1,7 +1,7 @@
 use super::*;
 use std::path::Path;
 
-/// Helper function to check if parsing produces the expected error type
+/// Helper function to check if parsing produces the expected error
 fn expect_error(content: &str, expected: ParsingError) {
     let result = parse_with_recovery(Path::new("test.tq"), content);
     match result {
@@ -10,14 +10,12 @@ fn expect_error(content: &str, expected: ParsingError) {
             content
         ),
         Err(errors) => {
-            // Check if any error matches the expected type
-            let found_expected = errors
-                .iter()
-                .any(|error| std::mem::discriminant(error) == std::mem::discriminant(&expected));
+            // Check if any error exactly matches the expected error
+            let found_expected = errors.contains(&expected);
 
             if !found_expected {
                 panic!(
-                    "Expected error type like {:?} but got: {:?} for input '{}'",
+                    "Expected error {:?} but got: {:?} for input '{}'",
                     expected, errors, content
                 );
             }
@@ -32,7 +30,7 @@ fn invalid_identifier_uppercase_start() {
 Making_Coffee : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(0, "".to_string()),
+        ParsingError::InvalidIdentifier(0, 13, "Making_Coffee".to_string()),
     );
 }
 
@@ -43,7 +41,7 @@ fn invalid_identifier_mixed_case() {
 makeCoffee : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(0, "".to_string()),
+        ParsingError::InvalidIdentifier(0, 10, "makeCoffee".to_string()),
     );
 }
 
@@ -54,7 +52,7 @@ fn invalid_identifier_with_dashes() {
 make-coffee : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(0, "".to_string()),
+        ParsingError::InvalidIdentifier(0, 11, "make-coffee".to_string()),
     );
 }
 
@@ -65,7 +63,7 @@ fn invalid_identifier_with_spaces() {
 make coffee : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidParameters(0),
+        ParsingError::InvalidParameters(5, 6),
     );
 }
 
@@ -76,7 +74,7 @@ fn invalid_signature_wrong_arrow() {
 making_coffee : Ingredients => Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidSignature(0),
+        ParsingError::InvalidSignature(28, 0),
     );
 }
 
@@ -87,7 +85,7 @@ fn invalid_genus_lowercase_forma() {
 making_coffee : ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidGenus(16),
+        ParsingError::InvalidGenus(16, 11),
     );
 }
 
@@ -98,7 +96,7 @@ fn invalid_genus_both_lowercase() {
 making_coffee : ingredients -> coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidGenus(16),
+        ParsingError::InvalidGenus(16, 11),
     );
 }
 
@@ -109,7 +107,7 @@ fn invalid_signature_missing_arrow() {
 making_coffee : Ingredients Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidSignature(16),
+        ParsingError::InvalidSignature(28, 0),
     );
 }
 
@@ -120,7 +118,7 @@ fn invalid_declaration_missing_colon() {
 making_coffee Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::Unrecognized(0),
+        ParsingError::Unrecognized(0, 0),
     );
 }
 
@@ -131,7 +129,7 @@ fn invalid_identifier_in_parameters() {
 making_coffee(BadParam) : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(14, "".to_string()),
+        ParsingError::InvalidIdentifier(0, 8, "BadParam".to_string()),
     );
 }
 
@@ -142,7 +140,7 @@ fn invalid_identifier_empty() {
  : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidDeclaration(0),
+        ParsingError::InvalidDeclaration(0, 0),
     );
 }
 
@@ -155,7 +153,7 @@ making_coffee :
     A. First step (should be lowercase 'a.')
             "#
         .trim_ascii(),
-        ParsingError::InvalidStep(21),
+        ParsingError::InvalidStep(21, 0),
     );
 }
 
@@ -169,7 +167,7 @@ making_coffee :
         "Yes" | "No"
             "#
         .trim_ascii(),
-        ParsingError::InvalidResponse(52),
+        ParsingError::InvalidResponse(52, 0),
     );
 }
 
@@ -183,7 +181,7 @@ making_coffee :
        This is missing closing backticks
             "#
         .trim_ascii(),
-        ParsingError::InvalidMultiline(41),
+        ParsingError::InvalidMultiline(24, 0),
     );
 }
 
@@ -196,7 +194,7 @@ making_coffee :
     1. Do something { exec("command"
             "#
         .trim_ascii(),
-        ParsingError::ExpectedMatchingChar(38, "a code block", '{', '}'),
+        ParsingError::ExpectedMatchingChar(37, 0, "a code block", '{', '}'),
     );
 }
 
@@ -209,7 +207,7 @@ making_coffee :
     i. Wrong case section
             "#
         .trim_ascii(),
-        ParsingError::InvalidStep(21),
+        ParsingError::InvalidStep(21, 0),
     );
 }
 
@@ -222,7 +220,7 @@ making_coffee :
     1. Do <something_without_closing
             "#
         .trim_ascii(),
-        ParsingError::ExpectedMatchingChar(27, "an invocation", '<', '>'),
+        ParsingError::ExpectedMatchingChar(27, 0, "an invocation", '<', '>'),
     );
 }
 
@@ -235,7 +233,33 @@ making_coffee :
     1. Do something { exec("command" }
             "#
         .trim_ascii(),
-        ParsingError::ExpectedMatchingChar(43, "a function call", '(', ')'),
+        ParsingError::ExpectedMatchingChar(43, 0, "parameters for a function", '(', ')'),
+    );
+}
+
+#[test]
+fn invalid_function_with_space_in_name() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { re peat() }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidFunction(39, 7),
+    );
+}
+
+#[test]
+fn invalid_function_with_space_and_invocation() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { re peat <thing>() }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidFunction(39, 15),
     );
 }
 
@@ -248,7 +272,7 @@ making_coffee :
     1. { repeat <making_coffee }
             "#
         .trim_ascii(),
-        ParsingError::ExpectedMatchingChar(29, "an invocation", '<', '>'),
+        ParsingError::ExpectedMatchingChar(33, 0, "an invocation", '<', '>'),
     );
 }
 
@@ -262,6 +286,19 @@ making_coffee :
         A. This should be lowercase
             "#
         .trim_ascii(),
-        ParsingError::InvalidSubstep(37),
+        ParsingError::InvalidSubstep(43, 0),
+    );
+}
+
+#[test]
+fn invalid_code_block_with_leftover_content() {
+    expect_error(
+        r#"
+robot :
+
+Your plastic pal who's fun to be with! { re peat <jingle> }
+        "#
+        .trim_ascii(),
+        ParsingError::InvalidCodeBlock(50, 7),
     );
 }

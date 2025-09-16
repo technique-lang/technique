@@ -623,7 +623,7 @@ impl<'i> Formatter<'i> {
     }
 
     // This is a helper for rendering a single descriptives in error messages.
-    // The real method is append_decriptives() below; this method simply
+    // The real method is append_descriptives() below; this method simply
     // creates a single element slice that can be passed to it.
     fn append_descriptive(&mut self, descriptive: &'i Descriptive) {
         use std::slice;

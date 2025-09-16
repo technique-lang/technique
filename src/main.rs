@@ -12,6 +12,7 @@ use technique::formatting::{self};
 
 use technique::parsing;
 
+mod editor;
 mod problem;
 mod rendering;
 
@@ -75,7 +76,7 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to type-check."),
+                        .help("The file containing the code for the Technique you want to parse and type check, or - to read from standard input."),
                 ),
         )
         .subcommand(
@@ -100,7 +101,7 @@ fn main() {
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to format."),
+                        .help("The file containing the code for the Technique you want to format, or - to read from standard input."),
                 ),
         )
         .subcommand(
@@ -124,6 +125,14 @@ fn main() {
                         .required(true)
                         .help("The file containing the code for the Technique you want to print."),
                 ),
+        )
+        .subcommand(
+            Command::new("language")
+                .about("Language Server Protocol integration for editors and IDEs.")
+                .long_about("Run a Language Server Protocol (LSP) service \
+                   for Technique documents. This accepts commands and code \
+                   input via stdin and returns compilation errors and other \
+                   diagnostics.")
         )
         .get_matches();
 
@@ -314,6 +323,11 @@ fn main() {
             }
 
             rendering::via_typst(&filename, &result);
+        }
+        Some(("language", _)) => {
+            debug!("Starting Language Server");
+
+            editor::run_language_server();
         }
         Some(_) => {
             println!("No valid subcommand was used")

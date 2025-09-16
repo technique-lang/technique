@@ -1,5 +1,6 @@
 //! parser for the Technique language
 
+use std::io::Read;
 use std::path::Path;
 use tracing::debug;
 
@@ -15,6 +16,21 @@ pub use parser::{parse_with_recovery, Parser, ParsingError};
 /// main function so that the Technique object created by parse() below can
 /// have the same lifetime.
 pub fn load(filename: &Path) -> Result<String, LoadingError<'_>> {
+    if filename.to_str() == Some("-") {
+        let mut buffer = String::new();
+        match std::io::stdin().read_to_string(&mut buffer) {
+            Ok(_) => return Ok(buffer),
+            Err(error) => {
+                debug!(?error);
+                return Err(LoadingError {
+                    problem: "Failed reading from stdin".to_string(),
+                    details: error.to_string(),
+                    filename,
+                });
+            }
+        }
+    }
+
     match std::fs::read_to_string(filename) {
         Ok(content) => Ok(content),
         Err(error) => {
