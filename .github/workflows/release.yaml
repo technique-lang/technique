@@ -58,11 +58,8 @@ jobs:
                         ;;
                   esac
 
-                  # Rename the file using the full tag name
-                  TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}"
-
-                  mv target/release/technique "${TARGET}"
-
+                  TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
+                  gzip -c target/release/technique > ${TARGET}
                   echo "binary=${TARGET}" >> $GITHUB_OUTPUT
 
             - name: Upload binary to Release
