@@ -31,8 +31,42 @@ jobs:
               run: |
                   cargo build --release
 
+            - name: Prepare binary
+              id: prepare
+              run: |
+                  case "${{ runner.os }}" in
+                      Linux)
+                        OS="linux"
+                        ;;
+                      Windows)
+                        OS="windows"
+                        ;;
+                      macOS)
+                        OS="macos"
+                        ;;
+                      *)
+                        OS="${{ runner.os }}"
+                        ;;
+                  esac
+
+                  case "${{ runner.arch }}" in
+                      X64)
+                        ARCH="x86_64"
+                        ;;
+                      *)
+                        ARCH="${{ runner.arch }}"
+                        ;;
+                  esac
+
+                  # Rename the file using the full tag name
+                  TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}"
+
+                  mv target/release/technique "${TARGET}"
+
+                  echo "binary=${TARGET}" >> $GITHUB_OUTPUT
+
             - name: Upload binary to Release
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ github.ref_name }}
-                  files: target/release/technique
+                  files: ${{ steps.prepare.outputs.binary }}
