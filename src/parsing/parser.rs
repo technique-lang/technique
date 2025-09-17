@@ -1452,9 +1452,22 @@ impl<'i> Parser<'i> {
                 .unwrap(); // is_function() already checked
             let text = &content[0..paren];
 
-            // Validate that the entire text is a valid identifier
-            let target = validate_identifier(text)
-                .ok_or(ParsingError::InvalidFunction(self.offset, text.len()))?;
+            let target = validate_identifier(text);
+
+            if target.is_none() {
+                if text.contains(' ') || text.contains('<') || text.contains('>') {
+                    let width = if let Some(tilde_pos) = content.find('~') {
+                        tilde_pos.min(content.len())
+                    } else {
+                        content.len()
+                    };
+                    return Err(ParsingError::InvalidCodeBlock(self.offset, width));
+                } else {
+                    return Err(ParsingError::InvalidFunction(self.offset, text.len()));
+                }
+            }
+
+            let target = target.unwrap();
 
             self.advance(text.len());
             let parameters = self.read_parameters()?;
@@ -1558,7 +1571,25 @@ impl<'i> Parser<'i> {
 
     fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         // Parse the expression before the ~ operator
-        let expression = self.take_until(&['~'], |inner| inner.read_expression())?;
+        let expression = self.take_until(&['~'], |inner| {
+            let start_pos = inner.offset;
+            let expression = inner.read_expression()?;
+
+            // Check for leftover content, erroring if present
+            inner.trim_whitespace();
+            if inner
+                .source
+                .is_empty()
+            {
+                Ok(expression)
+            } else {
+                let width = inner.offset - start_pos
+                    + inner
+                        .source
+                        .len();
+                Err(ParsingError::InvalidCodeBlock(start_pos, width))
+            }
+        })?;
 
         // Consume the ~ operator
         self.advance(1); // consume '~'
