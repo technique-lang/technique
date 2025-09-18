@@ -6,7 +6,14 @@ on:
 jobs:
     build:
         name: Build and Upload
-        runs-on: ubuntu-latest
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                    - os: macos-latest
+                    - os: windows-latest
+
         steps:
             - name: Clone project
               uses: actions/checkout@v3
@@ -31,39 +38,68 @@ jobs:
               run: |
                   cargo build --release
 
-            - name: Prepare binary
+            - name: Prepare target name
               id: prepare
               run: |
                   case "${{ runner.os }}" in
                       Linux)
                         OS="linux"
                         ;;
+                      macOS)
+                        OS="darwin"
+                        ;;
                       Windows)
                         OS="windows"
-                        ;;
-                      macOS)
-                        OS="macos"
-                        ;;
-                      *)
-                        OS="${{ runner.os }}"
                         ;;
                   esac
 
                   case "${{ runner.arch }}" in
+                      ARM)
+                        ARCH="arm"
+                        ;;
+                      ARM64)
+                        ARCH="aarch64"
+                        ;;
                       X64)
                         ARCH="x86_64"
+                        ;;
+                      X86)
+                        ARCH="i686"
                         ;;
                       *)
                         ARCH="${{ runner.arch }}"
                         ;;
                   esac
 
-                  TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
-                  gzip -c target/release/technique > ${TARGET}
-                  echo "binary=${TARGET}" >> $GITHUB_OUTPUT
+                  case "${{ runner.os }}" in
+                      Linux)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
+                        ;;
+                      macOS)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
+                        ;;
+                      Windows)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.zip"
+                        ;;
+                  esac
+
+                  echo "target=${TARGET}" >> $GITHUB_OUTPUT
+
+            - name: Compress binary (Unix)
+              id: compress
+              if: runner.os != 'Windows'
+              run: |
+                  gzip -c target/release/technique > ${{ steps.prepare.outputs.target }}
+
+            - name: Compress binary (Windows)
+              id: compress
+              if: runner.os == 'Windows'
+              shell: pwsh
+              run: |
+                  Compress-Archive -Path target/release/technique.exe -DestinationPath ${{ steps.prepare.outputs.target }}
 
             - name: Upload binary to Release
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ github.ref_name }}
-                  files: ${{ steps.prepare.outputs.binary }}
+                  files: ${{ steps.prepare.outputs.target }}
