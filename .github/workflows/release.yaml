@@ -86,13 +86,11 @@ jobs:
                   echo "target=${TARGET}" >> $GITHUB_OUTPUT
 
             - name: Compress binary (Unix)
-              id: compress
               if: runner.os != 'Windows'
               run: |
                   gzip -c target/release/technique > ${{ steps.prepare.outputs.target }}
 
             - name: Compress binary (Windows)
-              id: compress
               if: runner.os == 'Windows'
               shell: pwsh
               run: |
