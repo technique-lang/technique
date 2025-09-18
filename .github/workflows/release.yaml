@@ -1,0 +1,105 @@
+name: Release
+on:
+    release:
+        types: [published]
+
+jobs:
+    build:
+        name: Build and Upload
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                    - os: macos-latest
+                    - os: windows-latest
+
+        steps:
+            - name: Clone project
+              uses: actions/checkout@v3
+
+            - name: Validate toolchain
+              shell: bash
+              run: |
+                  echo "RUST_VERSION=$(rustc --version | cut -d ' ' -f 2)" >> ${GITHUB_ENV}
+
+            - uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/bin/
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                      target/release
+                  key: cargo-${{ runner.os }}-${{ runner.arch}}-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      cargo-${{ runner.os }}-${{ runner.arch}}-${{ env.RUST_VERSION }}-
+
+            - name: Build binary
+              run: |
+                  cargo build --release
+
+            - name: Prepare target name
+              id: prepare
+              shell: bash
+              run: |
+                  case "${{ runner.os }}" in
+                      Linux)
+                        OS="linux"
+                        ;;
+                      macOS)
+                        OS="darwin"
+                        ;;
+                      Windows)
+                        OS="windows"
+                        ;;
+                  esac
+
+                  case "${{ runner.arch }}" in
+                      ARM)
+                        ARCH="arm"
+                        ;;
+                      ARM64)
+                        ARCH="aarch64"
+                        ;;
+                      X64)
+                        ARCH="x86_64"
+                        ;;
+                      X86)
+                        ARCH="i686"
+                        ;;
+                      *)
+                        ARCH="${{ runner.arch }}"
+                        ;;
+                  esac
+
+                  case "${{ runner.os }}" in
+                      Linux)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
+                        ;;
+                      macOS)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.gz"
+                        ;;
+                      Windows)
+                        TARGET="technique-${{ github.ref_name }}-${OS}-${ARCH}.zip"
+                        ;;
+                  esac
+
+                  echo "target=${TARGET}" >> $GITHUB_OUTPUT
+
+            - name: Compress binary (Unix)
+              if: runner.os != 'Windows'
+              run: |
+                  gzip -c target/release/technique > ${{ steps.prepare.outputs.target }}
+
+            - name: Compress binary (Windows)
+              if: runner.os == 'Windows'
+              shell: pwsh
+              run: |
+                  Compress-Archive -Path target/release/technique.exe -DestinationPath ${{ steps.prepare.outputs.target }}
+
+            - name: Upload binary to Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  files: ${{ steps.prepare.outputs.target }}
