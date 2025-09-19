@@ -2822,6 +2822,15 @@ fn potential_procedure_declaration(content: &str) -> bool {
                     .is_empty();
             }
 
+            // If it's a step patterns then it's not a procedure declaration!
+            if is_step_dependent(content)
+                || is_step_parallel(content)
+                || is_substep_dependent(content)
+                || is_substep_parallel(content)
+            {
+                return false;
+            }
+
             // Has parentheses -> likely trying to be a procedure with parameters
             if before.contains('(') {
                 return true;
