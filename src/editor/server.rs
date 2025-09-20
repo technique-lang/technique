@@ -487,6 +487,9 @@ impl TechniqueLanguageServer {
                 ParsingError::InvalidSubstep(_, _) => {
                     ("Invalid substep".to_string(), DiagnosticSeverity::ERROR)
                 }
+                ParsingError::InvalidAttribute(_, _) => {
+                    ("Invalid attribute assignment".to_string(), DiagnosticSeverity::ERROR)
+                }
                 ParsingError::InvalidResponse(_, _) => {
                     ("Invalid response".to_string(), DiagnosticSeverity::ERROR)
                 }

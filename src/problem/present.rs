@@ -93,3 +93,9 @@ impl Present for Procedure<'_> {
         formatter::render_procedure_declaration(self, renderer)
     }
 }
+
+impl Present for Scope<'_> {
+    fn present(&self, renderer: &dyn Render) -> String {
+        formatter::render_scope(self, renderer)
+    }
+}
