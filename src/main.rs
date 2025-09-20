@@ -129,6 +129,7 @@ fn main() {
         .subcommand(
             Command::new("language")
                 .about("Language Server Protocol integration for editors and IDEs.")
+                .hide(true)
                 .long_about("Run a Language Server Protocol (LSP) service \
                    for Technique documents. This accepts commands and code \
                    input via stdin and returns compilation errors and other \

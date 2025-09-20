@@ -48,6 +48,7 @@ pub enum ParsingError {
     InvalidCodeBlock(usize, usize),
     InvalidStep(usize, usize),
     InvalidSubstep(usize, usize),
+    InvalidAttribute(usize, usize),
     InvalidResponse(usize, usize),
     InvalidMultiline(usize, usize),
     InvalidForeach(usize, usize),
@@ -87,6 +88,7 @@ impl ParsingError {
             ParsingError::InvalidMultiline(offset, _) => *offset,
             ParsingError::InvalidStep(offset, _) => *offset,
             ParsingError::InvalidSubstep(offset, _) => *offset,
+            ParsingError::InvalidAttribute(offset, _) => *offset,
             ParsingError::InvalidForeach(offset, _) => *offset,
             ParsingError::InvalidResponse(offset, _) => *offset,
             ParsingError::InvalidIntegral(offset, _) => *offset,
@@ -123,6 +125,7 @@ impl ParsingError {
             ParsingError::InvalidMultiline(_, width) => *width,
             ParsingError::InvalidStep(_, width) => *width,
             ParsingError::InvalidSubstep(_, width) => *width,
+            ParsingError::InvalidAttribute(_, width) => *width,
             ParsingError::InvalidForeach(_, width) => *width,
             ParsingError::InvalidResponse(_, width) => *width,
             ParsingError::InvalidIntegral(_, width) => *width,
@@ -1072,14 +1075,20 @@ impl<'i> Parser<'i> {
                         parser.skip_to_next_line();
                     }
                 }
-            } else if is_attribute_assignment(content) {
-                match parser.read_attribute_scope() {
-                    Ok(attribute_block) => elements.push(Element::Steps(vec![attribute_block])),
-                    Err(error) => {
-                        self.problems
-                            .push(error);
-                        parser.skip_to_next_line();
+            } else if is_attribute_pattern(content) {
+                if is_attribute_assignment(content) {
+                    match parser.read_attribute_scope() {
+                        Ok(attribute_block) => elements.push(Element::Steps(vec![attribute_block])),
+                        Err(error) => {
+                            self.problems
+                                .push(error);
+                            parser.skip_to_next_line();
+                        }
                     }
+                } else {
+                    self.problems
+                        .push(ParsingError::InvalidAttribute(parser.offset, content.len()));
+                    parser.skip_to_next_line();
                 }
             } else if is_step(content) {
                 let mut steps = vec![];
@@ -1124,14 +1133,14 @@ impl<'i> Parser<'i> {
                             && !is_procedure_title(line)
                             && !is_code_block(line)
                             && !malformed_step_pattern(line)
-                            && !is_attribute_assignment(line)
+                            && !is_attribute_pattern(line)
                     },
                     |line| {
                         is_step(line)
                             || is_procedure_title(line)
                             || is_code_block(line)
                             || malformed_step_pattern(line)
-                            || is_attribute_assignment(line)
+                            || is_attribute_pattern(line)
                     },
                     |inner| {
                         let content = inner.source;
@@ -1452,9 +1461,22 @@ impl<'i> Parser<'i> {
                 .unwrap(); // is_function() already checked
             let text = &content[0..paren];
 
-            // Validate that the entire text is a valid identifier
-            let target = validate_identifier(text)
-                .ok_or(ParsingError::InvalidFunction(self.offset, text.len()))?;
+            let target = validate_identifier(text);
+
+            if target.is_none() {
+                if text.contains(' ') || text.contains('<') || text.contains('>') {
+                    let width = if let Some(tilde_pos) = content.find('~') {
+                        tilde_pos.min(content.len())
+                    } else {
+                        content.len()
+                    };
+                    return Err(ParsingError::InvalidCodeBlock(self.offset, width));
+                } else {
+                    return Err(ParsingError::InvalidFunction(self.offset, text.len()));
+                }
+            }
+
+            let target = target.unwrap();
 
             self.advance(text.len());
             let parameters = self.read_parameters()?;
@@ -1558,7 +1580,25 @@ impl<'i> Parser<'i> {
 
     fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         // Parse the expression before the ~ operator
-        let expression = self.take_until(&['~'], |inner| inner.read_expression())?;
+        let expression = self.take_until(&['~'], |inner| {
+            let start_pos = inner.offset;
+            let expression = inner.read_expression()?;
+
+            // Check for leftover content, erroring if present
+            inner.trim_whitespace();
+            if inner
+                .source
+                .is_empty()
+            {
+                Ok(expression)
+            } else {
+                let width = inner.offset - start_pos
+                    + inner
+                        .source
+                        .len();
+                Err(ParsingError::InvalidCodeBlock(start_pos, width))
+            }
+        })?;
 
         // Consume the ~ operator
         self.advance(1); // consume '~'
@@ -2130,7 +2170,7 @@ impl<'i> Parser<'i> {
                     || is_substep_dependent(line)
                     || is_substep_parallel(line)
                     || is_subsubstep_dependent(line)
-                    || is_attribute_assignment(line)
+                    || is_attribute_pattern(line)
                     || is_enum_response(line)
                     || malformed_step_pattern(line)
                     || malformed_response_pattern(line)
@@ -2463,7 +2503,13 @@ impl<'i> Parser<'i> {
                         ))?;
                     attributes.push(Attribute::Place(identifier));
                 } else {
-                    return Err(ParsingError::InvalidStep(inner.offset, 0));
+                    // Check if this looks like a malformed attribute (starts with @ or ^)
+                    if is_attribute_pattern(trimmed) {
+                        // This might be multiple attributes without proper + joiners
+                        return Err(ParsingError::InvalidAttribute(inner.offset, line.len()));
+                    } else {
+                        return Err(ParsingError::InvalidStep(inner.offset, 0));
+                    }
                 }
             }
 
@@ -2484,9 +2530,13 @@ impl<'i> Parser<'i> {
 
             let content = self.source;
 
-            if is_attribute_assignment(content) {
-                let block = self.read_attribute_scope()?;
-                scopes.push(block);
+            if is_attribute_pattern(content) {
+                if is_attribute_assignment(content) {
+                    let block = self.read_attribute_scope()?;
+                    scopes.push(block);
+                } else {
+                    return Err(ParsingError::InvalidAttribute(self.offset, content.len()));
+                }
             } else if is_substep_dependent(content) {
                 let block = self.read_substep_dependent()?;
                 scopes.push(block);
@@ -2791,6 +2841,15 @@ fn potential_procedure_declaration(content: &str) -> bool {
                     .is_empty();
             }
 
+            // If it's a step patterns then it's not a procedure declaration!
+            if is_step_dependent(content)
+                || is_step_parallel(content)
+                || is_substep_dependent(content)
+                || is_substep_parallel(content)
+            {
+                return false;
+            }
+
             // Has parentheses -> likely trying to be a procedure with parameters
             if before.contains('(') {
                 return true;
@@ -2995,6 +3054,12 @@ fn is_attribute_assignment(input: &str) -> bool {
     // Also matches the special @* "reset to all" role
     let re = regex!(r"^\s*(@\*|[@^][a-z][a-z0-9_]*)(\s*\+\s*[@^][a-z][a-z0-9_]*)*");
     re.is_match(input)
+}
+
+/// Detect the beginning of an attribute (role or place) assignment
+fn is_attribute_pattern(input: &str) -> bool {
+    let trimmed = input.trim_ascii_start();
+    trimmed.starts_with('@') || trimmed.starts_with('^')
 }
 
 // This is a rather monsterous test battery, so we move it into a separate

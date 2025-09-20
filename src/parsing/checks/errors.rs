@@ -246,7 +246,7 @@ making_coffee :
     1. Do something { re peat() }
             "#
         .trim_ascii(),
-        ParsingError::InvalidFunction(39, 7),
+        ParsingError::InvalidCodeBlock(39, 10),
     );
 }
 
@@ -259,7 +259,7 @@ making_coffee :
     1. Do something { re peat <thing>() }
             "#
         .trim_ascii(),
-        ParsingError::InvalidFunction(39, 15),
+        ParsingError::InvalidCodeBlock(39, 18),
     );
 }
 

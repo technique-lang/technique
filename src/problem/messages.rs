@@ -630,6 +630,45 @@ parallel steps, but again this is not compulsory.
             .trim_ascii()
             .to_string(),
         ),
+        ParsingError::InvalidAttribute(_, _) => {
+            let examples = vec![
+                Scope::AttributeBlock {
+                    attributes: vec![
+                        Attribute::Role(Identifier("president_of_the_galaxy")),
+                        Attribute::Role(Identifier("femme_fatale")),
+                    ],
+                    subscopes: vec![],
+                },
+                Scope::AttributeBlock {
+                    attributes: vec![
+                        Attribute::Place(Identifier("milliways")),
+                        Attribute::Role(Identifier("waiter")),
+                        Attribute::Role(Identifier("dish_of_the_day")),
+                    ],
+                    subscopes: vec![],
+                },
+            ];
+
+            (
+                "Invalid attribute assignment".to_string(),
+                format!(
+                    r#"
+Multiple attributes (be they role or place assignments) must be joined using
+the '+' operator, for example:
+
+    {}
+    {}
+
+Note that an attribute creates a scope, so sub-steps and code blocks can be
+nested underneath a role or place assignment.
+                "#,
+                    examples[0].present(renderer),
+                    examples[1].present(renderer)
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         ParsingError::InvalidForeach(_, _) => {
             let examples = vec![
                 Expression::Foreach(

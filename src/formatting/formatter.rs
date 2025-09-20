@@ -165,6 +165,20 @@ pub fn render_procedure_declaration<'i>(procedure: &'i Procedure, renderer: &dyn
     render_fragments(&sub.fragments, renderer)
 }
 
+pub fn render_scope<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    match scope {
+        Scope::AttributeBlock { attributes, .. } => {
+            // Render attributes without indentation for error messages
+            sub.append_attributes(attributes);
+        }
+        _ => {
+            panic!("Do not use for anything other than rendering Attribute line examples");
+        }
+    }
+    render_fragments(&sub.fragments, renderer)
+}
+
 /// Helper function to convert fragments to a styled string using a renderer
 fn render_fragments<'i>(fragments: &[(Syntax, Cow<'i, str>)], renderer: &dyn Render) -> String {
     let mut result = String::new();
@@ -806,6 +820,7 @@ impl<'i> Formatter<'i> {
                 attributes,
                 subscopes,
             } => {
+                self.indent();
                 self.append_attributes(attributes);
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
@@ -906,7 +921,6 @@ impl<'i> Formatter<'i> {
     }
 
     fn append_attributes(&mut self, attributes: &'i Vec<Attribute>) {
-        self.indent();
         for (i, attribute) in attributes
             .iter()
             .enumerate()
