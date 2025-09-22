@@ -6,7 +6,7 @@ use lsp_types::{
     Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
     InitializeParams, InitializeResult, InitializedParams, Position, PublishDiagnosticsParams,
-    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
 };
 use serde_json::{from_value, to_value, Value};
 use technique::formatting::Identity;
@@ -19,7 +19,7 @@ use crate::problem::{calculate_column_number, calculate_line_number};
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
-    documents: HashMap<Url, String>,
+    documents: HashMap<Uri, String>,
 }
 
 impl TechniqueLanguageServer {
@@ -200,7 +200,7 @@ impl TechniqueLanguageServer {
             .text_document
             .text;
 
-        debug!("Document opened: {}", uri);
+        debug!("Document opened: {:?}", uri);
 
         self.documents
             .insert(uri.clone(), content.clone());
@@ -228,7 +228,7 @@ impl TechniqueLanguageServer {
         {
             let content = change.text;
 
-            debug!("Document changed: {}", uri);
+            debug!("Document changed: {:?}", uri);
 
             self.documents
                 .insert(uri.clone(), content.clone());
@@ -249,7 +249,7 @@ impl TechniqueLanguageServer {
         let uri = params
             .text_document
             .uri;
-        debug!("Document saved: {}", uri);
+        debug!("Document saved: {:?}", uri);
 
         let content = self
             .documents
@@ -273,7 +273,7 @@ impl TechniqueLanguageServer {
         let uri = params
             .text_document
             .uri;
-        debug!("Document closed: {}", uri);
+        debug!("Document closed: {:?}", uri);
 
         self.documents
             .remove(&uri);
@@ -291,7 +291,7 @@ impl TechniqueLanguageServer {
             .text_document
             .uri;
 
-        debug!("Format request: {}", uri);
+        debug!("Format request: {:?}", uri);
 
         // Get content from our documents map
         let content = match self
@@ -304,10 +304,10 @@ impl TechniqueLanguageServer {
             }
         };
 
-        let path = match uri.to_file_path() {
-            Ok(buf) => buf,
-            Err(_) => Path::new("-").to_path_buf(),
-        };
+        let path = Path::new(
+            uri.path()
+                .as_str(),
+        );
 
         let document = match parsing::parse_with_recovery(&path, &content) {
             Ok(document) => document,
@@ -339,16 +339,17 @@ impl TechniqueLanguageServer {
     /// Parse document and convert errors to diagnostics
     fn parse_and_report<E>(
         &self,
-        uri: Url,
+        uri: Uri,
         content: String,
         sender: &dyn Fn(Message) -> Result<(), E>,
     ) -> Result<(), Box<dyn std::error::Error + Sync + Send>>
     where
         E: std::error::Error + Send + Sync + 'static,
     {
-        let path = uri
-            .to_file_path()
-            .unwrap_or_else(|_| Path::new("-").to_path_buf());
+        let path = Path::new(
+            uri.path()
+                .as_str(),
+        );
 
         match parsing::parse_with_recovery(&path, &content) {
             Ok(_document) => {
@@ -364,7 +365,7 @@ impl TechniqueLanguageServer {
 
     fn publish_diagnostics<E>(
         &self,
-        uri: Url,
+        uri: Uri,
         diagnostics: Vec<Diagnostic>,
         sender: &dyn Fn(Message) -> Result<(), E>,
     ) -> Result<(), Box<dyn std::error::Error + Sync + Send>>
@@ -388,7 +389,7 @@ impl TechniqueLanguageServer {
 
     fn convert_parsing_errors(
         &self,
-        _uri: &Url,
+        _uri: &Uri,
         content: &str,
         errors: Vec<ParsingError>,
     ) -> Vec<Diagnostic> {
@@ -487,9 +488,10 @@ impl TechniqueLanguageServer {
                 ParsingError::InvalidSubstep(_, _) => {
                     ("Invalid substep".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidAttribute(_, _) => {
-                    ("Invalid attribute assignment".to_string(), DiagnosticSeverity::ERROR)
-                }
+                ParsingError::InvalidAttribute(_, _) => (
+                    "Invalid attribute assignment".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidResponse(_, _) => {
                     ("Invalid response".to_string(), DiagnosticSeverity::ERROR)
                 }
