@@ -16,6 +16,22 @@ programming code, but it is nevertheless a formally defined specification for
 writing procedures and clear rules for executing them and recording their
 outcomes.
 
+## Usage
+
+The _technique_ program has three subcommands:
+
+- _check_ \
+  Validate the syntax, structure, and types in a Technique document.
+
+- _format_ \
+  Format the code in the given Technique document, embellished with ANSI
+  syntax highlighting if run in a terminal.
+
+- _render_ \
+  Render the Technique document into a printable PDF. This use the Typst
+  typestting language and so requires the _typst_ compiler be installed and on
+  `PATH`.
+
 ## Contents
 
 This repository contains the _technique_ binary, which is the compiler for
