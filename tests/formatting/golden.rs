@@ -55,11 +55,7 @@ fn show_diff(original: &str, formatted: &str, file_path: &Path) {
     }
 }
 
-#[test]
-fn ensure_identical_output() {
-    // Read all .tq files from examples/prototype/
-    let dir = Path::new("tests/golden/");
-
+fn check_directory(dir: &Path) {
     // Ensure the directory exists
     assert!(dir.exists(), "examples directory missing");
 
@@ -120,4 +116,10 @@ fn ensure_identical_output() {
 
         panic!("All examples must format unchanged");
     }
+}
+
+#[test]
+fn ensure_identical_output() {
+    check_directory(Path::new("tests/golden/"));
+    check_directory(Path::new("examples/prototype/"));
 }
