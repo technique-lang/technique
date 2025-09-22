@@ -21,3 +21,14 @@ Technique v1, along with a code formatter, and machinery to render procedures
 as PDFs. Syntax highlighting is available for Vim, the Zed Editor, Sublime
 Text, and the Typst typesetter. There's a language server, and an extension
 for Zed, with VS Code and NeoVim on the way.
+
+- Syntax checking, code formatter, renderer (this repository) \
+  <https://github.com/technique-lang/technique>
+- Formal specification \
+  <https://github.com/technique-lang/specification>
+- Zed Editor support  \
+  <https://github.com/technique-lang/extension.zed>
+- Tree Sitter grammar (for syntax highlighting) \
+  <https://github.com/technique-lang/tree-sitter-technique>
+- Typst and Vim support  \
+  <https://github.com/technique-lang/highlighting>
