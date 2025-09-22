@@ -363,14 +363,7 @@ impl<'i> Formatter<'i> {
         sub.append_application(invocation);
         sub.flush_current();
 
-        // Combine all fragments into a single atomic fragment to prevent wrapping
-        let mut combined = String::new();
-        for (_syntax, content) in &sub.fragments {
-            combined.push_str(&content);
-        }
-
-        // Return as a single fragment
-        vec![(Syntax::Invocation, Cow::Owned(combined))]
+        sub.fragments
     }
 
     fn render_binding(
@@ -403,13 +396,7 @@ impl<'i> Formatter<'i> {
         sub.append_variables(variables);
         sub.flush_current();
 
-        // Combine all fragments into a single atomic fragment to prevent wrapping
-        let mut combined = String::new();
-        for (_syntax, content) in &sub.fragments {
-            combined.push_str(&content);
-        }
-
-        vec![(Syntax::Structure, Cow::Owned(combined))]
+        sub.fragments
     }
 
     pub fn append_char(&mut self, c: char) {
