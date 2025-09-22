@@ -1,0 +1,15 @@
+local_network :
+
+# Local Network Connectivity
+
+Establish that the local network environment is functioning.
+
+    1.  Check physical network interface { exec(
+        ```bash
+            ip addr
+        ```
+        ) } and look for eth0 being marked UP.
+    2.  Check local network connectivity
+    3.  Check local DHCP is working
+    4.  Check local DNS responding
+    5.  Verify reachability of local network gateway

@@ -1,0 +1,199 @@
+% technique v1
+! Proprietary; © 2002-2019 Andrew Cowie
+
+christmas_dinner : Context -> Dinner
+
+# Christmas Dinner
+
+Recipe for a classic Christmas dinner. It is probably worth noting that this
+can be followed on most any high holiday. The only things you really need are
+patience, guests, and a turkey.
+
+    1.  Assemble ingredients <assemble_ingredients> ~ ingredients
+    2.  Prepare the meal <prepare_meal>(ingredients) ~ meal
+    3.  Serve dinner <serve_dinner>(meal) ~ dishes
+    4.  Clean up after <cleanup_after>(dishes)
+
+assemble_ingredients : () -> Ingredients
+
+# Shopping List
+
+Assembling all necessary ingredients from various sources.
+
+    @chef
+        1.  Get turkey from butcher { <turkey> ~ t }
+        2.  Get stuffing ingredients { <stuffing> ~ s }
+        3.  Get breadsauce ingredients { <breadsauce> ~ b }
+
+turkey : () -> Ingredients
+
+# Turkey
+
+For some reason people seem to think that they need an enormous bird. Don't
+worry even if you are expecting a large party; if you've got lots of relatives
+you can just leave out a few plates of cheese and crackers and they'll be full
+long before dinner is served.
+
+    ^butcher
+        -   Buy turkey
+            {
+                [
+                    "Turkey" = 4 ± 1 kg
+                    "Bacon" = 2 pieces
+                ]
+            }
+
+stuffing : () -> Ingredients
+
+# Stuffing
+
+Stuffing a bird actually makes it take longer to cook, but doing so adds
+aroma, flavour, and helps preserve moisture and keeps the turkey tender.
+
+    ^store
+        -   Get seasoning ingredients
+            {
+                [
+                    "Salt" = 1 teaspoon
+                    "Pepper" = 1 teaspoon
+                ]
+            }
+
+    ^grocer
+        -   Get vegetables
+            {
+                [
+                    "Carrots" = 1 each
+                    "Celery" = 0.5 stalk
+                ]
+            }
+
+    ^bakery
+        -   Get bread
+            {
+                [
+                    "Bread" = 2 slices
+                ]
+            }
+
+breadsauce : () -> Ingredients
+
+# Breadsauce
+
+This ancient recipe from Northern Yorkshire calls for ...
+
+    ^bakery
+        -   Get bread
+            {
+                [
+                    "Bread" = 4 slices
+                ]
+            }
+
+    ^store
+        -   Get spices and milk
+            {
+                [
+                    "Salt" = 1 teaspoon
+                    "Pepper" = 1 teaspoon
+                    "Cloves" = 4 teaspoons
+                    "Milk" = 100 mL
+                ]
+            }
+
+    ^grocer
+        -   Get onion
+            {
+                [
+                    "Brown Onion" = 0.5 bulb
+                ]
+            }
+
+prepare_meal(i) : Ingredients -> Meal
+
+# Prepare Meal
+
+Coordinating the preparation of all meal components.
+
+    @chef
+        1.  Roast the turkey { <roast_turkey>(i) ~ turkey }
+        2.  Roast potatoes { <roast_potatoes>(i) ~ potatoes }
+        3.  Make breadsauce { <make_breadsauce>(i) ~ sauce }
+        4.  Prepare vegetables { <prepare_vegetables>(i) ~ raw }
+        5.  Make gravy { <make_gravy>(i) ~ gravy }
+        6.  Wait for cooking { timer(3 hr) ~ t1 }
+        7.  Cook vegetables { <cook_vegetables>(raw) ~ (veggies, water) }
+        8.  Combine gravy with vegetable water { <combine>(gravy, water) ~ gravy }
+        9.  Check turkey temperature { <probe_bird_temperature>(turkey) ~ temp }
+            {
+                [
+                    "Final Temperature" = temp
+                ]
+            }
+
+roast_turkey(i) : Ingredients -> Turkey
+
+# Roast Turkey
+
+    @chef
+        1.  Set oven temperature { <oven>(180 °C) ~ temp }
+        2.  Place bacon strips onto bird
+        3.  Put bird into oven
+        4.  Set timer for roasting { timer(3 h) ~ t }
+        5.  Record temperature
+            {
+                [
+                    "Roast temperature" = temp
+                ]
+            }
+
+    @assistant
+        -   Set the table
+
+cook_vegetables(veg) : VegetablesPrepared -> VegetablesCooked, VegetableWater
+
+# Cook Vegetables
+
+    @chef
+        1.  Boil water
+        2.  Dunk greens in water
+
+combine(g, w) : Gravy, VegetableWater -> Gravy
+
+# Pour the vegetable water into the gravy
+
+    @chef
+        -   Combine gravy and vegetable water
+
+serve_dinner(m) : Meal -> DirtyDishes
+
+# Serve dinner and enjoy
+
+cleanup_after(d) : DirtyDishes -> ()
+
+# Cleanup
+
+No one likes cleaning up. As far as I can tell, the only real justification
+for having children is to help with doing the dishes on festive occasions.
+Certainly I always hated my Aunt at holidays for making me dry dishes with a
+dish towel when they would perfectly well air dry by themselves.
+
+    @*
+        1.  Turn off oven { <oven>(0 °C) }
+        2.  Put knives away { <knives_away> }
+        3.  Turn lights out { <lights_out> }
+
+oven(temp) : Temperature -> ()
+
+# Set oven temperature
+
+    @chef
+        -   Set temperature to { "oven at { temp }" }
+
+knives_away :
+
+# Put knives away
+
+    @*
+        1.  Place knives in safe place
+        2.  Start dishwasher
