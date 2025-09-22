@@ -342,13 +342,7 @@ impl<'i> Formatter<'i> {
                 sub.add_fragment_reference(Syntax::Neutral, " ");
                 sub.add_fragment_reference(Syntax::Structure, "}");
                 sub.flush_current();
-
-                let mut combined = String::new();
-                for (_syntax, content) in &sub.fragments {
-                    combined.push_str(&content);
-                }
-
-                vec![(Syntax::Structure, Cow::Owned(combined))]
+                sub.fragments
             }
         }
     }
