@@ -56,11 +56,27 @@ for Zed, with VS Code and NeoVim on the way.
 To give a sense of the flavour of the language, here are a small selection of
 Technique source files rendered to PDFs using the _technique render_ command.
 
-First, from a the recipe for a roast turkey during the holidays:
+### Systems and Operations
+
+One of the original use cases behind this work was wanting to document the
+procedures used in systems administration and network operations. This example
+shows a simple list of such tasks:
+
+<a href="tests/samples/LocalNetwork.tq">
+<img width=613 src="examples/screenshots/LocalNetwork.png">
+</a>
+
+### Recipes
+
+Preparing a meal during the holidays is also a list of tasks, but often more
+than one person needs to do things concurrently:
 
 <a href="examples/prototype/ChristmasTurkey.tq">
 <img width=608 src="examples/screenshots/ChristmasTurkey.png">
 </a>
+
+
+### Instructions
 
 This from a set of instructions guiding staff of what to do when an incident
 occurs:
@@ -68,6 +84,8 @@ occurs:
 <a href="examples/prototype/DontPanic.tq">
 <img width=593 src="examples/screenshots/DontPanic.png">
 </a>
+
+### Larger processes
 
 Finally, an example showing using Technique to describe a much larger
 procedure, in this case the entire process of doing systems engineering on a
