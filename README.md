@@ -16,30 +16,6 @@ programming code, but it is nevertheless a formally defined specification for
 writing procedures and clear rules for executing them and recording their
 outcomes.
 
-Documents written in Technique have file extension _\*.tq_.
-
-## Examples
-
-To give a sense of the flavour of the language, here are two examples.
-
-First, from a set of instructions guiding staff of what to do when an incident
-occurs:
-
-<a href="examples/prototype/DontPanic.tq">
-<img width=890 src="examples/screenshots/DontPanic.png">
-</a>
-
-Second, shows using Technique to describe a much larger procedure, in his case
-the entire process of doing systems engineering on a software project. This
-pushes the limits of what Technique is for, but nevertheless illustrates that
-it can be used for very large structures as well as very detailed ones:
-
-<a href="examples/prototype/SystemsEngineeringProcess.tq">
-<img width=900 src="examples/screenshots/SystemsEngineeringProcess.png">
-</a>
-
-Detailed examples can be found in the _examples/_ and _tests/_ directories.
-
 ## Contents
 
 This repository contains the _technique_ binary, which is the compiler for
@@ -58,3 +34,34 @@ for Zed, with VS Code and NeoVim on the way.
   <https://github.com/technique-lang/tree-sitter-technique>
 - Typst and Vim support  \
   <https://github.com/technique-lang/highlighting>
+
+## Examples
+
+To give a sense of the flavour of the language, here are a small selection of
+Technique source files rendered to PDFs using the _technique render_ command.
+
+First, from a the recipe for a roast turkey during the holidays:
+
+<a href="examples/prototype/ChristmasTurkey.tq">
+<img width=608 src="examples/screenshots/ChristmasTurkey.png">
+</a>
+
+This from a set of instructions guiding staff of what to do when an incident
+occurs:
+
+<a href="examples/prototype/DontPanic.tq">
+<img width=593 src="examples/screenshots/DontPanic.png">
+</a>
+
+Finally, an example showing using Technique to describe a much larger
+procedure, in this case the entire process of doing systems engineering on a
+software project. This pushes the limits of what the language is for, but
+nevertheless illustrates that Technqiue can be used for very large structures
+as well as very detailed ones:
+
+<a href="examples/prototype/SystemsEngineeringProcess.tq">
+<img width=600 src="examples/screenshots/SystemsEngineeringProcess.png">
+</a>
+
+Detailed examples can be found in the _examples/_ and _tests/_ directories.
+Documents written in Technique have file extension _\*.tq_.
