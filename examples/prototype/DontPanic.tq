@@ -1,0 +1,123 @@
+% technique v1
+! CC BY 4.0; © 2020 Athae Eredh Siniath, and Others
+
+emergency_procedure : Incident -> Calm
+
+# Instructions
+
+Don't Panic!
+
+In the event of an incident, clear thinking is key. Challenge yourself to form
+more than one hypothesis, and generate multiple options. The first solution
+you think of is rarely the best one.
+
+As you consider options available, think of our values. Never forget the needs
+of our customers and the trust they have placed in us.
+
+    1.  <ensure_safety>
+    2.  <communicate>
+    3.  { repeat <incident_action_cycle> }
+
+ensure_safety : Available -> Ready
+
+# Safety First
+
+Ensure your physical environment is free from danger, take measures to
+maximize digital security, and establish reliable connectivity.
+
+    -   Ensure physical and digital safety
+    -   Establish connectivity
+
+communicate : Ready -> Leader
+
+# Communicate
+
+Escalate quickly. Do not assume your manager or your team lead is aware of
+what is happening.
+
+Write down everything, with timestamps.
+
+    -   Tell colleagues you are taking charge
+
+incident_action_cycle(s) : Situation -> Done
+
+# ORDeAL
+
+You are the leader now. Act like it.
+
+    @leader
+        1.  Observe { <observe>(s) ~ e }
+        2.  Reflect { <reflect>(e) ~ os }
+        3.  Decide { <decide>(os) ~ d }
+        4.  Act { <act>(d) ~ r }
+        5.  Learn { <learn>(e, r) }
+
+observe : Situation -> Context
+
+# Observe
+
+Ask these questions: "What is happening? What is not happening?" Rapidly begin
+gathering information and sharing context. Information becomes intelligence
+only when it influences the thinking of the leader.
+
+    -   Gather information and share context
+
+reflect : Context -> Options
+
+# Reflect
+
+Ask yourself: "What can I do to influence the situation?" Interpret the data
+you have. Identify threats. Deduce opportunities, alternatives, options, and
+courses of action.
+
+    1.  Think!
+    2.  Courses of action?
+
+decide : Options -> Decision
+
+# Decide
+
+Determine your tasks, roles of key colleagues. Identify constraints, and
+establish limits. Communicate your intent upwards.
+
+    1.  Determine your tasks
+    2.  Communicate your intent upwards
+
+act(d) : Decision -> Context
+
+# Act
+
+Execute the decision.
+
+    1.  Execute { d }
+
+learn : Context, Outcome -> Situation
+
+# Learn
+
+Relate the outcomes of the decision and action taken to the environment. Did
+the system actually change? In the way you expected? Ask yourself and your
+team, "If we knew then what we know now, what would we do differently?"
+
+    1.  Consider outcome. Did action result in change?
+    2.  What is the situation now? ~ situation
+
+Now go back to step 1.
+
+journal(e) : Event -> JournalEntry
+
+# Journal
+
+Record everything, with timestamps. As soon as a second person joins you in
+responding to the incident, start verbalizing your actions to them and get
+them to act as journalist; if you hand over to them, you take the notes.
+
+    -   Record event as it happens ~ msg
+        @journalist
+        {
+            [
+                "timestamp" = now()
+                "message" = msg
+                "context" = "Details about { e }"
+            ]
+        }

@@ -1,0 +1,133 @@
+% technique v1
+! MIT; © 2018 Roy Kalawsky and Andrew Cowie
+
+systems_engineering_process :
+
+I. Define Goals and Objectives
+
+establish_product_concept : () -> Concept
+
+    1.  Establish Product Concept
+
+II. Requirements Definition and Architecture
+
+requirements_and_architecture : Concept -> Requirements, Architecture
+
+    2.  Define Requirements <define_requirements>(concept)
+    3.  Determine Architecture <determine_architecture>(concept)
+
+define_requirements : Concept -> Requirements
+
+determine_architecture : Concept -> Architecture
+
+III. Implementation
+
+design_and_build : Requirements -> System
+
+# Engineering Design, Build, and Verification
+
+    4.  Engineering Design <engineering_design>(requirements) ~ designs
+    5.  Software Development
+        { foreach design in designs }
+            a.  <implement>(design) ~ component
+    6.  Integration Testing
+        { foreach (design, component) in zip(designs, components) }
+            a.  <integration_testing>(design, component)
+
+engineering_design : Requirements -> [Design]
+
+# Engineering Design
+
+Given a set of requirements the engineering profession can undertake detailed
+analysis and turn the _idea_ into a technical _design_ for how the problem
+will be approached and what is actually to be built.
+
+implement : Design -> Component
+
+# Build and Test
+
+    1.  Prototypes and explorations <prototypes>(design)
+    2.  Software Development <build_software>
+    3.  Local Testing and Experimentation <local_experiments>
+
+build_software : Design -> Component
+
+# Software Development
+
+    1.  Define Interfaces and Types
+        @programmers
+            a.  <define_interfaces> ~ types
+    2.  Write Program code
+        @programmers
+            a.  <writing_code>(design, types) ~ component
+    3.  Unit Testing
+        @programmers
+            a.  <unit_tests>(component)
+
+define_interfaces : Design -> Interfaces
+
+writing_code : Design, Interfaces -> Component
+
+unit_tests : Component -> Component
+
+local_experiments : Component -> Component
+
+# Local Testing and Experimentation
+
+    7.  Local Testing
+
+integration_testing : Design, Component -> SubSystem
+
+# System Verification
+
+    8.  Integration Testing
+
+IV. System Validation
+
+functional_testing : [SubSystem] -> System
+
+    9.  Functional Testing
+
+validate_system : Requirements, System -> Product
+
+    10. Agree requirements have been met
+        @leadership
+            -   <acceptance_decision>(requirements, system) ~ product
+    11. Product Launch
+        @marketing + @sales
+            -   <product_release>(product)
+
+acceptance_decision : Requirements, System -> Product
+
+product_release : Product -> Product
+
+V. Production
+
+operations : Product -> Product
+
+    12. Ongoing Operations
+        @operators + @users + @management
+
+changes_upgrades : Product, ChangeRequest -> Product
+
+    13. Changes and Upgrades
+        @management
+            a.  Identify new requirements
+        @engineering
+            b.  Assess impact on system architecture
+            c.  Create a design for the both
+                -   the change, and
+                -   the resultant changed component
+            d.  Implement the change
+            e.  Test the updated component
+            f.  Re-integrate System
+        @management
+            g.  Validate its functionality ~ product2
+        @leadership
+            h.  Release the updated system <operations>(product2)
+
+VI. Retirement or Replacement
+
+decommissioning : System -> ()
+
+    14. Decommission System

@@ -25,14 +25,18 @@ To give a sense of the flavour of the language, here are two examples.
 First, from a set of instructions guiding staff of what to do when an incident
 occurs:
 
-![Don't Panic](examples/screenshots/DontPanic.png)
+<a href="examples/prototype/DontPanic.tq">
+<img width=890 src="examples/screenshots/DontPanic.png">
+</a>
 
 Second, shows using Technique to describe a much larger procedure, in his case
 the entire process of doing systems engineering on a software project. This
 pushes the limits of what Technique is for, but nevertheless illustrates that
 it can be used for very large structures as well as very detailed ones:
 
-![Systems Engineering Process](examples/screenshots/SystemsEngineeringProcess.png)
+<a href="examples/prototype/SystemsEngineeringProcess.tq">
+<img width=900 src="examples/screenshots/SystemsEngineeringProcess.png">
+</a>
 
 Detailed examples can be found in the _examples/_ and _tests/_ directories.
 
