@@ -252,8 +252,8 @@ impl<'i> Parser<'i> {
             }
 
             // Check if this Technique is a single set of one or more
-            // top-level Scope::SectionChunk
-            if is_section(self.source) && procedures.is_empty() {
+            // top-level Scopes (steps or sections)
+            if (is_section(self.source) || is_step(self.source)) && procedures.is_empty() {
                 while !self.is_finished() {
                     self.trim_whitespace();
                     if self.is_finished() {
@@ -263,6 +263,24 @@ impl<'i> Parser<'i> {
                     if is_section(self.source) {
                         match self.read_section() {
                             Ok(section) => sections.push(section),
+                            Err(error) => {
+                                self.problems
+                                    .push(error);
+                                self.skip_to_next_line();
+                            }
+                        }
+                    } else if is_step_dependent(self.source) {
+                        match self.read_step_dependent() {
+                            Ok(step) => sections.push(step),
+                            Err(error) => {
+                                self.problems
+                                    .push(error);
+                                self.skip_to_next_line();
+                            }
+                        }
+                    } else if is_step_parallel(self.source) {
+                        match self.read_step_parallel() {
+                            Ok(step) => sections.push(step),
                             Err(error) => {
                                 self.problems
                                     .push(error);
