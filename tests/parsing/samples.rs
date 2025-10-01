@@ -3,10 +3,8 @@ use std::path::Path;
 
 use technique::parsing;
 
-#[test]
-fn ensure_parse() {
-    let dir = Path::new("tests/samples/");
-
+fn check_directory(dir: &Path) {
+    // Ensure the directory exists
     assert!(dir.exists(), "samples directory missing");
 
     let entries = fs::read_dir(dir).expect("Failed to read samples directory");
@@ -48,4 +46,10 @@ fn ensure_parse() {
             failures.len()
         );
     }
+}
+
+#[test]
+fn ensure_parse() {
+    check_directory(Path::new("tests/samples/"));
+    check_directory(Path::new("examples/minimal/"));
 }
