@@ -1,13 +1,15 @@
+use ignore::WalkBuilder;
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
-    DocumentSymbolParams, DocumentSymbolResponse, InitializedParams, Location, Position,
-    PublishDiagnosticsParams, Range, SymbolInformation, SymbolKind, TextEdit, Uri,
-    WorkspaceSymbolParams,
+    DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializedParams, Location,
+    Position, PublishDiagnosticsParams, Range, SymbolInformation, SymbolKind, TextEdit, Uri,
+    WorkspaceFolder, WorkspaceSymbolParams,
 };
 use serde_json::{from_value, to_value, Value};
 use technique::formatting::Identity;
@@ -22,12 +24,16 @@ use crate::problem::{calculate_column_number, calculate_line_number};
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
     documents: HashMap<Uri, String>,
+    /// Workspace folders provided during initialization
+    folders: Option<Vec<WorkspaceFolder>>,
 }
 
 impl TechniqueLanguageServer {
-    pub fn new() -> Self {
+    pub fn new(params: InitializeParams) -> Self {
+        let folders = params.workspace_folders;
         Self {
             documents: HashMap::new(),
+            folders,
         }
     }
 
@@ -400,10 +406,16 @@ impl TechniqueLanguageServer {
             .to_lowercase();
         debug!("Workspace symbol request: query={:?}", query);
 
-        let mut all_symbols = Vec::new();
+        let mut result = Vec::new();
+        let mut searched = std::collections::HashSet::new();
 
-        // Search through all open documents
+        // First, search through documents we know are open (they have the
+        // most up to date, possibly modified, content)
         for (uri, content) in &self.documents {
+            searched.insert(PathBuf::from(
+                uri.path()
+                    .as_str(),
+            ));
             let path = Path::new(
                 uri.path()
                     .as_str(),
@@ -421,13 +433,46 @@ impl TechniqueLanguageServer {
                             .to_lowercase()
                             .contains(&query)
                     {
-                        all_symbols.push(symbol);
+                        result.push(symbol);
                     }
                 }
             }
         }
 
-        Ok(Some(all_symbols))
+        // Then search all Technique files in the workspace that aren't
+        // already open
+        let paths = self.find_technique_files();
+        for path in paths {
+            // Skip files we've already processed
+            if searched.contains(&path) {
+                continue;
+            }
+
+            // Read and parse the file
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(document) = parsing::parse_with_recovery(&path, &content) {
+                    // Create a URI for the file
+                    let uri: Uri = format!("file://{}", path.display())
+                        .parse()
+                        .unwrap();
+                    let symbols = self.extract_symbols_from_document(&uri, &content, &document);
+
+                    // Filter symbols by query
+                    for symbol in symbols {
+                        if query.is_empty()
+                            || symbol
+                                .name
+                                .to_lowercase()
+                                .contains(&query)
+                        {
+                            result.push(symbol);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Some(result))
     }
 
     fn extract_symbols_from_document(
@@ -526,6 +571,49 @@ impl TechniqueLanguageServer {
 
         sender(Message::Notification(notification))?;
         Ok(())
+    }
+
+    /// Find all Technique files in the workspace so they can be scanned for
+    /// procedure names and other symbols.
+    fn find_technique_files(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+
+        if let Some(ref folders) = self.folders {
+            for folder in folders {
+                let raw = folder
+                    .uri
+                    .as_str();
+
+                // Strip file:// from path if present
+                let filename = if raw.starts_with("file://") {
+                    &raw[7..]
+                } else {
+                    raw
+                };
+
+                let path = Path::new(filename);
+                if path.exists() {
+                    // Use the ignore crate's WalkBuilder to respect
+                    // files excluded by .gitignore
+                    let walker = WalkBuilder::new(&path).build();
+
+                    for entry in walker {
+                        if let Ok(entry) = entry {
+                            let path = entry.path();
+                            if path.is_file() {
+                                if let Some(ext) = path.extension() {
+                                    if ext == "tq" {
+                                        paths.push(path.to_path_buf());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        paths
     }
 
     fn convert_parsing_errors(
@@ -694,14 +782,14 @@ impl TechniqueLanguageServer {
 
 /// Calculate the byte offset of a substring within a parent string using
 /// pointer arithmetic.
-/// 
+///
 /// Returns None if the substring is not actually part of the parent string,
 /// checking first to see if the substring pointer is actually within the
 /// bounds of the parent string.
 fn calculate_slice_offset(parent: &str, substring: &str) -> Option<usize> {
     let parent_ptr = parent.as_ptr() as usize;
     let substring_ptr = substring.as_ptr() as usize;
-    
+
     if substring_ptr >= parent_ptr && substring_ptr < parent_ptr + parent.len() {
         Some(substring_ptr - parent_ptr)
     } else {
