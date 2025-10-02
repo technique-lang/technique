@@ -82,12 +82,6 @@ impl TechniqueLanguageServer {
             .method
             .as_str()
         {
-            "initialize" => {
-                let params: InitializeParams = from_value(req.params)?;
-                let result = self.handle_initialize(params)?;
-                let response = Response::new_ok(req.id, result);
-                sender(Message::Response(response))?;
-            }
             "textDocument/formatting" => {
                 let params: DocumentFormattingParams = from_value(req.params)?;
                 match self.handle_document_formatting(params) {
@@ -136,8 +130,8 @@ impl TechniqueLanguageServer {
             .as_str()
         {
             "initialized" => {
-                let _params: InitializedParams = from_value(notification.params)?;
-                self.handle_initialized()?;
+                let params: InitializedParams = from_value(notification.params)?;
+                self.handle_initialized(params)?;
             }
             "textDocument/didOpen" => {
                 let params: DidOpenTextDocumentParams = from_value(notification.params)?;
@@ -162,26 +156,12 @@ impl TechniqueLanguageServer {
         Ok(())
     }
 
-    fn handle_initialize(
-        &self,
-        _params: InitializeParams,
-    ) -> Result<InitializeResult, Box<dyn std::error::Error + Sync + Send>> {
-        info!("Language Server initializing");
-
-        Ok(InitializeResult {
-            server_info: None,
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
-                )),
-                document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
-                ..Default::default()
-            },
-        })
-    }
-
-    fn handle_initialized(&self) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-        info!("Technique Language Server initialized");
+    fn handle_initialized(
+        &mut self,
+        _params: InitializedParams,
+    ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+        // Note: workspace folders are received in the initialize params, which are handled by
+        // connection.initialize() in mod.rs. If we need workspace info, we should pass it from there.
         Ok(())
     }
 
