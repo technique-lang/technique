@@ -19,7 +19,7 @@ use tracing::{debug, error, info, warn};
 use crate::formatting;
 use crate::parsing;
 use crate::parsing::ParsingError;
-use crate::problem::{calculate_column_number, calculate_line_number};
+use crate::problem::{calculate_column_number, calculate_line_number, Present};
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
@@ -483,29 +483,47 @@ impl TechniqueLanguageServer {
     ) -> Vec<SymbolInformation> {
         let mut symbols = Vec::new();
 
+        // Create URI from the path for the Location
+        let uri: Uri = format!("file://{}", path.display())
+            .parse()
+            .unwrap();
+
         if let Some(ref body) = document.body {
             match body {
                 Technique::Procedures(procedures) => {
                     for procedure in procedures {
+                        let text: String;
+
                         let name = procedure
                             .name
                             .0;
 
                         // Calculate the byte offset of the name using pointer arithmetic
                         let offset = calculate_slice_offset(content, name).unwrap_or(0);
-                        let position = offset_to_position(content, offset);
+                        let position_start = offset_to_position(content, offset);
+
+                        if let Some(signature) = &procedure.signature {
+                            text = format!("{} : {}", name, signature.present(&Identity));
+                        } else {
+                            text = format!("{} :", name);
+                        }
+
+                        let position_end = Position {
+                            line: position_start.line,
+                            character: position_start.character + text.len() as u32,
+                        };
 
                         #[allow(deprecated)]
                         let symbol = SymbolInformation {
-                            name: name.to_string(),
+                            name: text,
                             kind: SymbolKind::CONSTRUCTOR,
                             tags: None,
                             deprecated: None, // deprecated but still required, how annoying
                             location: Location {
                                 uri: uri.clone(),
                                 range: Range {
-                                    start: position,
-                                    end: position,
+                                    start: position_start,
+                                    end: position_end,
                                 },
                             },
                             container_name: None,
