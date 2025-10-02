@@ -9,6 +9,7 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
+ignore = "0.4"
 lsp-server = "0.7.9"
 lsp-types = "0.97"
 owo-colors = "4"

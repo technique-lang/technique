@@ -5,11 +5,13 @@ use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
-    InitializeParams, InitializeResult, InitializedParams, Position, PublishDiagnosticsParams,
-    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+    DocumentSymbolParams, DocumentSymbolResponse, InitializedParams, Location, Position,
+    PublishDiagnosticsParams, Range, SymbolInformation, SymbolKind, TextEdit, Uri,
+    WorkspaceSymbolParams,
 };
 use serde_json::{from_value, to_value, Value};
 use technique::formatting::Identity;
+use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
 
 use crate::formatting;
@@ -93,6 +95,40 @@ impl TechniqueLanguageServer {
                         let response = Response::new_err(
                             req.id,
                             lsp_server::ErrorCode::ParseError as i32,
+                            err.to_string(),
+                        );
+                        sender(Message::Response(response))?;
+                    }
+                }
+            }
+            "textDocument/documentSymbol" => {
+                let params: DocumentSymbolParams = from_value(req.params)?;
+                match self.handle_document_symbol(params) {
+                    Ok(result) => {
+                        let response = Response::new_ok(req.id, result);
+                        sender(Message::Response(response))?;
+                    }
+                    Err(err) => {
+                        let response = Response::new_err(
+                            req.id,
+                            lsp_server::ErrorCode::InternalError as i32,
+                            err.to_string(),
+                        );
+                        sender(Message::Response(response))?;
+                    }
+                }
+            }
+            "workspace/symbol" => {
+                let params: WorkspaceSymbolParams = from_value(req.params)?;
+                match self.handle_workspace_symbol(params) {
+                    Ok(result) => {
+                        let response = Response::new_ok(req.id, result);
+                        sender(Message::Response(response))?;
+                    }
+                    Err(err) => {
+                        let response = Response::new_err(
+                            req.id,
+                            lsp_server::ErrorCode::InternalError as i32,
                             err.to_string(),
                         );
                         sender(Message::Response(response))?;
@@ -316,6 +352,131 @@ impl TechniqueLanguageServer {
         Ok(Some(vec![edit]))
     }
 
+    fn handle_document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<DocumentSymbolResponse, Box<dyn std::error::Error + Sync + Send>> {
+        let uri = params
+            .text_document
+            .uri;
+
+        debug!("Document symbol request: {:?}", uri);
+
+        // Get content from our documents map
+        let content = match self
+            .documents
+            .get(&uri)
+        {
+            Some(content) => content,
+            None => {
+                return Ok(DocumentSymbolResponse::Flat(vec![]));
+            }
+        };
+
+        let path = Path::new(
+            uri.path()
+                .as_str(),
+        );
+
+        // Parse document with recovery to get symbols even if there are errors
+        let document = match parsing::parse_with_recovery(path, content) {
+            Ok(document) => document,
+            Err(_) => {
+                // Return empty symbols if parsing fails completely
+                return Ok(DocumentSymbolResponse::Flat(vec![]));
+            }
+        };
+
+        let symbols = self.extract_symbols_from_document(&uri, content, &document);
+        Ok(DocumentSymbolResponse::Flat(symbols))
+    }
+
+    fn handle_workspace_symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>, Box<dyn std::error::Error + Sync + Send>> {
+        let query = params
+            .query
+            .to_lowercase();
+        debug!("Workspace symbol request: query={:?}", query);
+
+        let mut all_symbols = Vec::new();
+
+        // Search through all open documents
+        for (uri, content) in &self.documents {
+            let path = Path::new(
+                uri.path()
+                    .as_str(),
+            );
+
+            // Try to parse each document
+            if let Ok(document) = parsing::parse_with_recovery(&path, content) {
+                let symbols = self.extract_symbols_from_document(uri, content, &document);
+
+                // Filter symbols by query
+                for symbol in symbols {
+                    if query.is_empty()
+                        || symbol
+                            .name
+                            .to_lowercase()
+                            .contains(&query)
+                    {
+                        all_symbols.push(symbol);
+                    }
+                }
+            }
+        }
+
+        Ok(Some(all_symbols))
+    }
+
+    fn extract_symbols_from_document(
+        &self,
+        uri: &Uri,
+        content: &str,
+        document: &Document,
+    ) -> Vec<SymbolInformation> {
+        let mut symbols = Vec::new();
+
+        if let Some(ref body) = document.body {
+            match body {
+                Technique::Procedures(procedures) => {
+                    for procedure in procedures {
+                        let name = procedure
+                            .name
+                            .0;
+
+                        // Calculate the byte offset of the name using pointer arithmetic
+                        let offset = calculate_slice_offset(content, name).unwrap_or(0);
+                        let position = offset_to_position(content, offset);
+
+                        #[allow(deprecated)]
+                        let symbol = SymbolInformation {
+                            name: name.to_string(),
+                            kind: SymbolKind::CONSTRUCTOR,
+                            tags: None,
+                            deprecated: None, // deprecated but still required, how annoying
+                            location: Location {
+                                uri: uri.clone(),
+                                range: Range {
+                                    start: position,
+                                    end: position,
+                                },
+                            },
+                            container_name: None,
+                        };
+                        symbols.push(symbol);
+                    }
+                }
+                _ => {
+                    // Steps or Empty - no symbols to extract
+                }
+            }
+        }
+
+        symbols
+    }
+
     /// Parse document and convert errors to diagnostics
     fn parse_and_report<E>(
         &self,
@@ -531,6 +692,23 @@ impl TechniqueLanguageServer {
     }
 }
 
+/// Calculate the byte offset of a substring within a parent string using
+/// pointer arithmetic.
+/// 
+/// Returns None if the substring is not actually part of the parent string,
+/// checking first to see if the substring pointer is actually within the
+/// bounds of the parent string.
+fn calculate_slice_offset(parent: &str, substring: &str) -> Option<usize> {
+    let parent_ptr = parent.as_ptr() as usize;
+    let substring_ptr = substring.as_ptr() as usize;
+    
+    if substring_ptr >= parent_ptr && substring_ptr < parent_ptr + parent.len() {
+        Some(substring_ptr - parent_ptr)
+    } else {
+        None
+    }
+}
+
 /// Convert byte offset to LSP Position
 fn offset_to_position(text: &str, offset: usize) -> Position {
     let line = calculate_line_number(text, offset) as u32;
@@ -541,6 +719,27 @@ fn offset_to_position(text: &str, offset: usize) -> Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_calculate_str_offsets() {
+        let parent = "hello world, this is a test";
+
+        // Test substring that is part of parent
+        let substring = &parent[6..11]; // "world"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(6));
+
+        // Test substring at the beginning
+        let substring = &parent[0..5]; // "hello"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(0));
+
+        // Test substring at the end
+        let substring = &parent[23..27]; // "test"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(23));
+
+        // Test substring that is not part of parent
+        let other = "not from parent";
+        assert_eq!(calculate_slice_offset(parent, other), None);
+    }
 
     #[test]
     fn test_offset_to_position() {
