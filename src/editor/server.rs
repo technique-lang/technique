@@ -26,15 +26,22 @@ pub struct TechniqueLanguageServer {
     documents: HashMap<Uri, String>,
     /// Workspace folders provided during initialization
     folders: Option<Vec<WorkspaceFolder>>,
+    /// Cache of symbols from all Technique files in the workspace
+    cache: HashMap<PathBuf, Vec<SymbolInformation>>,
 }
 
 impl TechniqueLanguageServer {
     pub fn new(params: InitializeParams) -> Self {
         let folders = params.workspace_folders;
-        Self {
+        let mut server = Self {
             documents: HashMap::new(),
             folders,
-        }
+            cache: HashMap::new(),
+        };
+
+        // Populate symbol cache
+        server.rebuild_symbol_cache();
+        server
     }
 
     /// Main server loop that handles incoming LSP messages
@@ -227,6 +234,8 @@ impl TechniqueLanguageServer {
         self.documents
             .insert(uri.clone(), content.clone());
 
+        self.update_symbol_cache(&uri, &content);
+
         self.parse_and_report(uri, content, sender)?;
         Ok(())
     }
@@ -254,6 +263,8 @@ impl TechniqueLanguageServer {
 
             self.documents
                 .insert(uri.clone(), content.clone());
+
+            self.update_symbol_cache(&uri, &content);
 
             self.parse_and_report(uri, content, sender)?;
         }
@@ -299,6 +310,10 @@ impl TechniqueLanguageServer {
 
         self.documents
             .remove(&uri);
+
+        // We intentionally do NOT remove the file from symbol cache here just
+        // because the user closed the file; we've already gone to all the
+        // trouble of of calculating the symbols, so we keep that work.
 
         // Clear diagnostics for closed document
         self.publish_diagnostics(uri, vec![], sender)?;
@@ -393,7 +408,7 @@ impl TechniqueLanguageServer {
             }
         };
 
-        let symbols = self.extract_symbols_from_document(&uri, content, &document);
+        let symbols = self.extract_symbols_from_document(path, content, &document);
         Ok(DocumentSymbolResponse::Flat(symbols))
     }
 
@@ -423,7 +438,7 @@ impl TechniqueLanguageServer {
 
             // Try to parse each document
             if let Ok(document) = parsing::parse_with_recovery(&path, content) {
-                let symbols = self.extract_symbols_from_document(uri, content, &document);
+                let symbols = self.extract_symbols_from_document(&path, content, &document);
 
                 // Filter symbols by query
                 for symbol in symbols {
@@ -439,35 +454,23 @@ impl TechniqueLanguageServer {
             }
         }
 
-        // Then search all Technique files in the workspace that aren't
-        // already open
-        let paths = self.find_technique_files();
-        for path in paths {
-            // Skip files we've already processed
-            if searched.contains(&path) {
+        // Then search cached symbols from workspace files that aren't open,
+        // skip files we've already processed (beacuse they are open!)
+        for (path, symbols) in &self.cache {
+            //
+            if searched.contains(path) {
                 continue;
             }
 
-            // Read and parse the file
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(document) = parsing::parse_with_recovery(&path, &content) {
-                    // Create a URI for the file
-                    let uri: Uri = format!("file://{}", path.display())
-                        .parse()
-                        .unwrap();
-                    let symbols = self.extract_symbols_from_document(&uri, &content, &document);
-
-                    // Filter symbols by query
-                    for symbol in symbols {
-                        if query.is_empty()
-                            || symbol
-                                .name
-                                .to_lowercase()
-                                .contains(&query)
-                        {
-                            result.push(symbol);
-                        }
-                    }
+            // Filter symbols by query
+            for symbol in symbols {
+                if query.is_empty()
+                    || symbol
+                        .name
+                        .to_lowercase()
+                        .contains(&query)
+                {
+                    result.push(symbol.clone());
                 }
             }
         }
@@ -477,7 +480,7 @@ impl TechniqueLanguageServer {
 
     fn extract_symbols_from_document(
         &self,
-        uri: &Uri,
+        path: &Path,
         content: &str,
         document: &Document,
     ) -> Vec<SymbolInformation> {
@@ -591,6 +594,45 @@ impl TechniqueLanguageServer {
         Ok(())
     }
 
+    /// Rebuild the symbol cache by parsing all Technique files in the workspace
+    fn rebuild_symbol_cache(&mut self) {
+        debug!("Rebuilding symbol cache");
+        self.cache
+            .clear();
+
+        let paths = self.find_technique_files();
+
+        for path in paths {
+            debug!("Caching symbols from: {:?}", path);
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(document) = parsing::parse_with_recovery(&path, &content) {
+                    let symbols = self.extract_symbols_from_document(&path, &content, &document);
+                    debug!("Found {} symbols in {:?}", symbols.len(), path);
+                    self.cache
+                        .insert(path, symbols);
+                } else {
+                    debug!("Failed to parse {:?}", path);
+                }
+            } else {
+                debug!("Failed to read {:?}", path);
+            }
+        }
+    }
+
+    /// Update the symbol cache for a specific file
+    fn update_symbol_cache(&mut self, uri: &Uri, content: &str) {
+        let path = PathBuf::from(
+            uri.path()
+                .as_str(),
+        );
+
+        if let Ok(document) = parsing::parse_with_recovery(&path, content) {
+            let symbols = self.extract_symbols_from_document(&path, content, &document);
+            self.cache
+                .insert(path, symbols);
+        }
+    }
+
     /// Find all Technique files in the workspace so they can be scanned for
     /// procedure names and other symbols.
     fn find_technique_files(&self) -> Vec<PathBuf> {
@@ -611,6 +653,8 @@ impl TechniqueLanguageServer {
 
                 let path = Path::new(filename);
                 if path.exists() {
+                    debug!("Looking for Technique files in: {:?}", path);
+
                     // Use the ignore crate's WalkBuilder to respect
                     // files excluded by .gitignore
                     let walker = WalkBuilder::new(&path).build();
