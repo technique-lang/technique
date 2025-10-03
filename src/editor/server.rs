@@ -1,32 +1,47 @@
+use ignore::WalkBuilder;
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
-    InitializeParams, InitializeResult, InitializedParams, Position, PublishDiagnosticsParams,
-    Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+    DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializedParams, Location,
+    Position, PublishDiagnosticsParams, Range, SymbolInformation, SymbolKind, TextEdit, Uri,
+    WorkspaceFolder, WorkspaceSymbolParams,
 };
 use serde_json::{from_value, to_value, Value};
 use technique::formatting::Identity;
+use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
 
 use crate::formatting;
 use crate::parsing;
 use crate::parsing::ParsingError;
-use crate::problem::{calculate_column_number, calculate_line_number};
+use crate::problem::{calculate_column_number, calculate_line_number, Present};
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
     documents: HashMap<Uri, String>,
+    /// Workspace folders provided during initialization
+    folders: Option<Vec<WorkspaceFolder>>,
+    /// Cache of symbols from all Technique files in the workspace
+    cache: HashMap<PathBuf, Vec<SymbolInformation>>,
 }
 
 impl TechniqueLanguageServer {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(params: InitializeParams) -> Self {
+        let folders = params.workspace_folders;
+        let mut server = Self {
             documents: HashMap::new(),
-        }
+            folders,
+            cache: HashMap::new(),
+        };
+
+        // Populate symbol cache
+        server.rebuild_symbol_cache();
+        server
     }
 
     /// Main server loop that handles incoming LSP messages
@@ -82,12 +97,6 @@ impl TechniqueLanguageServer {
             .method
             .as_str()
         {
-            "initialize" => {
-                let params: InitializeParams = from_value(req.params)?;
-                let result = self.handle_initialize(params)?;
-                let response = Response::new_ok(req.id, result);
-                sender(Message::Response(response))?;
-            }
             "textDocument/formatting" => {
                 let params: DocumentFormattingParams = from_value(req.params)?;
                 match self.handle_document_formatting(params) {
@@ -99,6 +108,40 @@ impl TechniqueLanguageServer {
                         let response = Response::new_err(
                             req.id,
                             lsp_server::ErrorCode::ParseError as i32,
+                            err.to_string(),
+                        );
+                        sender(Message::Response(response))?;
+                    }
+                }
+            }
+            "textDocument/documentSymbol" => {
+                let params: DocumentSymbolParams = from_value(req.params)?;
+                match self.handle_document_symbol(params) {
+                    Ok(result) => {
+                        let response = Response::new_ok(req.id, result);
+                        sender(Message::Response(response))?;
+                    }
+                    Err(err) => {
+                        let response = Response::new_err(
+                            req.id,
+                            lsp_server::ErrorCode::InternalError as i32,
+                            err.to_string(),
+                        );
+                        sender(Message::Response(response))?;
+                    }
+                }
+            }
+            "workspace/symbol" => {
+                let params: WorkspaceSymbolParams = from_value(req.params)?;
+                match self.handle_workspace_symbol(params) {
+                    Ok(result) => {
+                        let response = Response::new_ok(req.id, result);
+                        sender(Message::Response(response))?;
+                    }
+                    Err(err) => {
+                        let response = Response::new_err(
+                            req.id,
+                            lsp_server::ErrorCode::InternalError as i32,
                             err.to_string(),
                         );
                         sender(Message::Response(response))?;
@@ -136,8 +179,8 @@ impl TechniqueLanguageServer {
             .as_str()
         {
             "initialized" => {
-                let _params: InitializedParams = from_value(notification.params)?;
-                self.handle_initialized()?;
+                let params: InitializedParams = from_value(notification.params)?;
+                self.handle_initialized(params)?;
             }
             "textDocument/didOpen" => {
                 let params: DidOpenTextDocumentParams = from_value(notification.params)?;
@@ -162,26 +205,12 @@ impl TechniqueLanguageServer {
         Ok(())
     }
 
-    fn handle_initialize(
-        &self,
-        _params: InitializeParams,
-    ) -> Result<InitializeResult, Box<dyn std::error::Error + Sync + Send>> {
-        info!("Language Server initializing");
-
-        Ok(InitializeResult {
-            server_info: None,
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
-                )),
-                document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
-                ..Default::default()
-            },
-        })
-    }
-
-    fn handle_initialized(&self) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-        info!("Technique Language Server initialized");
+    fn handle_initialized(
+        &mut self,
+        _params: InitializedParams,
+    ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+        // Note: workspace folders are received in the initialize params, which are handled by
+        // connection.initialize() in mod.rs. If we need workspace info, we should pass it from there.
         Ok(())
     }
 
@@ -204,6 +233,8 @@ impl TechniqueLanguageServer {
 
         self.documents
             .insert(uri.clone(), content.clone());
+
+        self.update_symbol_cache(&uri, &content);
 
         self.parse_and_report(uri, content, sender)?;
         Ok(())
@@ -232,6 +263,8 @@ impl TechniqueLanguageServer {
 
             self.documents
                 .insert(uri.clone(), content.clone());
+
+            self.update_symbol_cache(&uri, &content);
 
             self.parse_and_report(uri, content, sender)?;
         }
@@ -277,6 +310,10 @@ impl TechniqueLanguageServer {
 
         self.documents
             .remove(&uri);
+
+        // We intentionally do NOT remove the file from symbol cache here just
+        // because the user closed the file; we've already gone to all the
+        // trouble of of calculating the symbols, so we keep that work.
 
         // Clear diagnostics for closed document
         self.publish_diagnostics(uri, vec![], sender)?;
@@ -336,6 +373,176 @@ impl TechniqueLanguageServer {
         Ok(Some(vec![edit]))
     }
 
+    fn handle_document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<DocumentSymbolResponse, Box<dyn std::error::Error + Sync + Send>> {
+        let uri = params
+            .text_document
+            .uri;
+
+        debug!("Document symbol request: {:?}", uri);
+
+        // Get content from our documents map
+        let content = match self
+            .documents
+            .get(&uri)
+        {
+            Some(content) => content,
+            None => {
+                return Ok(DocumentSymbolResponse::Flat(vec![]));
+            }
+        };
+
+        let path = Path::new(
+            uri.path()
+                .as_str(),
+        );
+
+        // Parse document with recovery to get symbols even if there are errors
+        let document = match parsing::parse_with_recovery(path, content) {
+            Ok(document) => document,
+            Err(_) => {
+                // Return empty symbols if parsing fails completely
+                return Ok(DocumentSymbolResponse::Flat(vec![]));
+            }
+        };
+
+        let symbols = self.extract_symbols_from_document(path, content, &document);
+        Ok(DocumentSymbolResponse::Flat(symbols))
+    }
+
+    fn handle_workspace_symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>, Box<dyn std::error::Error + Sync + Send>> {
+        let query = params
+            .query
+            .to_lowercase();
+        debug!("Workspace symbol request: query={:?}", query);
+
+        let mut result = Vec::new();
+        let mut searched = std::collections::HashSet::new();
+
+        // First, search through documents we know are open (they have the
+        // most up to date, possibly modified, content)
+        for (uri, content) in &self.documents {
+            searched.insert(PathBuf::from(
+                uri.path()
+                    .as_str(),
+            ));
+            let path = Path::new(
+                uri.path()
+                    .as_str(),
+            );
+
+            // Try to parse each document
+            if let Ok(document) = parsing::parse_with_recovery(&path, content) {
+                let symbols = self.extract_symbols_from_document(&path, content, &document);
+
+                // Filter symbols by query
+                for symbol in symbols {
+                    if query.is_empty()
+                        || symbol
+                            .name
+                            .to_lowercase()
+                            .contains(&query)
+                    {
+                        result.push(symbol);
+                    }
+                }
+            }
+        }
+
+        // Then search cached symbols from workspace files that aren't open,
+        // skip files we've already processed (beacuse they are open!)
+        for (path, symbols) in &self.cache {
+            //
+            if searched.contains(path) {
+                continue;
+            }
+
+            // Filter symbols by query
+            for symbol in symbols {
+                if query.is_empty()
+                    || symbol
+                        .name
+                        .to_lowercase()
+                        .contains(&query)
+                {
+                    result.push(symbol.clone());
+                }
+            }
+        }
+
+        Ok(Some(result))
+    }
+
+    fn extract_symbols_from_document(
+        &self,
+        path: &Path,
+        content: &str,
+        document: &Document,
+    ) -> Vec<SymbolInformation> {
+        let mut symbols = Vec::new();
+
+        // Create URI from the path for the Location
+        let uri: Uri = format!("file://{}", path.display())
+            .parse()
+            .unwrap();
+
+        if let Some(ref body) = document.body {
+            match body {
+                Technique::Procedures(procedures) => {
+                    for procedure in procedures {
+                        let text: String;
+
+                        let name = procedure
+                            .name
+                            .0;
+
+                        // Calculate the byte offset of the name using pointer arithmetic
+                        let offset = calculate_slice_offset(content, name).unwrap_or(0);
+                        let position_start = offset_to_position(content, offset);
+
+                        if let Some(signature) = &procedure.signature {
+                            text = format!("{} : {}", name, signature.present(&Identity));
+                        } else {
+                            text = format!("{} :", name);
+                        }
+
+                        let position_end = Position {
+                            line: position_start.line,
+                            character: position_start.character + text.len() as u32,
+                        };
+
+                        #[allow(deprecated)]
+                        let symbol = SymbolInformation {
+                            name: text,
+                            kind: SymbolKind::CONSTRUCTOR,
+                            tags: None,
+                            deprecated: None, // deprecated but still required, how annoying
+                            location: Location {
+                                uri: uri.clone(),
+                                range: Range {
+                                    start: position_start,
+                                    end: position_end,
+                                },
+                            },
+                            container_name: None,
+                        };
+                        symbols.push(symbol);
+                    }
+                }
+                _ => {
+                    // Steps or Empty - no symbols to extract
+                }
+            }
+        }
+
+        symbols
+    }
+
     /// Parse document and convert errors to diagnostics
     fn parse_and_report<E>(
         &self,
@@ -385,6 +592,90 @@ impl TechniqueLanguageServer {
 
         sender(Message::Notification(notification))?;
         Ok(())
+    }
+
+    /// Rebuild the symbol cache by parsing all Technique files in the workspace
+    fn rebuild_symbol_cache(&mut self) {
+        debug!("Rebuilding symbol cache");
+        self.cache
+            .clear();
+
+        let paths = self.find_technique_files();
+
+        for path in paths {
+            debug!("Caching symbols from: {:?}", path);
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(document) = parsing::parse_with_recovery(&path, &content) {
+                    let symbols = self.extract_symbols_from_document(&path, &content, &document);
+                    debug!("Found {} symbols in {:?}", symbols.len(), path);
+                    self.cache
+                        .insert(path, symbols);
+                } else {
+                    debug!("Failed to parse {:?}", path);
+                }
+            } else {
+                debug!("Failed to read {:?}", path);
+            }
+        }
+    }
+
+    /// Update the symbol cache for a specific file
+    fn update_symbol_cache(&mut self, uri: &Uri, content: &str) {
+        let path = PathBuf::from(
+            uri.path()
+                .as_str(),
+        );
+
+        if let Ok(document) = parsing::parse_with_recovery(&path, content) {
+            let symbols = self.extract_symbols_from_document(&path, content, &document);
+            self.cache
+                .insert(path, symbols);
+        }
+    }
+
+    /// Find all Technique files in the workspace so they can be scanned for
+    /// procedure names and other symbols.
+    fn find_technique_files(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+
+        if let Some(ref folders) = self.folders {
+            for folder in folders {
+                let raw = folder
+                    .uri
+                    .as_str();
+
+                // Strip file:// from path if present
+                let filename = if raw.starts_with("file://") {
+                    &raw[7..]
+                } else {
+                    raw
+                };
+
+                let path = Path::new(filename);
+                if path.exists() {
+                    debug!("Looking for Technique files in: {:?}", path);
+
+                    // Use the ignore crate's WalkBuilder to respect
+                    // files excluded by .gitignore
+                    let walker = WalkBuilder::new(&path).build();
+
+                    for entry in walker {
+                        if let Ok(entry) = entry {
+                            let path = entry.path();
+                            if path.is_file() {
+                                if let Some(ext) = path.extension() {
+                                    if ext == "tq" {
+                                        paths.push(path.to_path_buf());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        paths
     }
 
     fn convert_parsing_errors(
@@ -551,6 +842,23 @@ impl TechniqueLanguageServer {
     }
 }
 
+/// Calculate the byte offset of a substring within a parent string using
+/// pointer arithmetic.
+///
+/// Returns None if the substring is not actually part of the parent string,
+/// checking first to see if the substring pointer is actually within the
+/// bounds of the parent string.
+fn calculate_slice_offset(parent: &str, substring: &str) -> Option<usize> {
+    let parent_ptr = parent.as_ptr() as usize;
+    let substring_ptr = substring.as_ptr() as usize;
+
+    if substring_ptr >= parent_ptr && substring_ptr < parent_ptr + parent.len() {
+        Some(substring_ptr - parent_ptr)
+    } else {
+        None
+    }
+}
+
 /// Convert byte offset to LSP Position
 fn offset_to_position(text: &str, offset: usize) -> Position {
     let line = calculate_line_number(text, offset) as u32;
@@ -561,6 +869,27 @@ fn offset_to_position(text: &str, offset: usize) -> Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_calculate_str_offsets() {
+        let parent = "hello world, this is a test";
+
+        // Test substring that is part of parent
+        let substring = &parent[6..11]; // "world"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(6));
+
+        // Test substring at the beginning
+        let substring = &parent[0..5]; // "hello"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(0));
+
+        // Test substring at the end
+        let substring = &parent[23..27]; // "test"
+        assert_eq!(calculate_slice_offset(parent, substring), Some(23));
+
+        // Test substring that is not part of parent
+        let other = "not from parent";
+        assert_eq!(calculate_slice_offset(parent, other), None);
+    }
 
     #[test]
     fn test_offset_to_position() {
