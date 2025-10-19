@@ -9,19 +9,6 @@ pub trait Present {
     fn present(&self, renderer: &dyn Render) -> String;
 }
 
-// TODO: Implement Present for all AST types used in error examples:
-// - Signature
-// - Genus (Single, Tuple, Naked, List, Unit)
-// - Forma
-// - Identifier
-// - Procedure
-// - Response
-// - Numeric (Integral, Scientific/Quantity)
-// - Invocation
-// - Function
-// - Expression (for code blocks)
-// - And others as needed
-
 impl Present for Signature<'_> {
     fn present(&self, renderer: &dyn Render) -> String {
         formatter::render_signature(self, renderer)

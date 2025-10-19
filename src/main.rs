@@ -9,7 +9,6 @@ use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::*;
 use technique::formatting::{self};
-
 use technique::parsing;
 
 mod editor;
