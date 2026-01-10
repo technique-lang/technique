@@ -8,7 +8,8 @@ use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::{self, Identity};
 use technique::parsing;
-use technique::rendering::{self, Terminal, Typst};
+use technique::rendering::{self, Terminal};
+use technique::templating::{self, Source};
 
 mod editor;
 mod output;
@@ -17,7 +18,6 @@ mod problem;
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
     Native,
-    Typst,
     Silent,
 }
 
@@ -105,23 +105,31 @@ fn main() {
         .subcommand(
             Command::new("render")
                 .about("Render the Technique document into a printable PDF.")
-                .long_about("Render the Technique document into a printable \
-                    PDF. By default this will highlight the source of the \
-                    input file for the purposes of reviewing the raw \
-                    procedure in code form.")
+                .long_about("Render the Technique document into a formatted \
+                PDF using a template. This allows you to transform the code of \
+                the procedure into the intended layout suitable to the \
+                domain you're app.")
                 .arg(
                     Arg::new("output")
                         .short('o')
                         .long("output")
-                        .value_parser(["typst", "none"])
-                        .default_value("none")
+                        .value_parser(["pdf", "typst"])
+                        .default_value("pdf")
                         .action(ArgAction::Set)
-                        .help("Which kind of diagnostic output to print when rendering.")
+                        .help("Whether to write PDF to a file on disk, or print the Typst markup that would be used to create that PDF (for debugging)."),
+                )
+                .arg(
+                    Arg::new("template")
+                        .short('t')
+                        .long("template")
+                        .default_value("source")
+                        .action(ArgAction::Set)
+                        .help("Template to use for rendering."),
                 )
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to print."),
+                        .help("The file containing the Technique you want to render."),
                 ),
         )
         .subcommand(
@@ -261,13 +269,12 @@ fn main() {
             let output = submatches
                 .get_one::<String>("output")
                 .unwrap();
-            let output = match output.as_str() {
-                "typst" => Output::Typst,
-                "none" => Output::Silent,
-                _ => panic!("Unrecognized --output value"),
-            };
 
-            debug!(?output);
+            let template_name = submatches
+                .get_one::<String>("template")
+                .unwrap();
+
+            debug!(output, template_name);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -308,20 +315,21 @@ fn main() {
                 }
             };
 
-            let result = rendering::render(&Typst, &technique, 70);
+            // Select template and render
+            let result = match template_name.as_str() {
+                "source" => templating::fill(&Source, &technique, 70),
+                _ => panic!("Unrecognized template: {}", template_name),
+            };
 
-            match output {
-                Output::Typst => {
+            match output.as_str() {
+                "typst" => {
                     print!("{}", result);
                 }
-                _ => {
-                    // ignore; the default is to not output any intermediate
-                    // representations and instead proceed to invoke the
-                    // typesetter to generate the desired PDF.
+                "pdf" => {
+                    output::via_typst(&filename, &result);
                 }
+                _ => panic!("Unrecognized --output value"),
             }
-
-            output::via_typst(&filename, &result);
         }
         Some(("language", _)) => {
             debug!("Starting Language Server");
