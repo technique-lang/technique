@@ -1,7 +1,7 @@
 //! Renderers for colourizing Technique language
 
 use owo_colors::OwoColorize;
-use technique::formatting::*;
+use crate::formatting::*;
 
 /// Embellish fragments with ANSI escapes to create syntax highlighting in
 /// terminal output.
