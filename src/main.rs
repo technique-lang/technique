@@ -1,19 +1,18 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
-use rendering::{Terminal, Typst};
 use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
-use technique::formatting::*;
-use technique::formatting::{self};
+use technique::formatting::{self, Identity};
 use technique::parsing;
+use technique::rendering::{self, Terminal, Typst};
 
 mod editor;
+mod output;
 mod problem;
-mod rendering;
 
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
@@ -251,9 +250,9 @@ fn main() {
 
             let result;
             if raw_output || std::io::stdout().is_terminal() {
-                result = formatting::render(&Terminal, &technique, wrap_width);
+                result = rendering::render(&Terminal, &technique, wrap_width);
             } else {
-                result = formatting::render(&Identity, &technique, wrap_width);
+                result = rendering::render(&Identity, &technique, wrap_width);
             }
 
             print!("{}", result);
@@ -309,7 +308,7 @@ fn main() {
                 }
             };
 
-            let result = formatting::render(&Typst, &technique, 70);
+            let result = rendering::render(&Typst, &technique, 70);
 
             match output {
                 Output::Typst => {
@@ -322,7 +321,7 @@ fn main() {
                 }
             }
 
-            rendering::via_typst(&filename, &result);
+            output::via_typst(&filename, &result);
         }
         Some(("language", _)) => {
             debug!("Starting Language Server");
