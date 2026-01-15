@@ -1,7 +1,7 @@
 //! Renderers for colourizing Technique language
 
-use std::borrow::Cow;
 use crate::formatting::*;
+use std::borrow::Cow;
 
 /// Add markup around syntactic elements for use when including
 /// Technique source in Typst documents.

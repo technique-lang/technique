@@ -1,7 +1,7 @@
 //! Renderers for colourizing Technique language
 
-use crate::language::*;
 use crate::formatting::*;
+use crate::language::*;
 
 /// We do the code formatting in two passes. First we convert from our
 /// Abstract Syntax Tree types into a Vec of "fragments" (Syntax tag, String

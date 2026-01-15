@@ -9,7 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 use technique::formatting::{self, Identity};
 use technique::parsing;
 use technique::rendering::{self, Terminal};
-use technique::templating::{self, Source};
+use technique::templating::{self, Checklist, Source};
 
 mod editor;
 mod output;
@@ -318,6 +318,7 @@ fn main() {
             // Select template and render
             let result = match template_name.as_str() {
                 "source" => templating::fill(&Source, &technique, 70),
+                "checklist" => templating::fill(&Checklist, &technique, 70),
                 _ => panic!("Unrecognized template: {}", template_name),
             };
 

@@ -1,9 +1,9 @@
-//! Template trait for rendering Technique documents
+//! Trait for transforming Technique documents and then rendering them.
 
-use crate::language::Document;
+use crate::language;
 
-/// Trait for templates that transform Technique documents into Typst markup
+/// Templates transform Technique documents into Typst markup.
 pub trait Template {
     /// Render a Technique document into Typst markup
-    fn render(&self, document: &Document, width: u8) -> String;
+    fn render(&self, document: &language::Document, width: u8) -> String;
 }

@@ -16,10 +16,10 @@ use technique::formatting::Identity;
 use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
 
-use crate::rendering;
 use crate::parsing;
 use crate::parsing::ParsingError;
 use crate::problem::{calculate_column_number, calculate_line_number, Present};
+use crate::rendering;
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
