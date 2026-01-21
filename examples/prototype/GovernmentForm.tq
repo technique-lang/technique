@@ -1,0 +1,15 @@
+% technique v1
+! Official; © 2026 Heard Island Government
+& form
+
+drivers_license_application :
+{
+    [
+        "Name" = "Kowalski"
+        "Species" = "Emperor Pengin"
+        "Age" = 4.2 winters
+        "Unique Pengiun Identifier" = uuid()
+        "Occupation" = "Operational Planning Specialist"
+        "Permanent Address" = "Central Park Zoo, New York, NY, 10021, United States"
+    ]
+}
