@@ -16,7 +16,7 @@ use technique::formatting::Identity;
 use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
 
-use crate::formatting;
+use crate::rendering;
 use crate::parsing;
 use crate::parsing::ParsingError;
 use crate::problem::{calculate_column_number, calculate_line_number, Present};
@@ -353,7 +353,7 @@ impl TechniqueLanguageServer {
             }
         };
 
-        let result = formatting::render(&Identity, &document, 78);
+        let result = rendering::render(&Identity, &document, 78);
 
         // convert to LSP type for return to editor.
         let edit = TextEdit {
