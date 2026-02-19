@@ -1,0 +1,39 @@
+% technique v1
+! PD; © 2003 National Aeronautics and Space Administration, Canadian Space Agency, European Space Agency, and Others
+& nasa-flight-plan,v4.0
+
+emergency_procedures :
+
+# ISS Powerdown and Recovery
+
+    1.  <rs_load_powerdown>
+    2.  <node1_htr_avail_16>
+    3.  <node1_htr_avail_79>
+
+rs_load_powerdown :
+
+# RS Load Powerdown
+
+ARCU deactivation is requested by MCC-H and performed after MCC-M concurrence.
+
+node1_htr_avail_16 :
+
+# Inhibiting Node 1 B HTRS (1 to 6)
+
+    @pcs
+    { foreach node in seq(6) }
+        1.  Check Availability
+        2.  Perform { cmd("Inhibit") }
+        3.  Check Availability
+                'Inhibited'
+
+node1_htr_avail_79 :
+
+# Inhibiting Node 1 B HTRS (7 to 9)
+
+    @pcs
+    { foreach node in seq(9) }
+        1.  Check Availability
+        2.  Perform { cmd("Inhibit") }
+        3.  Check Availability
+                'Inhibited'
