@@ -2,13 +2,12 @@
 
 mod checklist;
 mod engine;
-mod semantic;
 mod source;
 mod template;
 
 pub use checklist::Checklist;
 pub use source::Source;
-pub use template::{Content, Section, Step, Task, Template};
+pub use template::Template;
 
 use crate::language;
 
