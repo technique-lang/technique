@@ -317,8 +317,9 @@ fn main() {
 
             // Select template and render
             let result = match template_name.as_str() {
-                "source" => templating::fill(&Source, &technique, 70),
-                "checklist" => templating::fill(&Checklist, &technique, 70),
+                "source" => templating::render(&Source::new(70), &technique),
+                "checklist" => templating::render(&Checklist, &technique),
+                "procedure" => templating::render(&Procedure, &technique),
                 _ => panic!("Unrecognized template: {}", template_name),
             };
 
