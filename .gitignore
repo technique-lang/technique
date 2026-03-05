@@ -3,3 +3,6 @@
 
 # rendered code fragments
 /*.pdf
+
+# documentation symlinks
+/doc/references
