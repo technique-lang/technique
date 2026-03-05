@@ -71,7 +71,12 @@ impl<'i> Scope<'i> {
     /// Filters out ResponseBlock, CodeBlock, AttributeBlock, etc.
     pub fn substeps(&self) -> impl Iterator<Item = &Scope<'i>> {
         self.children()
-            .filter(|s| matches!(s, Scope::DependentBlock { .. } | Scope::ParallelBlock { .. }))
+            .filter(|s| {
+                matches!(
+                    s,
+                    Scope::DependentBlock { .. } | Scope::ParallelBlock { .. }
+                )
+            })
     }
 
     /// Returns the text content of this step (first paragraph).
@@ -138,22 +143,134 @@ impl<'i> Scope<'i> {
             _ => None,
         }
     }
+
+    /// Returns the body of a SectionChunk.
+    pub fn body(&self) -> Option<&Technique<'i>> {
+        match self {
+            Scope::SectionChunk { body, .. } => Some(body),
+            _ => None,
+        }
+    }
+}
+
+impl<'i> Technique<'i> {
+    /// Returns an iterator over procedures if this is a Procedures variant.
+    pub fn procedures(&self) -> impl Iterator<Item = &Procedure<'i>> {
+        let slice: &[Procedure<'i>] = match self {
+            Technique::Procedures(procedures) => procedures,
+            _ => &[],
+        };
+        slice.iter()
+    }
+
+    /// Returns an iterator over steps if this is a Steps variant.
+    pub fn steps(&self) -> impl Iterator<Item = &Scope<'i>> {
+        let slice: &[Scope<'i>] = match self {
+            Technique::Steps(steps) => steps,
+            _ => &[],
+        };
+        slice.iter()
+    }
+}
+
+impl<'i> Procedure<'i> {
+    /// Returns the procedure name.
+    pub fn name(&self) -> &'i str {
+        self.name
+            .0
+    }
+}
+
+impl<'i> Response<'i> {
+    /// Returns the response value.
+    pub fn value(&self) -> &'i str {
+        self.value
+    }
+
+    /// Returns the optional condition.
+    pub fn condition(&self) -> Option<&'i str> {
+        self.condition
+    }
 }
 
 impl<'i> Paragraph<'i> {
     /// Returns the text content of this paragraph as a single String.
-    /// Code, invocations, and bindings are omitted.
+    /// When text is present, invocations are treated as cross-references
+    /// and omitted. When the only content is invocations (and bindings),
+    /// the invocation target names are included as fallback text.
     pub fn text(&self) -> String {
+        let has_text = self
+            .0
+            .iter()
+            .any(|d| Self::has_text(d));
+
         let mut result = String::new();
         for descriptive in &self.0 {
-            if let Descriptive::Text(text) = descriptive {
+            Self::append_descriptive(&mut result, descriptive, !has_text);
+        }
+        result
+    }
+
+    fn has_text(descriptive: &Descriptive<'i>) -> bool {
+        match descriptive {
+            Descriptive::Text(_) => true,
+            Descriptive::Binding(inner, _) => Self::has_text(inner),
+            _ => false,
+        }
+    }
+
+    fn append_descriptive(
+        result: &mut String,
+        descriptive: &Descriptive<'i>,
+        include_invocations: bool,
+    ) {
+        match descriptive {
+            Descriptive::Text(text) => {
                 if !result.is_empty() && !result.ends_with(' ') {
                     result.push(' ');
                 }
                 result.push_str(text);
             }
+            Descriptive::Application(invocation) if include_invocations => {
+                Self::append_invocation_name(result, invocation);
+            }
+            Descriptive::CodeInline(expr) if include_invocations => {
+                Self::append_expression_name(result, expr);
+            }
+            Descriptive::Binding(inner, _) => {
+                Self::append_descriptive(result, inner, include_invocations);
+            }
+            _ => {}
         }
-        result
+    }
+
+    fn append_invocation_name(result: &mut String, invocation: &crate::language::Invocation<'i>) {
+        if !result.is_empty() && !result.ends_with(' ') {
+            result.push(' ');
+        }
+        let name = match &invocation.target {
+            crate::language::Target::Local(id) => id.0,
+            crate::language::Target::Remote(ext) => ext.0,
+        };
+        result.push_str(name);
+    }
+
+    fn append_expression_name(result: &mut String, expr: &crate::language::Expression<'i>) {
+        match expr {
+            crate::language::Expression::Application(invocation) => {
+                Self::append_invocation_name(result, invocation);
+            }
+            crate::language::Expression::Repeat(inner) => {
+                Self::append_expression_name(result, inner);
+            }
+            crate::language::Expression::Foreach(_, inner) => {
+                Self::append_expression_name(result, inner);
+            }
+            crate::language::Expression::Binding(inner, _) => {
+                Self::append_expression_name(result, inner);
+            }
+            _ => {}
+        }
     }
 
     /// Returns an iterator over the descriptive elements.
