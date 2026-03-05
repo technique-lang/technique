@@ -4,9 +4,9 @@
 //! This provides building blocks (headings, steps, roles, responses, etc)
 //! that renderers can compose into complete output documents.
 //!
-//! Note that this is distinct from `rendering::typst` which renders Technique
-//! in its original surface language syntax form; this module operates over
-//! constructs made in any particular domain.
+//! Note that this is distinct from `highlighting::typst` which renders
+//! Technique in its original surface language syntax form; this module
+//! operates over constructs made in any particular domain.
 
 /// Escape special Typst characters in text content.
 pub fn escape(text: &str) -> String {

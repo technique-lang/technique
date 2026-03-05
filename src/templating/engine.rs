@@ -1,9 +1,16 @@
-//! Templating engine: AST accessor methods.
-//!
-//! This module provides accessor methods on AST types for convenient
-//! iteration when extracting content for templates. This allows us to hide
-//! parser artifacts like `Scope` and iterate over the constructs we recognize
-//! as sections, steps, and tasks.
+//! Engine: accessor helpers over the parser's AST types.
+//! 
+//! The Technique language parser deals with considerable complexity and
+//! ambiguity in the surface language, and as a result the parser's AST is
+//! somewhat tailored to the form of that surface language. This is fine for
+//! compiling and code formatting, but contains too much internal detail for
+//! someone writing an output renderer to deal with.
+//! 
+//! This module thus provides convenient iteration methods on AST types so
+//! that adapters can extract content without having to match on parser
+//! internals directly. The types returned are still the parser's own types
+//! (Scope, Paragraph, Response, etc.) — the "adapters" are responsible for
+//! projecting these into domain-specific models.
 
 use crate::language::{
     Attribute, Descriptive, Document, Element, Paragraph, Procedure, Response, Scope, Technique,
@@ -195,9 +202,13 @@ impl<'i> Response<'i> {
 
 impl<'i> Paragraph<'i> {
     /// Returns the text content of this paragraph as a single String.
-    /// When text is present, invocations are treated as cross-references
-    /// and omitted. When the only content is invocations (and bindings),
-    /// the invocation target names are included as fallback text.
+    /// Only extracts `Descriptive::Text` nodes and recurses into bindings.
+    ///
+    /// When a paragraph has no text (i.e. its content is only invocations
+    /// or code inlines), this falls back to extracting invocation target
+    /// names. This is a workaround — the adapters should resolve
+    /// invocations to procedure titles instead. See `elements()` for
+    /// access to the full paragraph content.
     pub fn text(&self) -> String {
         let has_text = self
             .0
