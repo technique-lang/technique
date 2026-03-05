@@ -7,9 +7,9 @@ use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::{self, Identity};
+use technique::highlighting::{self, Terminal};
 use technique::parsing;
-use technique::rendering::{self, Terminal};
-use technique::templating::{self, Checklist, Source};
+use technique::templating::{self, Checklist, Procedure, Source};
 
 mod editor;
 mod output;
@@ -258,9 +258,9 @@ fn main() {
 
             let result;
             if raw_output || std::io::stdout().is_terminal() {
-                result = rendering::render(&Terminal, &technique, wrap_width);
+                result = highlighting::render(&Terminal, &technique, wrap_width);
             } else {
-                result = rendering::render(&Identity, &technique, wrap_width);
+                result = highlighting::render(&Identity, &technique, wrap_width);
             }
 
             print!("{}", result);

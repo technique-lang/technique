@@ -16,10 +16,10 @@ use technique::formatting::Identity;
 use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
 
+use crate::highlighting;
 use crate::parsing;
 use crate::parsing::ParsingError;
 use crate::problem::{calculate_column_number, calculate_line_number, Present};
-use crate::rendering;
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content
@@ -353,7 +353,7 @@ impl TechniqueLanguageServer {
             }
         };
 
-        let result = rendering::render(&Identity, &document, 78);
+        let result = highlighting::render(&Identity, &document, 78);
 
         // convert to LSP type for return to editor.
         let edit = TextEdit {

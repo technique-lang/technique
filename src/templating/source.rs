@@ -3,8 +3,8 @@
 //! normal renderers by instead delegating to the existing code formatting
 //! pipeline underlying the `format` command.
 
-use crate::language::Document;
 use crate::highlighting::{render, Typst};
+use crate::language::Document;
 
 use super::Template;
 
