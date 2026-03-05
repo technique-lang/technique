@@ -32,16 +32,13 @@ pub fn heading(level: u8, text: &str) -> String {
 }
 
 /// Descriptive text paragraph.
-pub fn description(indent: &str, text: &str) -> String {
-    format!("{}{}\n\n", indent, escape(text))
+pub fn description(text: &str) -> String {
+    format!("{}\n\n", escape(text))
 }
 
 /// Step with checkbox, optional ordinal, and text.
-pub fn step(indent: &str, ordinal: Option<&str>, text: Option<&str>) -> String {
-    let mut out = format!(
-        "{}#box(stroke: 0.5pt, width: 0.8em, height: 0.8em) ",
-        indent
-    );
+pub fn step(ordinal: Option<&str>, text: Option<&str>) -> String {
+    let mut out = "#box(stroke: 0.5pt, width: 0.8em, height: 0.8em) ".to_string();
     if let Some(ord) = ordinal {
         out.push_str(&format!("*{}.*  ", ord));
     }
@@ -53,16 +50,16 @@ pub fn step(indent: &str, ordinal: Option<&str>, text: Option<&str>) -> String {
 }
 
 /// Role attribution header.
-pub fn role(indent: &str, name: &str) -> String {
-    format!("{}#text(weight: \"bold\")[{}]\n\n", indent, name)
+pub fn role(name: &str) -> String {
+    format!("#text(weight: \"bold\")[{}]\n\n", name)
 }
 
 /// Response options with small checkboxes.
-pub fn responses(indent: &str, options: &[String]) -> String {
+pub fn responses(options: &[String]) -> String {
     if options.is_empty() {
         return String::new();
     }
-    let mut out = format!("{}", indent);
+    let mut out = String::new();
     for (i, option) in options
         .iter()
         .enumerate()
