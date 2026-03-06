@@ -317,3 +317,83 @@ impl<'i> Paragraph<'i> {
         }
     }
 }
+
+#[cfg(test)]
+mod check {
+    use crate::language::{
+        Descriptive, Expression, Identifier, Invocation, Paragraph, Target,
+    };
+
+    fn local<'a>(name: &'a str) -> Invocation<'a> {
+        Invocation {
+            target: Target::Local(Identifier(name)),
+            parameters: None,
+        }
+    }
+
+    // Pure text: "Ensure physical and digital safety"
+    #[test]
+    fn text_only_paragraph() {
+        let p = Paragraph(vec![Descriptive::Text("Ensure physical and digital safety")]);
+        assert_eq!(p.text(), "Ensure physical and digital safety");
+        assert!(p.invocations().is_empty());
+        assert_eq!(p.content(), "Ensure physical and digital safety");
+    }
+
+    // Bare invocation: <ensure_safety>
+    #[test]
+    fn invocation_only_paragraph() {
+        let p = Paragraph(vec![Descriptive::Application(local("ensure_safety"))]);
+        assert_eq!(p.text(), "");
+        assert_eq!(p.invocations(), vec!["ensure_safety"]);
+        assert_eq!(p.content(), "ensure_safety");
+    }
+
+    // Mixed: Define Requirements <define_requirements>(concept)
+    // Text is present so content() returns just the text.
+    #[test]
+    fn mixed_text_and_invocation() {
+        let p = Paragraph(vec![
+            Descriptive::Text("Define Requirements"),
+            Descriptive::Application(local("define_requirements")),
+        ]);
+        assert_eq!(p.text(), "Define Requirements");
+        assert_eq!(p.invocations(), vec!["define_requirements"]);
+        assert_eq!(p.content(), "Define Requirements");
+    }
+
+    // CodeInline with repeat: { repeat <incident_action_cycle> }
+    #[test]
+    fn repeat_expression() {
+        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Repeat(
+            Box::new(Expression::Application(local("incident_action_cycle"))),
+        ))]);
+        assert_eq!(p.text(), "");
+        assert_eq!(p.invocations(), vec!["incident_action_cycle"]);
+        assert_eq!(p.content(), "repeat incident_action_cycle");
+    }
+
+    // Binding wrapping an invocation: <observe>(s) ~ e
+    #[test]
+    fn binding_with_invocation() {
+        let p = Paragraph(vec![Descriptive::Binding(
+            Box::new(Descriptive::Application(local("observe"))),
+            vec![Identifier("e")],
+        )]);
+        assert_eq!(p.text(), "");
+        assert_eq!(p.invocations(), vec!["observe"]);
+        assert_eq!(p.content(), "observe");
+    }
+
+    // CodeInline with foreach: { foreach design in designs }
+    #[test]
+    fn foreach_expression() {
+        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Foreach(
+            vec![Identifier("design")],
+            Box::new(Expression::Application(local("implement"))),
+        ))]);
+        assert_eq!(p.text(), "");
+        assert_eq!(p.invocations(), vec!["implement"]);
+        assert_eq!(p.content(), "foreach implement");
+    }
+}
