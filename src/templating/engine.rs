@@ -219,17 +219,46 @@ impl<'i> Paragraph<'i> {
         targets
     }
 
-    /// Returns displayable content: text if present, otherwise the
-    /// first invocation target name.
+    /// Returns text of the step body if present, otherwise (for the scenarion
+    /// where the step is a bare invocation or code expression) a readable
+    /// rendering of the first non-text element.
     pub fn content(&self) -> String {
         let text = self.text();
         if !text.is_empty() {
             return text;
         }
-        self.invocations()
-            .first()
-            .unwrap_or(&"")
-            .to_string()
+        for descriptive in &self.0 {
+            let result = Self::descriptive_content(descriptive);
+            if !result.is_empty() {
+                return result;
+            }
+        }
+        String::new()
+    }
+
+    fn descriptive_content(descriptive: &Descriptive<'i>) -> String {
+        match descriptive {
+            Descriptive::Application(inv) => Self::invocation_name(inv).to_string(),
+            Descriptive::CodeInline(expr) => Self::expression_content(expr),
+            Descriptive::Binding(inner, _) => Self::descriptive_content(inner),
+            _ => String::new(),
+        }
+    }
+
+    fn expression_content(expr: &crate::language::Expression<'i>) -> String {
+        match expr {
+            crate::language::Expression::Application(invocation) => {
+                Self::invocation_name(invocation).to_string()
+            }
+            crate::language::Expression::Repeat(inner) => {
+                format!("repeat {}", Self::expression_content(inner))
+            }
+            crate::language::Expression::Foreach(_, inner) => {
+                format!("foreach {}", Self::expression_content(inner))
+            }
+            crate::language::Expression::Binding(inner, _) => Self::expression_content(inner),
+            _ => String::new(),
+        }
     }
 
     fn append_text(result: &mut String, descriptive: &Descriptive<'i>) {
