@@ -1,4 +1,8 @@
 //! Formats procedure domain types into Typst.
+//!
+//! Produces output styled after operational procedures: sans-serif font,
+//! title block with overview, blue "Procedure" bar, numbered steps with
+//! bold titles, roles as indented bold names, and lettered substeps.
 
 use crate::templating::template::Renderer;
 use crate::templating::typst;
@@ -16,90 +20,186 @@ impl Renderer for ProcedureRenderer {
 }
 
 fn render(document: &Document) -> String {
-    let mut output = typst::preamble();
+    let mut out = String::new();
+
+    out.push_str("#set page(margin: 1.5cm)\n");
+    out.push_str("#set par(justify: false)\n");
+    out.push_str("#show text: set text(size: 9pt, font: \"TeX Gyre Heros\")\n\n");
+
+    // Outer block wraps entire procedure
+    out.push_str("#block(width: 100%, stroke: 0.1pt, inset: 10pt)[\n");
 
     if let Some(title) = &document.title {
-        output.push_str(&typst::heading(1, title));
+        out.push_str(&format!(
+            "#text(size: 15pt)[*{}*]\n\n",
+            typst::escape(title)
+        ));
+    }
+    if !document.description.is_empty() {
+        out.push_str("_Overview_\n\n");
+        for para in &document.description {
+            out.push_str(&typst::escape(para));
+            out.push('\n');
+        }
     }
 
-    for para in &document.description {
-        output.push_str(&typst::description(para));
+    // Procedure bar
+    out.push_str("#block(width: 100%, fill: rgb(\"#006699\"), inset: 5pt)[#text(fill: white)[*Procedure*]]\n\n");
+
+    // Sections
+    let total = document.sections.len();
+    for (i, section) in document.sections.iter().enumerate() {
+        render_section(&mut out, section);
+        if i + 1 < total {
+            out.push_str("#line(length: 100%, stroke: (thickness: 0.5pt, paint: rgb(\"#003366\"), dash: (\"dot\", 2pt, 4pt, 2pt)))\n\n");
+        }
     }
 
-    for section in &document.sections {
-        render_section(&mut output, section);
-    }
-
-    output
+    out.push_str("]\n");
+    out
 }
 
-fn render_section(output: &mut String, section: &Section) {
+fn render_section(out: &mut String, section: &Section) {
+    // Section heading
     match (&section.ordinal, &section.heading) {
         (Some(ord), Some(heading)) => {
-            output.push_str(&typst::heading(2, &format!("{}. {}", ord, heading)));
+            out.push_str(&format!(
+                "#text(size: 14pt)[*{}.* #h(8pt) *{}*]\n\n",
+                ord,
+                typst::escape(heading)
+            ));
         }
         (Some(ord), None) => {
-            output.push_str(&typst::heading(2, &format!("{}.", ord)));
+            out.push_str(&format!("#text(size: 14pt)[*{}.*]\n\n", ord));
         }
         (None, Some(heading)) => {
-            output.push_str(&typst::heading(2, heading));
+            out.push_str(&format!(
+                "#text(size: 14pt)[*{}*]\n\n",
+                typst::escape(heading)
+            ));
         }
         (None, None) => {}
     }
 
     for para in &section.description {
-        output.push_str(&typst::description(para));
+        out.push_str(&typst::escape(para));
+        out.push_str("\n\n");
     }
 
-    for item in &section.items {
-        render_item(output, item);
+    // Steps indented slightly from section heading
+    if !section.items.is_empty() {
+        out.push_str("#pad(left: 8pt)[\n");
+        for item in &section.items {
+            render_item(out, item);
+        }
+        out.push_str("]\n");
     }
 }
 
-fn render_item(output: &mut String, item: &Item) {
+fn render_item(out: &mut String, item: &Item) {
     match item {
-        Item::Step(step) => render_step(output, step),
+        Item::Step(step) => render_step(out, step),
         Item::RoleGroup(group) => {
-            output.push_str(&typst::role(&group.name));
-            for child in &group.items {
-                render_item(output, child);
-            }
+            render_role(out, group);
         }
     }
 }
 
-fn render_step(output: &mut String, step: &Step) {
-    let ordinal = match step.kind {
-        StepKind::Dependent => step
-            .ordinal
-            .as_deref(),
+fn render_role(out: &mut String, group: &super::types::RoleGroup) {
+    out.push_str(&format!("- *{}*\n", typst::escape(&group.name)));
+    if !group.items.is_empty() {
+        let start = ordinal_start(&group.items);
+        out.push_str(&format!(
+            "#pad(left: 20pt)[\n#set par(leading: 0.5em)\n#set enum(numbering: \"a.\", start: {}, spacing: 0.8em)\n",
+            start
+        ));
+        for child in &group.items {
+            render_child(out, child);
+        }
+        out.push_str("]\n");
+    }
+}
+
+/// Convert the first child's letter ordinal to a numeric start value.
+fn ordinal_start(items: &[Item]) -> u32 {
+    if let Some(Item::Step(step)) = items.first() {
+        if let Some(ord) = &step.ordinal {
+            if let Some(c) = ord.chars().next() {
+                if c.is_ascii_lowercase() {
+                    return (c as u32) - ('a' as u32) + 1;
+                }
+            }
+        }
+    }
+    1
+}
+
+/// Render items nested under a role group (substeps).
+fn render_child(out: &mut String, item: &Item) {
+    match item {
+        Item::Step(step) => {
+            match step.title.as_deref() {
+                Some(t) => {
+                    out.push_str(&format!("+ {}\n", typst::escape(t)));
+                }
+                None => {}
+            }
+        }
+        Item::RoleGroup(group) => {
+            render_role(out, group);
+        }
+    }
+}
+
+fn render_step(out: &mut String, step: &Step) {
+    let ord = match step.kind {
+        StepKind::Dependent => step.ordinal.as_deref(),
         StepKind::Parallel => None,
     };
 
-    output.push_str(&typst::step(
-        ordinal,
-        step.title
-            .as_deref(),
-    ));
-
-    for para in &step.body {
-        output.push_str(&typst::description(para));
+    // Step heading
+    match (ord, step.title.as_deref()) {
+        (Some(o), Some(t)) => {
+            out.push_str(&format!(
+                "*{}.* #h(4pt) *{}*\n\n",
+                o,
+                typst::escape(t)
+            ));
+        }
+        (Some(o), None) => {
+            out.push_str(&format!("*{}.*\n\n", o));
+        }
+        (None, Some(t)) => {
+            out.push_str(&format!("*{}*\n\n", typst::escape(t)));
+        }
+        (None, None) => {}
     }
 
-    let display: Vec<String> = step
-        .responses
-        .iter()
-        .map(|r| match &r.condition {
-            Some(cond) => format!("{} {}", r.value, cond),
-            None => r
-                .value
-                .clone(),
-        })
-        .collect();
-    output.push_str(&typst::responses(&display));
+    for para in &step.body {
+        out.push_str(&typst::escape(para));
+        out.push_str("\n\n");
+    }
 
-    for child in &step.children {
-        render_item(output, child);
+    if !step.responses.is_empty() {
+        for r in &step.responses {
+            match &r.condition {
+                Some(cond) => out.push_str(&format!(
+                    "- _{} {}_\n",
+                    typst::escape(&r.value),
+                    typst::escape(cond)
+                )),
+                None => out.push_str(&format!("- _{}_\n", typst::escape(&r.value))),
+            }
+        }
+        out.push('\n');
+    }
+
+    if !step.children.is_empty() {
+        out.push_str("#pad(left: 16pt)[\n");
+        for child in &step.children {
+            render_item(out, child);
+        }
+        out.push_str("]\n\n");
     }
 }
 
@@ -133,14 +233,14 @@ mod check {
     }
 
     #[test]
-    fn document_title_as_heading() {
+    fn document_title_in_block() {
         let doc = Document {
             title: Some("Emergency Procedure".into()),
             description: Vec::new(),
             sections: Vec::new(),
         };
         let out = ProcedureRenderer.render(&doc);
-        assert!(out.contains("= Emergency Procedure"));
+        assert!(out.contains("*Emergency Procedure*"));
     }
 
     #[test]
@@ -157,7 +257,7 @@ mod check {
         };
         let out = ProcedureRenderer.render(&doc);
         assert!(out.contains("*4.*"));
-        assert!(out.contains("Engineering Design"));
+        assert!(out.contains("*Engineering Design*"));
     }
 
     #[test]
@@ -210,6 +310,7 @@ mod check {
             }],
         };
         let out = ProcedureRenderer.render(&doc);
-        assert!(out.contains("== III. Implementation"));
+        assert!(out.contains("*III.*"));
+        assert!(out.contains("*Implementation*"));
     }
 }

@@ -270,11 +270,11 @@ fn main() {
                 .get_one::<String>("output")
                 .unwrap();
 
-            let template_name = submatches
+            let cli_template = submatches
                 .get_one::<String>("template")
                 .unwrap();
 
-            debug!(output, template_name);
+            debug!(output, cli_template);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -315,8 +315,16 @@ fn main() {
                 }
             };
 
+            // Use template from document metadata if present, otherwise
+            // fall back to CLI argument (which defaults to "source").
+            let template_name = technique
+                .header
+                .as_ref()
+                .and_then(|m| m.template)
+                .unwrap_or(cli_template.as_str());
+
             // Select template and render
-            let result = match template_name.as_str() {
+            let result = match template_name {
                 "source" => templating::render(&Source::new(70), &technique),
                 "checklist" => templating::render(&Checklist, &technique),
                 "procedure" => templating::render(&Procedure, &technique),
