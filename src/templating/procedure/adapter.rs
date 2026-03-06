@@ -94,12 +94,13 @@ fn section_from_scope(scope: &language::Scope) -> Option<Section> {
     let (numeral, title) = scope.section_info()?;
     let heading = title.map(|para| para.text());
 
+    let mut description = Vec::new();
     let mut items = Vec::new();
 
     if let Some(body) = scope.body() {
         for procedure in body.procedures() {
-            let proc_items = items_from_procedure(procedure);
-            items.extend(proc_items);
+            description.extend(procedure.description().map(|p| p.content()));
+            items.extend(items_from_procedure(procedure));
         }
         for step in body.steps() {
             items.extend(items_from_scope(step));
@@ -109,7 +110,7 @@ fn section_from_scope(scope: &language::Scope) -> Option<Section> {
     Some(Section {
         ordinal: Some(numeral.to_string()),
         heading,
-        description: Vec::new(),
+        description,
         items,
     })
 }
@@ -344,5 +345,39 @@ ensure_safety :
         } else {
             panic!("expected Step");
         }
+    }
+
+    #[test]
+    fn sections_contain_their_procedures() {
+        let doc = extract(trim(
+            r#"
+main :
+
+# Upgrade
+
+    I. Preparation <preparation>
+
+preparation :
+
+    1. Check systems
+    2. Notify staff
+
+    II. Execution <execution>
+
+execution :
+
+    3. Run scripts
+    4. Verify
+            "#,
+        ));
+        assert_eq!(doc.sections.len(), 2);
+
+        assert_eq!(doc.sections[0].ordinal.as_deref(), Some("I"));
+        assert_eq!(doc.sections[0].heading.as_deref(), Some("Preparation"));
+        assert_eq!(doc.sections[0].items.len(), 2);
+
+        assert_eq!(doc.sections[1].ordinal.as_deref(), Some("II"));
+        assert_eq!(doc.sections[1].heading.as_deref(), Some("Execution"));
+        assert_eq!(doc.sections[1].items.len(), 2);
     }
 }
