@@ -35,7 +35,7 @@ fn extract(document: &language::Document) -> Document {
             .map(String::from);
         doc.description = first
             .description()
-            .map(|p| p.text())
+            .map(|p| p.content())
             .collect();
 
         let has_sections = first
@@ -118,7 +118,7 @@ fn section_from_procedure(procedure: &language::Procedure) -> Section {
     let items = items_from_procedure(procedure);
     let description: Vec<String> = procedure
         .description()
-        .map(|p| p.text())
+        .map(|p| p.content())
         .collect();
 
     Section {
@@ -203,7 +203,7 @@ fn step_from_scope(scope: &language::Scope) -> Step {
 
     let paragraphs: Vec<String> = scope
         .description()
-        .map(|p| p.text())
+        .map(|p| p.content())
         .collect();
     let (title, body) = match paragraphs.split_first() {
         Some((first, rest)) => (Some(first.clone()), rest.to_vec()),

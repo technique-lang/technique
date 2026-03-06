@@ -201,40 +201,38 @@ impl<'i> Response<'i> {
 }
 
 impl<'i> Paragraph<'i> {
-    /// Returns the text content of this paragraph as a single String.
-    /// Only extracts `Descriptive::Text` nodes and recurses into bindings.
-    ///
-    /// When a paragraph has no text (i.e. its content is only invocations
-    /// or code inlines), this falls back to extracting invocation target
-    /// names. This is a workaround — the adapters should resolve
-    /// invocations to procedure titles instead. See `elements()` for
-    /// access to the full paragraph content.
+    /// Returns only the text content of this paragraph.
     pub fn text(&self) -> String {
-        let has_text = self
-            .0
-            .iter()
-            .any(|d| Self::has_text(d));
-
         let mut result = String::new();
-        for descriptive in &self.0 {
-            Self::append_descriptive(&mut result, descriptive, !has_text);
+        for d in &self.0 {
+            Self::append_text(&mut result, d);
         }
         result
     }
 
-    fn has_text(descriptive: &Descriptive<'i>) -> bool {
-        match descriptive {
-            Descriptive::Text(_) => true,
-            Descriptive::Binding(inner, _) => Self::has_text(inner),
-            _ => false,
+    /// Returns invocation target names from this paragraph.
+    pub fn invocations(&self) -> Vec<&'i str> {
+        let mut targets = Vec::new();
+        for d in &self.0 {
+            Self::extract_invocations(&mut targets, d);
         }
+        targets
     }
 
-    fn append_descriptive(
-        result: &mut String,
-        descriptive: &Descriptive<'i>,
-        include_invocations: bool,
-    ) {
+    /// Returns displayable content: text if present, otherwise the
+    /// first invocation target name.
+    pub fn content(&self) -> String {
+        let text = self.text();
+        if !text.is_empty() {
+            return text;
+        }
+        self.invocations()
+            .first()
+            .unwrap_or(&"")
+            .to_string()
+    }
+
+    fn append_text(result: &mut String, descriptive: &Descriptive<'i>) {
         match descriptive {
             Descriptive::Text(text) => {
                 if !result.is_empty() && !result.ends_with(' ') {
@@ -242,51 +240,51 @@ impl<'i> Paragraph<'i> {
                 }
                 result.push_str(text);
             }
-            Descriptive::Application(invocation) if include_invocations => {
-                Self::append_invocation_name(result, invocation);
+            Descriptive::Binding(inner, _) => Self::append_text(result, inner),
+            _ => {}
+        }
+    }
+
+    fn extract_invocations(targets: &mut Vec<&'i str>, descriptive: &Descriptive<'i>) {
+        match descriptive {
+            Descriptive::Application(inv) => {
+                targets.push(Self::invocation_name(inv));
             }
-            Descriptive::CodeInline(expr) if include_invocations => {
-                Self::append_expression_name(result, expr);
+            Descriptive::CodeInline(expr) => {
+                Self::extract_expression_invocations(targets, expr);
             }
             Descriptive::Binding(inner, _) => {
-                Self::append_descriptive(result, inner, include_invocations);
+                Self::extract_invocations(targets, inner);
             }
             _ => {}
         }
     }
 
-    fn append_invocation_name(result: &mut String, invocation: &crate::language::Invocation<'i>) {
-        if !result.is_empty() && !result.ends_with(' ') {
-            result.push(' ');
-        }
-        let name = match &invocation.target {
-            crate::language::Target::Local(id) => id.0,
-            crate::language::Target::Remote(ext) => ext.0,
-        };
-        result.push_str(name);
-    }
-
-    fn append_expression_name(result: &mut String, expr: &crate::language::Expression<'i>) {
+    fn extract_expression_invocations(
+        targets: &mut Vec<&'i str>,
+        expr: &crate::language::Expression<'i>,
+    ) {
         match expr {
-            crate::language::Expression::Application(invocation) => {
-                Self::append_invocation_name(result, invocation);
+            crate::language::Expression::Application(inv) => {
+                targets.push(Self::invocation_name(inv));
             }
             crate::language::Expression::Repeat(inner) => {
-                Self::append_expression_name(result, inner);
+                Self::extract_expression_invocations(targets, inner);
             }
             crate::language::Expression::Foreach(_, inner) => {
-                Self::append_expression_name(result, inner);
+                Self::extract_expression_invocations(targets, inner);
             }
             crate::language::Expression::Binding(inner, _) => {
-                Self::append_expression_name(result, inner);
+                Self::extract_expression_invocations(targets, inner);
             }
             _ => {}
         }
     }
 
-    /// Returns an iterator over the descriptive elements.
-    pub fn elements(&self) -> impl Iterator<Item = &Descriptive<'i>> {
-        self.0
-            .iter()
+    fn invocation_name(inv: &crate::language::Invocation<'i>) -> &'i str {
+        match &inv.target {
+            crate::language::Target::Local(id) => id.0,
+            crate::language::Target::Remote(ext) => ext.0,
+        }
     }
 }

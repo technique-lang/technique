@@ -19,7 +19,6 @@ impl Adapter for ChecklistAdapter {
     }
 }
 
-/// Transform the parsed AST into a checklist Document.
 fn extract(document: &language::Document) -> Document {
     let mut extracted = Document::new();
 
@@ -27,7 +26,6 @@ fn extract(document: &language::Document) -> Document {
         extract_procedure(&mut extracted, procedure);
     }
 
-    // Handle top-level steps (if no procedures)
     if extracted
         .sections
         .is_empty()
@@ -71,13 +69,12 @@ fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
     }
 }
 
-/// Extract steps from a scope, handling different scope types.
 fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Vec<Step> {
     if scope.is_step() {
         return vec![step_from_scope(scope, inherited_role)];
     }
 
-    // Handle AttributeBlock — extract role and process children
+    // AttributeBlock — extract role and process children
     let roles: Vec<_> = scope
         .roles()
         .collect();
@@ -91,7 +88,7 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
             .collect();
     }
 
-    // Handle SectionChunk
+    // SectionChunk
     if let Some((numeral, title)) = scope.section_info() {
         let heading = title.map(|para| para.text());
 
@@ -105,7 +102,6 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
             children: Vec::new(),
         }];
 
-        // Handle nested procedures in section body
         if let Some(body) = scope.body() {
             for procedure in body.procedures() {
                 if let Some(title) = procedure.title() {
@@ -137,7 +133,6 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
     Vec::new()
 }
 
-/// Convert a step-like scope into a Step.
 fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Step {
     let mut responses = Vec::new();
     let mut children = Vec::new();
@@ -156,10 +151,9 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
         children.extend(steps_from_scope(subscope, inherited_role));
     }
 
-    // First paragraph becomes title, rest becomes body
     let paragraphs: Vec<String> = scope
         .description()
-        .map(|p| p.text())
+        .map(|p| p.content())
         .collect();
     let (title, body) = match paragraphs.split_first() {
         Some((first, rest)) => (Some(first.clone()), rest.to_vec()),
