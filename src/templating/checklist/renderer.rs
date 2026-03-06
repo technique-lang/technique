@@ -46,6 +46,7 @@ fn render_section(output: &mut String, section: &Section) {
     output.push('\n');
 }
 
+/// Render a single step and its children into the output buffer.
 fn render_step(output: &mut String, step: &Step) {
     if let Some(r) = &step.role {
         output.push_str(&typst::role(r));
@@ -76,5 +77,88 @@ fn render_step(output: &mut String, step: &Step) {
 
     for child in &step.children {
         render_step(output, child);
+    }
+}
+
+#[cfg(test)]
+mod check {
+    use crate::templating::template::Renderer;
+
+    use super::ChecklistRenderer;
+    use super::super::types::{Document, Response, Section, Step};
+
+    fn step(ordinal: Option<&str>, title: Option<&str>) -> Step {
+        Step {
+            name: None,
+            ordinal: ordinal.map(String::from),
+            title: title.map(String::from),
+            body: Vec::new(),
+            role: None,
+            responses: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn section_heading_with_ordinal() {
+        let doc = Document {
+            sections: vec![Section {
+                ordinal: Some("I".into()),
+                heading: Some("Before anaesthesia".into()),
+                steps: vec![step(Some("1"), Some("Check pulse"))],
+            }],
+        };
+        let out = ChecklistRenderer.render(&doc);
+        assert!(out.contains("== I. Before anaesthesia"));
+    }
+
+    #[test]
+    fn step_with_ordinal_and_title() {
+        let doc = Document {
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                steps: vec![step(Some("3"), Some("Verify identity"))],
+            }],
+        };
+        let out = ChecklistRenderer.render(&doc);
+        assert!(out.contains("*3.*"));
+        assert!(out.contains("Verify identity"));
+    }
+
+    #[test]
+    fn role_rendered_before_step() {
+        let mut s = step(Some("1"), Some("Confirm site"));
+        s.role = Some("surgeon".into());
+        let doc = Document {
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                steps: vec![s],
+            }],
+        };
+        let out = ChecklistRenderer.render(&doc);
+        let role_pos = out.find("surgeon").unwrap();
+        let step_pos = out.find("Confirm site").unwrap();
+        assert!(role_pos < step_pos);
+    }
+
+    #[test]
+    fn responses_rendered() {
+        let mut s = step(Some("1"), Some("Ready?"));
+        s.responses = vec![
+            Response { value: "Yes".into(), condition: None },
+            Response { value: "No".into(), condition: Some("if complications".into()) },
+        ];
+        let doc = Document {
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                steps: vec![s],
+            }],
+        };
+        let out = ChecklistRenderer.render(&doc);
+        assert!(out.contains("Yes"));
+        assert!(out.contains("No if complications"));
     }
 }

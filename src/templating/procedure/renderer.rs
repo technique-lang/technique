@@ -102,3 +102,114 @@ fn render_step(output: &mut String, step: &Step) {
         render_item(output, child);
     }
 }
+
+#[cfg(test)]
+mod check {
+    use crate::templating::template::Renderer;
+
+    use super::ProcedureRenderer;
+    use super::super::types::{Document, Item, RoleGroup, Section, Step, StepKind};
+
+    fn dep(ordinal: &str, title: &str) -> Step {
+        Step {
+            kind: StepKind::Dependent,
+            ordinal: Some(ordinal.into()),
+            title: Some(title.into()),
+            body: Vec::new(),
+            responses: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+
+    fn par(title: &str) -> Step {
+        Step {
+            kind: StepKind::Parallel,
+            ordinal: None,
+            title: Some(title.into()),
+            body: Vec::new(),
+            responses: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn document_title_as_heading() {
+        let doc = Document {
+            title: Some("Emergency Procedure".into()),
+            description: Vec::new(),
+            sections: Vec::new(),
+        };
+        let out = ProcedureRenderer.render(&doc);
+        assert!(out.contains("= Emergency Procedure"));
+    }
+
+    #[test]
+    fn dependent_step_shows_ordinal() {
+        let doc = Document {
+            title: None,
+            description: Vec::new(),
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                description: Vec::new(),
+                items: vec![Item::Step(dep("4", "Engineering Design"))],
+            }],
+        };
+        let out = ProcedureRenderer.render(&doc);
+        assert!(out.contains("*4.*"));
+        assert!(out.contains("Engineering Design"));
+    }
+
+    #[test]
+    fn parallel_step_has_title() {
+        let doc = Document {
+            title: None,
+            description: Vec::new(),
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                description: Vec::new(),
+                items: vec![Item::Step(par("Check exits"))],
+            }],
+        };
+        let out = ProcedureRenderer.render(&doc);
+        assert!(out.contains("Check exits"));
+    }
+
+    #[test]
+    fn role_group_wraps_children() {
+        let doc = Document {
+            title: None,
+            description: Vec::new(),
+            sections: vec![Section {
+                ordinal: None,
+                heading: None,
+                description: Vec::new(),
+                items: vec![Item::RoleGroup(RoleGroup {
+                    name: "programmers".into(),
+                    items: vec![Item::Step(dep("a", "define_interfaces"))],
+                })],
+            }],
+        };
+        let out = ProcedureRenderer.render(&doc);
+        let role_pos = out.find("programmers").unwrap();
+        let step_pos = out.find("define\\_interfaces").unwrap();
+        assert!(role_pos < step_pos);
+    }
+
+    #[test]
+    fn section_heading_with_ordinal() {
+        let doc = Document {
+            title: None,
+            description: Vec::new(),
+            sections: vec![Section {
+                ordinal: Some("III".into()),
+                heading: Some("Implementation".into()),
+                description: Vec::new(),
+                items: Vec::new(),
+            }],
+        };
+        let out = ProcedureRenderer.render(&doc);
+        assert!(out.contains("== III. Implementation"));
+    }
+}

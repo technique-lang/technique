@@ -133,6 +133,7 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
     Vec::new()
 }
 
+/// Convert a step-like scope into a Step.
 fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Step {
     let mut responses = Vec::new();
     let mut children = Vec::new();
@@ -170,5 +171,98 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
         role: inherited_role.map(String::from),
         responses,
         children,
+    }
+}
+
+#[cfg(test)]
+mod check {
+    use std::path::Path;
+
+    use crate::parsing;
+    use crate::templating::template::Adapter;
+
+    use super::ChecklistAdapter;
+
+    fn trim(s: &str) -> &str {
+        s.strip_prefix('\n')
+            .unwrap_or(s)
+    }
+
+    fn extract(source: &str) -> super::Document {
+        let path = Path::new("test.tq");
+        let doc = parsing::parse(path, source).unwrap();
+        ChecklistAdapter.extract(&doc)
+    }
+
+    #[test]
+    fn procedure_title_becomes_section_heading() {
+        let doc = extract(trim(
+            r#"
+preflight :
+
+# Pre-flight Checks
+
+    1. Fasten seatbelt
+            "#,
+        ));
+        assert_eq!(doc.sections.len(), 1);
+        assert_eq!(doc.sections[0].heading.as_deref(), Some("Pre-flight Checks"));
+    }
+
+    #[test]
+    fn role_flattened_onto_children() {
+        let doc = extract(trim(
+            r#"
+checks :
+
+    @surgeon
+        1. Confirm identity
+        2. Mark surgical site
+            "#,
+        ));
+        let steps = &doc.sections[0].steps;
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].role.as_deref(), Some("surgeon"));
+        assert_eq!(steps[1].role.as_deref(), Some("surgeon"));
+    }
+
+    #[test]
+    fn responses_with_conditions() {
+        let doc = extract(trim(
+            r#"
+checks :
+
+    1. Is the patient ready?
+            'Yes' | 'No' if complications
+            "#,
+        ));
+        let step = &doc.sections[0].steps[0];
+        assert_eq!(step.responses.len(), 2);
+        assert_eq!(step.responses[0].value, "Yes");
+        assert_eq!(step.responses[0].condition, None);
+        assert_eq!(step.responses[1].value, "No");
+        assert_eq!(
+            step.responses[1].condition.as_deref(),
+            Some("if complications")
+        );
+    }
+
+    #[test]
+    fn invocation_only_step_has_content() {
+        let doc = extract(trim(
+            r#"
+main :
+
+    1. <ensure_safety>
+
+ensure_safety :
+
+# Safety First
+
+    - Check exits
+            "#,
+        ));
+        let steps = &doc.sections[0].steps;
+        assert_eq!(steps[0].title.as_deref(), Some("ensure_safety"));
     }
 }

@@ -221,3 +221,128 @@ fn step_from_scope(scope: &language::Scope) -> Step {
         children,
     }
 }
+
+#[cfg(test)]
+mod check {
+    use std::path::Path;
+
+    use crate::parsing;
+    use crate::templating::template::Adapter;
+
+    use super::ProcedureAdapter;
+    use super::super::types::{Item, StepKind};
+
+    fn trim(s: &str) -> &str {
+        s.strip_prefix('\n')
+            .unwrap_or(s)
+    }
+
+    fn extract(source: &str) -> super::Document {
+        let path = Path::new("test.tq");
+        let doc = parsing::parse(path, source).unwrap();
+        ProcedureAdapter.extract(&doc)
+    }
+
+    #[test]
+    fn procedure_title_becomes_document_title() {
+        let doc = extract(trim(
+            r#"
+emergency :
+
+# Don't Panic
+
+    1. Stay calm
+            "#,
+        ));
+        assert_eq!(doc.title.as_deref(), Some("Don't Panic"));
+    }
+
+    #[test]
+    fn role_preserved_as_group() {
+        let doc = extract(trim(
+            r#"
+build :
+
+    1. Define Interfaces
+        @programmers
+            a. <define_interfaces>
+            "#,
+        ));
+        let items = &doc.sections[0].items;
+        assert_eq!(items.len(), 1);
+        if let Item::Step(step) = &items[0] {
+            assert_eq!(step.children.len(), 1);
+            if let Item::RoleGroup(group) = &step.children[0] {
+                assert_eq!(group.name, "programmers");
+                assert_eq!(group.items.len(), 1);
+            } else {
+                panic!("expected RoleGroup");
+            }
+        } else {
+            panic!("expected Step");
+        }
+    }
+
+    #[test]
+    fn dependent_step_has_ordinal() {
+        let doc = extract(trim(
+            r#"
+checks :
+
+    1. First step
+    2. Second step
+            "#,
+        ));
+        let items = &doc.sections[0].items;
+        assert_eq!(items.len(), 2);
+        if let Item::Step(s) = &items[0] {
+            assert!(matches!(s.kind, StepKind::Dependent));
+            assert_eq!(s.ordinal.as_deref(), Some("1"));
+        } else {
+            panic!("expected Step");
+        }
+    }
+
+    #[test]
+    fn parallel_step_no_ordinal() {
+        let doc = extract(trim(
+            r#"
+checks :
+
+    - First item
+    - Second item
+            "#,
+        ));
+        let items = &doc.sections[0].items;
+        assert_eq!(items.len(), 2);
+        if let Item::Step(s) = &items[0] {
+            assert!(matches!(s.kind, StepKind::Parallel));
+            assert_eq!(s.ordinal, None);
+        } else {
+            panic!("expected Step");
+        }
+    }
+
+    #[test]
+    fn invocation_only_step_has_content() {
+        let doc = extract(trim(
+            r#"
+main :
+
+    1. <ensure_safety>
+
+ensure_safety :
+
+# Safety First
+
+    - Check exits
+            "#,
+        ));
+        let items = &doc.sections[0].items;
+        if let Item::Step(step) = &items[0] {
+            assert_eq!(step.title.as_deref(), Some("ensure_safety"));
+        } else {
+            panic!("expected Step");
+        }
+    }
+}
