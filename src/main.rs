@@ -123,7 +123,7 @@ fn main() {
                         .short('t')
                         .long("template")
                         .action(ArgAction::Set)
-                        .help("Template to use for rendering. By default the value specified in the input document's template line will be used, falling back to [source] if unspecified."),
+                        .help("Template to use for rendering. By default the value specified in the input document's template line will be used, falling back to source highlighting if unspecified."),
                 )
                 .arg(
                     Arg::new("filename")
