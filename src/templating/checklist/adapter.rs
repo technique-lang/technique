@@ -30,20 +30,51 @@ fn extract(document: &language::Document) -> Document {
         .sections
         .is_empty()
     {
-        let steps: Vec<Step> = document
-            .steps()
-            .filter(|s| s.is_step())
-            .map(|s| step_from_scope(s, None))
-            .collect();
+        // Handle top-level SectionChunks (no procedures)
+        for scope in document.steps() {
+            if let Some((numeral, title)) = scope.section_info() {
+                let heading = title.map(|para| para.text());
+                let steps: Vec<Step> = match scope.body() {
+                    Some(body) => body
+                        .steps()
+                        .filter(|s| s.is_step())
+                        .map(|s| step_from_scope(s, None))
+                        .collect(),
+                    None => Vec::new(),
+                };
 
-        if !steps.is_empty() {
-            extracted
-                .sections
-                .push(Section {
-                    ordinal: None,
-                    heading: None,
-                    steps,
-                });
+                if !steps.is_empty() {
+                    extracted
+                        .sections
+                        .push(Section {
+                            ordinal: Some(numeral.to_string()),
+                            heading,
+                            steps,
+                        });
+                }
+            }
+        }
+
+        // Handle bare top-level steps (no sections, no procedures)
+        if extracted
+            .sections
+            .is_empty()
+        {
+            let steps: Vec<Step> = document
+                .steps()
+                .filter(|s| s.is_step())
+                .map(|s| step_from_scope(s, None))
+                .collect();
+
+            if !steps.is_empty() {
+                extracted
+                    .sections
+                    .push(Section {
+                        ordinal: None,
+                        heading: None,
+                        steps,
+                    });
+            }
         }
     }
 
