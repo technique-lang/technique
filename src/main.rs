@@ -122,9 +122,8 @@ fn main() {
                     Arg::new("template")
                         .short('t')
                         .long("template")
-                        .default_value("source")
                         .action(ArgAction::Set)
-                        .help("Template to use for rendering."),
+                        .help("Template to use for rendering. By default the value specified in the input document's template line will be used, falling back to [source] if unspecified."),
                 )
                 .arg(
                     Arg::new("filename")
@@ -270,11 +269,7 @@ fn main() {
                 .get_one::<String>("output")
                 .unwrap();
 
-            let cli_template = submatches
-                .get_one::<String>("template")
-                .unwrap();
-
-            debug!(output, cli_template);
+            debug!(output);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -315,20 +310,37 @@ fn main() {
                 }
             };
 
-            // Use template from document metadata if present, otherwise
-            // fall back to CLI argument (which defaults to "source").
-            let template_name = technique
-                .header
-                .as_ref()
-                .and_then(|m| m.template)
-                .unwrap_or(cli_template.as_str());
+            // If present the value of the --template option will override the
+            // document's metadata template line. If neither is specified then
+            // the fallback default is "source".
+
+            let template = submatches.get_one::<String>("template");
+            let template: &str = match template {
+                Some(value) => value,
+                None => {
+                    technique
+                        .header
+                        .as_ref()
+                        .and_then(|m| m.template)
+                        .unwrap_or("source")
+                }
+            };
+
+            debug!(template);
 
             // Select template and render
-            let result = match template_name {
+            let result = match template {
                 "source" => templating::render(&Source::new(70), &technique),
                 "checklist" => templating::render(&Checklist, &technique),
                 "procedure" => templating::render(&Procedure, &technique),
-                _ => panic!("Unrecognized template: {}", template_name),
+                other => {
+                    eprintln!(
+                        "{}: unrecognized template \"{}\"",
+                        "error".bright_red(),
+                        other
+                    );
+                    std::process::exit(1);
+                }
             };
 
             match output.as_str() {
