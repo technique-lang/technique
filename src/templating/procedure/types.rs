@@ -1,15 +1,15 @@
 //! Domain types for a procedure.
 //!
-//! A procedure preserves the full hierarchy of the source Technique document:
-//! sections containing procedures, procedures containing steps, with role
-//! groups and responses, substeps, etc. This is basically a full fidelity
-//! renderer of the input Technique structure.
+//! A procedure is a recursive tree of nodes mirroring the structure of the
+//! source Technique document. Sections, procedures, steps, role groups —
+//! whatever the author wrote, the domain model preserves.
 
-/// A procedure document is sections containing items.
+/// A procedure document: title and description from the first procedure,
+/// then a tree of nodes representing the body.
 pub struct Document {
     pub title: Option<String>,
     pub description: Vec<String>,
-    pub sections: Vec<Section>,
+    pub body: Vec<Node>,
 }
 
 impl Document {
@@ -17,48 +17,43 @@ impl Document {
         Document {
             title: None,
             description: Vec::new(),
-            sections: Vec::new(),
+            body: Vec::new(),
         }
     }
 }
 
-/// A section within a procedure document.
-pub struct Section {
-    pub ordinal: Option<String>,
-    pub heading: Option<String>,
-    pub description: Vec<String>,
-    pub items: Vec<Item>,
-}
-
-/// An item within a section: either a step or a role group. This
-/// distinction matters because `@beaker` with lettered tasks is a
-/// structural container, not a step annotation — the role group
-/// owns its children rather than decorating them.
-pub enum Item {
-    Step(Step),
-    RoleGroup(RoleGroup),
-}
-
-/// A step within a procedure.
-pub struct Step {
-    pub kind: StepKind,
-    pub ordinal: Option<String>,
-    pub title: Option<String>,
-    pub body: Vec<String>,
-    pub responses: Vec<Response>,
-    pub children: Vec<Item>,
+/// A node in the procedure tree.
+pub enum Node {
+    Section {
+        ordinal: String,
+        heading: Option<String>,
+        children: Vec<Node>,
+    },
+    Procedure {
+        name: String,
+        title: Option<String>,
+        description: Vec<String>,
+        children: Vec<Node>,
+    },
+    Step {
+        kind: StepKind,
+        ordinal: Option<String>,
+        title: Option<String>,
+        body: Vec<String>,
+        invocations: Vec<String>,
+        responses: Vec<Response>,
+        children: Vec<Node>,
+    },
+    Attribute {
+        name: String,
+        children: Vec<Node>,
+    },
 }
 
 /// Whether a step is dependent (numbered) or parallel (bulleted).
 pub enum StepKind {
     Dependent,
     Parallel,
-}
-
-/// A role group: a named container for items assigned to a role.
-pub struct RoleGroup {
-    pub name: String,
-    pub items: Vec<Item>,
 }
 
 /// A response option with an optional condition.

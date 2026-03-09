@@ -1,22 +1,10 @@
 //! Output generation for the Technique CLI application
 
 use owo_colors::OwoColorize;
-use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use tinytemplate::TinyTemplate;
 use tracing::{debug, info};
-
-static TEMPLATE: &'static str = r#"
-#show text: set text(font: "Inconsolata")
-#show raw: set block(breakable: true)
-"#;
-
-#[derive(Serialize)]
-struct Context {
-    filename: String,
-}
 
 pub fn via_typst(filename: &Path, markup: &str) {
     info!("Printing file: {}", filename.display());
@@ -46,30 +34,11 @@ pub fn via_typst(filename: &Path, markup: &str) {
         .spawn()
         .expect("Failed to start external Typst process");
 
-    // Write the file contents to the process's stdin
+    // Write the markup to the process's stdin
     let mut stdin = child
         .stdin
         .take()
         .unwrap();
-
-    let mut tt = TinyTemplate::new();
-    tt.add_template("hello", TEMPLATE)
-        .unwrap();
-
-    let context = Context {
-        filename: filename
-            .to_string_lossy()
-            .to_string(),
-    };
-
-    let rendered = tt
-        .render("hello", &context)
-        .unwrap();
-    stdin
-        .write(rendered.as_bytes())
-        .expect("Write header to child process");
-
-    // write markup to stdin handle
 
     stdin
         .write(markup.as_bytes())

@@ -8,6 +8,11 @@ use crate::language::Document;
 
 use super::Template;
 
+static PREAMBLE: &str = r#"
+#show text: set text(font: "Inconsolata")
+#show raw: set block(breakable: true)
+"#;
+
 pub struct Source {
     width: u8,
 }
@@ -20,6 +25,8 @@ impl Source {
 
 impl Template for Source {
     fn render(&self, document: &Document) -> String {
-        render(&Typst, document, self.width)
+        let mut out = String::from(PREAMBLE);
+        out.push_str(&render(&Typst, document, self.width));
+        out
     }
 }
