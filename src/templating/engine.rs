@@ -1,11 +1,11 @@
 //! Engine: accessor helpers over the parser's AST types.
-//! 
+//!
 //! The Technique language parser deals with considerable complexity and
 //! ambiguity in the surface language, and as a result the parser's AST is
 //! somewhat tailored to the form of that surface language. This is fine for
 //! compiling and code formatting, but contains too much internal detail for
 //! someone writing an output renderer to deal with.
-//! 
+//!
 //! This module thus provides convenient iteration methods on AST types so
 //! that adapters can extract content without having to match on parser
 //! internals directly. The types returned are still the parser's own types
@@ -320,9 +320,7 @@ impl<'i> Paragraph<'i> {
 
 #[cfg(test)]
 mod check {
-    use crate::language::{
-        Descriptive, Expression, Identifier, Invocation, Paragraph, Target,
-    };
+    use crate::language::{Descriptive, Expression, Identifier, Invocation, Paragraph, Target};
 
     fn local<'a>(name: &'a str) -> Invocation<'a> {
         Invocation {
@@ -334,9 +332,13 @@ mod check {
     // Pure text: "Ensure physical and digital safety"
     #[test]
     fn text_only_paragraph() {
-        let p = Paragraph(vec![Descriptive::Text("Ensure physical and digital safety")]);
+        let p = Paragraph(vec![Descriptive::Text(
+            "Ensure physical and digital safety",
+        )]);
         assert_eq!(p.text(), "Ensure physical and digital safety");
-        assert!(p.invocations().is_empty());
+        assert!(p
+            .invocations()
+            .is_empty());
         assert_eq!(p.content(), "Ensure physical and digital safety");
     }
 
@@ -365,9 +367,9 @@ mod check {
     // CodeInline with repeat: { repeat <incident_action_cycle> }
     #[test]
     fn repeat_expression() {
-        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Repeat(
-            Box::new(Expression::Application(local("incident_action_cycle"))),
-        ))]);
+        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Repeat(Box::new(
+            Expression::Application(local("incident_action_cycle")),
+        )))]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["incident_action_cycle"]);
         assert_eq!(p.content(), "repeat incident_action_cycle");

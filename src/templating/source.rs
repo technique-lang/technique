@@ -13,20 +13,14 @@ static PREAMBLE: &str = r#"
 #show raw: set block(breakable: true)
 "#;
 
-pub struct Source {
-    width: u8,
-}
+const WIDTH: u8 = 70;
 
-impl Source {
-    pub fn new(width: u8) -> Self {
-        Source { width }
-    }
-}
+pub struct Source;
 
 impl Template for Source {
     fn render(&self, document: &Document) -> String {
         let mut out = String::from(PREAMBLE);
-        out.push_str(&render(&Typst, document, self.width));
+        out.push_str(&render(&Typst, document, WIDTH));
         out
     }
 

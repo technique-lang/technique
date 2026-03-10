@@ -317,37 +317,47 @@ fn main() {
             let template = submatches.get_one::<String>("template");
             let template: &str = match template {
                 Some(value) => value,
-                None => {
-                    technique
-                        .header
-                        .as_ref()
-                        .and_then(|m| m.template)
-                        .unwrap_or("source")
-                }
+                None => technique
+                    .header
+                    .as_ref()
+                    .and_then(|m| m.template)
+                    .unwrap_or("source"),
             };
 
             debug!(template);
 
             // Select template and render
-            let result = match template {
-                "source" => templating::render(&Source::new(70), &technique),
-                "checklist" => templating::render(&Checklist, &technique),
-                "procedure" => templating::render(&Procedure, &technique),
-                other => {
-                    eprintln!(
-                        "{}: unrecognized template \"{}\"",
-                        "error".bright_red(),
-                        other
-                    );
-                    std::process::exit(1);
-                }
-            };
-
             match output.as_str() {
                 "typst" => {
+                    let result = match template {
+                        "source" => templating::data(&Source, &technique),
+                        "checklist" => templating::data(&Checklist, &technique),
+                        "procedure" => templating::data(&Procedure, &technique),
+                        other => {
+                            eprintln!(
+                                "{}: unrecognized template \"{}\"",
+                                "error".bright_red(),
+                                other
+                            );
+                            std::process::exit(1);
+                        }
+                    };
                     print!("{}", result);
                 }
                 "pdf" => {
+                    let result = match template {
+                        "source" => templating::render(&Source, &technique),
+                        "checklist" => templating::render(&Checklist, &technique),
+                        "procedure" => templating::render(&Procedure, &technique),
+                        other => {
+                            eprintln!(
+                                "{}: unrecognized template \"{}\"",
+                                "error".bright_red(),
+                                other
+                            );
+                            std::process::exit(1);
+                        }
+                    };
                     output::via_typst(&filename, &result);
                 }
                 _ => panic!("Unrecognized --output value"),
