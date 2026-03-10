@@ -236,8 +236,12 @@ preflight :
     1. Fasten seatbelt
             "#,
         ));
-        assert_eq!(doc.sections.len(), 1);
-        assert_eq!(doc.sections[0].heading.as_deref(), Some("Pre-flight Checks"));
+        assert_eq!(
+            doc.sections
+                .len(),
+            1
+        );
+        assert_eq!(doc.sections[0].heading, Some("Pre-flight Checks".into()));
     }
 
     #[test]
@@ -253,8 +257,8 @@ checks :
         ));
         let steps = &doc.sections[0].steps;
         assert_eq!(steps.len(), 2);
-        assert_eq!(steps[0].role.as_deref(), Some("surgeon"));
-        assert_eq!(steps[1].role.as_deref(), Some("surgeon"));
+        assert_eq!(steps[0].role, Some("surgeon".into()));
+        assert_eq!(steps[1].role, Some("surgeon".into()));
     }
 
     #[test]
@@ -268,14 +272,15 @@ checks :
             "#,
         ));
         let step = &doc.sections[0].steps[0];
-        assert_eq!(step.responses.len(), 2);
+        assert_eq!(
+            step.responses
+                .len(),
+            2
+        );
         assert_eq!(step.responses[0].value, "Yes");
         assert_eq!(step.responses[0].condition, None);
         assert_eq!(step.responses[1].value, "No");
-        assert_eq!(
-            step.responses[1].condition.as_deref(),
-            Some("if complications")
-        );
+        assert_eq!(step.responses[1].condition, Some("if complications".into()));
     }
 
     #[test]
@@ -294,6 +299,6 @@ ensure_safety :
             "#,
         ));
         let steps = &doc.sections[0].steps;
-        assert_eq!(steps[0].title.as_deref(), Some("ensure_safety"));
+        assert_eq!(steps[0].title, Some("ensure_safety".into()));
     }
 }

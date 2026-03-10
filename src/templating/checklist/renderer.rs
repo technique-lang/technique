@@ -1,21 +1,10 @@
 //! Format checklist domain types into Typst.
 
-use crate::templating::template::Renderer;
 use crate::templating::typst;
 
 use super::types::{Document, Section, Step};
 
-pub struct ChecklistRenderer;
-
-impl Renderer for ChecklistRenderer {
-    type Model = Document;
-
-    fn render(&self, model: &Document) -> String {
-        render(model)
-    }
-}
-
-fn render(document: &Document) -> String {
+pub fn markup(document: &Document) -> String {
     let mut output = typst::preamble();
 
     for section in &document.sections {
@@ -82,9 +71,6 @@ fn render_step(output: &mut String, step: &Step) {
 
 #[cfg(test)]
 mod check {
-    use crate::templating::template::Renderer;
-
-    use super::ChecklistRenderer;
     use super::super::types::{Document, Response, Section, Step};
 
     fn step(ordinal: Option<&str>, title: Option<&str>) -> Step {
@@ -108,7 +94,7 @@ mod check {
                 steps: vec![step(Some("1"), Some("Check pulse"))],
             }],
         };
-        let out = ChecklistRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("== I. Before anaesthesia"));
     }
 
@@ -121,7 +107,7 @@ mod check {
                 steps: vec![step(Some("3"), Some("Verify identity"))],
             }],
         };
-        let out = ChecklistRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("*3.*"));
         assert!(out.contains("Verify identity"));
     }
@@ -137,9 +123,13 @@ mod check {
                 steps: vec![s],
             }],
         };
-        let out = ChecklistRenderer.render(&doc);
-        let role_pos = out.find("surgeon").unwrap();
-        let step_pos = out.find("Confirm site").unwrap();
+        let out = super::markup(&doc);
+        let role_pos = out
+            .find("surgeon")
+            .unwrap();
+        let step_pos = out
+            .find("Confirm site")
+            .unwrap();
         assert!(role_pos < step_pos);
     }
 
@@ -147,8 +137,14 @@ mod check {
     fn responses_rendered() {
         let mut s = step(Some("1"), Some("Ready?"));
         s.responses = vec![
-            Response { value: "Yes".into(), condition: None },
-            Response { value: "No".into(), condition: Some("if complications".into()) },
+            Response {
+                value: "Yes".into(),
+                condition: None,
+            },
+            Response {
+                value: "No".into(),
+                condition: Some("if complications".into()),
+            },
         ];
         let doc = Document {
             sections: vec![Section {
@@ -157,7 +153,7 @@ mod check {
                 steps: vec![s],
             }],
         };
-        let out = ChecklistRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("Yes"));
         assert!(out.contains("No if complications"));
     }

@@ -29,4 +29,8 @@ impl Template for Source {
         out.push_str(&render(&Typst, document, self.width));
         out
     }
+
+    fn data(&self, document: &Document) -> String {
+        self.render(document)
+    }
 }

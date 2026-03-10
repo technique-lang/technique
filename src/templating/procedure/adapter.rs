@@ -8,7 +8,7 @@
 use crate::language;
 use crate::templating::template::Adapter;
 
-use super::types::{Document, Node, Response, StepKind};
+use super::types::{Document, Node, Response};
 
 pub struct ProcedureAdapter;
 
@@ -123,13 +123,8 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
     Vec::new()
 }
 
-/// Convert a step-like scope into a Step node.
+/// Convert a step-like scope into a Sequential or Parallel node.
 fn node_from_step(scope: &language::Scope) -> Node {
-    let kind = match scope {
-        language::Scope::DependentBlock { .. } => StepKind::Dependent,
-        _ => StepKind::Parallel,
-    };
-
     let mut responses = Vec::new();
     let mut children = Vec::new();
 
@@ -170,16 +165,26 @@ fn node_from_step(scope: &language::Scope) -> Node {
         None => (None, Vec::new()),
     };
 
-    Node::Step {
-        kind,
-        ordinal: scope
-            .ordinal()
-            .map(String::from),
-        title,
-        body,
-        invocations,
-        responses,
-        children,
+    match scope {
+        language::Scope::DependentBlock { .. } => Node::Sequential {
+            ordinal: scope
+                .ordinal()
+                .map(String::from)
+                .unwrap_or_default(),
+            title,
+            body,
+            invocations,
+            responses,
+            children,
+        },
+        language::Scope::ParallelBlock { .. } => Node::Parallel {
+            title,
+            body,
+            invocations,
+            responses,
+            children,
+        },
+        _ => panic!("node_from_step called with non-step scope"),
     }
 }
 
@@ -190,8 +195,8 @@ mod check {
     use crate::parsing;
     use crate::templating::template::Adapter;
 
+    use super::super::types::Node;
     use super::ProcedureAdapter;
-    use super::super::types::{Node, StepKind};
 
     fn trim(s: &str) -> &str {
         s.strip_prefix('\n')
@@ -215,7 +220,7 @@ emergency :
     1. Stay calm
             "#,
         ));
-        assert_eq!(doc.title.as_deref(), Some("Don't Panic"));
+        assert_eq!(doc.title, Some("Don't Panic".into()));
     }
 
     #[test]
@@ -229,7 +234,7 @@ build :
             a. <define_interfaces>
             "#,
         ));
-        if let Node::Step { children, .. } = &doc.body[0] {
+        if let Node::Sequential { children, .. } = &doc.body[0] {
             assert_eq!(children.len(), 1);
             if let Node::Attribute { name, children } = &children[0] {
                 assert_eq!(name, "programmers");
@@ -238,7 +243,7 @@ build :
                 panic!("expected RoleGroup");
             }
         } else {
-            panic!("expected Step");
+            panic!("expected Sequential");
         }
     }
 
@@ -252,17 +257,20 @@ checks :
     2. Second step
             "#,
         ));
-        assert_eq!(doc.body.len(), 2);
-        if let Node::Step { kind, ordinal, .. } = &doc.body[0] {
-            assert!(matches!(kind, StepKind::Dependent));
-            assert_eq!(ordinal.as_deref(), Some("1"));
+        assert_eq!(
+            doc.body
+                .len(),
+            2
+        );
+        if let Node::Sequential { ordinal, .. } = &doc.body[0] {
+            assert_eq!(ordinal, "1");
         } else {
-            panic!("expected Step");
+            panic!("expected Sequential");
         }
     }
 
     #[test]
-    fn parallel_step_no_ordinal() {
+    fn parallel_step() {
         let doc = extract(trim(
             r#"
 checks :
@@ -271,12 +279,15 @@ checks :
     - Second item
             "#,
         ));
-        assert_eq!(doc.body.len(), 2);
-        if let Node::Step { kind, ordinal, .. } = &doc.body[0] {
-            assert!(matches!(kind, StepKind::Parallel));
-            assert_eq!(*ordinal, None);
+        assert_eq!(
+            doc.body
+                .len(),
+            2
+        );
+        if let Node::Parallel { .. } = &doc.body[0] {
+            // ok
         } else {
-            panic!("expected Step");
+            panic!("expected Parallel");
         }
     }
 
@@ -295,10 +306,10 @@ ensure_safety :
     - Check exits
             "#,
         ));
-        if let Node::Step { title, .. } = &doc.body[0] {
-            assert_eq!(title.as_deref(), Some("ensure_safety"));
+        if let Node::Sequential { title, .. } = &doc.body[0] {
+            assert_eq!(*title, Some("ensure_safety".into()));
         } else {
-            panic!("expected Step");
+            panic!("expected Sequential");
         }
     }
 
@@ -325,11 +336,20 @@ execution :
     4. Verify
             "#,
         ));
-        assert_eq!(doc.body.len(), 2);
+        assert_eq!(
+            doc.body
+                .len(),
+            2
+        );
 
-        if let Node::Section { ordinal, heading, children } = &doc.body[0] {
+        if let Node::Section {
+            ordinal,
+            heading,
+            children,
+        } = &doc.body[0]
+        {
             assert_eq!(ordinal, "I");
-            assert_eq!(heading.as_deref(), Some("Preparation"));
+            assert_eq!(*heading, Some("Preparation".into()));
             // Section contains a Procedure node with 2 steps
             assert_eq!(children.len(), 1);
             if let Node::Procedure { children, .. } = &children[0] {
@@ -341,9 +361,14 @@ execution :
             panic!("expected Section");
         }
 
-        if let Node::Section { ordinal, heading, children } = &doc.body[1] {
+        if let Node::Section {
+            ordinal,
+            heading,
+            children,
+        } = &doc.body[1]
+        {
             assert_eq!(ordinal, "II");
-            assert_eq!(heading.as_deref(), Some("Execution"));
+            assert_eq!(*heading, Some("Execution".into()));
             assert_eq!(children.len(), 1);
             if let Node::Procedure { children, .. } = &children[0] {
                 assert_eq!(children.len(), 2);

@@ -28,8 +28,8 @@ fn check_directory(dir: &Path, template: &impl templating::Template) {
     let mut failures = Vec::new();
 
     for file in &files {
-        let source = parsing::load(file)
-            .unwrap_or_else(|e| panic!("Failed to load {:?}: {:?}", file, e));
+        let source =
+            parsing::load(file).unwrap_or_else(|e| panic!("Failed to load {:?}: {:?}", file, e));
 
         let doc = parsing::parse(file, &source)
             .unwrap_or_else(|e| panic!("Failed to parse {:?}: {:?}", file, e));

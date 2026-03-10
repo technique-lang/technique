@@ -4,22 +4,11 @@
 //! title block with overview, blue "Procedure" bar, numbered steps with
 //! bold titles, roles as indented bold names, and lettered substeps.
 
-use crate::templating::template::Renderer;
 use crate::templating::typst;
 
-use super::types::{Document, Node, Response, StepKind};
+use super::types::{Document, Node, Response};
 
-pub struct ProcedureRenderer;
-
-impl Renderer for ProcedureRenderer {
-    type Model = Document;
-
-    fn render(&self, model: &Document) -> String {
-        render(model)
-    }
-}
-
-fn render(document: &Document) -> String {
+pub(super) fn markup(document: &Document) -> String {
     let mut out = String::new();
 
     out.push_str("#set page(margin: 1.5cm)\n");
@@ -36,7 +25,11 @@ fn render(document: &Document) -> String {
         ));
     }
 
-    if !document.description.is_empty() || has_sections(&document.body) {
+    if !document
+        .description
+        .is_empty()
+        || has_sections(&document.body)
+    {
         out.push_str("_Overview_\n\n");
         for para in &document.description {
             out.push_str(&typst::escape(para));
@@ -55,8 +48,14 @@ fn render(document: &Document) -> String {
     out.push_str("#block(width: 100%, fill: rgb(\"#006699\"), inset: 5pt)[#text(fill: white)[*Procedure*]]\n\n");
 
     // Body
-    let total = document.body.len();
-    for (i, node) in document.body.iter().enumerate() {
+    let total = document
+        .body
+        .len();
+    for (i, node) in document
+        .body
+        .iter()
+        .enumerate()
+    {
         render_node(&mut out, node);
         // Section dividers
         if i + 1 < total {
@@ -73,18 +72,17 @@ fn render(document: &Document) -> String {
 /// True if any top-level node is a Section.
 fn has_sections(body: &[Node]) -> bool {
     body.iter()
-        .any(|n| matches!(n, Node::Section { .. }))
+        .any(|n| if let Node::Section { .. } = n { true } else { false })
 }
 
 fn render_outline_entry(out: &mut String, node: &Node) {
-    if let Node::Section { ordinal, heading, .. } = node {
+    if let Node::Section {
+        ordinal, heading, ..
+    } = node
+    {
         match heading {
             Some(heading) => {
-                out.push_str(&format!(
-                    "[{}.], [{}],\n",
-                    ordinal,
-                    typst::escape(heading)
-                ));
+                out.push_str(&format!("[{}.], [{}],\n", ordinal, typst::escape(heading)));
             }
             None => {
                 out.push_str(&format!("[{}.], [],\n", ordinal));
@@ -95,13 +93,22 @@ fn render_outline_entry(out: &mut String, node: &Node) {
 
 fn render_node(out: &mut String, node: &Node) {
     match node {
-        Node::Section { ordinal, heading, children } => {
+        Node::Section {
+            ordinal,
+            heading,
+            children,
+        } => {
             render_section(out, ordinal, heading.as_deref(), children);
         }
-        Node::Procedure { name, title, description, children } => {
+        Node::Procedure {
+            name,
+            title,
+            description,
+            children,
+        } => {
             render_procedure(out, name, title.as_deref(), description, children);
         }
-        Node::Step { .. } => {
+        Node::Sequential { .. } | Node::Parallel { .. } => {
             render_step(out, node);
         }
         Node::Attribute { name, children } => {
@@ -129,11 +136,14 @@ fn render_section(out: &mut String, ordinal: &str, heading: Option<&str>, childr
     }
 }
 
-fn render_procedure(out: &mut String, name: &str, title: Option<&str>, description: &[String], children: &[Node]) {
-    out.push_str(&format!(
-        "#text(size: 7pt)[`{}`]\\\n",
-        name
-    ));
+fn render_procedure(
+    out: &mut String,
+    name: &str,
+    title: Option<&str>,
+    description: &[String],
+    children: &[Node],
+) {
+    out.push_str(&format!("#text(size: 7pt)[`{}`]\\\n", name));
     if let Some(title) = title {
         out.push_str(&format!(
             "#text(size: 11pt)[*{}*]\n\n",
@@ -174,12 +184,13 @@ fn render_role(out: &mut String, name: &str, children: &[Node]) {
 
 /// Convert the first child's letter ordinal to a numeric start value.
 fn ordinal_start(children: &[Node]) -> u32 {
-    if let Some(Node::Step { ordinal, .. }) = children.first() {
-        if let Some(ord) = ordinal {
-            if let Some(c) = ord.chars().next() {
-                if c.is_ascii_lowercase() {
-                    return (c as u32) - ('a' as u32) + 1;
-                }
+    if let Some(Node::Sequential { ordinal, .. }) = children.first() {
+        if let Some(c) = ordinal
+            .chars()
+            .next()
+        {
+            if c.is_ascii_lowercase() {
+                return (c as u32) - ('a' as u32) + 1;
             }
         }
     }
@@ -189,7 +200,7 @@ fn ordinal_start(children: &[Node]) -> u32 {
 /// Render items nested under a role group (substeps).
 fn render_child(out: &mut String, node: &Node) {
     match node {
-        Node::Step { title, .. } => {
+        Node::Sequential { title, .. } | Node::Parallel { title, .. } => {
             if let Some(t) = title {
                 out.push_str(&format!("+ {}\n", typst::escape(t)));
             }
@@ -202,26 +213,39 @@ fn render_child(out: &mut String, node: &Node) {
 }
 
 fn render_step(out: &mut String, node: &Node) {
-    let Node::Step { kind, ordinal, title, body, invocations, responses, children } = node else {
-        return;
-    };
-
-    let ord = match kind {
-        StepKind::Dependent => ordinal.as_deref(),
-        StepKind::Parallel => None,
+    let (ordinal, title, body, invocations, responses, children) = match node {
+        Node::Sequential {
+            ordinal,
+            title,
+            body,
+            invocations,
+            responses,
+            children,
+        } => (
+            Some(ordinal.as_str()),
+            title,
+            body,
+            invocations,
+            responses,
+            children,
+        ),
+        Node::Parallel {
+            title,
+            body,
+            invocations,
+            responses,
+            children,
+        } => (None, title, body, invocations, responses, children),
+        _ => return,
     };
 
     // Invocations on the line before the step heading
     render_invocations(out, invocations);
 
     // Step heading
-    match (ord, title.as_deref()) {
+    match (ordinal, title.as_deref()) {
         (Some(o), Some(t)) => {
-            out.push_str(&format!(
-                "*{}.* #h(4pt) *{}*\n\n",
-                o,
-                typst::escape(t)
-            ));
+            out.push_str(&format!("*{}.* #h(4pt) *{}*\n\n", o, typst::escape(t)));
         }
         (Some(o), None) => {
             out.push_str(&format!("*{}.*\n\n", o));
@@ -253,10 +277,7 @@ fn render_step(out: &mut String, node: &Node) {
 fn render_invocations(out: &mut String, invocations: &[String]) {
     if !invocations.is_empty() {
         let names = invocations.join(", ");
-        out.push_str(&format!(
-            "#text(size: 7pt)[`{}`]\\\n",
-            names
-        ));
+        out.push_str(&format!("#text(size: 7pt)[`{}`]\\\n", names));
     }
 }
 
@@ -276,15 +297,11 @@ fn render_responses(out: &mut String, responses: &[Response]) {
 
 #[cfg(test)]
 mod check {
-    use crate::templating::template::Renderer;
-
-    use super::ProcedureRenderer;
-    use super::super::types::{Document, Node, StepKind};
+    use super::super::types::{Document, Node};
 
     fn dep(ordinal: &str, title: &str) -> Node {
-        Node::Step {
-            kind: StepKind::Dependent,
-            ordinal: Some(ordinal.into()),
+        Node::Sequential {
+            ordinal: ordinal.into(),
             title: Some(title.into()),
             body: Vec::new(),
             invocations: Vec::new(),
@@ -294,9 +311,7 @@ mod check {
     }
 
     fn par(title: &str) -> Node {
-        Node::Step {
-            kind: StepKind::Parallel,
-            ordinal: None,
+        Node::Parallel {
             title: Some(title.into()),
             body: Vec::new(),
             invocations: Vec::new(),
@@ -312,7 +327,7 @@ mod check {
             description: Vec::new(),
             body: Vec::new(),
         };
-        let out = ProcedureRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("*Emergency Procedure*"));
     }
 
@@ -323,7 +338,7 @@ mod check {
             description: Vec::new(),
             body: vec![dep("4", "Engineering Design")],
         };
-        let out = ProcedureRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("*4.*"));
         assert!(out.contains("*Engineering Design*"));
     }
@@ -335,7 +350,7 @@ mod check {
             description: Vec::new(),
             body: vec![par("Check exits")],
         };
-        let out = ProcedureRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("Check exits"));
     }
 
@@ -349,9 +364,13 @@ mod check {
                 children: vec![dep("a", "define_interfaces")],
             }],
         };
-        let out = ProcedureRenderer.render(&doc);
-        let role_pos = out.find("programmers").unwrap();
-        let step_pos = out.find("define\\_interfaces").unwrap();
+        let out = super::markup(&doc);
+        let role_pos = out
+            .find("programmers")
+            .unwrap();
+        let step_pos = out
+            .find("define\\_interfaces")
+            .unwrap();
         assert!(role_pos < step_pos);
     }
 
@@ -366,7 +385,7 @@ mod check {
                 children: Vec::new(),
             }],
         };
-        let out = ProcedureRenderer.render(&doc);
+        let out = super::markup(&doc);
         assert!(out.contains("*III.*"));
         assert!(out.contains("*Implementation*"));
     }

@@ -10,12 +10,9 @@ mod renderer;
 pub mod types;
 
 use crate::language;
-use crate::templating::template::Template;
-
-use crate::templating::template::Adapter;
-use crate::templating::template::Renderer;
+use crate::templating::template::{Adapter, Template};
+use crate::templating::typst::{Data, Render};
 use adapter::ChecklistAdapter;
-use renderer::ChecklistRenderer;
 
 /// Checklist template: adapter + renderer composition.
 pub struct Checklist;
@@ -23,6 +20,13 @@ pub struct Checklist;
 impl Template for Checklist {
     fn render(&self, document: &language::Document) -> String {
         let model = ChecklistAdapter.extract(document);
-        ChecklistRenderer.render(&model)
+        renderer::markup(&model)
+    }
+
+    fn data(&self, document: &language::Document) -> String {
+        let model = ChecklistAdapter.extract(document);
+        let mut data = Data::new();
+        model.render(&mut data);
+        data.finish()
     }
 }
