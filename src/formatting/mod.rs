@@ -1,6 +1,6 @@
 pub mod formatter;
-mod renderer;
+mod syntax;
 
 // Re-export all public symbols
 pub use formatter::*;
-pub use renderer::*;
+pub use syntax::*;

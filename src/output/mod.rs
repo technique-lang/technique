@@ -1,0 +1,73 @@
+//! Output generation for the Technique CLI application
+
+use owo_colors::OwoColorize;
+use std::io::Write;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use tracing::{debug, info};
+
+/// Compile a Typst document piped via stdin to a PDF file.
+///
+/// The template content, data literal, and render call are written
+/// sequentially to the process's stdin.
+pub fn via_typst(filename: &Path, template: &str, data: &str) {
+    info!("Printing file: {}", filename.display());
+
+    if filename.to_str() == Some("-") {
+        eprintln!(
+            "{}: Unable to render to PDF from standard input.",
+            "error".bright_red()
+        );
+        std::process::exit(1);
+    }
+    if !filename.exists() {
+        panic!(
+            "Supplied procedure file does not exist: {}",
+            filename.display()
+        );
+    }
+
+    let target = filename.with_extension("pdf");
+
+    let mut child = Command::new("typst")
+        .arg("compile")
+        .arg("-")
+        .arg(&target)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| {
+            eprintln!("{}: failed to start typst: {}", "error".bright_red(), e);
+            std::process::exit(1);
+        });
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .unwrap();
+
+    stdin
+        .write_all(template.as_bytes())
+        .expect("Failed attempting to write");
+    stdin
+        .write_all(b"\n")
+        .expect("Failed attempting to write");
+    stdin
+        .write_all(data.as_bytes())
+        .expect("Failed attempting to write");
+    stdin
+        .write_all(b"\n#render(technique)\n")
+        .expect("Failed attempting to write");
+
+    drop(stdin);
+
+    let status = child
+        .wait()
+        .expect("Failed to wait for Typst process");
+
+    if !status.success() {
+        eprintln!("{}: typst compile failed", "error".bright_red());
+        std::process::exit(1);
+    }
+
+    debug!("Wrote {}", target.display());
+}

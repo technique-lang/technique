@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use technique::formatting::*;
+use technique::formatting::Identity;
+use technique::highlighting::render;
 use technique::parsing;
 
 /// Golden test for the format command

@@ -1,7 +1,4 @@
-use technique::{
-    formatting::{formatter, Render},
-    language::*,
-};
+use technique::{formatting::*, language::*};
 
 /// Trait for AST types that can present themselves via a renderer
 pub trait Present {

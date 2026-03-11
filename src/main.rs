@@ -1,24 +1,23 @@
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
-use rendering::{Terminal, Typst};
 use std::io::IsTerminal;
 use std::path::Path;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
-use technique::formatting::*;
-use technique::formatting::{self};
+use technique::formatting::{self, Identity};
+use technique::highlighting::{self, Terminal};
 use technique::parsing;
+use technique::templating::{self, Checklist, Procedure, Source};
 
 mod editor;
+mod output;
 mod problem;
-mod rendering;
 
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
     Native,
-    Typst,
     Silent,
 }
 
@@ -67,6 +66,7 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
+                        .value_name("type")
                         .value_parser(["native", "none"])
                         .default_value("none")
                         .action(ArgAction::Set)
@@ -106,23 +106,40 @@ fn main() {
         .subcommand(
             Command::new("render")
                 .about("Render the Technique document into a printable PDF.")
-                .long_about("Render the Technique document into a printable \
-                    PDF. By default this will highlight the source of the \
-                    input file for the purposes of reviewing the raw \
-                    procedure in code form.")
+                .long_about("Render the Technique document into a formatted \
+                PDF using a template. This allows you to transform the code of \
+                the procedure into the intended layout suitable to the \
+                domain you're app.")
                 .arg(
                     Arg::new("output")
                         .short('o')
                         .long("output")
-                        .value_parser(["typst", "none"])
-                        .default_value("none")
+                        .value_name("type")
+                        .value_parser(["pdf", "typst"])
+                        .default_value("pdf")
                         .action(ArgAction::Set)
-                        .help("Which kind of diagnostic output to print when rendering.")
+                        .help("Whether to write PDF to a file on disk, or print the Typst markup that would be used to create that PDF (for debugging)."),
+                )
+                .arg(
+                    Arg::new("domain")
+                        .short('d')
+                        .long("domain")
+                        .value_parser(["checklist", "procedure", "recipe", "source"])
+                        .action(ArgAction::Set)
+                        .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
+                )
+                .arg(
+                    Arg::new("template")
+                        .short('t')
+                        .long("template")
+                        .value_name("filename")
+                        .action(ArgAction::Set)
+                        .help("Path to a Typst template file for rendering."),
                 )
                 .arg(
                     Arg::new("filename")
                         .required(true)
-                        .help("The file containing the code for the Technique you want to print."),
+                        .help("The file containing the Technique you want to render."),
                 ),
         )
         .subcommand(
@@ -251,9 +268,9 @@ fn main() {
 
             let result;
             if raw_output || std::io::stdout().is_terminal() {
-                result = formatting::render(&Terminal, &technique, wrap_width);
+                result = highlighting::render(&Terminal, &technique, wrap_width);
             } else {
-                result = formatting::render(&Identity, &technique, wrap_width);
+                result = highlighting::render(&Identity, &technique, wrap_width);
             }
 
             print!("{}", result);
@@ -262,13 +279,8 @@ fn main() {
             let output = submatches
                 .get_one::<String>("output")
                 .unwrap();
-            let output = match output.as_str() {
-                "typst" => Output::Typst,
-                "none" => Output::Silent,
-                _ => panic!("Unrecognized --output value"),
-            };
 
-            debug!(?output);
+            debug!(output);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -309,20 +321,70 @@ fn main() {
                 }
             };
 
-            let result = formatting::render(&Typst, &technique, 70);
+            // If present the value of the --domain option will override the
+            // document's metadata domain line. If neither is specified then
+            // the fallback default is "source".
 
-            match output {
-                Output::Typst => {
-                    print!("{}", result);
+            let domain = submatches.get_one::<String>("domain");
+            let domain: &str = match domain {
+                Some(value) => value,
+                None => technique
+                    .header
+                    .as_ref()
+                    .and_then(|m| m.domain)
+                    .unwrap_or("source"),
+            };
+
+            debug!(domain);
+
+            // Select domain
+            let template: &dyn templating::Template = match domain {
+                "source" => &Source,
+                "checklist" => &Checklist,
+                "procedure" => &Procedure,
+                other => {
+                    eprintln!(
+                        "{}: unrecognized domain \"{}\"",
+                        "error".bright_red(),
+                        other
+                    );
+                    std::process::exit(1);
                 }
-                _ => {
-                    // ignore; the default is to not output any intermediate
-                    // representations and instead proceed to invoke the
-                    // typesetter to generate the desired PDF.
+            };
+
+            let data = template.data(&technique);
+
+            // If --template is given, use the user-supplied file (expected to
+            // be a .typ file containing Typst template code) ; otherwise
+            // inline the built-in template.
+            let preamble: String = match submatches.get_one::<String>("template") {
+                Some(path) => {
+                    if !Path::new(path).exists() {
+                        eprintln!(
+                            "{}: template file not found: {}",
+                            "error".bright_red(),
+                            path
+                        );
+                        std::process::exit(1);
+                    }
+                    format!("#import \"{}\": render", path)
                 }
+                None => template
+                    .typst()
+                    .to_string(),
+            };
+
+            match output.as_str() {
+                "typst" => {
+                    println!("{}", preamble);
+                    print!("{}", data);
+                    println!("\n#render(technique)");
+                }
+                "pdf" => {
+                    output::via_typst(filename, &preamble, &data);
+                }
+                _ => panic!("Unrecognized --output value"),
             }
-
-            rendering::via_typst(&filename, &result);
         }
         Some(("language", _)) => {
             debug!("Starting Language Server");

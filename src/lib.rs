@@ -1,4 +1,7 @@
+pub mod domain;
 pub mod formatting;
+pub mod highlighting;
 pub mod language;
 pub mod parsing;
 pub mod regex;
+pub mod templating;

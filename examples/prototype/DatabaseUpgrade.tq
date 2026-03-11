@@ -1,0 +1,75 @@
+% technique v1
+& procedure
+
+database_upgrade :
+
+# Production Database Upgrade
+
+In order to launch the next version of our e-commerce platform, we need to
+upgrade the schema of the core database at the heart of the application. We
+also have an outstanding requirement to upgrade the underlying database
+software, as we have had trouble with several bugs therein which the vendor
+reports fixed.
+
+I. Take site down
+
+site_down :
+
+# Take site down
+
+Before taking the database offline for its upgrade, we put the site into
+maintenance mode and safely down the servers. The start time is critical due
+to expected duration of the database schema upgrade scripts.
+
+    1.  Enter maintenance mode
+        @fozzie
+            a.  Put web site into maintenance mode (load balancer redirect to
+                alternate web servers with static pages)
+        @gonzo
+            b.  Activate IVR maintenance mode
+    2.  Down services
+        @kermit
+            a.  Stop all VMs
+            b.  Stop GFS on database1, database2
+            c.  Ensure RAID filesystems still mounted
+        @gonzo
+            d.  Stop Apache on web1, web2
+    3.  Verification
+        @kermit
+            a.  Verify maintenance mode is active
+            b.  Verify all VMs down
+            c.  GO / NO-GO FOR UPGRADE
+
+II. Database work
+
+software_update :
+
+# Database Software Upgrade
+
+Run an export of the database in order to ensure we have a good backup prior
+to upgrading the database software and running the schema change scripts.
+There is not much concurrent activity here, so those not directly involved in
+database activity will head for breakfast.
+
+    4.  Database safety
+        @beaker
+            a.  Database to single user mode
+            b.  Export database to secondary storage
+            c.  Stop database
+        @gonzo
+            d.  Run out to get coffees for everyone
+    5.  Software upgrade
+        @fozzie
+            a.  Install database software upgrade
+    6.  Restart database
+        @beaker
+            a.  Start database
+    7.  Preliminary database testing
+        @beaker
+            a.  Run access check scripts
+            b.  Run health check scripts
+        @fozzie
+            c.  Restart database monitoring
+    8.  Schema upgrade
+        @beaker
+            a.  Run database schema upgrade scripts
