@@ -24,7 +24,7 @@ mod verify {
                 version: 1,
                 license: Some("MIT"),
                 copyright: None,
-                template: Some("checklist"),
+                domain: Some("checklist"),
             }),
             body: None,
         };
@@ -69,7 +69,7 @@ first : A -> B
                 version: 1,
                 license: Some("PD"),
                 copyright: Some("2025 The First Procedure Society, Inc"),
-                template: None,
+                domain: None,
             }),
             body: Some(Technique::Procedures(vec![
                 Procedure {

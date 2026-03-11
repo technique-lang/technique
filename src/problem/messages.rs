@@ -101,9 +101,9 @@ the license statement, separated from it by a semicolon. Copyright statements
 typically list the year and then the name of the person or entity holding the
 copyright.
 
-The third line optionally specifies the template to be used when rendering the
-Technique. Common templates include {}, {}, and
-{}.
+The third line optionally specifies the domain or kind of Technique this is,
+to be used when rendering the Technique. Common templates include
+{}, {}, and {}.
             "#,
                     formatted_example,
                     renderer.style(crate::formatting::Syntax::Header, "MIT"),

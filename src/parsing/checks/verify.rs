@@ -20,7 +20,7 @@ fn technique_header() {
             version: 1,
             license: None,
             copyright: None,
-            template: None
+            domain: None
         })
     );
 
@@ -39,7 +39,7 @@ fn technique_header() {
             version: 1,
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
-            template: Some("checklist")
+            domain: Some("checklist")
         })
     );
 }

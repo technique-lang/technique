@@ -784,7 +784,7 @@ impl<'i> Parser<'i> {
         })
     }
 
-    fn read_template_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
+    fn read_domain_line(&mut self) -> Result<Option<&'i str>, ParsingError> {
         self.take_until(&['\n'], |inner| {
             let re = regex!(r"^&\s*(.+)$");
 
@@ -794,9 +794,9 @@ impl<'i> Parser<'i> {
 
             let one = cap
                 .get(1)
-                .ok_or(ParsingError::Expected(inner.offset, 0, "a template name"))?;
+                .ok_or(ParsingError::Expected(inner.offset, 0, "a domain name"))?;
 
-            let result = validate_template(one.as_str())
+            let result = validate_domain(one.as_str())
                 .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
             Ok(Some(result))
         })
@@ -821,9 +821,9 @@ impl<'i> Parser<'i> {
             (None, None)
         };
 
-        // Process template line
-        let template = if is_template_line(self.source) {
-            let result = self.read_template_line()?;
+        // Process domain line
+        let domain = if is_domain_line(self.source) {
+            let result = self.read_domain_line()?;
             self.require_newline()?;
             result
         } else {
@@ -834,7 +834,7 @@ impl<'i> Parser<'i> {
             version,
             license,
             copyright,
-            template,
+            domain,
         })
     }
 
@@ -877,10 +877,7 @@ impl<'i> Parser<'i> {
             two.len(),
         ))?;
 
-        Ok(Signature {
-            requires,
-            provides,
-        })
+        Ok(Signature { requires, provides })
     }
 
     fn parse_procedure_declaration(
@@ -2635,7 +2632,7 @@ fn is_spdx_line(content: &str) -> bool {
         .starts_with('!')
 }
 
-fn is_template_line(content: &str) -> bool {
+fn is_domain_line(content: &str) -> bool {
     content
         .trim_ascii_start()
         .starts_with('&')

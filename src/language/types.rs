@@ -13,7 +13,7 @@ pub struct Metadata<'i> {
     pub version: u8,
     pub license: Option<&'i str>,
     pub copyright: Option<&'i str>,
-    pub template: Option<&'i str>,
+    pub domain: Option<&'i str>,
 }
 
 impl Default for Metadata<'_> {
@@ -22,7 +22,7 @@ impl Default for Metadata<'_> {
             version: 1,
             license: None,
             copyright: None,
-            template: None,
+            domain: None,
         }
     }
 }
@@ -234,7 +234,7 @@ pub(crate) fn validate_copyright(input: &str) -> Option<&str> {
     }
 }
 
-pub(crate) fn validate_template(input: &str) -> Option<&str> {
+pub(crate) fn validate_domain(input: &str) -> Option<&str> {
     let re = regex!(r"^[A-Za-z0-9.,\-]+$");
 
     if re.is_match(input) {
@@ -538,10 +538,10 @@ mod check {
     }
 
     #[test]
-    fn template_rules() {
-        assert_eq!(validate_template("checklist"), Some("checklist"));
-        assert_eq!(validate_template("checklist,v1"), Some("checklist,v1"));
-        assert_eq!(validate_template("checklist-v1.0"), Some("checklist-v1.0"));
+    fn domain_rules() {
+        assert_eq!(validate_domain("checklist"), Some("checklist"));
+        assert_eq!(validate_domain("checklist,v1"), Some("checklist,v1"));
+        assert_eq!(validate_domain("checklist-v1.0"), Some("checklist-v1.0"));
     }
 
     fn maker<'i>() -> Metadata<'i> {
@@ -549,7 +549,7 @@ mod check {
             version: 1,
             license: None,
             copyright: None,
-            template: None,
+            domain: None,
         };
 
         t1
@@ -561,7 +561,7 @@ mod check {
             version: 1,
             license: None,
             copyright: None,
-            template: None,
+            domain: None,
         };
 
         assert_eq!(Metadata::default(), t1);
@@ -570,7 +570,7 @@ mod check {
             version: 1,
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
-            template: Some("checklist"),
+            domain: Some("checklist"),
         };
 
         let t3 = maker();
@@ -580,7 +580,7 @@ mod check {
         let t4 = Metadata {
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
-            template: Some("checklist"),
+            domain: Some("checklist"),
             ..t3
         };
 

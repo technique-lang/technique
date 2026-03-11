@@ -87,18 +87,18 @@ fn header_spdx() {
 }
 
 #[test]
-fn header_template() {
+fn header_domain() {
     let mut input = Parser::new();
     input.initialize("& checklist");
-    assert!(is_template_line(input.source));
+    assert!(is_domain_line(input.source));
 
-    let result = input.read_template_line();
+    let result = input.read_domain_line();
     assert_eq!(result, Ok(Some("checklist")));
 
     input.initialize("& nasa-flight-plan,v4.0");
-    assert!(is_template_line(input.source));
+    assert!(is_domain_line(input.source));
 
-    let result = input.read_template_line();
+    let result = input.read_domain_line();
     assert_eq!(result, Ok(Some("nasa-flight-plan,v4.0")));
 }
 

@@ -434,9 +434,9 @@ impl<'i> Formatter<'i> {
             self.append_char('\n');
         }
 
-        if let Some(template) = metadata.template {
+        if let Some(domain) = metadata.domain {
             self.append_str("& ");
-            self.append_str(template);
+            self.append_str(domain);
             self.append_char('\n');
         }
         self.reset_syntax();
