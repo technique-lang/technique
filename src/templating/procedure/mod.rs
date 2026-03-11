@@ -5,14 +5,13 @@
 //! domain model preserves hierarchy. Sections with ordinals, role groups as
 //! distinct items rather than step annotations, and nested children.
 
-mod adapter;
 mod renderer;
-pub mod types;
 
+use crate::domain::procedure::adapter::ProcedureAdapter;
+use crate::domain::typst::{Data, Render};
+use crate::domain::Adapter;
 use crate::language;
-use crate::templating::template::{Adapter, Template};
-use crate::templating::typst::{Data, Render};
-use adapter::ProcedureAdapter;
+use crate::templating::template::Template;
 
 /// Procedure template: adapter + renderer composition.
 pub struct Procedure;

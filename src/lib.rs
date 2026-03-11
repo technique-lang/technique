@@ -1,3 +1,4 @@
+pub mod domain;
 pub mod formatting;
 pub mod highlighting;
 pub mod language;

@@ -6,7 +6,7 @@
 
 use crate::templating::typst;
 
-use super::types::{Document, Node, Response};
+use crate::domain::procedure::types::{Document, Node, Response};
 
 pub(super) fn markup(document: &Document) -> String {
     let mut out = String::new();
@@ -297,7 +297,7 @@ fn render_responses(out: &mut String, responses: &[Response]) {
 
 #[cfg(test)]
 mod check {
-    use super::super::types::{Document, Node};
+    use crate::domain::procedure::types::{Document, Node};
 
     fn dep(ordinal: &str, title: &str) -> Node {
         Node::Sequential {

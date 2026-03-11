@@ -5,14 +5,13 @@
 //! assignments are inherited downward (an `@surgeon` scope annotates its
 //! child steps) rather than forming structural containers.
 
-mod adapter;
 mod renderer;
-pub mod types;
 
+use crate::domain::checklist::adapter::ChecklistAdapter;
+use crate::domain::typst::{Data, Render};
+use crate::domain::Adapter;
 use crate::language;
-use crate::templating::template::{Adapter, Template};
-use crate::templating::typst::{Data, Render};
-use adapter::ChecklistAdapter;
+use crate::templating::template::Template;
 
 /// Checklist template: adapter + renderer composition.
 pub struct Checklist;

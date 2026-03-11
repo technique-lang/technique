@@ -4,7 +4,7 @@
 //! source Technique document. Sections, procedures, steps, role groups —
 //! whatever the author wrote, the domain model preserves.
 
-use crate::templating::typst::{Data, Render};
+use crate::domain::typst::{Data, Render};
 
 /// A procedure document: title and description from the first procedure,
 /// then a tree of nodes representing the body.

@@ -2,7 +2,7 @@
 
 use crate::templating::typst;
 
-use super::types::{Document, Section, Step};
+use crate::domain::checklist::types::{Document, Section, Step};
 
 pub fn markup(document: &Document) -> String {
     let mut output = typst::preamble();
@@ -71,7 +71,7 @@ fn render_step(output: &mut String, step: &Step) {
 
 #[cfg(test)]
 mod check {
-    use super::super::types::{Document, Response, Section, Step};
+    use crate::domain::checklist::types::{Document, Response, Section, Step};
 
     fn step(ordinal: Option<&str>, title: Option<&str>) -> Step {
         Step {

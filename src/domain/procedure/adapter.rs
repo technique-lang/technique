@@ -6,7 +6,7 @@
 //! are appended as Procedure nodes.
 
 use crate::language;
-use crate::templating::template::Adapter;
+use crate::domain::Adapter;
 
 use super::types::{Document, Node, Response};
 
@@ -193,7 +193,7 @@ mod check {
     use std::path::Path;
 
     use crate::parsing;
-    use crate::templating::template::Adapter;
+    use crate::domain::Adapter;
 
     use super::super::types::Node;
     use super::ProcedureAdapter;

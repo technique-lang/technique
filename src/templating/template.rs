@@ -15,12 +15,3 @@ pub trait Template {
     /// Serialize the document as a Typst data literal.
     fn data(&self, document: &language::Document) -> String;
 }
-
-/// Adapters project the AST into a domain-specific model. Each template
-/// defines its own model types (e.g. checklist::Document,
-/// procedure::Document) reflecting how that domain thinks about the elements
-/// of procedures as encoded in Technique.
-pub trait Adapter {
-    type Model;
-    fn extract(&self, document: &language::Document) -> Self::Model;
-}

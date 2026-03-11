@@ -3,7 +3,7 @@
 //! A checklist is moderately structured and relatively flat: sections with
 //! headings, steps with checkboxes, response options, and limited nesting.
 
-use crate::templating::typst::{Data, Render};
+use crate::domain::typst::{Data, Render};
 
 /// A checklist is a document of sections containing steps.
 pub struct Document {

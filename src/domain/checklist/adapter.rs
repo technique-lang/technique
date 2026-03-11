@@ -5,7 +5,7 @@
 //! rendered as headings with their sub-procedures' steps as children.
 
 use crate::language;
-use crate::templating::template::Adapter;
+use crate::domain::Adapter;
 
 use super::types::{Document, Response, Section, Step};
 
@@ -210,7 +210,7 @@ mod check {
     use std::path::Path;
 
     use crate::parsing;
-    use crate::templating::template::Adapter;
+    use crate::domain::Adapter;
 
     use super::ChecklistAdapter;
 
