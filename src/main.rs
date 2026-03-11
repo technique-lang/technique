@@ -352,12 +352,31 @@ fn main() {
                 }
             };
 
-            let tmpl = template.typst();
             let data = template.data(&technique);
+
+            // If --template is given, use the user-supplied file (expected to
+            // be a .typ file containing Typst template code) ; otherwise
+            // inline the built-in template.
+            let preamble: String = match submatches.get_one::<String>("template") {
+                Some(path) => {
+                    if !Path::new(path).exists() {
+                        eprintln!(
+                            "{}: template file not found: {}",
+                            "error".bright_red(),
+                            path
+                        );
+                        std::process::exit(1);
+                    }
+                    format!("#import \"{}\": render", path)
+                }
+                None => template
+                    .typst()
+                    .to_string(),
+            };
 
             match output.as_str() {
                 "typst" => {
-                    println!("{}", tmpl);
+                    println!("{}", preamble);
                     print!("{}", data);
                     println!("\n#render(technique)");
                 }
