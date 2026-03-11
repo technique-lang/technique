@@ -11,4 +11,10 @@ use crate::language;
 pub trait Template {
     /// Serialize the document as a Typst data literal.
     fn data(&self, document: &language::Document) -> String;
+
+    /// Return the Typst source for this template, if any. Templates that
+    /// generate complete Typst documents directly (like Source) return `None`.
+    fn typst(&self) -> Option<&str> {
+        None
+    }
 }

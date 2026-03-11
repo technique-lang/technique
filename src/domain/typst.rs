@@ -21,29 +21,38 @@ impl Data {
         }
     }
 
-    /// Consume the builder and return the wrapped output.
+    /// Consume the builder and return the data as a `#let technique = ...`
+    /// binding. The trailing comma from `close()` is stripped so the
+    /// top-level assignment is valid Typst.
     pub fn finish(self) -> String {
-        format!("#let technique =\n{}", self.out)
+        let out = self
+            .out
+            .trim_end()
+            .trim_end_matches(',');
+        format!("#let technique = {}\n", out)
     }
 
     fn pad(&mut self) {
         for _ in 0..self.depth {
-            self.out.push_str(INDENT);
+            self.out
+                .push_str(INDENT);
         }
     }
 
     /// Open a dictionary: `(`, newline, and increase depth.
     pub fn open(&mut self) {
         self.pad();
-        self.out.push_str("(\n");
+        self.out
+            .push_str("(\n");
         self.depth += 1;
     }
 
-    /// Close a dictionary: decrease depth, closing `)`, and newline.
+    /// Close a dictionary: decrease depth, closing `),` and newline.
     pub fn close(&mut self) {
         self.depth -= 1;
         self.pad();
-        self.out.push_str(")\n");
+        self.out
+            .push_str("),\n");
     }
 
     /// Emit a `type: "name",` discriminator field and a newline.
@@ -69,7 +78,8 @@ impl Data {
         }
         self.depth -= 1;
         self.pad();
-        self.out.push_str("),\n");
+        self.out
+            .push_str("),\n");
     }
 }
 
@@ -103,7 +113,8 @@ impl Field for str {
 
 impl Field for String {
     fn emit(&self, data: &mut Data, key: &str) {
-        self.as_str().emit(data, key);
+        self.as_str()
+            .emit(data, key);
     }
 }
 
@@ -159,7 +170,7 @@ mod check {
         assert_eq!(d.depth, 1);
         d.close();
         assert_eq!(d.depth, 0);
-        assert_eq!(d.out, "(\n)\n");
+        assert_eq!(d.out, "(\n),\n");
     }
 
     #[test]
@@ -171,7 +182,11 @@ mod check {
         d.field("name", "inner");
         d.close();
         d.close();
-        assert!(d.out.contains("    name: \"outer\",\n"));
-        assert!(d.out.contains("        name: \"inner\",\n"));
+        assert!(d
+            .out
+            .contains("    name: \"outer\",\n"));
+        assert!(d
+            .out
+            .contains("        name: \"inner\",\n"));
     }
 }

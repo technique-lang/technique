@@ -337,31 +337,36 @@ fn main() {
 
             debug!(domain);
 
-            // Select domain and render
-            match output.as_str() {
-                "typst" => {
-                    let result = match domain {
-                        "source" => templating::data(&Source, &technique),
-                        "checklist" => templating::data(&Checklist, &technique),
-                        "procedure" => templating::data(&Procedure, &technique),
-                        other => {
-                            eprintln!(
-                                "{}: unrecognized domain \"{}\"",
-                                "error".bright_red(),
-                                other
-                            );
-                            std::process::exit(1);
-                        }
-                    };
-                    print!("{}", result);
-                }
-                "pdf" => {
-                    // TODO: wire up new template-based rendering pipeline
+            // Select domain
+            let template: &dyn templating::Template = match domain {
+                "source" => &Source,
+                "checklist" => &Checklist,
+                "procedure" => &Procedure,
+                other => {
                     eprintln!(
-                        "{}: PDF rendering via templates not yet implemented",
+                        "{}: unrecognized domain \"{}\"",
                         "error".bright_red(),
+                        other
                     );
                     std::process::exit(1);
+                }
+            };
+
+            let tmpl = template.typst();
+            let data = template.data(&technique);
+
+            match output.as_str() {
+                "typst" => {
+                    if let Some(t) = tmpl {
+                        println!("{}", t);
+                    }
+                    print!("{}", data);
+                    if tmpl.is_some() {
+                        println!("\n#render(technique)");
+                    }
+                }
+                "pdf" => {
+                    output::via_typst(filename, tmpl, &data, Path::new("."));
                 }
                 _ => panic!("Unrecognized --output value"),
             }

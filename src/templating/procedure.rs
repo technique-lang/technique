@@ -22,4 +22,8 @@ impl Template for Procedure {
         model.render(&mut data);
         data.finish()
     }
+
+    fn typst(&self) -> Option<&str> {
+        Some(TEMPLATE)
+    }
 }
