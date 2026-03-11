@@ -34,7 +34,7 @@ fn check_directory(dir: &Path, template: &impl templating::Template) {
         let doc = parsing::parse(file, &source)
             .unwrap_or_else(|e| panic!("Failed to parse {:?}: {:?}", file, e));
 
-        let output = templating::render(template, &doc);
+        let output = templating::data(template, &doc);
 
         if output.is_empty() {
             failures.push(file.clone());

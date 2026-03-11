@@ -9,9 +9,6 @@ use crate::language;
 /// that delegates directly to the code formatting logic.
 
 pub trait Template {
-    /// Render the document as complete Typst markup (for PDF generation).
-    fn render(&self, document: &language::Document) -> String;
-
     /// Serialize the document as a Typst data literal.
     fn data(&self, document: &language::Document) -> String;
 }

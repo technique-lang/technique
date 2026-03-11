@@ -18,13 +18,9 @@ const WIDTH: u8 = 70;
 pub struct Source;
 
 impl Template for Source {
-    fn render(&self, document: &Document) -> String {
+    fn data(&self, document: &Document) -> String {
         let mut out = String::from(PREAMBLE);
         out.push_str(&render(&Typst, document, WIDTH));
         out
-    }
-
-    fn data(&self, document: &Document) -> String {
-        self.render(document)
     }
 }

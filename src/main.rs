@@ -356,20 +356,12 @@ fn main() {
                     print!("{}", result);
                 }
                 "pdf" => {
-                    let result = match domain {
-                        "source" => templating::render(&Source, &technique),
-                        "checklist" => templating::render(&Checklist, &technique),
-                        "procedure" => templating::render(&Procedure, &technique),
-                        other => {
-                            eprintln!(
-                                "{}: unrecognized domain \"{}\"",
-                                "error".bright_red(),
-                                other
-                            );
-                            std::process::exit(1);
-                        }
-                    };
-                    output::via_typst(&filename, &result);
+                    // TODO: wire up new template-based rendering pipeline
+                    eprintln!(
+                        "{}: PDF rendering via templates not yet implemented",
+                        "error".bright_red(),
+                    );
+                    std::process::exit(1);
                 }
                 _ => panic!("Unrecognized --output value"),
             }
