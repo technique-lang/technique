@@ -857,7 +857,7 @@ impl<'i> Parser<'i> {
             .ok_or(ParsingError::Expected(
                 self.offset,
                 0,
-                "a Genus for the domain",
+                "a Genus for the requires",
             ))?;
 
         let two = cap
@@ -865,19 +865,22 @@ impl<'i> Parser<'i> {
             .ok_or(ParsingError::Expected(
                 self.offset,
                 0,
-                "a Genus for the range",
+                "a Genus for the provides",
             ))?;
 
-        let domain = validate_genus(one.as_str()).ok_or(ParsingError::InvalidGenus(
+        let requires = validate_genus(one.as_str()).ok_or(ParsingError::InvalidGenus(
             self.offset + one.start(),
             one.len(),
         ))?;
-        let range = validate_genus(two.as_str()).ok_or(ParsingError::InvalidGenus(
+        let provides = validate_genus(two.as_str()).ok_or(ParsingError::InvalidGenus(
             self.offset + two.start(),
             two.len(),
         ))?;
 
-        Ok(Signature { domain, range })
+        Ok(Signature {
+            requires,
+            provides,
+        })
     }
 
     fn parse_procedure_declaration(

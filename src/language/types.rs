@@ -87,8 +87,8 @@ pub enum Genus<'i> {
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Signature<'i> {
-    pub domain: Genus<'i>,
-    pub range: Genus<'i>,
+    pub requires: Genus<'i>,
+    pub provides: Genus<'i>,
 }
 
 // now types for procedure bodies

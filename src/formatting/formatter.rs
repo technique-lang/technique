@@ -536,11 +536,11 @@ impl<'i> Formatter<'i> {
     }
 
     pub fn append_signature(&mut self, signature: &'i Signature) {
-        self.append_genus(&signature.domain);
+        self.append_genus(&signature.requires);
         self.add_fragment_reference(Syntax::Neutral, " ");
         self.add_fragment_reference(Syntax::Structure, "->");
         self.add_fragment_reference(Syntax::Neutral, " ");
-        self.append_genus(&signature.range);
+        self.append_genus(&signature.provides);
     }
 
     pub fn append_genus(&mut self, genus: &'i Genus) {
@@ -1376,22 +1376,22 @@ mod check {
         let mut output = Formatter::new(78);
 
         output.append_signature(&Signature {
-            domain: Genus::Single(Forma("Alderaan")),
-            range: Genus::Single(Forma("AsteroidField")),
+            requires: Genus::Single(Forma("Alderaan")),
+            provides: Genus::Single(Forma("AsteroidField")),
         });
         assert_eq!(output.to_string(), "Alderaan -> AsteroidField");
 
         output.reset();
         output.append_signature(&Signature {
-            domain: Genus::List(Forma("Clone")),
-            range: Genus::Single(Forma("Army")),
+            requires: Genus::List(Forma("Clone")),
+            provides: Genus::Single(Forma("Army")),
         });
         assert_eq!(output.to_string(), "[Clone] -> Army");
 
         output.reset();
         let signature = Signature {
-            domain: Genus::Single(Forma("TaxationOfTradeRoutes")),
-            range: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
+            requires: Genus::Single(Forma("TaxationOfTradeRoutes")),
+            provides: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
         };
         output.append_signature(&signature);
         assert_eq!(

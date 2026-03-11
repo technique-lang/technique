@@ -237,16 +237,16 @@ doesn't have an input or result, per se.
         ParsingError::InvalidSignature(_, _) => {
             let examples = vec![
                 Signature {
-                    domain: Genus::Single(Forma("A")),
-                    range: Genus::Single(Forma("B")),
+                    requires: Genus::Single(Forma("A")),
+                    provides: Genus::Single(Forma("B")),
                 },
                 Signature {
-                    domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                    range: Genus::Single(Forma("Coffee")),
+                    requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                    provides: Genus::Single(Forma("Coffee")),
                 },
                 Signature {
-                    domain: Genus::List(Forma("FunctionalRequirement")),
-                    range: Genus::Single(Forma("Architecture")),
+                    requires: Genus::List(Forma("FunctionalRequirement")),
+                    provides: Genus::Single(Forma("Architecture")),
                 },
             ];
 
@@ -254,8 +254,8 @@ doesn't have an input or result, per se.
                 "Invalid signature".to_string(),
                 format!(
                     r#"
-Procedure signatures follow the pattern domain -> range, where domain and
-range are genus. Some examples:
+Procedure signatures follow the pattern requires -> provides, where requires
+and provides are genus. Some examples:
 
     {}
     {}
@@ -296,8 +296,8 @@ this form.
                     name: Identifier("f"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Single(Forma("A")),
-                        range: Genus::Single(Forma("B")),
+                        requires: Genus::Single(Forma("A")),
+                        provides: Genus::Single(Forma("B")),
                     }),
                     elements: Vec::new(),
                 },
@@ -305,8 +305,8 @@ this form.
                     name: Identifier("implementation"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Single(Forma("Design")),
-                        range: Genus::Single(Forma("Product")),
+                        requires: Genus::Single(Forma("Design")),
+                        provides: Genus::Single(Forma("Product")),
                     }),
                     elements: Vec::new(),
                 },
@@ -314,8 +314,8 @@ this form.
                     name: Identifier("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        range: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
+                        provides: Genus::Single(Forma("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -323,8 +323,8 @@ this form.
                     name: Identifier("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                        range: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                        provides: Genus::Single(Forma("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -332,8 +332,8 @@ this form.
                     name: Identifier("make_coffee"),
                     parameters: Some(vec![Identifier("b"), Identifier("m")]),
                     signature: Some(Signature {
-                        domain: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        range: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
+                        provides: Genus::Single(Forma("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -392,8 +392,8 @@ Finally, variables can be assigned for the names of the input parameters:
                     name: Identifier("lawsuit"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Single(Forma("Council")),
-                        range: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma("Council")),
+                        provides: Genus::List(Forma("Penny")),
                     }),
                     elements: Vec::new(),
                 },
@@ -401,8 +401,8 @@ Finally, variables can be assigned for the names of the input parameters:
                     name: Identifier("lawsuit"),
                     parameters: Some(vec![Identifier("c")]),
                     signature: Some(Signature {
-                        domain: Genus::Single(Forma("Council")),
-                        range: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma("Council")),
+                        provides: Genus::List(Forma("Penny")),
                     }),
                     elements: Vec::new(),
                 },

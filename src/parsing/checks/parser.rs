@@ -159,8 +159,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            domain: Genus::Single(Forma("A")),
-            range: Genus::Single(Forma("B"))
+            requires: Genus::Single(Forma("A")),
+            provides: Genus::Single(Forma("B"))
         })
     );
 
@@ -169,8 +169,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            domain: Genus::Single(Forma("Beans")),
-            range: Genus::Single(Forma("Coffee"))
+            requires: Genus::Single(Forma("Beans")),
+            provides: Genus::Single(Forma("Coffee"))
         })
     );
 
@@ -179,8 +179,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            domain: Genus::List(Forma("Bits")),
-            range: Genus::Single(Forma("Bob"))
+            requires: Genus::List(Forma("Bits")),
+            provides: Genus::Single(Forma("Bob"))
         })
     );
 
@@ -189,8 +189,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            domain: Genus::Single(Forma("Complex")),
-            range: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+            requires: Genus::Single(Forma("Complex")),
+            provides: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
         })
     );
 }
@@ -219,8 +219,8 @@ fn declaration_full() {
             Identifier("f"),
             None,
             Some(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma("A")),
+                provides: Genus::Single(Forma("B"))
             })
         ))
     );
@@ -235,8 +235,8 @@ fn declaration_full() {
             Identifier("making_coffee"),
             None,
             Some(Signature {
-                domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                range: Genus::List(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                provides: Genus::List(Forma("Coffee"))
             })
         ))
     );
@@ -292,8 +292,8 @@ making_coffee :
             Identifier("making_coffee"),
             None,
             Some(Signature {
-                domain: Genus::Single(Forma("Ingredients")),
-                range: Genus::Single(Forma("Coffee"))
+                requires: Genus::Single(Forma("Ingredients")),
+                provides: Genus::Single(Forma("Coffee"))
             })
         ))
     );
@@ -315,8 +315,8 @@ making_coffee(b, m) :
             Identifier("making_coffee"),
             Some(vec![Identifier("b"), Identifier("m")]),
             Some(Signature {
-                domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                range: Genus::Single(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                provides: Genus::Single(Forma("Coffee"))
             })
         ))
     );

@@ -61,8 +61,8 @@ making_coffee : (Beans, Milk) -> Coffee
             name: Identifier("making_coffee"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                range: Genus::Single(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
+                provides: Genus::Single(Forma("Coffee"))
             }),
             elements: vec![],
         })
@@ -88,8 +88,8 @@ second : C -> D
             name: Identifier("first"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma("A")),
+                provides: Genus::Single(Forma("B"))
             }),
             elements: vec![],
         })
@@ -102,8 +102,8 @@ second : C -> D
             name: Identifier("second"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Single(Forma("C")),
-                range: Genus::Single(Forma("D"))
+                requires: Genus::Single(Forma("C")),
+                provides: Genus::Single(Forma("D"))
             }),
             elements: vec![],
         })
@@ -127,8 +127,8 @@ making_coffee(e) : Ingredients -> Coffee
             name: Identifier("making_coffee"),
             parameters: Some(vec![Identifier("e")]),
             signature: Some(Signature {
-                domain: Genus::Single(Forma("Ingredients")),
-                range: Genus::Single(Forma("Coffee"))
+                requires: Genus::Single(Forma("Ingredients")),
+                provides: Genus::Single(Forma("Coffee"))
             }),
             elements: vec![],
         })
@@ -159,8 +159,8 @@ This is the first one.
             name: Identifier("first"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma("A")),
+                provides: Genus::Single(Forma("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -214,8 +214,8 @@ This is the first one.
             name: Identifier("first"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma("A")),
+                provides: Genus::Single(Forma("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -280,8 +280,8 @@ This is the first one.
             name: Identifier("first"),
             parameters: None,
             signature: Some(Signature {
-                domain: Genus::Single(Forma("A")),
-                range: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma("A")),
+                provides: Genus::Single(Forma("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -1287,8 +1287,8 @@ III. Implementation
                                 name: Identifier("requirements_and_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    domain: Genus::Single(Forma("Concept")),
-                                    range: Genus::Naked(vec![
+                                    requires: Genus::Single(Forma("Concept")),
+                                    provides: Genus::Naked(vec![
                                         Forma("Requirements"),
                                         Forma("Architecture")
                                     ]),
@@ -1332,8 +1332,8 @@ III. Implementation
                                 name: Identifier("define_requirements"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    domain: Genus::Single(Forma("Concept")),
-                                    range: Genus::Single(Forma("Requirements")),
+                                    requires: Genus::Single(Forma("Concept")),
+                                    provides: Genus::Single(Forma("Requirements")),
                                 }),
                                 elements: vec![],
                             },
@@ -1341,8 +1341,8 @@ III. Implementation
                                 name: Identifier("determine_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    domain: Genus::Single(Forma("Concept")),
-                                    range: Genus::Single(Forma("Architecture")),
+                                    requires: Genus::Single(Forma("Concept")),
+                                    provides: Genus::Single(Forma("Architecture")),
                                 }),
                                 elements: vec![],
                             },
