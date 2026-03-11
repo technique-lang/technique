@@ -28,7 +28,7 @@ The _technique_ program has three subcommands:
   syntax highlighting if run in a terminal.
 
 - _render_ \
-  Render the Technique document into a printable PDF. This use the Typst
+  Render the Technique document into a printable PDF. This uses the Typst
   typestting language and so requires the _typst_ compiler be installed and on
   `PATH`.
 
