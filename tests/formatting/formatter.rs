@@ -24,7 +24,7 @@ mod verify {
                 version: 1,
                 license: Some("MIT"),
                 copyright: None,
-                template: Some("checklist"),
+                domain: Some("checklist"),
             }),
             body: None,
         };
@@ -47,8 +47,8 @@ mod verify {
                 name: Identifier("first"),
                 parameters: None,
                 signature: Some(Signature {
-                    domain: Genus::Single(Forma("A")),
-                    range: Genus::Single(Forma("B")),
+                    requires: Genus::Single(Forma("A")),
+                    provides: Genus::Single(Forma("B")),
                 }),
                 elements: vec![],
             }])),
@@ -69,15 +69,15 @@ first : A -> B
                 version: 1,
                 license: Some("PD"),
                 copyright: Some("2025 The First Procedure Society, Inc"),
-                template: None,
+                domain: None,
             }),
             body: Some(Technique::Procedures(vec![
                 Procedure {
                     name: Identifier("first"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::Single(Forma("A")),
-                        range: Genus::Single(Forma("B")),
+                        requires: Genus::Single(Forma("A")),
+                        provides: Genus::Single(Forma("B")),
                     }),
                     elements: vec![],
                 },
@@ -85,8 +85,8 @@ first : A -> B
                     name: Identifier("second"),
                     parameters: None,
                     signature: Some(Signature {
-                        domain: Genus::List(Forma("Thing")),
-                        range: Genus::Tuple(vec![Forma("Who"), Forma("Where"), Forma("Why")]),
+                        requires: Genus::List(Forma("Thing")),
+                        provides: Genus::Tuple(vec![Forma("Who"), Forma("Where"), Forma("Why")]),
                     }),
                     elements: vec![],
                 },
@@ -117,8 +117,8 @@ second : [Thing] -> (Who, Where, Why)
                 name: Identifier("win_le_tour"),
                 parameters: None,
                 signature: Some(Signature {
-                    domain: Genus::Single(Forma("Bicycle")),
-                    range: Genus::Single(Forma("YellowJersey")),
+                    requires: Genus::Single(Forma("Bicycle")),
+                    provides: Genus::Single(Forma("YellowJersey")),
                 }),
                 elements: vec![Element::Steps(vec![
                     Scope::DependentBlock {
