@@ -66,6 +66,7 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
+                        .value_name("type")
                         .value_parser(["native", "none"])
                         .default_value("none")
                         .action(ArgAction::Set)
@@ -113,17 +114,27 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
+                        .value_name("type")
                         .value_parser(["pdf", "typst"])
                         .default_value("pdf")
                         .action(ArgAction::Set)
                         .help("Whether to write PDF to a file on disk, or print the Typst markup that would be used to create that PDF (for debugging)."),
                 )
                 .arg(
+                    Arg::new("domain")
+                        .short('d')
+                        .long("domain")
+                        .value_parser(["checklist", "procedure", "recipe", "source"])
+                        .action(ArgAction::Set)
+                        .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
+                )
+                .arg(
                     Arg::new("template")
                         .short('t')
                         .long("template")
+                        .value_name("filename")
                         .action(ArgAction::Set)
-                        .help("Template to use for rendering. By default the value specified in the input document's template line will be used, falling back to source highlighting if unspecified."),
+                        .help("Path to a Typst template file for rendering."),
                 )
                 .arg(
                     Arg::new("filename")
@@ -310,32 +321,32 @@ fn main() {
                 }
             };
 
-            // If present the value of the --template option will override the
-            // document's metadata template line. If neither is specified then
+            // If present the value of the --domain option will override the
+            // document's metadata domain line. If neither is specified then
             // the fallback default is "source".
 
-            let template = submatches.get_one::<String>("template");
-            let template: &str = match template {
+            let domain = submatches.get_one::<String>("domain");
+            let domain: &str = match domain {
                 Some(value) => value,
                 None => technique
                     .header
                     .as_ref()
-                    .and_then(|m| m.template)
+                    .and_then(|m| m.domain)
                     .unwrap_or("source"),
             };
 
-            debug!(template);
+            debug!(domain);
 
-            // Select template and render
+            // Select domain and render
             match output.as_str() {
                 "typst" => {
-                    let result = match template {
+                    let result = match domain {
                         "source" => templating::data(&Source, &technique),
                         "checklist" => templating::data(&Checklist, &technique),
                         "procedure" => templating::data(&Procedure, &technique),
                         other => {
                             eprintln!(
-                                "{}: unrecognized template \"{}\"",
+                                "{}: unrecognized domain \"{}\"",
                                 "error".bright_red(),
                                 other
                             );
@@ -345,13 +356,13 @@ fn main() {
                     print!("{}", result);
                 }
                 "pdf" => {
-                    let result = match template {
+                    let result = match domain {
                         "source" => templating::render(&Source, &technique),
                         "checklist" => templating::render(&Checklist, &technique),
                         "procedure" => templating::render(&Procedure, &technique),
                         other => {
                             eprintln!(
-                                "{}: unrecognized template \"{}\"",
+                                "{}: unrecognized domain \"{}\"",
                                 "error".bright_red(),
                                 other
                             );
