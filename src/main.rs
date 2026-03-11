@@ -357,13 +357,9 @@ fn main() {
 
             match output.as_str() {
                 "typst" => {
-                    if let Some(t) = tmpl {
-                        println!("{}", t);
-                    }
+                    println!("{}", tmpl);
                     print!("{}", data);
-                    if tmpl.is_some() {
-                        println!("\n#render(technique)");
-                    }
+                    println!("\n#render(technique)");
                 }
                 "pdf" => {
                     output::via_typst(filename, tmpl, &data, Path::new("."));

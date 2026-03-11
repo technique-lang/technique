@@ -13,6 +13,7 @@ mod adapter;
 pub mod checklist;
 pub mod engine;
 pub mod procedure;
+pub mod source;
 pub mod typst;
 
 pub use adapter::Adapter;

@@ -23,7 +23,7 @@ impl Template for Checklist {
         data.finish()
     }
 
-    fn typst(&self) -> Option<&str> {
-        Some(TEMPLATE)
+    fn typst(&self) -> &str {
+        TEMPLATE
     }
 }

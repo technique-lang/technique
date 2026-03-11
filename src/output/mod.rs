@@ -9,12 +9,11 @@ use tracing::{debug, info};
 /// Compile a Typst document piped via stdin to a PDF file.
 ///
 /// The template content, data literal, and render call are written
-/// sequentially to the process's stdin. If `template` is `None` (as
-/// with Source), `data` is already a complete Typst document.
+/// sequentially to the process's stdin.
 ///
 /// The `root` path is passed as `--root` to Typst, controlling where
 /// relative imports resolve from. For built-in templates pass `"."`.
-pub fn via_typst(filename: &Path, template: Option<&str>, data: &str, root: &Path) {
+pub fn via_typst(filename: &Path, template: &str, data: &str, root: &Path) {
     info!("Printing file: {}", filename.display());
 
     if filename.to_str() == Some("-") {
@@ -51,22 +50,18 @@ pub fn via_typst(filename: &Path, template: Option<&str>, data: &str, root: &Pat
         .take()
         .unwrap();
 
-    if let Some(tmpl) = template {
-        stdin
-            .write_all(tmpl.as_bytes())
-            .expect("Failed attempting to write");
-        stdin
-            .write_all(b"\n")
-            .expect("Failed attempting to write");
-    }
+    stdin
+        .write_all(template.as_bytes())
+        .expect("Failed attempting to write");
+    stdin
+        .write_all(b"\n")
+        .expect("Failed attempting to write");
     stdin
         .write_all(data.as_bytes())
-        .expect("Write data");
-    if template.is_some() {
-        stdin
-            .write_all(b"\n#render(technique)\n")
-            .expect("Failed attempting to write");
-    }
+        .expect("Failed attempting to write");
+    stdin
+        .write_all(b"\n#render(technique)\n")
+        .expect("Failed attempting to write");
 
     drop(stdin);
 

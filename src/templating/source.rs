@@ -1,26 +1,28 @@
-//! Render Technique source code with syntax highlighting into Typst. This
-//! implements Template directly without the adapter/renderer split used in
-//! normal renderers by instead delegating to the existing code formatting
-//! pipeline underlying the `format` command.
+//! Source domain — renders Technique source code with syntax highlighting.
+//!
+//! The source domain model is a flat sequence of syntax-tagged fragments
+//! produced by the code formatter. The Typst template maps each syntax
+//! tag to a colour and weight.
 
-use crate::highlighting::{render, Typst};
-use crate::language::Document;
+use crate::domain::source::adapter::SourceAdapter;
+use crate::domain::typst::{Data, Render};
+use crate::domain::Adapter;
+use crate::language;
+use crate::templating::template::Template;
 
-use super::Template;
-
-static PREAMBLE: &str = r#"
-#show text: set text(font: "Inconsolata")
-#show raw: set block(breakable: true)
-"#;
-
-const WIDTH: u8 = 70;
+pub static TEMPLATE: &str = include_str!("source.typ");
 
 pub struct Source;
 
 impl Template for Source {
-    fn data(&self, document: &Document) -> String {
-        let mut out = String::from(PREAMBLE);
-        out.push_str(&render(&Typst, document, WIDTH));
-        out
+    fn data(&self, document: &language::Document) -> String {
+        let model = SourceAdapter.extract(document);
+        let mut data = Data::new();
+        model.render(&mut data);
+        data.finish()
+    }
+
+    fn typst(&self) -> &str {
+        TEMPLATE
     }
 }
