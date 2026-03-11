@@ -10,10 +10,7 @@ use tracing::{debug, info};
 ///
 /// The template content, data literal, and render call are written
 /// sequentially to the process's stdin.
-///
-/// The `root` path is passed as `--root` to Typst, controlling where
-/// relative imports resolve from. For built-in templates pass `"."`.
-pub fn via_typst(filename: &Path, template: &str, data: &str, root: &Path) {
+pub fn via_typst(filename: &Path, template: &str, data: &str) {
     info!("Printing file: {}", filename.display());
 
     if filename.to_str() == Some("-") {
@@ -34,8 +31,6 @@ pub fn via_typst(filename: &Path, template: &str, data: &str, root: &Path) {
 
     let mut child = Command::new("typst")
         .arg("compile")
-        .arg("--root")
-        .arg(root)
         .arg("-")
         .arg(&target)
         .stdin(Stdio::piped())

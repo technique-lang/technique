@@ -362,7 +362,7 @@ fn main() {
                     println!("\n#render(technique)");
                 }
                 "pdf" => {
-                    output::via_typst(filename, tmpl, &data, Path::new("."));
+                    output::via_typst(filename, &preamble, &data);
                 }
                 _ => panic!("Unrecognized --output value"),
             }
