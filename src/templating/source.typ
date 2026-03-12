@@ -1,10 +1,8 @@
-// Built-in source template for Technique.
+//  Built-in source domain template for Technique.
 //
-// Expects a `technique` dictionary with shape:
-//   (fragments: ((syntax, content), ...))
-//
-// Each fragment carries a syntax tag and a content string.
-// The syntax tag determines the colour and weight applied.
+// Exports `render` and `template`.
+
+// -- Render helpers --------------------------------------------------------
 
 #let palette = (
     Neutral: (c) => raw(c),
@@ -39,11 +37,18 @@
     styler(f.content)
 }
 
-#let render(technique) = [
-    #show text: set text(font: "Inconsolata")
-    #show raw: set block(breakable: true)
+// -- Render function -------------------------------------------------------
 
+#let render(technique) = [
     #for f in technique.fragments {
         render-fragment(f)
     }
 ]
+
+// -- Default template ------------------------------------------------------
+
+#let template(body) = {
+    set text(font: "Inconsolata")
+    show raw: set block(breakable: true)
+    body
+}

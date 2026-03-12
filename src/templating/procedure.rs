@@ -26,4 +26,8 @@ impl Template for Procedure {
     fn typst(&self) -> &str {
         TEMPLATE
     }
+
+    fn domain(&self) -> &str {
+        "procedure"
+    }
 }

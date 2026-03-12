@@ -1,16 +1,35 @@
 //! Output generation for the Technique CLI application
 
 use owo_colors::OwoColorize;
-use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tracing::{debug, info};
 
-/// Compile a Typst document piped via stdin to a PDF file.
-///
-/// The template content, data literal, and render call are written
-/// sequentially to the process's stdin.
-pub fn via_typst(filename: &Path, template: &str, data: &str) {
+/// Generate the Typst document content that wires together the domain
+/// template, optional user template, data literal, and render call.
+pub fn document(domain: &str, data: &str, custom: Option<&str>) -> String {
+    let mut doc = String::new();
+
+    doc.push_str(&format!("#import \".{}.typ\": render, template\n", domain));
+    if let Some(path) = custom {
+        doc.push_str(&format!("#import \"/{}\": *\n", path));
+    }
+    doc.push_str("\n#show: template\n\n");
+    doc.push_str(data);
+    doc.push_str("\nrender(technique)\n");
+
+    doc
+}
+
+/// Write the domain template and generated document beside the source
+/// file, then compile to PDF via Typst.
+pub fn via_typst(
+    filename: &Path,
+    template: &str,
+    domain: &str,
+    data: &str,
+    custom: Option<&str>,
+) {
     info!("Printing file: {}", filename.display());
 
     if filename.to_str() == Some("-") {
@@ -27,42 +46,37 @@ pub fn via_typst(filename: &Path, template: &str, data: &str) {
         );
     }
 
+    let source_dir = filename
+        .parent()
+        .unwrap_or(Path::new("."));
+    let stem = filename
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    // Write domain template beside source
+    let machinery = source_dir.join(format!(".{}.typ", domain));
+    std::fs::write(&machinery, template).expect("Failed to write domain template");
+
+    // Write generated document beside source
+    let content = document(domain, data, custom);
+    let document = source_dir.join(format!(".{}.typ", stem));
+    std::fs::write(&document, &content).expect("Failed to write generated document");
+
     let target = filename.with_extension("pdf");
 
-    let mut child = Command::new("typst")
+    let status = Command::new("typst")
         .arg("compile")
-        .arg("-")
+        .arg("--root")
+        .arg(".")
+        .arg(&document)
         .arg(&target)
-        .stdin(Stdio::piped())
-        .spawn()
+        .status()
         .unwrap_or_else(|e| {
             eprintln!("{}: failed to start typst: {}", "error".bright_red(), e);
             std::process::exit(1);
         });
-
-    let mut stdin = child
-        .stdin
-        .take()
-        .unwrap();
-
-    stdin
-        .write_all(template.as_bytes())
-        .expect("Failed attempting to write");
-    stdin
-        .write_all(b"\n")
-        .expect("Failed attempting to write");
-    stdin
-        .write_all(data.as_bytes())
-        .expect("Failed attempting to write");
-    stdin
-        .write_all(b"\n#render(technique)\n")
-        .expect("Failed attempting to write");
-
-    drop(stdin);
-
-    let status = child
-        .wait()
-        .expect("Failed to wait for Typst process");
 
     if !status.success() {
         eprintln!("{}: typst compile failed", "error".bright_red());

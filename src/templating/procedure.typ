@@ -1,8 +1,8 @@
-// Built-in procedure template for Technique.
+// Procedure domain template for Technique.
 //
-// Expects a `technique` dictionary with shape:
-//   (title, description, body: ((type: "section"|"procedure"|"sequential"
-//   |"parallel"|"attribute", ...children), ...))
+// Exports `render` and `template`.
+
+// -- Render helpers --------------------------------------------------------
 
 #let render-responses(responses) = {
     for r in responses {
@@ -56,20 +56,15 @@
 
 #let render-node(node) = {
     if node.type == "section" {
-        if node.at("heading", default: none) != none {
-            text(size: 14pt)[*#node.ordinal.* #h(8pt) *#node.heading*]
-        } else {
-            text(size: 14pt)[*#node.ordinal.*]
-        }
-        parbreak()
+        heading(level: 1, numbering: none,
+            [#node.ordinal. #h(8pt) #if node.at("heading", default: none) != none { node.heading }])
         for child in node.children { render-node(child) }
 
     } else if node.type == "procedure" {
         text(size: 7pt)[`#node.name`]
         linebreak()
         if node.at("title", default: none) != none {
-            text(size: 11pt)[*#node.title*]
-            parbreak()
+            heading(level: 2, numbering: none, outlined: false, node.title)
         }
         for para in node.description {
             [#para]
@@ -117,11 +112,9 @@
     )
 }
 
-#let render(technique) = [
-    #set page(margin: 1.5cm)
-    #set par(justify: false)
-    #show text: set text(size: 9pt, font: "TeX Gyre Heros")
+// -- Render function -------------------------------------------------------
 
+#let render(technique) = [
     #block(width: 100%, stroke: 0.1pt, inset: 10pt)[
         #if technique.at("title", default: none) != none [
             #text(size: 15pt)[*#technique.title*]
@@ -137,7 +130,7 @@
                 render-outline(technique.body)
             }
         ]
-        #block(width: 100%, fill: rgb("#006699"), inset: 5pt)[#text(fill: white)[*Procedure*]]
+        #heading(level: 3, numbering: none, outlined: false, [Procedure])
 
         #for (i, node) in technique.body.enumerate() {
             render-node(node)
@@ -147,3 +140,20 @@
         }
     ]
 ]
+
+// -- Default template ------------------------------------------------------
+
+#let template(body) = {
+    set page(margin: 1.5cm)
+    set par(justify: false)
+    set text(size: 9pt, font: "TeX Gyre Heros")
+
+    show heading.where(level: 1): set text(size: 14pt)
+    show heading.where(level: 2): set text(size: 11pt)
+    show heading.where(level: 3): it => {
+        block(width: 100%, fill: rgb("#006699"), inset: 5pt,
+            text(fill: white, weight: "bold", it.body))
+    }
+
+    body
+}

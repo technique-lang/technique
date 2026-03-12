@@ -14,4 +14,7 @@ pub trait Template {
 
     /// Return the Typst source for this template.
     fn typst(&self) -> &str;
+
+    /// Return the domain name (used for the template filename on disk).
+    fn domain(&self) -> &str;
 }

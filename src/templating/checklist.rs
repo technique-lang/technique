@@ -26,4 +26,8 @@ impl Template for Checklist {
     fn typst(&self) -> &str {
         TEMPLATE
     }
+
+    fn domain(&self) -> &str {
+        "checklist"
+    }
 }

@@ -71,13 +71,17 @@ impl Data {
     pub fn list<T: Render>(&mut self, key: &str, items: &[T]) {
         self.pad();
         self.out
-            .push_str(&format!("{}: (\n", key));
-        self.depth += 1;
-        for item in items {
-            item.render(self);
+            .push_str(&format!("{}: (", key));
+        if !items.is_empty() {
+            self.out
+                .push('\n');
+            self.depth += 1;
+            for item in items {
+                item.render(self);
+            }
+            self.depth -= 1;
+            self.pad();
         }
-        self.depth -= 1;
-        self.pad();
         self.out
             .push_str("),\n");
     }

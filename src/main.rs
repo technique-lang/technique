@@ -354,10 +354,7 @@ fn main() {
 
             let data = template.data(&technique);
 
-            // If --template is given, use the user-supplied file (expected to
-            // be a .typ file containing Typst template code) ; otherwise
-            // inline the built-in template.
-            let preamble: String = match submatches.get_one::<String>("template") {
+            let custom = match submatches.get_one::<String>("template") {
                 Some(path) => {
                     if !Path::new(path).exists() {
                         eprintln!(
@@ -367,21 +364,18 @@ fn main() {
                         );
                         std::process::exit(1);
                     }
-                    format!("#import \"{}\": render", path)
+                    Some(path.as_str())
                 }
-                None => template
-                    .typst()
-                    .to_string(),
+                None => None,
             };
 
             match output.as_str() {
                 "typst" => {
-                    println!("{}", preamble);
-                    print!("{}", data);
-                    println!("\n#render(technique)");
+                    let doc = output::document(template.domain(), &data, custom);
+                    print!("{}", doc);
                 }
                 "pdf" => {
-                    output::via_typst(filename, &preamble, &data);
+                    output::via_typst(filename, template.typst(), template.domain(), &data, custom);
                 }
                 _ => panic!("Unrecognized --output value"),
             }

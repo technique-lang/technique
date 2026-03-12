@@ -1,8 +1,8 @@
-// Built-in checklist template for Technique.
+// Checklist domain template for Technique.
 //
-// Expects a `technique` dictionary with shape:
-//   (sections: ((ordinal, heading, steps: ((ordinal, title, body, role,
-//   responses, children), ...)), ...))
+// Exports `render` and `template`.
+
+// -- Render helpers --------------------------------------------------------
 
 #let check = box(stroke: 0.5pt, width: 0.8em, height: 0.8em)
 #let small-check = box(stroke: 0.5pt, width: 0.6em, height: 0.6em)
@@ -36,20 +36,27 @@
     }
 }
 
-#let render(technique) = [
-    #set page(margin: 1.5cm)
-    #set text(size: 10pt)
+// -- Render function -------------------------------------------------------
 
+#let render(technique) = [
     #for section in technique.sections [
-        #if section.ordinal != none and section.heading != none [
-            == #section.ordinal. #section.heading
-        ] else if section.ordinal != none [
-            == #section.ordinal.
-        ] else if section.heading != none [
-            == #section.heading
-        ]
+        #if section.ordinal != none and section.heading != none {
+            heading(level: 1, numbering: none, [#section.ordinal. #section.heading])
+        } else if section.ordinal != none {
+            heading(level: 1, numbering: none, [#section.ordinal.])
+        } else if section.heading != none {
+            heading(level: 1, numbering: none, section.heading)
+        }
         #for step in section.steps {
             render-step(step)
         }
     ]
 ]
+
+// -- Default template ------------------------------------------------------
+
+#let template(body) = {
+    set page(margin: 1.5cm)
+    set text(size: 10pt)
+    body
+}
