@@ -1,147 +1,103 @@
 // Procedure domain template for Technique.
 //
-// Exports `render` and `template`.
+// Thin formatting functions called from Rust-generated markup.
+// Each function is independently overridable via `--template`.
 
-// -- Render helpers --------------------------------------------------------
+// -- Formatting functions ----------------------------------------------------
 
-#let render-responses(responses) = {
-    for r in responses {
-        if r.condition != none [- _#r.value #r.condition _]
-        else [- _#r.value _]
-    }
-    if responses.len() > 0 { parbreak() }
-}
-
-#let render-invocations(invocations) = {
-    if invocations.len() > 0 {
-        text(size: 7pt)[`#invocations.join(", ")`]
-        linebreak()
-    }
-}
-
-#let ordinal-start(children) = {
-    let first = children.at(0, default: none)
-    if first != none and first.type == "sequential" {
-        let o = first.at("ordinal", default: "a")
-        let c = o.codepoints().at(0, default: "a")
-        if "abcdefghijklmnopqrstuvwxyz".contains(c) {
-            "abcdefghijklmnopqrstuvwxyz".position(c) + 1
-        } else { 1 }
-    } else { 1 }
-}
-
-#let render-child(node) = {
-    if node.type == "sequential" or node.type == "parallel" {
-        if node.at("title", default: none) != none [+ #node.title]
-    }
-}
-
-#let render-role(node) = {
-    [- *#node.name*]
-    if node.children.len() > 0 {
-        let start = ordinal-start(node.children)
-        pad(left: 20pt)[
-            #set par(leading: 0.5em)
-            #set enum(numbering: "a.", start: start, spacing: 0.8em)
-            #for child in node.children {
-                if child.type == "attribute" {
-                    render-role(child)
-                } else {
-                    render-child(child)
-                }
-            }
-        ]
-    }
-}
-
-#let render-node(node) = {
-    if node.type == "section" {
-        heading(level: 1, numbering: none,
-            [#node.ordinal. #h(8pt) #if node.at("heading", default: none) != none { node.heading }])
-        for child in node.children { render-node(child) }
-
-    } else if node.type == "procedure" {
-        text(size: 7pt)[`#node.name`]
-        linebreak()
-        if node.at("title", default: none) != none {
-            heading(level: 2, numbering: none, outlined: false, node.title)
-        }
-        for para in node.description {
-            [#para]
-            parbreak()
-        }
-        if node.children.len() > 0 {
-            pad(left: 8pt)[#for child in node.children { render-node(child) }]
-        }
-
-    } else if node.type == "sequential" or node.type == "parallel" {
-        render-invocations(node.invocations)
-        let ordinal = if node.type == "sequential" { node.ordinal } else { none }
-        if ordinal != none and node.at("title", default: none) != none [
-            *#ordinal.* #h(4pt) *#node.title*
-        ] else if ordinal != none [
-            *#ordinal.*
-        ] else if node.at("title", default: none) != none [
-            *#node.title*
-        ]
-        parbreak()
-        for para in node.body {
-            [#para]
-            parbreak()
-        }
-        render-responses(node.responses)
-        if node.children.len() > 0 {
-            pad(left: 16pt)[#for child in node.children { render-node(child) }]
-        }
-
-    } else if node.type == "attribute" {
-        render-role(node)
-    }
-}
-
-#let has-sections(body) = {
-    body.any(n => n.type == "section")
-}
-
-#let render-outline(body) = {
-    grid(columns: (auto, 1fr), column-gutter: 6pt, row-gutter: 0.3em,
-        ..body.filter(n => n.type == "section").map(n => {
-            let heading = n.at("heading", default: none)
-            ([#n.ordinal.], [#if heading != none { heading }])
-        }).flatten()
-    )
-}
-
-// -- Render function -------------------------------------------------------
-
-#let render(technique) = [
+#let render-document(title: none, description: (), children: none) = [
     #block(width: 100%, stroke: 0.1pt, inset: 10pt)[
-        #if technique.at("title", default: none) != none [
-            #text(size: 15pt)[*#technique.title*]
+        #if title != none [
+            #text(size: 15pt)[*#title*]
 
         ]
-        #if technique.description.len() > 0 or has-sections(technique.body) [
+        #if description.len() > 0 or children != none [
             _Overview_
 
-            #for para in technique.description [
+            #for para in description [
                 #para
             ]
-            #if has-sections(technique.body) {
-                render-outline(technique.body)
-            }
         ]
-        #heading(level: 3, numbering: none, outlined: false, [Procedure])
-
-        #for (i, node) in technique.body.enumerate() {
-            render-node(node)
-            if i + 1 < technique.body.len() and node.type == "section" {
-                line(length: 100%, stroke: (thickness: 0.5pt, paint: rgb("#003366"), dash: ("dot", 2pt, 4pt, 2pt)))
-            }
+        #if children != none {
+            children
         }
     ]
 ]
 
-// -- Default template ------------------------------------------------------
+#let render-outline(sections: ()) = {
+    grid(columns: (auto, 1fr), column-gutter: 6pt, row-gutter: 0.3em,
+        ..sections.map(s => {
+            let heading = s.at("heading", default: none)
+            ([#s.ordinal.], [#if heading != none { heading }])
+        }).flatten()
+    )
+    heading(level: 3, numbering: none, outlined: false, [Procedure])
+}
+
+#let render-section(ordinal: none, heading: none, children: none) = {
+    std.heading(level: 1, numbering: none,
+        [#ordinal. #h(8pt) #if heading != none { heading }])
+    if children != none { children }
+}
+
+#let section-divider() = {
+    line(length: 100%, stroke: (thickness: 0.5pt, paint: rgb("#003366"), dash: ("dot", 2pt, 4pt, 2pt)))
+}
+
+#let render-procedure(name: none, title: none, description: (), children: none) = {
+    text(size: 7pt)[`#name`]
+    linebreak()
+    if title != none {
+        std.heading(level: 2, numbering: none, outlined: false, title)
+    }
+    for para in description {
+        [#para]
+        parbreak()
+    }
+    if children != none {
+        pad(left: 8pt, children)
+    }
+}
+
+#let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
+    if invocations.len() > 0 {
+        text(size: 7pt)[`#invocations.join(", ")`]
+        linebreak()
+    }
+    if ordinal != none and title != none [
+        *#ordinal.* #h(4pt) *#title*
+    ] else if ordinal != none [
+        *#ordinal.*
+    ] else if title != none [
+        *#title*
+    ]
+    parbreak()
+    for para in body {
+        [#para]
+        parbreak()
+    }
+    if responses != none {
+        responses
+        parbreak()
+    }
+    if children != none {
+        pad(left: 16pt, children)
+    }
+}
+
+#let render-response(value: none, condition: none) = {
+    if condition != none [- _#value #condition _]
+    else [- _#value _]
+}
+
+#let render-attribute(name: none, children: none) = {
+    [- *#name*]
+    if children != none {
+        pad(left: 20pt, children)
+    }
+}
+
+// -- Default template --------------------------------------------------------
 
 #let template(body) = {
     set page(margin: 1.5cm)

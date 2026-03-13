@@ -1,59 +1,51 @@
 // Checklist domain template for Technique.
 //
-// Exports `render` and `template`.
+// Thin formatting functions called from Rust-generated markup.
+// Each function is independently overridable via `--template`.
 
-// -- Render helpers --------------------------------------------------------
+// -- Formatting functions ----------------------------------------------------
 
 #let check = box(stroke: 0.5pt, width: 0.8em, height: 0.8em)
 #let small-check = box(stroke: 0.5pt, width: 0.6em, height: 0.6em)
 
-#let render-responses(responses) = {
-    for (i, r) in responses.enumerate() {
-        if i > 0 [ | ]
-        small-check
-        if r.condition != none [ _#r.value #r.condition _]
-        else [ _#r.value _]
+#let render-section(ordinal: none, heading: none, children: none) = {
+    if ordinal != none and heading != none {
+        std.heading(level: 1, numbering: none, [#ordinal. #heading])
+    } else if ordinal != none {
+        std.heading(level: 1, numbering: none, [#ordinal.])
+    } else if heading != none {
+        std.heading(level: 1, numbering: none, heading)
     }
-    if responses.len() > 0 { parbreak() }
+    if children != none { children }
 }
 
-#let render-step(step) = {
-    if step.role != none {
-        text(weight: "bold")[#step.role]
+#let render-response(value: none, condition: none) = {
+    small-check
+    if condition != none [ _#value #condition _]
+    else [ _#value _]
+}
+
+#let render-step(ordinal: none, title: none, body: (), role: none, responses: none, children: none) = {
+    if role != none {
+        text(weight: "bold")[#role]
         parbreak()
     }
     check
-    if step.ordinal != none [  *#step.ordinal.*  ]
-    if step.title != none [ #step.title]
+    if ordinal != none [  *#ordinal.*  ]
+    if title != none [ #title]
     parbreak()
-    for para in step.body {
+    for para in body {
         [#para]
         parbreak()
     }
-    render-responses(step.responses)
-    for child in step.children {
-        render-step(child)
+    if responses != none {
+        responses
+        parbreak()
     }
+    if children != none { children }
 }
 
-// -- Render function -------------------------------------------------------
-
-#let render(technique) = [
-    #for section in technique.sections [
-        #if section.ordinal != none and section.heading != none {
-            heading(level: 1, numbering: none, [#section.ordinal. #section.heading])
-        } else if section.ordinal != none {
-            heading(level: 1, numbering: none, [#section.ordinal.])
-        } else if section.heading != none {
-            heading(level: 1, numbering: none, section.heading)
-        }
-        #for step in section.steps {
-            render-step(step)
-        }
-    ]
-]
-
-// -- Default template ------------------------------------------------------
+// -- Default template --------------------------------------------------------
 
 #let template(body) = {
     set page(margin: 1.5cm)
