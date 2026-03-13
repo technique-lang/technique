@@ -352,8 +352,6 @@ fn main() {
                 }
             };
 
-            let data = template.data(&technique);
-
             let custom = match submatches.get_one::<String>("template") {
                 Some(path) => {
                     if !Path::new(path).exists() {
@@ -369,13 +367,15 @@ fn main() {
                 None => None,
             };
 
+            let markup = template.markup(&technique);
+            let document = templating::assemble(template.domain(), &markup, custom);
+
             match output.as_str() {
                 "typst" => {
-                    let doc = output::document(template.domain(), &data, custom);
-                    print!("{}", doc);
+                    print!("{}", document);
                 }
                 "pdf" => {
-                    output::via_typst(filename, template.typst(), template.domain(), &data, custom);
+                    output::via_typst(filename, template.typst(), template.domain(), &document);
                 }
                 _ => panic!("Unrecognized --output value"),
             }
