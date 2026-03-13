@@ -5,8 +5,8 @@
 //! any SectionChunks within) become the body. Remaining top-level procedures
 //! are appended as Procedure nodes.
 
-use crate::language;
 use crate::domain::Adapter;
+use crate::language;
 
 use super::types::{Document, Node, Response};
 
@@ -192,8 +192,8 @@ fn node_from_step(scope: &language::Scope) -> Node {
 mod check {
     use std::path::Path;
 
-    use crate::parsing;
     use crate::domain::Adapter;
+    use crate::parsing;
 
     use super::super::types::Node;
     use super::ProcedureAdapter;

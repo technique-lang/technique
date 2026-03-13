@@ -1,8 +1,9 @@
 /.vscode
 /target
 
-# rendered code fragments
-/*.pdf
+# rendering artifacts
+*.pdf
+.*.typ
 
 # documentation symlinks
 /doc/references

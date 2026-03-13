@@ -4,8 +4,8 @@
 //! role assignments are inherited by sub steps, and SectionChunks are
 //! rendered as headings with their sub-procedures' steps as children.
 
-use crate::language;
 use crate::domain::Adapter;
+use crate::language;
 
 use super::types::{Document, Response, Section, Step};
 
@@ -209,8 +209,8 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
 mod check {
     use std::path::Path;
 
-    use crate::parsing;
     use crate::domain::Adapter;
+    use crate::parsing;
 
     use super::ChecklistAdapter;
 
