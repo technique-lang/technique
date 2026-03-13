@@ -50,7 +50,7 @@ impl Render for Fragment {
             out.raw(&format!("#{}()\n", func));
         } else {
             out.raw(&format!(
-                "#{}(\"{}\")\n",
+                "#{}(\"{}\")",
                 func,
                 escape_string(&self.content)
             ));
