@@ -109,7 +109,7 @@ fn main() {
                 .long_about("Render the Technique document into a formatted \
                 PDF using a template. This allows you to transform the code of \
                 the procedure into the intended layout suitable to the \
-                domain you're app.")
+                domain of your application.")
                 .arg(
                     Arg::new("output")
                         .short('o')

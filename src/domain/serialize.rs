@@ -53,7 +53,7 @@ impl Markup {
     }
 
     /// Emit an optional string parameter: `key: "value", ` or `key: none, `.
-    pub fn param_opt(&mut self, key: &str, value: Option<&str>) {
+    pub fn param_opt(&mut self, key: &str, value: &Option<String>) {
         match value {
             Some(v) => self
                 .out
@@ -131,8 +131,8 @@ mod check {
     fn markup_param_opt_some_and_none() {
         let mut m = Markup::new();
         m.call("f");
-        m.param_opt("a", Some("yes"));
-        m.param_opt("b", None);
+        m.param_opt("a", &Some("yes".into()));
+        m.param_opt("b", &None);
         m.close();
         assert_eq!(m.finish(), "#f(a: \"yes\", b: none, )\n");
     }

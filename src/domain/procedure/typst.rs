@@ -7,11 +7,7 @@ use super::types::{Document, Node, Response};
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
         out.call("render-document");
-        out.param_opt(
-            "title",
-            self.title
-                .as_deref(),
-        );
+        out.param_opt("title", &self.title);
         out.param_list("description", &self.description);
         out.content_open("children");
 
@@ -90,7 +86,7 @@ impl Render for Node {
             } => {
                 out.call("render-section");
                 out.param("ordinal", ordinal);
-                out.param_opt("heading", heading.as_deref());
+                out.param_opt("heading", heading);
                 if !children.is_empty() {
                     out.content_open("children");
                     for child in children {
@@ -108,7 +104,7 @@ impl Render for Node {
             } => {
                 out.call("render-procedure");
                 out.param("name", name);
-                out.param_opt("title", title.as_deref());
+                out.param_opt("title", title);
                 out.param_list("description", description);
                 if !children.is_empty() {
                     out.content_open("children");
@@ -129,7 +125,7 @@ impl Render for Node {
             } => {
                 out.call("render-step");
                 out.param("ordinal", ordinal);
-                out.param_opt("title", title.as_deref());
+                out.param_opt("title", title);
                 out.param_list("body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
@@ -156,7 +152,7 @@ impl Render for Node {
                 children,
             } => {
                 out.call("render-step");
-                out.param_opt("title", title.as_deref());
+                out.param_opt("title", title);
                 out.param_list("body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
@@ -195,11 +191,7 @@ impl Render for Response {
     fn render(&self, out: &mut Markup) {
         out.call("render-response");
         out.param("value", &self.value);
-        out.param_opt(
-            "condition",
-            self.condition
-                .as_deref(),
-        );
+        out.param_opt("condition", &self.condition);
         out.close();
     }
 }

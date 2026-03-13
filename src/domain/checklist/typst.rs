@@ -15,16 +15,8 @@ impl Render for Document {
 impl Render for Section {
     fn render(&self, out: &mut Markup) {
         out.call("render-section");
-        out.param_opt(
-            "ordinal",
-            self.ordinal
-                .as_deref(),
-        );
-        out.param_opt(
-            "heading",
-            self.heading
-                .as_deref(),
-        );
+        out.param_opt("ordinal", &self.ordinal);
+        out.param_opt("heading", &self.heading);
         if !self
             .steps
             .is_empty()
@@ -42,22 +34,10 @@ impl Render for Section {
 impl Render for Step {
     fn render(&self, out: &mut Markup) {
         out.call("render-step");
-        out.param_opt(
-            "ordinal",
-            self.ordinal
-                .as_deref(),
-        );
-        out.param_opt(
-            "title",
-            self.title
-                .as_deref(),
-        );
+        out.param_opt("ordinal", &self.ordinal);
+        out.param_opt("title", &self.title);
         out.param_list("body", &self.body);
-        out.param_opt(
-            "role",
-            self.role
-                .as_deref(),
-        );
+        out.param_opt("role", &self.role);
         if !self
             .responses
             .is_empty()
@@ -86,11 +66,7 @@ impl Render for Response {
     fn render(&self, out: &mut Markup) {
         out.call("render-response");
         out.param("value", &self.value);
-        out.param_opt(
-            "condition",
-            self.condition
-                .as_deref(),
-        );
+        out.param_opt("condition", &self.condition);
         out.close();
     }
 }
