@@ -45,11 +45,12 @@
 }
 
 #let render-procedure(name: none, title: none, description: (), children: none) = {
-    text(size: 7pt)[`#name`]
-    linebreak()
     if title != none {
         std.heading(level: 2, numbering: none, outlined: false, title)
     }
+    text(size: 7pt, fill: rgb("#999999"), raw(name))
+    linebreak()
+
     for para in description {
         [#para]
         parbreak()
@@ -61,7 +62,7 @@
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
     if invocations.len() > 0 {
-        text(size: 7pt)[`#invocations.join(", ")`]
+        text(size: 7pt, raw(invocations.join(", ")))
         linebreak()
     }
     if ordinal != none and title != none [
@@ -105,7 +106,10 @@
     set text(size: 9pt, font: "TeX Gyre Heros")
 
     show heading.where(level: 1): set text(size: 14pt)
-    show heading.where(level: 2): set text(size: 11pt)
+    show heading.where(level: 2): it => {
+        block(width: 100%, below: 0.4em,
+            text(size: 11pt, weight: "bold", it.body))
+    }
     show heading.where(level: 3): it => {
         block(width: 100%, fill: rgb("#006699"), inset: 5pt,
             text(fill: white, weight: "bold", it.body))
