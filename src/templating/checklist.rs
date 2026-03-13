@@ -6,7 +6,7 @@
 //! child steps) rather than forming structural containers.
 
 use crate::domain::checklist::adapter::ChecklistAdapter;
-use crate::domain::typst::{Data, Render};
+use crate::domain::serialize::{Markup, Render};
 use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
@@ -16,11 +16,11 @@ pub static TEMPLATE: &str = include_str!("checklist.typ");
 pub struct Checklist;
 
 impl Template for Checklist {
-    fn data(&self, document: &language::Document) -> String {
+    fn markup(&self, document: &language::Document) -> String {
         let model = ChecklistAdapter.extract(document);
-        let mut data = Data::new();
-        model.render(&mut data);
-        data.finish()
+        let mut out = Markup::new();
+        model.render(&mut out);
+        out.finish()
     }
 
     fn typst(&self) -> &str {
