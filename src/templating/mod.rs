@@ -17,6 +17,9 @@ pub use template::Template;
 /// Assemble a complete, compilable Typst document from domain template
 /// imports, optional user template, and rendered markup.
 ///
+/// The custom template import uses a root-relative path (`/`), which assumes
+/// the Typst compiler is invoked with `--root .` as done by `output::via_typst`.
+///
 /// This second import line is the critical aspect of the ability of a user to
 /// customize the output template. Because the import is * any functions that
 /// the user redefines in their template will override the names from the
