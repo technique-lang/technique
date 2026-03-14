@@ -8,7 +8,7 @@ use tracing::{debug, info};
 /// Write the domain template and assembled document into a (hidden) file
 /// beside the input source file, then compile to PDF using the external Typst
 /// binary.
-pub fn via_typst(filename: &Path, template: &str, domain: &str, document: &str) {
+pub fn via_typst(filename: &Path, template: &str, domain: &str, document: &str, keep: bool) {
     info!("Printing file: {}", filename.display());
 
     if filename.to_str() == Some("-") {
@@ -34,11 +34,11 @@ pub fn via_typst(filename: &Path, template: &str, domain: &str, document: &str) 
         .to_str()
         .unwrap();
 
-    // Write domain template beside source
-    let machinery = source_dir.join(format!(".{}.typ", domain));
-    std::fs::write(&machinery, template).expect("Failed to write domain template");
+    // Write the domain template beside where the source file is
+    let domain_typ = source_dir.join(format!(".{}.typ", domain));
+    std::fs::write(&domain_typ, template).expect("Failed to write domain template");
 
-    // Write assembled document beside source
+    // Write assembled document beside source as well
     let target_typ = source_dir.join(format!(".{}.typ", stem));
     std::fs::write(&target_typ, document).expect("Failed to write generated document");
 
@@ -59,6 +59,11 @@ pub fn via_typst(filename: &Path, template: &str, domain: &str, document: &str) 
     if !status.success() {
         eprintln!("{}: typst compile failed", "error".bright_red());
         std::process::exit(1);
+    }
+
+    if !keep {
+        let _ = std::fs::remove_file(&domain_typ);
+        let _ = std::fs::remove_file(&target_typ);
     }
 
     debug!("Wrote {}", target_pdf.display());

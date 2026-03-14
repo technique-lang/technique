@@ -137,6 +137,13 @@ fn main() {
                         .help("Path to a Typst template file for rendering."),
                 )
                 .arg(
+                    Arg::new("keep")
+                        .short('k')
+                        .long("keep")
+                        .action(ArgAction::SetTrue)
+                        .help("Keep the generated intermediate files in place after rendering. This allows you to do iterative development of the template and styling with the Typst compiler without having to regenerate the input document every time. The intermediate pieces are written as hidden files in the same directory as the source document."),
+                )
+                .arg(
                     Arg::new("filename")
                         .required(true)
                         .help("The file containing the Technique you want to render."),
@@ -370,12 +377,22 @@ fn main() {
             let markup = template.markup(&technique);
             let document = templating::assemble(template.domain(), &markup, custom);
 
+            let keep = *submatches
+                .get_one::<bool>("keep")
+                .unwrap();
+
             match output.as_str() {
                 "typst" => {
                     print!("{}", document);
                 }
                 "pdf" => {
-                    output::via_typst(filename, template.typst(), template.domain(), &document);
+                    output::via_typst(
+                        filename,
+                        template.typst(),
+                        template.domain(),
+                        &document,
+                        keep,
+                    );
                 }
                 _ => panic!("Unrecognized --output value"),
             }
