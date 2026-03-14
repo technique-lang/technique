@@ -13,7 +13,7 @@ mod adapter;
 pub mod checklist;
 pub mod engine;
 pub mod procedure;
+pub(crate) mod serialize;
 pub mod source;
-pub mod typst;
 
 pub use adapter::Adapter;

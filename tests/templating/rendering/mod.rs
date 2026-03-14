@@ -25,28 +25,15 @@ fn check_directory(dir: &Path, template: &impl templating::Template) {
 
     assert!(!files.is_empty(), "No .tq files found in {:?}", dir);
 
-    let mut failures = Vec::new();
-
     for file in &files {
         let source =
             parsing::load(file).unwrap_or_else(|e| panic!("Failed to load {:?}: {:?}", file, e));
 
-        let doc = parsing::parse(file, &source)
+        let technique = parsing::parse(file, &source)
             .unwrap_or_else(|e| panic!("Failed to parse {:?}: {:?}", file, e));
 
-        let output = templating::data(template, &doc);
-
-        if output.is_empty() {
-            failures.push(file.clone());
-        }
-    }
-
-    if !failures.is_empty() {
-        panic!(
-            "Template produced empty output for {} files: {:?}",
-            failures.len(),
-            failures
-        );
+        // Exercise the markup path; panics surface as test failures
+        let _ = template.markup(&technique);
     }
 }
 

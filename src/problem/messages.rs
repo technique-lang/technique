@@ -79,7 +79,7 @@ literal resumes.
                 "! «license»; © «copyright»\n",
             ));
             formatted_example
-                .push_str(&renderer.style(crate::formatting::Syntax::Header, "& «template»"));
+                .push_str(&renderer.style(crate::formatting::Syntax::Header, "& «domain»"));
 
             (
                 "Invalid header".to_string(),
@@ -102,7 +102,7 @@ typically list the year and then the name of the person or entity holding the
 copyright.
 
 The third line optionally specifies the domain or kind of Technique this is,
-to be used when rendering the Technique. Common templates include
+to be used when rendering the Technique. Common domains include
 {}, {}, and {}.
             "#,
                     formatted_example,

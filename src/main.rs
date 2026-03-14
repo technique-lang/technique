@@ -109,7 +109,7 @@ fn main() {
                 .long_about("Render the Technique document into a formatted \
                 PDF using a template. This allows you to transform the code of \
                 the procedure into the intended layout suitable to the \
-                domain you're app.")
+                domain of your application.")
                 .arg(
                     Arg::new("output")
                         .short('o')
@@ -135,6 +135,13 @@ fn main() {
                         .value_name("filename")
                         .action(ArgAction::Set)
                         .help("Path to a Typst template file for rendering."),
+                )
+                .arg(
+                    Arg::new("keep")
+                        .short('k')
+                        .long("keep")
+                        .action(ArgAction::SetTrue)
+                        .help("Keep the generated intermediate files in place after rendering. This allows you to do iterative development of the template and styling with the Typst compiler without having to regenerate the input document every time. The intermediate pieces are written as hidden files in the same directory as the source document."),
                 )
                 .arg(
                     Arg::new("filename")
@@ -352,12 +359,7 @@ fn main() {
                 }
             };
 
-            let data = template.data(&technique);
-
-            // If --template is given, use the user-supplied file (expected to
-            // be a .typ file containing Typst template code) ; otherwise
-            // inline the built-in template.
-            let preamble: String = match submatches.get_one::<String>("template") {
+            let custom = match submatches.get_one::<String>("template") {
                 Some(path) => {
                     if !Path::new(path).exists() {
                         eprintln!(
@@ -367,21 +369,30 @@ fn main() {
                         );
                         std::process::exit(1);
                     }
-                    format!("#import \"{}\": render", path)
+                    Some(path.as_str())
                 }
-                None => template
-                    .typst()
-                    .to_string(),
+                None => None,
             };
+
+            let markup = template.markup(&technique);
+            let document = templating::assemble(template.domain(), &markup, custom);
+
+            let keep = *submatches
+                .get_one::<bool>("keep")
+                .unwrap();
 
             match output.as_str() {
                 "typst" => {
-                    println!("{}", preamble);
-                    print!("{}", data);
-                    println!("\n#render(technique)");
+                    print!("{}", document);
                 }
                 "pdf" => {
-                    output::via_typst(filename, &preamble, &data);
+                    output::via_typst(
+                        filename,
+                        template.typst(),
+                        template.domain(),
+                        &document,
+                        keep,
+                    );
                 }
                 _ => panic!("Unrecognized --output value"),
             }

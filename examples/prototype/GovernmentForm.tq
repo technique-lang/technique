@@ -6,9 +6,9 @@ drivers_license_application :
 {
     [
         "Name" = "Kowalski"
-        "Species" = "Emperor Pengin"
+        "Species" = "Emperor Penguin"
         "Age" = 4.2 winters
-        "Unique Pengiun Identifier" = uuid()
+        "Unique Penguin Identifier" = uuid()
         "Occupation" = "Operational Planning Specialist"
         "Permanent Address" = "Central Park Zoo, New York, NY, 10021, United States"
     ]
