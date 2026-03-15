@@ -28,6 +28,8 @@ pub enum Syntax {
     Language,
     Attribute,
     Structure,
+    StepBegin,
+    StepEnd,
 }
 
 /// Trait for different rendering backends (the no-op no-markup one, ANSI

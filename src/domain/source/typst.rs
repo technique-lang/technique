@@ -48,6 +48,10 @@ impl Render for Fragment {
 
         if self.syntax == "Newline" {
             out.raw(&format!("#{}()\n", func));
+        } else if self.syntax == "StepBegin" {
+            out.raw("#block(breakable: false)[");
+        } else if self.syntax == "StepEnd" {
+            out.raw("]");
         } else {
             out.raw(&format!(
                 "#{}(\"{}\")",

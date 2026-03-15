@@ -43,7 +43,11 @@ fn coalesce(fragments: Vec<Fragment>) -> Vec<Fragment> {
 
     for frag in fragments {
         if let Some(last) = result.last_mut() {
-            if last.syntax == frag.syntax && frag.syntax != "Newline" {
+            if last.syntax == frag.syntax
+                && frag.syntax != "Newline"
+                && frag.syntax != "StepBegin"
+                && frag.syntax != "StepEnd"
+            {
                 last.content.push_str(&frag.content);
                 continue;
             }

@@ -63,7 +63,7 @@ pub fn format_with_renderer<'i>(technique: &'i Document, width: u8) -> Vec<(Synt
             .fragments
             .last()
         {
-            if !last_content.ends_with('\n') {
+            if !last_content.is_empty() && !last_content.ends_with('\n') {
                 output.add_fragment_reference(Syntax::Description, "\n");
             }
         }
@@ -720,6 +720,7 @@ impl<'i> Formatter<'i> {
     }
 
     fn append_step(&mut self, step: &'i Scope) {
+        self.add_fragment_reference(Syntax::StepBegin, "");
         match step {
             Scope::DependentBlock {
                 ordinal,
@@ -768,6 +769,7 @@ impl<'i> Formatter<'i> {
             }
             _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
+        self.add_fragment_reference(Syntax::StepEnd, "");
     }
 
     fn append_responses(&mut self, responses: &'i Vec<Response>) {
