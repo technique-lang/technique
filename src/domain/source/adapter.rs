@@ -19,14 +19,50 @@ impl Adapter for SourceAdapter {
     fn extract(&self, document: &language::Document) -> Document {
         let fragments = format_with_renderer(document, WIDTH);
 
+        let fragments: Vec<Fragment> = fragments
+            .into_iter()
+            .map(|(syntax, content)| Fragment {
+                syntax: format!("{:?}", syntax),
+                content: content.into_owned(),
+            })
+            .collect();
+
         Document {
-            fragments: fragments
-                .into_iter()
-                .map(|(syntax, content)| Fragment {
-                    syntax: format!("{:?}", syntax),
-                    content: content.into_owned(),
-                })
-                .collect(),
+            fragments: coalesce(fragments),
         }
     }
+}
+
+/// Merge adjacent fragments to reduce verbosity in serialized output.
+/// Same-syntax fragments are concatenated. Whitespace-only fragments
+/// tagged Neutral or Description are absorbed into the preceding
+/// fragment, allowing subsequent same-syntax merges to collapse runs
+/// of words into single strings.
+fn coalesce(fragments: Vec<Fragment>) -> Vec<Fragment> {
+    let mut result: Vec<Fragment> = Vec::with_capacity(fragments.len());
+
+    for frag in fragments {
+        if let Some(last) = result.last_mut() {
+            if last.syntax == frag.syntax && frag.syntax != "Newline" {
+                last.content.push_str(&frag.content);
+                continue;
+            }
+            if is_text_whitespace(&frag) {
+                last.content.push_str(&frag.content);
+                continue;
+            }
+        }
+        result.push(frag);
+    }
+
+    result
+}
+
+fn is_text_whitespace(frag: &Fragment) -> bool {
+    (frag.syntax == "Neutral" || frag.syntax == "Description")
+        && !frag.content.is_empty()
+        && frag
+            .content
+            .bytes()
+            .all(|b| b == b' ')
 }

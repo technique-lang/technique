@@ -1249,7 +1249,7 @@ impl<'a, 'i> Line<'a, 'i> {
                     + word.len() as u8;
             } else {
                 self.current
-                    .push((Syntax::Description, Cow::Borrowed(" ")));
+                    .push((syntax, Cow::Borrowed(" ")));
                 self.current
                     .push((syntax, Cow::Borrowed(word)));
                 self.position += 1 + word.len() as u8;
