@@ -814,25 +814,33 @@ impl<'i> Formatter<'i> {
                 attributes,
                 subscopes,
             } => {
+                if subscopes.len() == 0 {
+                    self.indent();
+                    self.append_attributes(attributes);
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                    return;
+                }
+
+                let is_code =
+                    if let Scope::CodeBlock { .. } = subscopes[0] { true } else { false };
+
+                // Keep attribute with its first subscope
+                self.add_fragment_reference(Syntax::BlockBegin, "");
                 self.indent();
                 self.append_attributes(attributes);
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
-                if subscopes.len() == 0 {
-                    return;
+                if !is_code {
+                    self.increase(4);
+                }
+                self.append_scope(&subscopes[0]);
+                self.add_fragment_reference(Syntax::BlockEnd, "");
+
+                for scope in &subscopes[1..] {
+                    self.append_scope(scope);
                 }
 
-                let first = subscopes
-                    .iter()
-                    .next()
-                    .unwrap();
-
-                if let Scope::CodeBlock { .. } = first {
-                    // do NOT increase indent
-                    self.append_scopes(subscopes);
-                } else {
-                    self.increase(4);
-                    self.append_scopes(subscopes);
+                if !is_code {
                     self.decrease(4);
                 }
             }
