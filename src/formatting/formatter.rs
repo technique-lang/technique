@@ -473,7 +473,9 @@ impl<'i> Formatter<'i> {
             self.append_char('\n');
         }
 
-        // declaration
+        // declaration and title kept together
+
+        self.add_fragment_reference(Syntax::BlockBegin, "");
 
         let name = &procedure.name;
         self.add_fragment_reference(Syntax::Declaration, name.0);
@@ -497,9 +499,17 @@ impl<'i> Formatter<'i> {
 
         self.append_char('\n');
 
-        // elements
+        // include title in block to keep it with the declaration
+        let mut elements = procedure.elements.iter();
+        if let Some(Element::Title(_)) = procedure.elements.first() {
+            self.append_element(elements.next().unwrap());
+        }
 
-        for element in &procedure.elements {
+        self.add_fragment_reference(Syntax::BlockEnd, "");
+
+        // remaining elements
+
+        for element in elements {
             self.append_element(element);
         }
     }
