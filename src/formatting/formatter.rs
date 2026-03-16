@@ -720,7 +720,7 @@ impl<'i> Formatter<'i> {
     }
 
     fn append_step(&mut self, step: &'i Scope) {
-        self.add_fragment_reference(Syntax::StepBegin, "");
+        self.add_fragment_reference(Syntax::BlockBegin, "");
         match step {
             Scope::DependentBlock {
                 ordinal,
@@ -769,7 +769,8 @@ impl<'i> Formatter<'i> {
             }
             _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
-        self.add_fragment_reference(Syntax::StepEnd, "");
+
+        self.add_fragment_reference(Syntax::BlockEnd, "");
     }
 
     fn append_responses(&mut self, responses: &'i Vec<Response>) {

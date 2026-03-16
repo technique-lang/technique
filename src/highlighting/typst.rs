@@ -38,7 +38,7 @@ impl Render for Typst {
             Syntax::Language => markup("fill: rgb(0xc4, 0xa0, 0x00), weight: \"bold\"", &content),
             Syntax::Attribute => markup("weight: \"bold\"", &content),
             Syntax::Structure => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
-            Syntax::StepBegin | Syntax::StepEnd => String::new(),
+            Syntax::BlockBegin | Syntax::BlockEnd => String::new(),
         }
     }
 }

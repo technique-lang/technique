@@ -45,8 +45,8 @@ fn coalesce(fragments: Vec<Fragment>) -> Vec<Fragment> {
         if let Some(last) = result.last_mut() {
             if last.syntax == frag.syntax
                 && frag.syntax != "Newline"
-                && frag.syntax != "StepBegin"
-                && frag.syntax != "StepEnd"
+                && frag.syntax != "BlockBegin"
+                && frag.syntax != "BlockEnd"
             {
                 last.content.push_str(&frag.content);
                 continue;
@@ -70,3 +70,4 @@ fn is_text_whitespace(frag: &Fragment) -> bool {
             .bytes()
             .all(|b| b == b' ')
 }
+
