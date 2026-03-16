@@ -30,11 +30,13 @@
 #let render-language(c) = text(fill: rgb(0xc4, 0xa0, 0x00), weight: "bold", raw(c))
 #let render-attribute(c) = text(weight: "bold", raw(c))
 #let render-structure(c) = text(fill: rgb(0x99, 0x99, 0x99), weight: "bold", raw(c))
+#let render-block(body) = block(breakable: false, spacing: 0.65em, body)
 
 // -- Default template --------------------------------------------------------
 
 #let template(body) = {
     set text(font: "Inconsolata")
+    set par(spacing: 0.65em, leading: 0.65em)
     show raw: set block(breakable: true)
     body
 }

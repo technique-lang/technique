@@ -46,7 +46,13 @@ impl Render for Fragment {
             _ => "render-neutral",
         };
 
-        if self.syntax == "Newline" {
+        if self.syntax == "BlockBegin" {
+            out.raw("#render-block()[\n");
+            return;
+        } else if self.syntax == "BlockEnd" {
+            out.raw("]\n");
+            return;
+        } else if self.syntax == "Newline" {
             out.raw(&format!("#{}()\n", func));
         } else {
             out.raw(&format!(

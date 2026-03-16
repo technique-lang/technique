@@ -28,6 +28,8 @@ pub enum Syntax {
     Language,
     Attribute,
     Structure,
+    BlockBegin,
+    BlockEnd,
 }
 
 /// Trait for different rendering backends (the no-op no-markup one, ANSI
@@ -41,7 +43,10 @@ pub trait Render {
 pub struct Identity;
 
 impl Render for Identity {
-    fn style(&self, _syntax: Syntax, content: &str) -> String {
-        content.to_string()
+    fn style(&self, syntax: Syntax, content: &str) -> String {
+        match syntax {
+            Syntax::BlockBegin | Syntax::BlockEnd => String::new(),
+            _ => content.to_string(),
+        }
     }
 }

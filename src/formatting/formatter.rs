@@ -63,7 +63,7 @@ pub fn format_with_renderer<'i>(technique: &'i Document, width: u8) -> Vec<(Synt
             .fragments
             .last()
         {
-            if !last_content.ends_with('\n') {
+            if !last_content.is_empty() && !last_content.ends_with('\n') {
                 output.add_fragment_reference(Syntax::Description, "\n");
             }
         }
@@ -473,7 +473,9 @@ impl<'i> Formatter<'i> {
             self.append_char('\n');
         }
 
-        // declaration
+        // declaration and title kept together
+
+        self.add_fragment_reference(Syntax::BlockBegin, "");
 
         let name = &procedure.name;
         self.add_fragment_reference(Syntax::Declaration, name.0);
@@ -497,9 +499,17 @@ impl<'i> Formatter<'i> {
 
         self.append_char('\n');
 
-        // elements
+        // include title in block to keep it with the declaration
+        let mut elements = procedure.elements.iter();
+        if let Some(Element::Title(_)) = procedure.elements.first() {
+            self.append_element(elements.next().unwrap());
+        }
 
-        for element in &procedure.elements {
+        self.add_fragment_reference(Syntax::BlockEnd, "");
+
+        // remaining elements
+
+        for element in elements {
             self.append_element(element);
         }
     }
@@ -720,6 +730,7 @@ impl<'i> Formatter<'i> {
     }
 
     fn append_step(&mut self, step: &'i Scope) {
+        self.add_fragment_reference(Syntax::BlockBegin, "");
         match step {
             Scope::DependentBlock {
                 ordinal,
@@ -768,6 +779,8 @@ impl<'i> Formatter<'i> {
             }
             _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
+
+        self.add_fragment_reference(Syntax::BlockEnd, "");
     }
 
     fn append_responses(&mut self, responses: &'i Vec<Response>) {
@@ -801,25 +814,33 @@ impl<'i> Formatter<'i> {
                 attributes,
                 subscopes,
             } => {
+                if subscopes.len() == 0 {
+                    self.indent();
+                    self.append_attributes(attributes);
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                    return;
+                }
+
+                let is_code =
+                    if let Scope::CodeBlock { .. } = subscopes[0] { true } else { false };
+
+                // Keep attribute with its first subscope
+                self.add_fragment_reference(Syntax::BlockBegin, "");
                 self.indent();
                 self.append_attributes(attributes);
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
-                if subscopes.len() == 0 {
-                    return;
+                if !is_code {
+                    self.increase(4);
+                }
+                self.append_scope(&subscopes[0]);
+                self.add_fragment_reference(Syntax::BlockEnd, "");
+
+                for scope in &subscopes[1..] {
+                    self.append_scope(scope);
                 }
 
-                let first = subscopes
-                    .iter()
-                    .next()
-                    .unwrap();
-
-                if let Scope::CodeBlock { .. } = first {
-                    // do NOT increase indent
-                    self.append_scopes(subscopes);
-                } else {
-                    self.increase(4);
-                    self.append_scopes(subscopes);
+                if !is_code {
                     self.decrease(4);
                 }
             }
@@ -1249,7 +1270,7 @@ impl<'a, 'i> Line<'a, 'i> {
                     + word.len() as u8;
             } else {
                 self.current
-                    .push((Syntax::Description, Cow::Borrowed(" ")));
+                    .push((syntax, Cow::Borrowed(" ")));
                 self.current
                     .push((syntax, Cow::Borrowed(word)));
                 self.position += 1 + word.len() as u8;

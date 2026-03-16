@@ -26,6 +26,7 @@
 }
 
 #let render-step(ordinal: none, title: none, body: (), role: none, responses: none, children: none) = {
+  block(breakable: false, {
     if role != none {
         text(weight: "bold")[#role]
         parbreak()
@@ -43,6 +44,7 @@
         parbreak()
     }
     if children != none { children }
+  })
 }
 
 // -- Default template --------------------------------------------------------

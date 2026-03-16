@@ -61,6 +61,7 @@
 }
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
+  block(breakable: false, {
     if invocations.len() > 0 {
         text(size: 7pt, raw(invocations.join(", ")))
         linebreak()
@@ -84,6 +85,7 @@
     if children != none {
         pad(left: 16pt, children)
     }
+  })
 }
 
 #let render-response(value: none, condition: none) = {
