@@ -22,7 +22,21 @@ impl Adapter for ChecklistAdapter {
 fn extract(document: &language::Document) -> Document {
     let mut extracted = Document::new();
 
-    for procedure in document.procedures() {
+    let mut procedures = document.procedures();
+
+    if let Some(first) = procedures.next() {
+        extracted.name = Some(
+            first
+                .name()
+                .to_string(),
+        );
+        extracted.title = first
+            .title()
+            .map(String::from);
+        extract_procedure(&mut extracted, first);
+    }
+
+    for procedure in procedures {
         extract_procedure(&mut extracted, procedure);
     }
 
@@ -82,38 +96,35 @@ fn extract(document: &language::Document) -> Document {
 }
 
 fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
-    content
-        .sections
-        .push(Section {
-            ordinal: None,
-            heading: procedure
-                .title()
-                .map(String::from),
-            steps: Vec::new(),
-        });
 
     for scope in procedure.steps() {
         if let Some((numeral, title)) = scope.section_info() {
             let mut steps = Vec::new();
             if let Some(body) = scope.body() {
                 for p in body.procedures() {
-                    if let Some(t) = p.title() {
-                        steps.push(Step {
-                            name: Some(
-                                p.name()
-                                    .to_string(),
-                            ),
-                            ordinal: None,
-                            title: Some(t.to_string()),
-                            body: Vec::new(),
-                            role: None,
-                            responses: Vec::new(),
-                            children: p
-                                .steps()
-                                .flat_map(|s| steps_from_scope(s, None))
-                                .collect(),
+                    let title = p
+                        .title()
+                        .map(String::from)
+                        .unwrap_or_else(|| {
+                            p.name()
+                                .to_string()
                         });
-                    }
+                    let children: Vec<Step> = p
+                        .steps()
+                        .flat_map(|s| steps_from_scope(s, None))
+                        .collect();
+                    steps.push(Step {
+                        name: Some(
+                            p.name()
+                                .to_string(),
+                        ),
+                        ordinal: None,
+                        title: Some(title),
+                        body: Vec::new(),
+                        role: None,
+                        responses: Vec::new(),
+                        children,
+                    });
                 }
             }
             content
@@ -124,6 +135,18 @@ fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
                     steps,
                 });
         } else {
+            if content
+                .sections
+                .is_empty()
+            {
+                content
+                    .sections
+                    .push(Section {
+                        ordinal: None,
+                        heading: None,
+                        steps: Vec::new(),
+                    });
+            }
             content
                 .sections
                 .last_mut()
@@ -260,7 +283,7 @@ mod check {
     }
 
     #[test]
-    fn procedure_title_becomes_section_heading() {
+    fn procedure_title_becomes_document_title() {
         let doc = extract(trim(
             r#"
 preflight :
@@ -270,12 +293,14 @@ preflight :
     1. Fasten seatbelt
             "#,
         ));
+        assert_eq!(doc.name, Some("preflight".into()));
+        assert_eq!(doc.title, Some("Pre-flight Checks".into()));
         assert_eq!(
             doc.sections
                 .len(),
             1
         );
-        assert_eq!(doc.sections[0].heading, Some("Pre-flight Checks".into()));
+        assert_eq!(doc.sections[0].heading, None);
     }
 
     #[test]

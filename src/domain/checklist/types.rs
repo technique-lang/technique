@@ -5,12 +5,16 @@
 
 /// A checklist is a document of sections containing steps.
 pub struct Document {
+    pub name: Option<String>,
+    pub title: Option<String>,
     pub sections: Vec<Section>,
 }
 
 impl Document {
     pub fn new() -> Self {
         Document {
+            name: None,
+            title: None,
             sections: Vec::new(),
         }
     }
@@ -25,7 +29,6 @@ pub struct Section {
 
 /// A step within a checklist section.
 pub struct Step {
-    #[allow(dead_code)]
     pub name: Option<String>,
     pub ordinal: Option<String>,
     pub title: Option<String>,

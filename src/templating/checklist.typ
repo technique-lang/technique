@@ -8,14 +8,30 @@
 #let check = box(stroke: 0.5pt, width: 0.8em, height: 0.8em)
 #let small-check = box(stroke: 0.5pt, width: 0.6em, height: 0.6em)
 
+#let render-document(name: none, title: none) = {
+    if title != none {
+        std.heading(level: 1, numbering: none, title)
+    } else if name != none {
+        std.heading(level: 1, numbering: none, raw(name))
+    }
+}
+
 #let render-section(ordinal: none, heading: none, children: none) = {
-    let level = if ordinal != none { 2 } else { 1 }
     if ordinal != none and heading != none {
-        std.heading(level: level, numbering: none, [#ordinal. #heading])
+        std.heading(level: 2, numbering: none, [#ordinal. #heading])
     } else if ordinal != none {
-        std.heading(level: level, numbering: none, [#ordinal.])
+        std.heading(level: 2, numbering: none, [#ordinal.])
     } else if heading != none {
-        std.heading(level: level, numbering: none, heading)
+        std.heading(level: 2, numbering: none, heading)
+    }
+    if children != none { children }
+}
+
+#let render-procedure(name: none, title: none, body: (), role: none, responses: none, children: none) = {
+    if title != none {
+        std.heading(level: 3, numbering: none, title)
+    } else if name != none {
+        std.heading(level: 3, numbering: none, raw(name))
     }
     if children != none { children }
 }
@@ -44,7 +60,7 @@
         responses
         parbreak()
     }
-    if children != none { children }
+    if children != none { pad(left: 16pt, children) }
   })
 }
 
