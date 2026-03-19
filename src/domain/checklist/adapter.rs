@@ -82,21 +82,55 @@ fn extract(document: &language::Document) -> Document {
 }
 
 fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
-    let steps: Vec<Step> = procedure
-        .steps()
-        .flat_map(|s| steps_from_scope(s, None))
-        .collect();
+    content
+        .sections
+        .push(Section {
+            ordinal: None,
+            heading: procedure
+                .title()
+                .map(String::from),
+            steps: Vec::new(),
+        });
 
-    if !steps.is_empty() {
-        content
-            .sections
-            .push(Section {
-                ordinal: None,
-                heading: procedure
-                    .title()
-                    .map(String::from),
-                steps,
-            });
+    for scope in procedure.steps() {
+        if let Some((numeral, title)) = scope.section_info() {
+            let mut steps = Vec::new();
+            if let Some(body) = scope.body() {
+                for p in body.procedures() {
+                    if let Some(t) = p.title() {
+                        steps.push(Step {
+                            name: Some(
+                                p.name()
+                                    .to_string(),
+                            ),
+                            ordinal: None,
+                            title: Some(t.to_string()),
+                            body: Vec::new(),
+                            role: None,
+                            responses: Vec::new(),
+                            children: p
+                                .steps()
+                                .flat_map(|s| steps_from_scope(s, None))
+                                .collect(),
+                        });
+                    }
+                }
+            }
+            content
+                .sections
+                .push(Section {
+                    ordinal: Some(numeral.to_string()),
+                    heading: title.map(|para| para.text()),
+                    steps,
+                });
+        } else {
+            content
+                .sections
+                .last_mut()
+                .unwrap()
+                .steps
+                .extend(steps_from_scope(&scope, None));
+        }
     }
 }
 

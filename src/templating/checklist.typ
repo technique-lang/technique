@@ -9,12 +9,13 @@
 #let small-check = box(stroke: 0.5pt, width: 0.6em, height: 0.6em)
 
 #let render-section(ordinal: none, heading: none, children: none) = {
+    let level = if ordinal != none { 2 } else { 1 }
     if ordinal != none and heading != none {
-        std.heading(level: 1, numbering: none, [#ordinal. #heading])
+        std.heading(level: level, numbering: none, [#ordinal. #heading])
     } else if ordinal != none {
-        std.heading(level: 1, numbering: none, [#ordinal.])
+        std.heading(level: level, numbering: none, [#ordinal.])
     } else if heading != none {
-        std.heading(level: 1, numbering: none, heading)
+        std.heading(level: level, numbering: none, heading)
     }
     if children != none { children }
 }
