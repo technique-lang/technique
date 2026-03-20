@@ -45,11 +45,15 @@
 }
 
 #let render-procedure(name: none, title: none, description: (), children: none) = {
-    if title != none {
-        std.heading(level: 2, numbering: none, outlined: false, title)
-    }
-    text(size: 7pt, fill: rgb("#999999"), raw(name))
-    linebreak()
+    block(above: 1.2em, {
+        if name != none {
+            text(size: 7pt, fill: rgb("#999999"), raw(name))
+            linebreak()
+        }
+        if title != none {
+            std.heading(level: 2, numbering: none, outlined: false, title)
+        }
+    })
 
     for para in description {
         [#para]
@@ -62,16 +66,16 @@
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
   block(breakable: false, {
-    if invocations.len() > 0 {
-        text(size: 7pt, raw(invocations.join(", ")))
-        linebreak()
-    }
+    let invocation-title = title != none and invocations.contains(title)
     if ordinal != none and title != none [
-        *#ordinal.* #h(4pt) *#title*
+        *#ordinal.* #h(4pt) #if invocation-title { raw(title) } else [*#title*]
     ] else if ordinal != none [
         *#ordinal.*
     ] else if title != none [
-        *#title*
+        #if invocation-title { raw(title) } else [*#title*]
+    ]
+    if not invocation-title and invocations.len() > 0 [
+        #h(4pt) #text(size: 7pt, fill: rgb("#999999"), raw(invocations.map(i => "<" + i + ">").join(", ")))
     ]
     parbreak()
     for para in body {
@@ -109,7 +113,7 @@
 
     show heading.where(level: 1): set text(size: 14pt)
     show heading.where(level: 2): it => {
-        block(width: 100%, below: 0.4em,
+        block(width: 100%, above: 0.5em, below: 0.6em,
             text(size: 11pt, weight: "bold", it.body))
     }
     show heading.where(level: 3): it => {
