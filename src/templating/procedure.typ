@@ -109,6 +109,15 @@
     }
 }
 
+#let render-code-block(expression: none, children: none) = {
+    if expression != none {
+        text(fill: rgb("#999999"), raw(expression))
+    }
+    if children != none {
+        pad(left: 16pt, children)
+    }
+}
+
 // -- Default template --------------------------------------------------------
 
 #let template(body) = {

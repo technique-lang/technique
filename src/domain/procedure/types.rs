@@ -54,6 +54,10 @@ pub enum Node {
         name: String,
         children: Vec<Node>,
     },
+    CodeBlock {
+        expression: String,
+        children: Vec<Node>,
+    },
 }
 
 /// A response option with an optional condition.

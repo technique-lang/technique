@@ -99,6 +99,18 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
         return vec![Node::Attribute { name, children }];
     }
 
+    // CodeBlock — loop expression with children
+    if let Some(expression) = scope.expression_text() {
+        let mut children = Vec::new();
+        for child in scope.children() {
+            children.extend(nodes_from_scope(child));
+        }
+        return vec![Node::CodeBlock {
+            expression,
+            children,
+        }];
+    }
+
     // SectionChunk
     if let Some((numeral, title)) = scope.section_info() {
         let heading = title.map(|para| para.text());

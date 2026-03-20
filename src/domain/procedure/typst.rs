@@ -183,6 +183,21 @@ impl Render for Node {
                 }
                 out.close();
             }
+            Node::CodeBlock {
+                expression,
+                children,
+            } => {
+                out.call("render-code-block");
+                out.param("expression", expression);
+                if !children.is_empty() {
+                    out.content_open("children");
+                    for child in children {
+                        child.render(out);
+                    }
+                    out.content_close();
+                }
+                out.close();
+            }
         }
     }
 }

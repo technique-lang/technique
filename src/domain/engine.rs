@@ -13,7 +13,8 @@
 //! projecting these into domain-specific models.
 
 use crate::language::{
-    Attribute, Descriptive, Document, Element, Paragraph, Procedure, Response, Scope, Technique,
+    Attribute, Descriptive, Document, Element, Expression, Paragraph, Procedure, Response, Scope,
+    Target, Technique,
 };
 
 impl<'i> Document<'i> {
@@ -158,6 +159,14 @@ impl<'i> Scope<'i> {
             _ => None,
         }
     }
+
+    /// Returns the expression of a CodeBlock as readable text.
+    pub fn expression_text(&self) -> Option<String> {
+        match self {
+            Scope::CodeBlock { expression, .. } => Some(render_expression(expression)),
+            _ => None,
+        }
+    }
 }
 
 impl<'i> Technique<'i> {
@@ -197,6 +206,42 @@ impl<'i> Response<'i> {
     /// Returns the optional condition.
     pub fn condition(&self) -> Option<&'i str> {
         self.condition
+    }
+}
+
+/// Render an Expression as human-readable text.
+fn render_expression(expr: &Expression) -> String {
+    match expr {
+        Expression::Repeat(inner) => {
+            format!("repeat {}", render_expression(inner))
+        }
+        Expression::Foreach(ids, inner) => {
+            let vars = if ids.len() == 1 {
+                ids[0].0.to_string()
+            } else {
+                format!("({})", ids.iter().map(|id| id.0).collect::<Vec<_>>().join(", "))
+            };
+            format!("foreach {} in {}", vars, render_expression(inner))
+        }
+        Expression::Application(inv) => {
+            let name = match &inv.target {
+                Target::Local(id) => id.0,
+                Target::Remote(ext) => ext.0,
+            };
+            if let Some(params) = &inv.parameters {
+                let args: Vec<_> = params.iter().map(render_expression).collect();
+                format!("<{}>({})", name, args.join(", "))
+            } else {
+                format!("<{}>", name)
+            }
+        }
+        Expression::Execution(func) => {
+            let args: Vec<_> = func.parameters.iter().map(render_expression).collect();
+            format!("{}({})", func.target.0, args.join(", "))
+        }
+        Expression::Variable(id) => id.0.to_string(),
+        Expression::Binding(inner, _) => render_expression(inner),
+        _ => String::new(),
     }
 }
 
