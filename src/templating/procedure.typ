@@ -12,7 +12,7 @@
 
         ]
         #if description.len() > 0 or children != none [
-            _Overview_
+            #heading(level: 3, numbering: none, outlined: false, [Overview])
 
             #for para in description [
                 #para
@@ -66,25 +66,24 @@
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
   block(breakable: false, {
-    let invocation-title = title != none and invocations.contains(title)
-    if ordinal != none and title != none [
-        *#ordinal.* #h(4pt) #if invocation-title { raw(title) } else [*#title*]
-    ] else if ordinal != none [
-        *#ordinal.*
+    set par(spacing: 0.7em)
+    if ordinal != none [ *#ordinal.* #h(4pt) ]
+    if invocations.len() > 0 [
+        #if title != none { text(fill: rgb("#999999"), raw(title + " ")) }
+        #text(fill: rgb("#999999"), raw(invocations.map(i => "<" + i + ">").join(", ")))
     ] else if title != none [
-        #if invocation-title { raw(title) } else [*#title*]
+        *#title*
     ]
-    if not invocation-title and invocations.len() > 0 [
-        #h(4pt) #text(size: 7pt, fill: rgb("#999999"), raw(invocations.map(i => "<" + i + ">").join(", ")))
-    ]
-    parbreak()
-    for para in body {
-        [#para]
+    if body.len() > 0 {
         parbreak()
+        for para in body {
+            [#para]
+            parbreak()
+        }
     }
     if responses != none {
-        responses
         parbreak()
+        responses
     }
     if children != none {
         pad(left: 16pt, children)

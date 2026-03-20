@@ -161,7 +161,14 @@ fn node_from_step(scope: &language::Scope) -> Node {
         .map(|p| p.content())
         .collect();
     let (title, body) = match paragraphs.split_first() {
-        Some((first, rest)) => (Some(first.clone()), rest.to_vec()),
+        Some((first, rest)) => {
+            let mut t = first.clone();
+            for inv in &invocations {
+                t = t.replace(inv, "");
+            }
+            let t = t.trim().to_string();
+            (if t.is_empty() { None } else { Some(t) }, rest.to_vec())
+        }
         None => (None, Vec::new()),
     };
 
@@ -306,8 +313,14 @@ ensure_safety :
     - Check exits
             "#,
         ));
-        if let Node::Sequential { title, .. } = &doc.body[0] {
-            assert_eq!(*title, Some("ensure_safety".into()));
+        if let Node::Sequential {
+            title,
+            invocations,
+            ..
+        } = &doc.body[0]
+        {
+            assert_eq!(*title, None);
+            assert_eq!(invocations, &["ensure_safety"]);
         } else {
             panic!("expected Sequential");
         }
