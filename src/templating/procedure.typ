@@ -70,11 +70,10 @@
   block(breakable: false, {
     set par(spacing: 0.7em)
     if ordinal != none [ *#ordinal.* #h(4pt) ]
+    if title != none [ *#title* ]
     if invocations.len() > 0 [
-        #if title != none { text(fill: rgb("#999999"), raw(title + " ")) }
+        #if title != none { h(4pt) }
         #text(fill: rgb("#999999"), raw(invocations.map(i => "<" + i + ">").join(", ")))
-    ] else if title != none [
-        *#title*
     ]
     if body.len() > 0 {
         parbreak()
