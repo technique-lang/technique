@@ -12,7 +12,8 @@
 
         ]
         #if description.len() > 0 or children != none [
-            #heading(level: 3, numbering: none, outlined: false, [Overview])
+            #block(width: 100%, fill: rgb("#006699"), inset: 5pt,
+                text(fill: white, weight: "bold", [Overview]))
 
             #for para in description [
                 #para
@@ -31,7 +32,8 @@
             ([#s.ordinal.], [#if heading != none { heading }])
         }).flatten()
     )
-    heading(level: 3, numbering: none, outlined: false, [Procedure])
+    block(width: 100%, fill: rgb("#006699"), inset: 5pt,
+        text(fill: white, weight: "bold", [Procedure]))
 }
 
 #let render-section(ordinal: none, heading: none, children: none) = {
@@ -115,10 +117,5 @@
         block(width: 100%, above: 0.5em, below: 0.6em,
             text(size: 11pt, weight: "bold", it.body))
     }
-    show heading.where(level: 3): it => {
-        block(width: 100%, fill: rgb("#006699"), inset: 5pt,
-            text(fill: white, weight: "bold", it.body))
-    }
-
     body
 }
