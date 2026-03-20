@@ -49,7 +49,8 @@
 #let render-procedure(name: none, title: none, description: (), children: none) = {
     block(above: 1.2em, {
         if name != none {
-            text(size: 7pt, fill: rgb("#999999"), raw(name))
+            text(fill: rgb("#3465a4"), raw(name))
+            text(fill: rgb("#999999"), raw(" :"))
             linebreak()
         }
         if title != none {
@@ -73,7 +74,11 @@
     if title != none [ *#title* ]
     if invocations.len() > 0 [
         #if title != none { h(4pt) }
-        #text(fill: rgb("#999999"), raw(invocations.map(i => "<" + i + ">").join(", ")))
+        #invocations.map(i => {
+            text(fill: rgb("#999999"), raw("<"))
+            text(fill: rgb("#3b5d7d"), raw(i))
+            text(fill: rgb("#999999"), raw(">"))
+        }).join(text(fill: rgb("#999999"), raw(", ")))
     ]
     if body.len() > 0 {
         parbreak()
