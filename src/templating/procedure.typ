@@ -16,6 +16,7 @@
                 text(fill: white, weight: "bold", [Overview]))
 
             #for para in description [
+                #set text(font: "Libertinus Serif", size: 11pt)
                 #para
             ]
         ]
@@ -58,7 +59,10 @@
     })
 
     for para in description {
-        [#para]
+        [
+            #set text(font: "Libertinus Serif", size: 11pt)
+            #para
+        ]
         parbreak()
     }
     if children != none {
