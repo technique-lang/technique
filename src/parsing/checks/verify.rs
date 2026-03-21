@@ -1112,6 +1112,7 @@ second_section_second_procedure :
     assert_eq!(
         document,
         Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("main_procedure"),
@@ -1266,6 +1267,7 @@ III. Implementation
     assert_eq!(
         document,
         Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("main_procedure"),

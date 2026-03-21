@@ -20,6 +20,7 @@ mod verify {
     #[test]
     fn header_and_body() {
         let document = Document {
+            source: None,
             header: Some(Metadata {
                 version: 1,
                 license: Some("MIT"),
@@ -42,6 +43,7 @@ mod verify {
         );
 
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("first"),
@@ -65,6 +67,7 @@ first : A -> B
         );
 
         let document = Document {
+            source: None,
             header: Some(Metadata {
                 version: 1,
                 license: Some("PD"),
@@ -112,6 +115,7 @@ second : [Thing] -> (Who, Where, Why)
     #[test]
     fn steps_and_substeps() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("win_le_tour"),
@@ -175,6 +179,7 @@ win_le_tour : Bicycle -> YellowJersey
     #[test]
     fn code_blocks() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("vibe_coding"),
@@ -208,6 +213,7 @@ vibe_coding :
     #[test]
     fn multiline_in_code_inline() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("action"),
@@ -257,6 +263,7 @@ We must take action!
     #[test]
     fn code_block_under_attribute() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("journal"),
@@ -320,6 +327,7 @@ Record everything, with timestamps.
     #[test]
     fn nested_scopes() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("before_leaving"),
@@ -413,6 +421,7 @@ before_leaving :
     #[test]
     fn section_formatting() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("main_procedure"),
@@ -458,6 +467,7 @@ III.
     #[test]
     fn response_formatting() {
         let document = Document {
+            source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
                 name: Identifier("test_procedure"),
