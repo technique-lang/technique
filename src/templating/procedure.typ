@@ -25,6 +25,7 @@
 
             #for para in description [
                 #set text(font: "Libertinus Serif", size: 11pt)
+                #set par(leading: 0.5em)
                 #para
             ]
         ]
@@ -56,7 +57,7 @@
 }
 
 #let render-procedure(name: none, title: none, description: (), children: none) = {
-    block(above: 1.2em, {
+    block(above: 1.2em, below: 0.8em, {
         if name != none {
             text(fill: rgb("#999999"), raw(name + " :"))
             linebreak()
@@ -69,6 +70,7 @@
     for para in description {
         [
             #set text(font: "Libertinus Serif", size: 11pt)
+                #set par(leading: 0.5em)
             #para
         ]
         parbreak()
@@ -167,7 +169,7 @@
 
     show heading.where(level: 1): set text(size: 14pt)
     show heading.where(level: 2): it => {
-        block(width: 100%, above: 0.5em, below: 0.6em,
+        block(width: 100%, above: 0.5em, below: 0.2em,
             text(size: 11pt, weight: "bold", it.body))
     }
     body
