@@ -1,12 +1,18 @@
 //! Typst serialization for checklist domain types.
 
-use crate::domain::serialize::{Markup, Render};
+use crate::domain::serialize::{render_prose_list, Markup, Render};
 
 use super::types::{Document, Response, Section, Step};
 
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
-        if self.name.is_some() || self.title.is_some() {
+        if self
+            .name
+            .is_some()
+            || self
+                .title
+                .is_some()
+        {
             out.call("render-document");
             out.param_opt("name", &self.name);
             out.param_opt("title", &self.title);
@@ -39,7 +45,10 @@ impl Render for Section {
 
 impl Render for Step {
     fn render(&self, out: &mut Markup) {
-        if self.name.is_some() {
+        if self
+            .name
+            .is_some()
+        {
             out.call("render-procedure");
             out.param_opt("name", &self.name);
             out.param_opt("title", &self.title);
@@ -48,7 +57,7 @@ impl Render for Step {
             out.param_opt("ordinal", &self.ordinal);
             out.param_opt("title", &self.title);
         }
-        out.param_list("body", &self.body);
+        render_prose_list(out, "body", &self.body);
         out.param_opt("role", &self.role);
         if !self
             .responses

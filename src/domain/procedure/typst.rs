@@ -1,26 +1,8 @@
 //! Typst serialization for procedure domain types.
 
-use crate::domain::serialize::{escape_string, Markup, Render};
+use crate::domain::serialize::{escape_string, render_prose_list, Markup, Render};
 
-use super::types::{Document, Inline, Node, Prose, Response};
-
-/// Emit a list of prose paragraphs as Typst content blocks.
-fn render_prose_list(out: &mut Markup, key: &str, items: &[Prose]) {
-    out.raw(&format!("{}: (", key));
-    for item in items {
-        out.raw("[");
-        for fragment in &item.0 {
-            match fragment {
-                Inline::Text(s) => out.raw(&format!("#\"{}\"", escape_string(s))),
-                Inline::Emphasis(s) => out.raw(&format!("#emph(\"{}\")", escape_string(s))),
-                Inline::Strong(s) => out.raw(&format!("#strong(\"{}\")", escape_string(s))),
-                Inline::Code(s) => out.raw(&format!("#raw(\"{}\")", escape_string(s))),
-            }
-        }
-        out.raw("], ");
-    }
-    out.raw("), ");
-}
+use super::types::{Document, Node, Response};
 
 impl Render for Document {
     fn render(&self, out: &mut Markup) {

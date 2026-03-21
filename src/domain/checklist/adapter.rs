@@ -7,7 +7,7 @@
 use crate::domain::Adapter;
 use crate::language;
 
-use super::types::{Document, Response, Section, Step};
+use super::types::{Document, Prose, Response, Section, Step};
 
 pub struct ChecklistAdapter;
 
@@ -96,7 +96,6 @@ fn extract(document: &language::Document) -> Document {
 }
 
 fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
-
     for scope in procedure.steps() {
         if let Some((numeral, title)) = scope.section_info() {
             let mut steps = Vec::new();
@@ -245,7 +244,12 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
         .map(|p| p.content())
         .collect();
     let (title, body) = match paragraphs.split_first() {
-        Some((first, rest)) => (Some(first.clone()), rest.to_vec()),
+        Some((first, rest)) => (
+            Some(first.clone()),
+            rest.iter()
+                .map(|s| Prose::parse(s))
+                .collect(),
+        ),
         None => (None, Vec::new()),
     };
 

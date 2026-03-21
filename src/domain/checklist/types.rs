@@ -3,6 +3,8 @@
 //! A checklist is moderately structured and relatively flat: sections with
 //! headings, steps with checkboxes, response options, and limited nesting.
 
+pub use crate::domain::engine::{Inline, Prose};
+
 /// A checklist is a document of sections containing steps.
 pub struct Document {
     pub name: Option<String>,
@@ -32,7 +34,7 @@ pub struct Step {
     pub name: Option<String>,
     pub ordinal: Option<String>,
     pub title: Option<String>,
-    pub body: Vec<String>,
+    pub body: Vec<Prose>,
     pub role: Option<String>,
     pub responses: Vec<Response>,
     pub children: Vec<Step>,
