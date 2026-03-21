@@ -187,11 +187,13 @@ impl Render for Node {
             }
             Node::CodeBlock {
                 expression,
+                body,
                 responses,
                 children,
             } => {
                 out.call("render-code-block");
                 out.param("expression", expression);
+                out.param_list("body", body);
                 if !responses.is_empty() {
                     out.content_open("responses");
                     for r in responses {

@@ -131,19 +131,31 @@
     }
 }
 
-#let render-code-block(expression: none, responses: none, children: none) = {
+#let render-code-block(expression: none, body: (), responses: none, children: none) = {
     if expression != none {
         text(fill: rgb("#999999"), raw(expression))
+        linebreak()
     }
-    pad(left: 16pt, {
-        if responses != none {
-            parbreak()
-            responses
-        }
-        if children != none {
-            children
-        }
-    })
+    if body.len() > 0 {
+        pad(left: 16pt, top: 0pt, bottom: 0pt, {
+            for line in body {
+                text(fill: rgb(0x4e, 0x9a, 0x06), weight: "bold", raw(line))
+                linebreak()
+            }
+        })
+        text(fill: rgb("#999999"), raw(")"))
+    }
+    if responses != none or children != none {
+        pad(left: 16pt, {
+            if responses != none {
+                parbreak()
+                responses
+            }
+            if children != none {
+                children
+            }
+        })
+    }
 }
 
 // -- Default template --------------------------------------------------------

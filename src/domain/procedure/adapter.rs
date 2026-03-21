@@ -127,6 +127,7 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
         }
         return vec![Node::CodeBlock {
             expression,
+            body: Vec::new(),
             responses,
             children,
         }];
@@ -188,6 +189,20 @@ fn node_from_step(scope: &language::Scope) -> Node {
                 .collect()
         })
         .unwrap_or_default();
+
+    // Extract code inlines from the first paragraph as child CodeBlock nodes.
+    for (expression, body) in paras
+        .first()
+        .map(|p| p.code_inlines())
+        .unwrap_or_default()
+    {
+        children.push(Node::CodeBlock {
+            expression,
+            body,
+            responses: Vec::new(),
+            children: Vec::new(),
+        });
+    }
 
     let paragraphs: Vec<String> = paras
         .iter()

@@ -210,6 +210,23 @@ impl<'i> Response<'i> {
 }
 
 /// Render an Expression as human-readable text.
+/// Returns (expression_text, body_lines) where body_lines captures multiline
+/// content separately for distinct styling.
+fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
+    if let Expression::Execution(func) = expr {
+        let mut body = Vec::new();
+        for param in &func.parameters {
+            if let Expression::Multiline(_, lines) = param {
+                body.extend(lines.iter().map(|s| s.to_string()));
+            }
+        }
+        if !body.is_empty() {
+            return (format!("{}(", func.target.0), body);
+        }
+    }
+    (render_expression(expr), Vec::new())
+}
+
 fn render_expression(expr: &Expression) -> String {
     match expr {
         Expression::Repeat(inner) => {
@@ -239,6 +256,7 @@ fn render_expression(expr: &Expression) -> String {
             let args: Vec<_> = func.parameters.iter().map(render_expression).collect();
             format!("{}({})", func.target.0, args.join(", "))
         }
+        Expression::Multiline(_, lines) => lines.join("\n"),
         Expression::Variable(id) => id.0.to_string(),
         Expression::Binding(inner, _) => render_expression(inner),
         _ => String::new(),
@@ -262,6 +280,22 @@ impl<'i> Paragraph<'i> {
             Self::extract_invocations(&mut targets, d);
         }
         targets
+    }
+
+    /// Returns rendered code inline expressions from this paragraph.
+    /// Each entry is (expression, body_lines) where body_lines captures
+    /// multiline content for separate styling.
+    pub fn code_inlines(&self) -> Vec<(String, Vec<String>)> {
+        let mut results = Vec::new();
+        for d in &self.0 {
+            if let Descriptive::CodeInline(expr) = d {
+                let (text, body) = render_expression_parts(expr);
+                if !text.is_empty() {
+                    results.push((text, body));
+                }
+            }
+        }
+        results
     }
 
     /// Returns text of the step body if present, otherwise (for the scenarion

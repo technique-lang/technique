@@ -60,6 +60,7 @@ pub enum Node {
     },
     CodeBlock {
         expression: String,
+        body: Vec<String>,
         responses: Vec<Response>,
         children: Vec<Node>,
     },
