@@ -49,8 +49,7 @@
 #let render-procedure(name: none, title: none, description: (), children: none) = {
     block(above: 1.2em, {
         if name != none {
-            text(fill: rgb("#3465a4"), raw(name))
-            text(fill: rgb("#999999"), raw(" :"))
+            text(fill: rgb("#999999"), raw(name + " :"))
             linebreak()
         }
         if title != none {
