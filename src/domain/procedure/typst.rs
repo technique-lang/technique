@@ -185,10 +185,18 @@ impl Render for Node {
             }
             Node::CodeBlock {
                 expression,
+                responses,
                 children,
             } => {
                 out.call("render-code-block");
                 out.param("expression", expression);
+                if !responses.is_empty() {
+                    out.content_open("responses");
+                    for r in responses {
+                        r.render(out);
+                    }
+                    out.content_close();
+                }
                 if !children.is_empty() {
                     out.content_open("children");
                     for child in children {

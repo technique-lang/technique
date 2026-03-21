@@ -101,12 +101,24 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
 
     // CodeBlock — loop expression with children
     if let Some(expression) = scope.expression_text() {
+        let mut responses = Vec::new();
         let mut children = Vec::new();
         for child in scope.children() {
+            for response in child.responses() {
+                responses.push(Response {
+                    value: response
+                        .value()
+                        .to_string(),
+                    condition: response
+                        .condition()
+                        .map(String::from),
+                });
+            }
             children.extend(nodes_from_scope(child));
         }
         return vec![Node::CodeBlock {
             expression,
+            responses,
             children,
         }];
     }

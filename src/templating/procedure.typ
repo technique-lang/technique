@@ -108,8 +108,12 @@
 }
 
 #let render-response(value: none, condition: none) = {
-    if condition != none [- _#value #condition _]
-    else [- _#value _]
+    text(fill: rgb("#999999"), raw("["))
+    text(font: "Liberation Sans", size: 0.85em, {
+        if condition != none [ #value #condition ]
+        else [ #value ]
+    })
+    text(fill: rgb("#999999"), raw("]"))
 }
 
 #let render-attribute(name: none, children: none) = {
@@ -119,13 +123,19 @@
     }
 }
 
-#let render-code-block(expression: none, children: none) = {
+#let render-code-block(expression: none, responses: none, children: none) = {
     if expression != none {
         text(fill: rgb("#999999"), raw(expression))
     }
-    if children != none {
-        pad(left: 16pt, children)
-    }
+    pad(left: 16pt, {
+        if responses != none {
+            parbreak()
+            responses
+        }
+        if children != none {
+            children
+        }
+    })
 }
 
 // -- Default template --------------------------------------------------------
