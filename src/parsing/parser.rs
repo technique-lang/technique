@@ -374,7 +374,23 @@ impl<'i> Parser<'i> {
             None
         };
 
-        let document = Document { header, body };
+        // Strip the .tq file extension. We will evolved this when we have web
+        // based procedures, but for now the parser expects a file to read
+        // from so we can use its filename as the source.
+        let source = self
+            .filename
+            .to_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.strip_suffix(".tq")
+                    .unwrap_or(s)
+            });
+
+        let document = Document {
+            source,
+            header,
+            body,
+        };
         let errors = std::mem::take(&mut self.problems);
 
         if errors.is_empty() {

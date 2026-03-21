@@ -104,6 +104,30 @@ impl Markup {
     }
 }
 
+/// Emit a list of prose paragraphs as Typst content blocks.
+pub fn render_prose_list(out: &mut Markup, key: &str, items: &[super::engine::Prose]) {
+    out.raw(&format!("{}: (", key));
+    for item in items {
+        out.raw("[");
+        for fragment in &item.0 {
+            match fragment {
+                super::engine::Inline::Text(s) => out.raw(&format!("#\"{}\"", escape_string(s))),
+                super::engine::Inline::Emphasis(s) => {
+                    out.raw(&format!("#emph(\"{}\")", escape_string(s)))
+                }
+                super::engine::Inline::Strong(s) => {
+                    out.raw(&format!("#strong(\"{}\")", escape_string(s)))
+                }
+                super::engine::Inline::Code(s) => {
+                    out.raw(&format!("#raw(\"{}\")", escape_string(s)))
+                }
+            }
+        }
+        out.raw("], ");
+    }
+    out.raw("), ");
+}
+
 /// Render a domain type as Typst function-call markup.
 pub trait Render {
     fn render(&self, out: &mut Markup);

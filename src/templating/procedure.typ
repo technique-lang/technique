@@ -5,16 +5,27 @@
 
 // -- Formatting functions ----------------------------------------------------
 
-#let render-document(title: none, description: (), children: none) = [
+#let render-document(source: none, name: none, title: none, description: (), children: none) = [
     #block(width: 100%, stroke: 0.1pt, inset: 10pt)[
+        #if source != none {
+            text(fill: rgb("#999999"), raw(source))
+            linebreak()
+        }
+        #if name != none {
+            text(fill: rgb("#999999"), raw(name + " :"))
+            linebreak()
+        }
         #if title != none [
             #text(size: 15pt)[*#title*]
 
         ]
         #if description.len() > 0 or children != none [
-            _Overview_
+            #block(width: 100%, fill: rgb("#006699"), inset: 5pt,
+                text(fill: white, weight: "bold", [Overview]))
 
             #for para in description [
+                #set text(font: "Libertinus Serif", size: 11pt)
+                #set par(leading: 0.5em)
                 #para
             ]
         ]
@@ -31,7 +42,8 @@
             ([#s.ordinal.], [#if heading != none { heading }])
         }).flatten()
     )
-    heading(level: 3, numbering: none, outlined: false, [Procedure])
+    block(width: 100%, fill: rgb("#006699"), inset: 5pt,
+        text(fill: white, weight: "bold", [Procedure]))
 }
 
 #let render-section(ordinal: none, heading: none, children: none) = {
@@ -45,14 +57,22 @@
 }
 
 #let render-procedure(name: none, title: none, description: (), children: none) = {
-    if title != none {
-        std.heading(level: 2, numbering: none, outlined: false, title)
-    }
-    text(size: 7pt, fill: rgb("#999999"), raw(name))
-    linebreak()
+    block(above: 1.2em, below: 0.8em, {
+        if name != none {
+            text(fill: rgb("#999999"), raw(name + " :"))
+            linebreak()
+        }
+        if title != none {
+            std.heading(level: 2, numbering: none, outlined: false, title)
+        }
+    })
 
     for para in description {
-        [#para]
+        [
+            #set text(font: "Libertinus Serif", size: 11pt)
+                #set par(leading: 0.5em)
+            #para
+        ]
         parbreak()
     }
     if children != none {
@@ -61,26 +81,35 @@
 }
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
+  let ordinal-width = if ordinal != none and ordinal.len() > 1 { 1.5em } else { 1em }
   block(breakable: false, {
-    if invocations.len() > 0 {
-        text(size: 7pt, raw(invocations.join(", ")))
-        linebreak()
+    set par(spacing: 0.7em, hanging-indent: ordinal-width + 0.2em)
+    if ordinal != none {
+        box(width: ordinal-width)[*#ordinal.*]
+        h(0.2em)
+    } else if title != none or invocations.len() > 0 {
+        box(width: ordinal-width)[\u{2013}]
+        h(0.2em)
     }
-    if ordinal != none and title != none [
-        *#ordinal.* #h(4pt) *#title*
-    ] else if ordinal != none [
-        *#ordinal.*
-    ] else if title != none [
-        *#title*
+    if title != none [ *#title* ]
+    if invocations.len() > 0 [
+        #if title != none { h(4pt) }
+        #invocations.map(i => {
+            text(fill: rgb("#999999"), raw("<"))
+            text(fill: rgb("#3b5d7d"), raw(i))
+            text(fill: rgb("#999999"), raw(">"))
+        }).join(text(fill: rgb("#999999"), raw(", ")))
     ]
-    parbreak()
-    for para in body {
-        [#para]
+    if body.len() > 0 {
         parbreak()
+        for para in body {
+            [#para]
+            parbreak()
+        }
     }
     if responses != none {
-        responses
         parbreak()
+        responses
     }
     if children != none {
         pad(left: 16pt, children)
@@ -89,14 +118,45 @@
 }
 
 #let render-response(value: none, condition: none) = {
-    if condition != none [- _#value #condition _]
-    else [- _#value _]
+    text(fill: rgb("#999999"), raw("["))
+    text(font: "Liberation Sans", size: 0.85em, {
+        if condition != none [ #value #condition ]
+        else [ #value ]
+    })
+    text(fill: rgb("#999999"), raw("]"))
 }
 
 #let render-attribute(name: none, children: none) = {
     [- *#name*]
     if children != none {
         pad(left: 20pt, children)
+    }
+}
+
+#let render-code-block(expression: none, body: (), responses: none, children: none) = {
+    if expression != none {
+        text(fill: rgb("#999999"), raw(expression))
+        linebreak()
+    }
+    if body.len() > 0 {
+        pad(left: 16pt, top: 0pt, bottom: 0pt, {
+            for line in body {
+                text(fill: rgb(0x4e, 0x9a, 0x06), weight: "bold", raw(line))
+                linebreak()
+            }
+        })
+        text(fill: rgb("#999999"), raw(")"))
+    }
+    if responses != none or children != none {
+        pad(left: 16pt, {
+            if responses != none {
+                parbreak()
+                responses
+            }
+            if children != none {
+                children
+            }
+        })
     }
 }
 
@@ -109,13 +169,8 @@
 
     show heading.where(level: 1): set text(size: 14pt)
     show heading.where(level: 2): it => {
-        block(width: 100%, below: 0.4em,
+        block(width: 100%, above: 0.5em, below: 0.2em,
             text(size: 11pt, weight: "bold", it.body))
     }
-    show heading.where(level: 3): it => {
-        block(width: 100%, fill: rgb("#006699"), inset: 5pt,
-            text(fill: white, weight: "bold", it.body))
-    }
-
     body
 }

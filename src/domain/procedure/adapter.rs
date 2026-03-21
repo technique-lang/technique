@@ -8,7 +8,7 @@
 use crate::domain::Adapter;
 use crate::language;
 
-use super::types::{Document, Node, Response};
+use super::types::{Document, Node, Prose, Response};
 
 pub struct ProcedureAdapter;
 
@@ -25,13 +25,22 @@ fn extract(document: &language::Document) -> Document {
 
     let mut procedures = document.procedures();
 
+    doc.source = document
+        .source
+        .map(String::from);
+
     if let Some(first) = procedures.next() {
+        doc.name = Some(
+            first
+                .name()
+                .to_string(),
+        );
         doc.title = first
             .title()
             .map(String::from);
         doc.description = first
             .description()
-            .map(|p| p.content())
+            .map(|p| Prose::parse(&p.content()))
             .collect();
 
         for scope in first.steps() {
@@ -74,7 +83,7 @@ fn node_from_procedure(procedure: &language::Procedure) -> Node {
             .map(String::from),
         description: procedure
             .description()
-            .map(|p| p.content())
+            .map(|p| Prose::parse(&p.content()))
             .collect(),
         children,
     }
@@ -97,6 +106,31 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
             children.extend(nodes_from_scope(child));
         }
         return vec![Node::Attribute { name, children }];
+    }
+
+    // CodeBlock — loop expression with children
+    if let Some(expression) = scope.expression_text() {
+        let mut responses = Vec::new();
+        let mut children = Vec::new();
+        for child in scope.children() {
+            for response in child.responses() {
+                responses.push(Response {
+                    value: response
+                        .value()
+                        .to_string(),
+                    condition: response
+                        .condition()
+                        .map(String::from),
+                });
+            }
+            children.extend(nodes_from_scope(child));
+        }
+        return vec![Node::CodeBlock {
+            expression,
+            body: Vec::new(),
+            responses,
+            children,
+        }];
     }
 
     // SectionChunk
@@ -156,12 +190,40 @@ fn node_from_step(scope: &language::Scope) -> Node {
         })
         .unwrap_or_default();
 
+    // Extract code inlines from the first paragraph as child CodeBlock nodes.
+    for (expression, body) in paras
+        .first()
+        .map(|p| p.code_inlines())
+        .unwrap_or_default()
+    {
+        children.push(Node::CodeBlock {
+            expression,
+            body,
+            responses: Vec::new(),
+            children: Vec::new(),
+        });
+    }
+
     let paragraphs: Vec<String> = paras
         .iter()
         .map(|p| p.content())
         .collect();
     let (title, body) = match paragraphs.split_first() {
-        Some((first, rest)) => (Some(first.clone()), rest.to_vec()),
+        Some((first, rest)) => {
+            let mut t = first.clone();
+            for inv in &invocations {
+                t = t.replace(inv, "");
+            }
+            let t = t
+                .trim()
+                .to_string();
+            (
+                if t.is_empty() { None } else { Some(t) },
+                rest.iter()
+                    .map(|s| Prose::parse(s))
+                    .collect(),
+            )
+        }
         None => (None, Vec::new()),
     };
 
@@ -306,8 +368,12 @@ ensure_safety :
     - Check exits
             "#,
         ));
-        if let Node::Sequential { title, .. } = &doc.body[0] {
-            assert_eq!(*title, Some("ensure_safety".into()));
+        if let Node::Sequential {
+            title, invocations, ..
+        } = &doc.body[0]
+        {
+            assert_eq!(*title, None);
+            assert_eq!(invocations, &["ensure_safety"]);
         } else {
             panic!("expected Sequential");
         }

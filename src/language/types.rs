@@ -4,6 +4,7 @@ use crate::regex::*;
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct Document<'i> {
+    pub source: Option<&'i str>,
     pub header: Option<Metadata<'i>>,
     pub body: Option<Technique<'i>>,
 }

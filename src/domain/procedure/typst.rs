@@ -1,14 +1,16 @@
 //! Typst serialization for procedure domain types.
 
-use crate::domain::serialize::{escape_string, Markup, Render};
+use crate::domain::serialize::{escape_string, render_prose_list, Markup, Render};
 
 use super::types::{Document, Node, Response};
 
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
         out.call("render-document");
+        out.param_opt("source", &self.source);
+        out.param_opt("name", &self.name);
         out.param_opt("title", &self.title);
-        out.param_list("description", &self.description);
+        render_prose_list(out, "description", &self.description);
         out.content_open("children");
 
         let has_sections = self
@@ -105,7 +107,7 @@ impl Render for Node {
                 out.call("render-procedure");
                 out.param("name", name);
                 out.param_opt("title", title);
-                out.param_list("description", description);
+                render_prose_list(out, "description", description);
                 if !children.is_empty() {
                     out.content_open("children");
                     for child in children {
@@ -126,7 +128,7 @@ impl Render for Node {
                 out.call("render-step");
                 out.param("ordinal", ordinal);
                 out.param_opt("title", title);
-                out.param_list("body", body);
+                render_prose_list(out, "body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
                     out.content_open("responses");
@@ -153,7 +155,7 @@ impl Render for Node {
             } => {
                 out.call("render-step");
                 out.param_opt("title", title);
-                out.param_list("body", body);
+                render_prose_list(out, "body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
                     out.content_open("responses");
@@ -174,6 +176,31 @@ impl Render for Node {
             Node::Attribute { name, children } => {
                 out.call("render-attribute");
                 out.param("name", name);
+                if !children.is_empty() {
+                    out.content_open("children");
+                    for child in children {
+                        child.render(out);
+                    }
+                    out.content_close();
+                }
+                out.close();
+            }
+            Node::CodeBlock {
+                expression,
+                body,
+                responses,
+                children,
+            } => {
+                out.call("render-code-block");
+                out.param("expression", expression);
+                out.param_list("body", body);
+                if !responses.is_empty() {
+                    out.content_open("responses");
+                    for r in responses {
+                        r.render(out);
+                    }
+                    out.content_close();
+                }
                 if !children.is_empty() {
                     out.content_open("children");
                     for child in children {

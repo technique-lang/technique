@@ -13,7 +13,8 @@
 //! projecting these into domain-specific models.
 
 use crate::language::{
-    Attribute, Descriptive, Document, Element, Paragraph, Procedure, Response, Scope, Technique,
+    Attribute, Descriptive, Document, Element, Expression, Paragraph, Procedure, Response, Scope,
+    Target, Technique,
 };
 
 impl<'i> Document<'i> {
@@ -158,6 +159,14 @@ impl<'i> Scope<'i> {
             _ => None,
         }
     }
+
+    /// Returns the expression of a CodeBlock as readable text.
+    pub fn expression_text(&self) -> Option<String> {
+        match self {
+            Scope::CodeBlock { expression, .. } => Some(render_expression(expression)),
+            _ => None,
+        }
+    }
 }
 
 impl<'i> Technique<'i> {
@@ -200,6 +209,93 @@ impl<'i> Response<'i> {
     }
 }
 
+/// Render an Expression as human-readable text.
+/// Returns (expression_text, body_lines) where body_lines captures multiline
+/// content separately for distinct styling.
+fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
+    if let Expression::Execution(func) = expr {
+        let mut body = Vec::new();
+        for param in &func.parameters {
+            if let Expression::Multiline(_, lines) = param {
+                body.extend(
+                    lines
+                        .iter()
+                        .map(|s| s.to_string()),
+                );
+            }
+        }
+        if !body.is_empty() {
+            return (
+                format!(
+                    "{}(",
+                    func.target
+                        .0
+                ),
+                body,
+            );
+        }
+    }
+    (render_expression(expr), Vec::new())
+}
+
+fn render_expression(expr: &Expression) -> String {
+    match expr {
+        Expression::Repeat(inner) => {
+            format!("repeat {}", render_expression(inner))
+        }
+        Expression::Foreach(ids, inner) => {
+            let vars = if ids.len() == 1 {
+                ids[0]
+                    .0
+                    .to_string()
+            } else {
+                format!(
+                    "({})",
+                    ids.iter()
+                        .map(|id| id.0)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            format!("foreach {} in {}", vars, render_expression(inner))
+        }
+        Expression::Application(inv) => {
+            let name = match &inv.target {
+                Target::Local(id) => id.0,
+                Target::Remote(ext) => ext.0,
+            };
+            if let Some(params) = &inv.parameters {
+                let args: Vec<_> = params
+                    .iter()
+                    .map(render_expression)
+                    .collect();
+                format!("<{}>({})", name, args.join(", "))
+            } else {
+                format!("<{}>", name)
+            }
+        }
+        Expression::Execution(func) => {
+            let args: Vec<_> = func
+                .parameters
+                .iter()
+                .map(render_expression)
+                .collect();
+            format!(
+                "{}({})",
+                func.target
+                    .0,
+                args.join(", ")
+            )
+        }
+        Expression::Multiline(_, lines) => lines.join("\n"),
+        Expression::Variable(id) => {
+            id.0.to_string()
+        }
+        Expression::Binding(inner, _) => render_expression(inner),
+        _ => String::new(),
+    }
+}
+
 impl<'i> Paragraph<'i> {
     /// Returns only the text content of this paragraph.
     pub fn text(&self) -> String {
@@ -217,6 +313,22 @@ impl<'i> Paragraph<'i> {
             Self::extract_invocations(&mut targets, d);
         }
         targets
+    }
+
+    /// Returns rendered code inline expressions from this paragraph.
+    /// Each entry is (expression, body_lines) where body_lines captures
+    /// multiline content for separate styling.
+    pub fn code_inlines(&self) -> Vec<(String, Vec<String>)> {
+        let mut results = Vec::new();
+        for d in &self.0 {
+            if let Descriptive::CodeInline(expr) = d {
+                let (text, body) = render_expression_parts(expr);
+                if !text.is_empty() {
+                    results.push((text, body));
+                }
+            }
+        }
+        results
     }
 
     /// Returns text of the step body if present, otherwise (for the scenarion
@@ -318,6 +430,65 @@ impl<'i> Paragraph<'i> {
     }
 }
 
+/// A paragraph of prose with inline markup.
+#[derive(Debug, PartialEq)]
+pub struct Prose(pub Vec<Inline>);
+
+/// An inline fragment within prose text.
+#[derive(Debug, PartialEq)]
+pub enum Inline {
+    Text(String),
+    Emphasis(String),
+    Strong(String),
+    Code(String),
+}
+
+impl Prose {
+    /// Parse a plain string, converting _text_ to emphasis, *text* to strong,
+    /// and `text` to code.
+    pub fn parse(s: &str) -> Prose {
+        let mut fragments = Vec::new();
+        let mut rest = s;
+
+        while !rest.is_empty() {
+            let next = rest.find(|c: char| c == '_' || c == '*' || c == '`');
+
+            match next {
+                None => {
+                    fragments.push(Inline::Text(rest.to_string()));
+                    break;
+                }
+                Some(i) => {
+                    let delim = rest.as_bytes()[i] as char;
+                    let after = &rest[i + 1..];
+
+                    match after.find(delim) {
+                        Some(end) if end > 0 => {
+                            if i > 0 {
+                                fragments.push(Inline::Text(rest[..i].to_string()));
+                            }
+                            let content = after[..end].to_string();
+                            fragments.push(match delim {
+                                '_' => Inline::Emphasis(content),
+                                '*' => Inline::Strong(content),
+                                '`' => Inline::Code(content),
+                                _ => unreachable!(),
+                            });
+                            rest = &after[end + 1..];
+                        }
+                        _ => {
+                            fragments.push(Inline::Text(rest[..i + 1].to_string()));
+                            rest = after;
+                        }
+                    }
+                }
+            }
+        }
+
+        Prose(fragments)
+    }
+}
+
 #[cfg(test)]
 mod check {
     use crate::language::{Descriptive, Expression, Identifier, Invocation, Paragraph, Target};
@@ -397,5 +568,88 @@ mod check {
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["implement"]);
         assert_eq!(p.content(), "foreach implement");
+    }
+
+    // -- Prose inline markup --
+
+    use super::{Inline, Prose};
+
+    #[test]
+    fn prose_plain_text() {
+        let p = Prose::parse("hello world");
+        assert_eq!(p.0, vec![Inline::Text("hello world".into())]);
+    }
+
+    #[test]
+    fn prose_emphasis() {
+        let p = Prose::parse("the _idea_ is good");
+        assert_eq!(
+            p.0,
+            vec![
+                Inline::Text("the ".into()),
+                Inline::Emphasis("idea".into()),
+                Inline::Text(" is good".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prose_strong() {
+        let p = Prose::parse("a *bold* move");
+        assert_eq!(
+            p.0,
+            vec![
+                Inline::Text("a ".into()),
+                Inline::Strong("bold".into()),
+                Inline::Text(" move".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prose_code() {
+        let p = Prose::parse("run `cmd` now");
+        assert_eq!(
+            p.0,
+            vec![
+                Inline::Text("run ".into()),
+                Inline::Code("cmd".into()),
+                Inline::Text(" now".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prose_mixed() {
+        let p = Prose::parse("the _idea_ and *design* with `code`");
+        assert_eq!(
+            p.0,
+            vec![
+                Inline::Text("the ".into()),
+                Inline::Emphasis("idea".into()),
+                Inline::Text(" and ".into()),
+                Inline::Strong("design".into()),
+                Inline::Text(" with ".into()),
+                Inline::Code("code".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prose_unclosed_delimiter() {
+        let p = Prose::parse("a_b has no pair");
+        assert_eq!(
+            p.0,
+            vec![
+                Inline::Text("a_".into()),
+                Inline::Text("b has no pair".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prose_empty_string() {
+        let p = Prose::parse("");
+        assert_eq!(p.0, vec![]);
     }
 }
