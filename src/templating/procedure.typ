@@ -71,9 +71,16 @@
 }
 
 #let render-step(ordinal: none, title: none, body: (), invocations: (), responses: none, children: none) = {
+  let ordinal-width = if ordinal != none and ordinal.len() > 1 { 1.5em } else { 1em }
   block(breakable: false, {
-    set par(spacing: 0.7em)
-    if ordinal != none [ *#ordinal.* #h(4pt) ]
+    set par(spacing: 0.7em, hanging-indent: ordinal-width + 0.2em)
+    if ordinal != none {
+        box(width: ordinal-width)[*#ordinal.*]
+        h(0.2em)
+    } else if title != none or invocations.len() > 0 {
+        box(width: ordinal-width)[\u{2013}]
+        h(0.2em)
+    }
     if title != none [ *#title* ]
     if invocations.len() > 0 [
         #if title != none { h(4pt) }
