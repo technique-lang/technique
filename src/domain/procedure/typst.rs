@@ -2,7 +2,25 @@
 
 use crate::domain::serialize::{escape_string, Markup, Render};
 
-use super::types::{Document, Node, Response};
+use super::types::{Document, Inline, Node, Prose, Response};
+
+/// Emit a list of prose paragraphs as Typst content blocks.
+fn render_prose_list(out: &mut Markup, key: &str, items: &[Prose]) {
+    out.raw(&format!("{}: (", key));
+    for item in items {
+        out.raw("[");
+        for fragment in &item.0 {
+            match fragment {
+                Inline::Text(s) => out.raw(&format!("#\"{}\"", escape_string(s))),
+                Inline::Emphasis(s) => out.raw(&format!("#emph(\"{}\")", escape_string(s))),
+                Inline::Strong(s) => out.raw(&format!("#strong(\"{}\")", escape_string(s))),
+                Inline::Code(s) => out.raw(&format!("#raw(\"{}\")", escape_string(s))),
+            }
+        }
+        out.raw("], ");
+    }
+    out.raw("), ");
+}
 
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
@@ -10,7 +28,7 @@ impl Render for Document {
         out.param_opt("source", &self.source);
         out.param_opt("name", &self.name);
         out.param_opt("title", &self.title);
-        out.param_list("description", &self.description);
+        render_prose_list(out, "description", &self.description);
         out.content_open("children");
 
         let has_sections = self
@@ -107,7 +125,7 @@ impl Render for Node {
                 out.call("render-procedure");
                 out.param("name", name);
                 out.param_opt("title", title);
-                out.param_list("description", description);
+                render_prose_list(out, "description", description);
                 if !children.is_empty() {
                     out.content_open("children");
                     for child in children {
@@ -128,7 +146,7 @@ impl Render for Node {
                 out.call("render-step");
                 out.param("ordinal", ordinal);
                 out.param_opt("title", title);
-                out.param_list("body", body);
+                render_prose_list(out, "body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
                     out.content_open("responses");
@@ -155,7 +173,7 @@ impl Render for Node {
             } => {
                 out.call("render-step");
                 out.param_opt("title", title);
-                out.param_list("body", body);
+                render_prose_list(out, "body", body);
                 out.param_list("invocations", invocations);
                 if !responses.is_empty() {
                     out.content_open("responses");

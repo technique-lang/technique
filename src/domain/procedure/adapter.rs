@@ -8,7 +8,7 @@
 use crate::domain::Adapter;
 use crate::language;
 
-use super::types::{Document, Node, Response};
+use super::types::{Document, Node, Prose, Response};
 
 pub struct ProcedureAdapter;
 
@@ -40,7 +40,7 @@ fn extract(document: &language::Document) -> Document {
             .map(String::from);
         doc.description = first
             .description()
-            .map(|p| p.content())
+            .map(|p| Prose::parse(&p.content()))
             .collect();
 
         for scope in first.steps() {
@@ -83,7 +83,7 @@ fn node_from_procedure(procedure: &language::Procedure) -> Node {
             .map(String::from),
         description: procedure
             .description()
-            .map(|p| p.content())
+            .map(|p| Prose::parse(&p.content()))
             .collect(),
         children,
     }
@@ -217,7 +217,12 @@ fn node_from_step(scope: &language::Scope) -> Node {
             let t = t
                 .trim()
                 .to_string();
-            (if t.is_empty() { None } else { Some(t) }, rest.to_vec())
+            (
+                if t.is_empty() { None } else { Some(t) },
+                rest.iter()
+                    .map(|s| Prose::parse(s))
+                    .collect(),
+            )
         }
         None => (None, Vec::new()),
     };
