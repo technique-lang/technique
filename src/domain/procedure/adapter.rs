@@ -25,7 +25,16 @@ fn extract(document: &language::Document) -> Document {
 
     let mut procedures = document.procedures();
 
+    doc.source = document
+        .source
+        .map(String::from);
+
     if let Some(first) = procedures.next() {
+        doc.name = Some(
+            first
+                .name()
+                .to_string(),
+        );
         doc.title = first
             .title()
             .map(String::from);
@@ -190,7 +199,9 @@ fn node_from_step(scope: &language::Scope) -> Node {
             for inv in &invocations {
                 t = t.replace(inv, "");
             }
-            let t = t.trim().to_string();
+            let t = t
+                .trim()
+                .to_string();
             (if t.is_empty() { None } else { Some(t) }, rest.to_vec())
         }
         None => (None, Vec::new()),
@@ -338,9 +349,7 @@ ensure_safety :
             "#,
         ));
         if let Node::Sequential {
-            title,
-            invocations,
-            ..
+            title, invocations, ..
         } = &doc.body[0]
         {
             assert_eq!(*title, None);

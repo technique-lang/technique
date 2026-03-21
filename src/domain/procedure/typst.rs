@@ -7,6 +7,8 @@ use super::types::{Document, Node, Response};
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
         out.call("render-document");
+        out.param_opt("source", &self.source);
+        out.param_opt("name", &self.name);
         out.param_opt("title", &self.title);
         out.param_list("description", &self.description);
         out.content_open("children");

@@ -7,6 +7,8 @@
 /// A procedure document: title and description from the first procedure,
 /// then a tree of nodes representing the body.
 pub struct Document {
+    pub source: Option<String>,
+    pub name: Option<String>,
     pub title: Option<String>,
     pub description: Vec<String>,
     pub body: Vec<Node>,
@@ -15,6 +17,8 @@ pub struct Document {
 impl Document {
     pub fn new() -> Self {
         Document {
+            source: None,
+            name: None,
             title: None,
             description: Vec::new(),
             body: Vec::new(),

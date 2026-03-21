@@ -5,8 +5,16 @@
 
 // -- Formatting functions ----------------------------------------------------
 
-#let render-document(title: none, description: (), children: none) = [
+#let render-document(source: none, name: none, title: none, description: (), children: none) = [
     #block(width: 100%, stroke: 0.1pt, inset: 10pt)[
+        #if source != none {
+            text(fill: rgb("#999999"), raw(source))
+            linebreak()
+        }
+        #if name != none {
+            text(fill: rgb("#999999"), raw(name + " :"))
+            linebreak()
+        }
         #if title != none [
             #text(size: 15pt)[*#title*]
 
