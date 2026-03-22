@@ -44,12 +44,18 @@ fn extract(document: &language::Document) -> Document {
             collect_ingredients(&mut items, scope, None);
         }
 
+        let description: Vec<Prose> = procedure
+            .description()
+            .map(|p| Prose::parse(&p.content()))
+            .collect();
+
         if !items.is_empty() {
             doc.ingredients
                 .push(Ingredients {
                     heading: procedure
                         .title()
                         .map(String::from),
+                    description,
                     items,
                 });
         } else {
@@ -61,9 +67,10 @@ fn extract(document: &language::Document) -> Document {
                 doc.steps
                     .push(Step {
                         ordinal: None,
-                        text: procedure
+                        title: procedure
                             .title()
                             .map(String::from),
+                        description,
                         role: None,
                         children,
                     });
@@ -85,11 +92,7 @@ fn extract(document: &language::Document) -> Document {
 }
 
 /// Walk a scope tree collecting ingredients from Place-attributed tablets.
-fn collect_ingredients(
-    items: &mut Vec<Ingredient>,
-    scope: &language::Scope,
-    place: Option<&str>,
-) {
+fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, place: Option<&str>) {
     // Place attribute sets the source for contained ingredients
     let places: Vec<_> = scope
         .places()
@@ -119,33 +122,24 @@ fn collect_ingredients(
                 }
             }
         }
-        return;
-    }
-
-    // Role attributes — pass through
-    if scope
-        .roles()
-        .next()
-        .is_some()
-    {
-        for child in scope.children() {
-            collect_ingredients(items, child, place);
-        }
     }
 }
 
 /// Walk a scope tree collecting method steps, inheriting role downward.
 fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&str>) {
     if scope.is_step() {
-        let text = scope
+        let title = scope
             .description()
             .next()
             .map(|p| p.content());
-        let text = text.filter(|t| !t.is_empty());
+        let title = title.filter(|t| !t.is_empty());
 
         let mut children = Vec::new();
         for child in scope.children() {
-            if child.tablet().is_some() {
+            if child
+                .tablet()
+                .is_some()
+            {
                 continue;
             }
             collect_steps(&mut children, child, role);
@@ -155,7 +149,8 @@ fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&s
             ordinal: scope
                 .ordinal()
                 .map(String::from),
-            text,
+            title,
+            description: Vec::new(),
             role: role.map(String::from),
             children,
         });
@@ -279,10 +274,7 @@ turkey : () -> Ingredients
         );
         assert_eq!(doc.ingredients[0].items[0].label, "Turkey");
         assert_eq!(doc.ingredients[0].items[0].quantity, "4 kg");
-        assert_eq!(
-            doc.ingredients[0].items[0].source,
-            Some("butcher".into())
-        );
+        assert_eq!(doc.ingredients[0].items[0].source, Some("butcher".into()));
         assert_eq!(doc.ingredients[0].items[1].label, "Bacon");
         assert_eq!(doc.ingredients[0].items[1].quantity, "2 pieces");
     }
@@ -312,27 +304,16 @@ roast :
                 .len(),
             2
         );
-        assert_eq!(
-            doc.steps[0]
-                .text,
-            Some("Cook food".into())
-        );
+        assert_eq!(doc.steps[0].title, Some("Cook food".into()));
         // Second procedure becomes a grouped step
-        assert_eq!(
-            doc.steps[1]
-                .text,
-            Some("Roast Turkey".into())
-        );
+        assert_eq!(doc.steps[1].title, Some("Roast Turkey".into()));
         assert_eq!(
             doc.steps[1]
                 .children
                 .len(),
             2
         );
-        assert_eq!(
-            doc.steps[1].children[0].role,
-            Some("chef".into())
-        );
+        assert_eq!(doc.steps[1].children[0].role, Some("chef".into()));
     }
 
     #[test]
@@ -369,11 +350,7 @@ shopping : () -> Ingredients
                 .len(),
             1
         );
-        assert_eq!(
-            doc.steps[0]
-                .text,
-            Some("Get ingredients".into())
-        );
+        assert_eq!(doc.steps[0].title, Some("Get ingredients".into()));
     }
 
     #[test]
@@ -419,13 +396,7 @@ stuffing : () -> Ingredients
                 .len(),
             2
         );
-        assert_eq!(
-            doc.ingredients[0].items[0].source,
-            Some("store".into())
-        );
-        assert_eq!(
-            doc.ingredients[0].items[1].source,
-            Some("bakery".into())
-        );
+        assert_eq!(doc.ingredients[0].items[0].source, Some("store".into()));
+        assert_eq!(doc.ingredients[0].items[1].source, Some("bakery".into()));
     }
 }

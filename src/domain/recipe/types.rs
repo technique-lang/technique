@@ -30,6 +30,7 @@ impl Document {
 /// component (e.g. "Turkey", "Stuffing", "Breadsauce").
 pub struct Ingredients {
     pub heading: Option<String>,
+    pub description: Vec<Prose>,
     pub items: Vec<Ingredient>,
 }
 
@@ -43,7 +44,8 @@ pub struct Ingredient {
 /// A step within the recipe method.
 pub struct Step {
     pub ordinal: Option<String>,
-    pub text: Option<String>,
+    pub title: Option<String>,
+    pub description: Vec<Prose>,
     pub role: Option<String>,
     pub children: Vec<Step>,
 }
