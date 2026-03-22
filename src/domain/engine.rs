@@ -13,8 +13,8 @@
 //! projecting these into domain-specific models.
 
 use crate::language::{
-    Attribute, Descriptive, Document, Element, Expression, Pair, Paragraph, Procedure, Response,
-    Scope, Target, Technique,
+    Attribute, Descriptive, Document, Element, Expression, Numeric, Pair, Paragraph, Piece,
+    Procedure, Response, Scope, Target, Technique,
 };
 
 impl<'i> Document<'i> {
@@ -318,7 +318,19 @@ fn render_expression(expr: &Expression) -> String {
             id.0.to_string()
         }
         Expression::Binding(inner, _) => render_expression(inner),
-        _ => String::new(),
+        Expression::String(pieces) => {
+            let mut result = String::new();
+            for piece in pieces {
+                match piece {
+                    Piece::Text(t) => result.push_str(t),
+                    Piece::Interpolation(e) => result.push_str(&render_expression(e)),
+                }
+            }
+            result
+        }
+        Expression::Number(Numeric::Scientific(q)) => q.to_string(),
+        Expression::Number(Numeric::Integral(n)) => n.to_string(),
+        Expression::Tablet(_) => String::new(),
     }
 }
 
