@@ -13,8 +13,8 @@
 //! projecting these into domain-specific models.
 
 use crate::language::{
-    Attribute, Descriptive, Document, Element, Expression, Paragraph, Procedure, Response, Scope,
-    Target, Technique,
+    Attribute, Descriptive, Document, Element, Expression, Pair, Paragraph, Procedure, Response,
+    Scope, Target, Technique,
 };
 
 impl<'i> Document<'i> {
@@ -133,6 +133,32 @@ impl<'i> Scope<'i> {
                 .collect::<Vec<_>>()
                 .into_iter(),
             _ => Vec::new().into_iter(),
+        }
+    }
+
+    /// Returns an iterator over place names if this is an AttributeBlock.
+    pub fn places(&self) -> impl Iterator<Item = &'i str> {
+        match self {
+            Scope::AttributeBlock { attributes, .. } => attributes
+                .iter()
+                .filter_map(|attr| match attr {
+                    Attribute::Place(id) => Some(id.0),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+            _ => Vec::new().into_iter(),
+        }
+    }
+
+    /// Returns the tablet pairs if this is a CodeBlock containing a Tablet.
+    pub fn tablet(&self) -> Option<&[Pair<'i>]> {
+        match self {
+            Scope::CodeBlock { expression, .. } => match expression {
+                Expression::Tablet(pairs) => Some(pairs),
+                _ => None,
+            },
+            _ => None,
         }
     }
 

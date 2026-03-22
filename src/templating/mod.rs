@@ -6,11 +6,13 @@
 
 mod checklist;
 mod procedure;
+mod recipe;
 mod source;
 mod template;
 
 pub use checklist::Checklist;
 pub use procedure::Procedure;
+pub use recipe::Recipe;
 pub use source::Source;
 pub use template::Template;
 

@@ -9,7 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::parsing;
-use technique::templating::{self, Checklist, Procedure, Source};
+use technique::templating::{self, Checklist, Procedure, Recipe, Source};
 
 mod editor;
 mod output;
@@ -349,6 +349,7 @@ fn main() {
                 "source" => &Source,
                 "checklist" => &Checklist,
                 "procedure" => &Procedure,
+                "recipe" => &Recipe,
                 other => {
                     eprintln!(
                         "{}: unrecognized domain \"{}\"",
