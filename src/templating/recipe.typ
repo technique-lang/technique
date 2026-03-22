@@ -65,6 +65,13 @@
     })
 }
 
+#let render-role-heading(name: none) = {
+    if name != none {
+        block(above: 0.6em, below: 0.4em,
+            text(size: 9pt, fill: rgb("#666666"), style: "italic", name))
+    }
+}
+
 #let render-step(ordinal: none, title: none, description: (), role: none, children: none) = {
     let ordinal-width = if ordinal != none and ordinal.len() > 1 { 1.5em } else { 1em }
 

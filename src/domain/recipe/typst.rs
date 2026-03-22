@@ -73,12 +73,49 @@ impl Render for Step {
             .children
             .is_empty()
         {
+            // Check whether children have multiple distinct named roles.
+            let mixed = has_mixed_roles(&self.children);
+
             out.content_open("children");
+            let mut prev: Option<&String> = None;
             for child in &self.children {
+                if mixed
+                    && child
+                        .role
+                        .as_ref()
+                        != prev
+                {
+                    if let Some(name) = &child.role {
+                        if name != "*" {
+                            out.call("render-role-heading");
+                            out.param("name", name);
+                            out.close();
+                        }
+                    }
+                    prev = child
+                        .role
+                        .as_ref();
+                }
                 child.render(out);
             }
             out.content_close();
         }
         out.close();
     }
+}
+
+fn has_mixed_roles(children: &[Step]) -> bool {
+    let mut seen: Option<&str> = None;
+    for child in children {
+        if let Some(r) = &child.role {
+            if r != "*" {
+                match seen {
+                    None => seen = Some(r),
+                    Some(prev) if prev != r => return true,
+                    _ => {}
+                }
+            }
+        }
+    }
+    false
 }
