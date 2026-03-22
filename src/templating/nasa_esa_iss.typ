@@ -32,7 +32,7 @@
 
         // Body content
         if children != none {
-            block(width: 100%, inset: (x: 10pt, y: 6pt), children)
+            block(width: 100%, inset: (x: 10pt, top: 6pt, bottom: 12pt), children)
         }
     })
 ]
@@ -51,7 +51,7 @@
 
 #let render-procedure(name: none, title: none, description: (), children: none) = {
     let ordinal-width = 1.6em
-    block(above: 0.8em, below: 0.6em, {
+    block(above: 0.8em, below: 0.8em, {
         set par(hanging-indent: ordinal-width + 0.2em)
         box(width: ordinal-width, text(size: 9pt, weight: "bold", [#name.]))
         h(0.2em)
@@ -199,7 +199,7 @@
 
 #let template(body) = {
     set page(
-        paper: "us-letter",
+        paper: "a5",
         margin: (top: 1.5cm, bottom: 1.5cm, left: 1.5cm, right: 1.5cm),
         numbering: "1",
         number-align: center + bottom,
