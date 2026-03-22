@@ -21,7 +21,7 @@ node1_htr_avail_16 :
 # Inhibiting Node 1 B HTRS (1 to 6)
 
     @pcs
-    { foreach node in seq(6) }
+    { foreach node in seq(1, 6) }
         1.  Check Availability
         2.  Perform { cmd("Inhibit") }
         3.  Check Availability
@@ -32,7 +32,7 @@ node1_htr_avail_79 :
 # Inhibiting Node 1 B HTRS (7 to 9)
 
     @pcs
-    { foreach node in seq(9) }
+    { foreach node in seq(7, 9) }
         1.  Check Availability
         2.  Perform { cmd("Inhibit") }
         3.  Check Availability

@@ -1174,6 +1174,20 @@ echo "Done"```) }"#,
         }))
     );
 
+    // Test function with multiple integer parameters
+    input.initialize("{ seq(1, 6) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(Expression::Execution(Function {
+            target: Identifier("seq"),
+            parameters: vec![
+                Expression::Number(Numeric::Integral(1)),
+                Expression::Number(Numeric::Integral(6))
+            ]
+        }))
+    );
+
     // Test function with decimal quantity parameter
     input.initialize("{ wait(2.5 s, \"yes\") }");
     let result = input.read_code_block();
