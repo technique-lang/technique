@@ -342,12 +342,6 @@ fn main() {
                     .unwrap_or("source"),
             };
 
-            // Strip version suffix (e.g. "nasa-esa-iss,v4.0" -> "nasa-esa-iss")
-            let domain = domain
-                .split(',')
-                .next()
-                .unwrap_or(domain);
-
             debug!(domain);
 
             // Select domain
