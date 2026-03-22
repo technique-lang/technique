@@ -2433,9 +2433,22 @@ impl<'i> Parser<'i> {
                             inner.parse_string_pieces(inner.source)
                         })?;
                     params.push(Expression::String(parts));
-                } else if is_numeric(content) {
-                    let numeric = outer.read_numeric()?;
+                } else if is_numeric_quantity(content) {
+                    let numeric = outer.read_numeric_quantity()?;
                     params.push(Expression::Number(numeric));
+                } else if is_numeric_integral(content)
+                    || content
+                        .as_bytes()
+                        .first()
+                        .is_some_and(|b| b.is_ascii_digit())
+                    || content.starts_with('-')
+                        && content
+                            .as_bytes()
+                            .get(1)
+                            .is_some_and(|b| b.is_ascii_digit())
+                {
+                    let decimal = outer.read_decimal_part()?;
+                    params.push(Expression::Number(Numeric::Integral(decimal.number)));
                 } else {
                     let name = outer.read_identifier()?;
                     params.push(Expression::Variable(name));
