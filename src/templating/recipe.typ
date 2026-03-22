@@ -22,13 +22,11 @@
         #v(0.5em)
     ]
     #if ingredients != none [
-        #block(width: 100%, above: 0.8em, below: 0.4em,
-            text(size: 13pt, weight: "bold", [Ingredients]))
+        #heading(level: 1, numbering: none, outlined: false, [Ingredients])
         #ingredients
     ]
     #if method != none [
-        #block(width: 100%, above: 0.8em, below: 0.4em,
-            text(size: 13pt, weight: "bold", [Method]))
+        #heading(level: 1, numbering: none, outlined: false, [Method])
         #method
     ]
 ]
@@ -55,7 +53,7 @@
 }
 
 #let render-ingredient(label: none, quantity: none, source: none) = {
-    block(above: 0.2em, below: 0.2em, {
+    block(above: 0.3em, below: 0.3em, {
         h(0.5em)
         box(width: 8em)[#label]
         if quantity != none [
@@ -79,13 +77,16 @@
                     h(0.2em)
                 }
                 if title != none {
-                    if ordinal != none { title } else {
-                        heading(level: 3, numbering: none, title)
+                    if ordinal != none { title } else if role == none {
+                        heading(level: 2, numbering: none, title)
+                    } else {
+                        [\u{2013} ] + title
                     }
                 }
             })
         }
         if description.len() > 0 {
+            v(0.5em)
             for para in description {
                 [
                     #set text(font: "Libertinus Serif", size: 11pt)
@@ -97,6 +98,7 @@
         }
         if children != none {
             if ordinal != none {
+                v(0.35em)
                 pad(left: 16pt, children)
             } else {
                 children
@@ -111,6 +113,9 @@
     set page(margin: 1.5cm)
     set par(justify: false)
     set text(size: 10pt, font: "TeX Gyre Heros")
+
+    show heading.where(level: 1): set text(size: 15pt)
+    show heading.where(level: 2): set text(size: 12pt)
 
     body
 }

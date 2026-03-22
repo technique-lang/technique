@@ -136,10 +136,10 @@ roast_turkey(i) : Ingredients -> Turkey
 # Roast Turkey
 
     @chef
-        1.  Set oven temperature { <oven>(180 °C) ~ temp }
+        1.  Set oven temperature { oven(180 °C) ~ temp }
         2.  Place bacon strips onto bird
         3.  Put bird into oven
-        4.  Set timer for roasting { timer(3 h) ~ t }
+        4.  Set timer for roasting { timer(3 hr) ~ t }
         5.  Record temperature
             {
                 [
@@ -179,16 +179,9 @@ Certainly I always hated my Aunt at holidays for making me dry dishes with a
 dish towel when they would perfectly well air dry by themselves.
 
     @*
-        1.  Turn off oven { <oven>(0 °C) }
+        1.  Turn off oven { oven(0 °C) }
         2.  Put knives away { <knives_away> }
         3.  Turn lights out { <lights_out> }
-
-oven(temp) : Temperature -> ()
-
-# Set oven temperature
-
-    @chef
-        -   Set temperature to { "oven at { temp }" }
 
 knives_away :
 
