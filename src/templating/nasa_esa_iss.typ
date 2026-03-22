@@ -137,34 +137,61 @@
 }
 
 #let render-code-block(expression: none, body: (), responses: none, children: none) = {
-    if expression != none {
-        block(above: 0.3em, below: 0.3em, {
-            if expression.starts-with("cmd ") {
-                let arg = expression.slice(4)
-                text(size: 8pt, weight: "bold", [cmd ])
-                text(size: 8pt, arg)
-            } else {
-                text(size: 8pt, fill: rgb("#444444"), raw(expression))
+    if expression != none and expression.starts-with("foreach ") {
+        // "foreach var 1 2 3 4 5 6" — render as numbered boxes
+        let parts = expression.split(" ")
+        let var = parts.at(1)
+        let values = parts.slice(2)
+
+        block(above: 0.3em, below: 0.6em, {
+            text(size: 8pt, [\[])
+            text(size: 8pt, weight: "bold", var)
+            text(size: 8pt, [\] = ])
+            h(2pt)
+            for val in values {
+                box(baseline: 15%, stroke: 0.5pt, inset: (x: 3pt, y: 1pt), text(size: 8pt, val))
+                h(1pt)
             }
         })
-    }
-    if body.len() > 0 {
-        pad(left: 14pt, {
-            for line in body {
-                text(size: 8pt, fill: rgb("#4e9a06"), weight: "bold", raw(line))
-                linebreak()
-            }
+
+        // Loop body with left bracket
+        block(above: 0.2em, below: 0.2em,
+            stroke: (left: 0.5pt), inset: (left: 8pt), {
+            if responses != none { responses }
+            if children != none { children }
         })
-    }
-    if responses != none or children != none {
-        pad(left: 14pt, {
-            if responses != none {
-                responses
-            }
-            if children != none {
-                children
-            }
-        })
+
+        block(above: 0.1em, text(size: 8pt, [Repeat]))
+    } else {
+        if expression != none {
+            block(above: 0.3em, below: 0.3em, {
+                if expression.starts-with("cmd ") {
+                    let arg = expression.slice(4)
+                    text(size: 8pt, weight: "bold", [cmd ])
+                    text(size: 8pt, arg)
+                } else {
+                    text(size: 8pt, fill: rgb("#444444"), raw(expression))
+                }
+            })
+        }
+        if body.len() > 0 {
+            pad(left: 14pt, {
+                for line in body {
+                    text(size: 8pt, fill: rgb("#4e9a06"), weight: "bold", raw(line))
+                    linebreak()
+                }
+            })
+        }
+        if responses != none or children != none {
+            pad(left: 14pt, {
+                if responses != none {
+                    responses
+                }
+                if children != none {
+                    children
+                }
+            })
+        }
     }
 }
 

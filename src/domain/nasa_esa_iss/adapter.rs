@@ -109,5 +109,21 @@ fn rewrite_expression(expr: &str) -> String {
     {
         return format!("cmd {}", arg);
     }
+    // foreach node in seq(1, 6) -> foreach node 1 2 3 4 5 6
+    if let Some(rest) = expr.strip_prefix("foreach ") {
+        if let Some((var, seq_expr)) = rest.split_once(" in ") {
+            if let Some((start, end)) = parse_seq(seq_expr) {
+                let values: Vec<String> = (start..=end).map(|n| n.to_string()).collect();
+                return format!("foreach {} {}", var.trim(), values.join(" "));
+            }
+        }
+    }
     expr.to_string()
+}
+
+/// Parse `seq(A, B)` into a (start, end) pair.
+fn parse_seq(s: &str) -> Option<(i64, i64)> {
+    let inner = s.strip_prefix("seq(")?.strip_suffix(')')?;
+    let (a, b) = inner.split_once(", ")?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
 }
