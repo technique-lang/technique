@@ -4,6 +4,8 @@
 //! ingredient sources; the remaining procedures contribute method steps.
 //! The first procedure supplies the document title and description.
 
+use std::collections::{HashMap, HashSet};
+
 use crate::domain::Adapter;
 use crate::language;
 
@@ -22,6 +24,12 @@ impl Adapter for RecipeAdapter {
 fn extract(document: &language::Document) -> Document {
     let mut doc = Document::new();
 
+    let proc_map: HashMap<&str, &language::Procedure> = document
+        .procedures()
+        .map(|p| (p.name(), p))
+        .collect();
+
+    let mut resolved: HashSet<&str> = HashSet::new();
     let mut procedures = document.procedures();
 
     if let Some(first) = procedures.next() {
@@ -34,7 +42,16 @@ fn extract(document: &language::Document) -> Document {
             .collect();
 
         for scope in first.steps() {
-            collect_steps(&mut doc.steps, scope, None);
+            collect_steps(&mut doc.steps, scope, None, &proc_map, &mut resolved);
+        }
+
+        // Top-level steps are phase headings, not numbered items.
+        // Their direct children keep ordinals; grandchildren lose them.
+        for step in &mut doc.steps {
+            step.ordinal = None;
+            for child in &mut step.children {
+                strip_ordinals(&mut child.children);
+            }
         }
     }
 
@@ -58,10 +75,10 @@ fn extract(document: &language::Document) -> Document {
                     description,
                     items,
                 });
-        } else {
+        } else if !resolved.contains(procedure.name()) {
             let mut children = Vec::new();
             for scope in procedure.steps() {
-                collect_steps(&mut children, scope, None);
+                collect_steps(&mut children, scope, None, &proc_map, &mut resolved);
             }
             if !children.is_empty() {
                 doc.steps
@@ -84,7 +101,7 @@ fn extract(document: &language::Document) -> Document {
         .is_empty()
     {
         for scope in document.steps() {
-            collect_steps(&mut doc.steps, scope, None);
+            collect_steps(&mut doc.steps, scope, None, &proc_map, &mut resolved);
         }
     }
 
@@ -126,13 +143,30 @@ fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, pla
 }
 
 /// Walk a scope tree collecting method steps, inheriting role downward.
-fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&str>) {
+/// Invocations are resolved by inlining the called procedure's content.
+fn collect_steps<'i>(
+    steps: &mut Vec<Step>,
+    scope: &language::Scope<'i>,
+    role: Option<&str>,
+    proc_map: &HashMap<&'i str, &language::Procedure<'i>>,
+    resolved: &mut HashSet<&'i str>,
+) {
     if scope.is_step() {
         let title = scope
             .description()
             .next()
             .map(|p| p.content());
         let title = title.filter(|t| !t.is_empty());
+
+        // Append built-in function parameters to title
+        let suffix = scope
+            .description()
+            .next()
+            .and_then(builtin_suffix_from_paragraph);
+        let title = match (title, suffix) {
+            (Some(t), Some(s)) => Some(format!("{} {}", t, s)),
+            (t, _) => t,
+        };
 
         let mut children = Vec::new();
         for child in scope.children() {
@@ -142,7 +176,30 @@ fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&s
             {
                 continue;
             }
-            collect_steps(&mut children, child, role);
+            collect_steps(&mut children, child, role, proc_map, resolved);
+        }
+
+        // Resolve invocations: inline called procedures' content
+        let mut description = Vec::new();
+        let invocations: Vec<&str> = scope
+            .description()
+            .flat_map(|p| p.invocations())
+            .collect();
+
+        for target in invocations {
+            if is_builtin(target) {
+                continue;
+            }
+            if let Some(proc) = proc_map.get(target) {
+                if resolved.insert(target) {
+                    for para in proc.description() {
+                        description.push(Prose::parse(&para.content()));
+                    }
+                    for child_scope in proc.steps() {
+                        collect_steps(&mut children, child_scope, None, proc_map, resolved);
+                    }
+                }
+            }
         }
 
         steps.push(Step {
@@ -150,7 +207,7 @@ fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&s
                 .ordinal()
                 .map(String::from),
             title,
-            description: Vec::new(),
+            description,
             role: role.map(String::from),
             children,
         });
@@ -166,7 +223,7 @@ fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&s
             .first()
             .copied();
         for child in scope.children() {
-            collect_steps(steps, child, name);
+            collect_steps(steps, child, name, proc_map, resolved);
         }
         return;
     }
@@ -182,7 +239,15 @@ fn collect_steps(steps: &mut Vec<Step>, scope: &language::Scope, role: Option<&s
 
     // Other scopes — recurse
     for child in scope.children() {
-        collect_steps(steps, child, role);
+        collect_steps(steps, child, role, proc_map, resolved);
+    }
+}
+
+/// Recursively strip ordinals from steps (used for deeply nested steps).
+fn strip_ordinals(steps: &mut Vec<Step>) {
+    for step in steps {
+        step.ordinal = None;
+        strip_ordinals(&mut step.children);
     }
 }
 
@@ -192,6 +257,72 @@ fn format_value(expr: &language::Expression) -> String {
         language::Expression::Number(language::Numeric::Scientific(q)) => q.to_string(),
         language::Expression::Number(language::Numeric::Integral(n)) => n.to_string(),
         _ => String::new(),
+    }
+}
+
+// -- Recipe domain built-in functions ----------------------------------------
+
+/// Returns true if the name is a recipe domain built-in function.
+fn is_builtin(name: &str) -> bool {
+    match name {
+        "oven" | "timer" => true,
+        _ => false,
+    }
+}
+
+/// Render a built-in function call as a human-readable suffix.
+fn builtin_suffix(name: &str, params: &[language::Expression]) -> Option<String> {
+    let val = params
+        .first()
+        .map(format_value);
+    let val = val.filter(|v| !v.is_empty());
+    match name {
+        "oven" => val.map(|v| format!("to {}", v)),
+        "timer" => val.map(|v| format!("for {}", v)),
+        _ => None,
+    }
+}
+
+/// Extract a built-in suffix from a step's description paragraph.
+fn builtin_suffix_from_paragraph(para: &language::Paragraph) -> Option<String> {
+    for d in &para.0 {
+        if let Some(s) = builtin_from_descriptive(d) {
+            return Some(s);
+        }
+    }
+    None
+}
+
+fn builtin_from_descriptive(d: &language::Descriptive) -> Option<String> {
+    match d {
+        language::Descriptive::CodeInline(expr) => builtin_from_expression(expr),
+        language::Descriptive::Application(inv) => builtin_from_invocation(inv),
+        language::Descriptive::Binding(inner, _) => builtin_from_descriptive(inner),
+        _ => None,
+    }
+}
+
+fn builtin_from_expression(expr: &language::Expression) -> Option<String> {
+    match expr {
+        language::Expression::Application(inv) => builtin_from_invocation(inv),
+        language::Expression::Execution(func) => builtin_suffix(
+            func.target
+                .0,
+            &func.parameters,
+        ),
+        language::Expression::Binding(inner, _) => builtin_from_expression(inner),
+        _ => None,
+    }
+}
+
+fn builtin_from_invocation(inv: &language::Invocation) -> Option<String> {
+    let name = match &inv.target {
+        language::Target::Local(id) => id.0,
+        _ => return None,
+    };
+    match &inv.parameters {
+        Some(params) => builtin_suffix(name, params),
+        None => None,
     }
 }
 
@@ -351,6 +482,84 @@ shopping : () -> Ingredients
             1
         );
         assert_eq!(doc.steps[0].title, Some("Get ingredients".into()));
+    }
+
+    #[test]
+    fn invocations_inlined_as_children() {
+        let doc = extract(trim(
+            r#"
+main :
+
+# Main
+
+    1. Do the thing { <sub>() }
+
+sub :
+
+# Sub Task
+
+Detailed instructions follow.
+
+    @worker
+        1. Step one
+        2. Step two
+            "#,
+        ));
+        // sub is resolved via invocation, so only one top-level step
+        assert_eq!(
+            doc.steps
+                .len(),
+            1
+        );
+        assert_eq!(doc.steps[0].title, Some("Do the thing".into()));
+        // sub's description is inherited
+        assert_eq!(
+            doc.steps[0]
+                .description
+                .len(),
+            1
+        );
+        // sub's steps are inlined as children
+        assert_eq!(
+            doc.steps[0]
+                .children
+                .len(),
+            2
+        );
+        assert_eq!(doc.steps[0].children[0].title, Some("Step one".into()));
+        assert_eq!(doc.steps[0].children[0].role, Some("worker".into()));
+    }
+
+    #[test]
+    fn builtin_functions_rendered_inline() {
+        let doc = extract(trim(
+            r#"
+main :
+
+# Main
+
+    1. Set oven temperature { <oven>(180 °C) }
+    2. Wait for cooking { timer(3 hr) }
+
+oven(temperature) :
+
+# Set oven temperature
+
+    @chef
+        - Set temperature to
+
+            "#,
+        ));
+        // Built-in parameters appended to step titles
+        assert_eq!(
+            doc.steps[0].title,
+            Some("Set oven temperature to 180 °C".into())
+        );
+        assert_eq!(doc.steps[1].title, Some("Wait for cooking for 3 hr".into()));
+        // oven procedure not inlined as children
+        assert!(doc.steps[0]
+            .children
+            .is_empty());
     }
 
     #[test]
