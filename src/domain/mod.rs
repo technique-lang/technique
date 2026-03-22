@@ -13,6 +13,7 @@ mod adapter;
 pub mod checklist;
 pub mod engine;
 pub mod procedure;
+pub mod recipe;
 pub(crate) mod serialize;
 pub mod source;
 
