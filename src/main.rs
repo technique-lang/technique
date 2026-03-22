@@ -9,7 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::parsing;
-use technique::templating::{self, Checklist, Procedure, Recipe, Source};
+use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 
 mod editor;
 mod output;
@@ -124,7 +124,7 @@ fn main() {
                     Arg::new("domain")
                         .short('d')
                         .long("domain")
-                        .value_parser(["checklist", "procedure", "recipe", "source"])
+                        .value_parser(["checklist", "nasa-esa-iss", "procedure", "recipe", "source"])
                         .action(ArgAction::Set)
                         .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
                 )
@@ -348,6 +348,7 @@ fn main() {
             let template: &dyn templating::Template = match domain {
                 "source" => &Source,
                 "checklist" => &Checklist,
+                "nasa-esa-iss" => &NasaEsaIss,
                 "procedure" => &Procedure,
                 "recipe" => &Recipe,
                 other => {
