@@ -1,4 +1,4 @@
-// NASA flight plan domain template for Technique.
+// NASA/ESA ISS Crew Procedure domain template for Technique.
 //
 // Renders procedures in the style of ISS flight plan documents:
 // bordered table layout, role designators in left margin, underlined

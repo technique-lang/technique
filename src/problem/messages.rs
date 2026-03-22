@@ -110,7 +110,7 @@ to be used when rendering the Technique. Common domains include
                     renderer.style(crate::formatting::Syntax::Header, "CC-BY 4.0"),
                     renderer.style(crate::formatting::Syntax::Header, "Proprietary"),
                     renderer.style(crate::formatting::Syntax::Header, "checklist"),
-                    renderer.style(crate::formatting::Syntax::Header, "nasa-flight-plan,v4.0"),
+                    renderer.style(crate::formatting::Syntax::Header, "nasa-esa-iss,v4.0"),
                     renderer.style(crate::formatting::Syntax::Header, "recipe")
                 ),
             )

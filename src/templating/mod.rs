@@ -5,14 +5,14 @@
 //! internally.
 
 mod checklist;
-mod nasa_flight_plan;
+mod nasa_esa_iss;
 mod procedure;
 mod recipe;
 mod source;
 mod template;
 
 pub use checklist::Checklist;
-pub use nasa_flight_plan::NasaFlightPlan;
+pub use nasa_esa_iss::NasaEsaIss;
 pub use procedure::Procedure;
 pub use recipe::Recipe;
 pub use source::Source;

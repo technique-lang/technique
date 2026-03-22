@@ -12,7 +12,7 @@
 mod adapter;
 pub mod checklist;
 pub mod engine;
-pub mod nasa_flight_plan;
+pub mod nasa_esa_iss;
 pub mod procedure;
 pub mod recipe;
 pub(crate) mod serialize;

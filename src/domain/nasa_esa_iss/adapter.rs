@@ -1,4 +1,5 @@
-//! Projects the parser's AST into the NASA flight plan domain model.
+//! Projects the parser's AST into the NASA/ESA ISS Crew Procedure domain
+//! model.
 //!
 //! This isn't really a serious example (because the procedure template used
 //! by NASA and ESA for ISS operations is a bit ridiculous), but it shows
@@ -18,9 +19,9 @@ use crate::domain::procedure::types::{Document, Node};
 use crate::domain::Adapter;
 use crate::language;
 
-pub struct NasaFlightPlanAdapter;
+pub struct NasaEsaIssAdapter;
 
-impl Adapter for NasaFlightPlanAdapter {
+impl Adapter for NasaEsaIssAdapter {
     type Model = Document;
 
     fn extract(&self, document: &language::Document) -> Document {
