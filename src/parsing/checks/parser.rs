@@ -95,11 +95,11 @@ fn header_domain() {
     let result = input.read_domain_line();
     assert_eq!(result, Ok(Some("checklist")));
 
-    input.initialize("& nasa-flight-plan,v4.0");
+    input.initialize("& nasa-esa-iss,v4.0");
     assert!(is_domain_line(input.source));
 
     let result = input.read_domain_line();
-    assert_eq!(result, Ok(Some("nasa-flight-plan,v4.0")));
+    assert_eq!(result, Ok(Some("nasa-esa-iss,v4.0")));
 }
 
 // now we test incremental parsing
