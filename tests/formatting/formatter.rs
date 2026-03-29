@@ -185,10 +185,10 @@ win_le_tour : Bicycle -> YellowJersey
                 name: Identifier("vibe_coding"),
                 parameters: None,
                 signature: None,
-                elements: vec![Element::CodeBlock(Expression::Execution(Function {
+                elements: vec![Element::CodeBlock(vec![Expression::Execution(Function {
                     target: Identifier("exec"),
                     parameters: vec![Expression::Multiline(Some("bash"), vec!["rm -rf /"])],
-                }))],
+                })])],
             }])),
         };
 
@@ -281,7 +281,7 @@ We must take action!
                         subscopes: vec![Scope::AttributeBlock {
                             attributes: vec![Attribute::Role(Identifier("journalist"))],
                             subscopes: vec![Scope::CodeBlock {
-                                expression: Expression::Tablet(vec![
+                                expressions: vec![Expression::Tablet(vec![
                                     Pair {
                                         label: "timestamp",
                                         value: Expression::Execution(Function {
@@ -293,7 +293,7 @@ We must take action!
                                         label: "message",
                                         value: Expression::Variable(Identifier("msg")),
                                     },
-                                ]),
+                                ])],
                                 subscopes: vec![],
                             }],
                         }],
@@ -359,10 +359,10 @@ Record everything, with timestamps.
                                     "Specimen labelling",
                                 )])],
                                 subscopes: vec![Scope::CodeBlock {
-                                    expression: Expression::Foreach(
+                                    expressions: vec![Expression::Foreach(
                                         vec![Identifier("specimen")],
                                         Box::new(Expression::Variable(Identifier("specimens"))),
-                                    ),
+                                    )],
                                     subscopes: vec![Scope::AttributeBlock {
                                         attributes: vec![Attribute::Role(Identifier(
                                             "nursing_team",
