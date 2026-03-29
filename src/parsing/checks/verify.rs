@@ -631,10 +631,10 @@ before_leaving :
                                 )])],
 
                                 subscopes: vec![Scope::CodeBlock {
-                                    expression: Expression::Foreach(
+                                    expressions: vec![Expression::Foreach(
                                         vec![Identifier("specimen")],
                                         Box::new(Expression::Variable(Identifier("specimens")))
-                                    ),
+                                    )],
                                     subscopes: vec![Scope::AttributeBlock {
                                         attributes: vec![Attribute::Role(Identifier(
                                             "nursing_team"

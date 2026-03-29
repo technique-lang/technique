@@ -299,6 +299,6 @@ robot :
 Your plastic pal who's fun to be with! { re peat <jingle> }
         "#
         .trim_ascii(),
-        ParsingError::InvalidCodeBlock(50, 7),
+        ParsingError::InvalidCodeBlock(50, 3),
     );
 }
