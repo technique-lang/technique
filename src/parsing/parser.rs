@@ -1511,6 +1511,12 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
+            if self.source.starts_with('"') {
+                return Err(ParsingError::InvalidFunction(
+                    self.offset - identifier.0.len(),
+                    identifier.0.len(),
+                ));
+            }
             Ok(Expression::Variable(identifier))
         }
     }
@@ -1776,7 +1782,7 @@ impl<'i> Parser<'i> {
 
         let content = self.source;
 
-        let possible = match content.find([' ', '\t', '\n', '(', '{', ',']) {
+        let possible = match content.find([' ', '\t', '\n', '(', '{', ',', '"']) {
             None => content,
             Some(i) => &content[0..i],
         };
