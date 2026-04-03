@@ -40,7 +40,7 @@ pub enum Element<'i> {
     Title(&'i str),
     Description(Vec<Paragraph<'i>>),
     Steps(Vec<Scope<'i>>),
-    CodeBlock(Expression<'i>), // TODO remove, possibly, if Scope::CodeBlock covers this adequately, or change to Vec<Scope> as well.
+    CodeBlock(Vec<Expression<'i>>),
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -137,7 +137,7 @@ pub enum Scope<'i> {
 
     // Code block scope: { foreach ... } with substeps
     CodeBlock {
-        expression: Expression<'i>,
+        expressions: Vec<Expression<'i>>,
         subscopes: Vec<Scope<'i>>,
     },
 
@@ -202,6 +202,7 @@ pub enum Expression<'i> {
     Execution(Function<'i>),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
     Tablet(Vec<Pair<'i>>),
+    Separator,
 }
 
 #[derive(Debug, PartialEq, Eq)]

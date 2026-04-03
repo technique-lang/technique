@@ -500,9 +500,18 @@ impl<'i> Formatter<'i> {
         self.append_char('\n');
 
         // include title in block to keep it with the declaration
-        let mut elements = procedure.elements.iter();
-        if let Some(Element::Title(_)) = procedure.elements.first() {
-            self.append_element(elements.next().unwrap());
+        let mut elements = procedure
+            .elements
+            .iter();
+        if let Some(Element::Title(_)) = procedure
+            .elements
+            .first()
+        {
+            self.append_element(
+                elements
+                    .next()
+                    .unwrap(),
+            );
         }
 
         self.add_fragment_reference(Syntax::BlockEnd, "");
@@ -530,14 +539,16 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_steps(steps);
             }
-            Element::CodeBlock(expression) => {
+            Element::CodeBlock(expressions) => {
                 self.add_fragment_reference(Syntax::Structure, "{");
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
                 self.increase(4);
-                self.indent();
-                self.append_expression(expression);
-                self.add_fragment_reference(Syntax::Newline, "\n");
+                for expression in expressions {
+                    self.indent();
+                    self.append_expression(expression);
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                }
                 self.decrease(4);
 
                 self.add_fragment_reference(Syntax::Structure, "}");
@@ -821,8 +832,11 @@ impl<'i> Formatter<'i> {
                     return;
                 }
 
-                let is_code =
-                    if let Scope::CodeBlock { .. } = subscopes[0] { true } else { false };
+                let is_code = if let Scope::CodeBlock { .. } = subscopes[0] {
+                    true
+                } else {
+                    false
+                };
 
                 // Keep attribute with its first subscope
                 self.add_fragment_reference(Syntax::BlockBegin, "");
@@ -845,31 +859,60 @@ impl<'i> Formatter<'i> {
                 }
             }
             Scope::CodeBlock {
-                expression,
+                expressions,
                 subscopes: substeps,
             } => {
-                match expression {
-                    Expression::Tablet(_) => {
-                        self.indent();
-                        self.add_fragment_reference(Syntax::Structure, "{");
-                        self.add_fragment_reference(Syntax::Newline, "\n");
+                let has_separator = expressions
+                    .iter()
+                    .any(|e| {
+                        if let Expression::Separator = e {
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                let inline = if has_separator {
+                    true
+                } else if expressions.len() == 1 {
+                    if let Expression::Tablet(_) = &expressions[0] {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                };
 
-                        self.increase(4);
+                if inline {
+                    self.indent();
+                    self.add_fragment_reference(Syntax::Structure, "{");
+                    self.add_fragment_reference(Syntax::Neutral, " ");
+                    for expression in expressions {
+                        if let Expression::Separator = expression {
+                            self.add_fragment_reference(Syntax::Structure, ";");
+                            self.add_fragment_reference(Syntax::Neutral, " ");
+                        } else {
+                            self.append_expression(expression);
+                        }
+                    }
+                    self.add_fragment_reference(Syntax::Neutral, " ");
+                    self.add_fragment_reference(Syntax::Structure, "}");
+                } else {
+                    self.indent();
+                    self.add_fragment_reference(Syntax::Structure, "{");
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                    self.increase(4);
+                    for expression in expressions {
+                        if let Expression::Separator = expression {
+                            continue;
+                        }
                         self.indent();
                         self.append_expression(expression);
                         self.add_fragment_reference(Syntax::Newline, "\n");
-                        self.decrease(4);
-                        self.indent();
-                        self.add_fragment_reference(Syntax::Structure, "}");
                     }
-                    _ => {
-                        self.indent();
-                        self.add_fragment_reference(Syntax::Structure, "{");
-                        self.add_fragment_reference(Syntax::Neutral, " ");
-                        self.append_expression(expression);
-                        self.add_fragment_reference(Syntax::Neutral, " ");
-                        self.add_fragment_reference(Syntax::Structure, "}");
-                    }
+                    self.decrease(4);
+                    self.indent();
+                    self.add_fragment_reference(Syntax::Structure, "}");
                 }
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
@@ -1022,6 +1065,7 @@ impl<'i> Formatter<'i> {
                 self.append_variables(variables);
             }
             Expression::Tablet(pairs) => self.append_tablet(pairs),
+            Expression::Separator => {}
         }
     }
 

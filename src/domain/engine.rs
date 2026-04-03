@@ -154,10 +154,14 @@ impl<'i> Scope<'i> {
     /// Returns the tablet pairs if this is a CodeBlock containing a Tablet.
     pub fn tablet(&self) -> Option<&[Pair<'i>]> {
         match self {
-            Scope::CodeBlock { expression, .. } => match expression {
-                Expression::Tablet(pairs) => Some(pairs),
-                _ => None,
-            },
+            Scope::CodeBlock { expressions, .. } => {
+                if expressions.len() == 1 {
+                    if let Expression::Tablet(pairs) = &expressions[0] {
+                        return Some(pairs);
+                    }
+                }
+                None
+            }
             _ => None,
         }
     }
@@ -189,7 +193,16 @@ impl<'i> Scope<'i> {
     /// Returns the expression of a CodeBlock as readable text.
     pub fn expression_text(&self) -> Option<String> {
         match self {
-            Scope::CodeBlock { expression, .. } => Some(render_expression(expression)),
+            Scope::CodeBlock { expressions, .. } => {
+                if expressions.is_empty() {
+                    return None;
+                }
+                let texts: Vec<String> = expressions
+                    .iter()
+                    .map(render_expression)
+                    .collect();
+                Some(texts.join("\n"))
+            }
             _ => None,
         }
     }
@@ -331,6 +344,7 @@ fn render_expression(expr: &Expression) -> String {
         Expression::Number(Numeric::Scientific(q)) => q.to_string(),
         Expression::Number(Numeric::Integral(n)) => n.to_string(),
         Expression::Tablet(_) => String::new(),
+        Expression::Separator => String::new(),
     }
 }
 

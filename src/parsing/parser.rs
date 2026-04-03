@@ -1102,7 +1102,7 @@ impl<'i> Parser<'i> {
                 }
             } else if is_code_block(content) {
                 match parser.read_code_block() {
-                    Ok(expression) => elements.push(Element::CodeBlock(expression)),
+                    Ok(expressions) => elements.push(Element::CodeBlock(expressions)),
                     Err(error) => {
                         self.problems
                             .push(error);
@@ -1395,57 +1395,49 @@ impl<'i> Parser<'i> {
         Ok((numeral, title))
     }
 
-    fn read_code_block(&mut self) -> Result<Expression<'i>, ParsingError> {
+    fn read_code_block(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
         self.take_block_chars("a code block", '{', '}', true, |inner| {
-            // Save the start position (accounting for leading whitespace that read_expression will trim)
-            inner.trim_whitespace();
-            let start = inner.offset;
+            let mut expressions = Vec::new();
 
-            let expression = inner.read_expression()?;
-
-            // Check if there's leftover content
-            let offset_before_trim = inner.offset;
-            inner.trim_whitespace();
-            if !inner
-                .source
-                .is_empty()
-            {
-                let mut width = offset_before_trim - start; // Width of what we parsed
-
-                // Check if leftover looks like continuation of identifier
-                let leftover = inner
+            loop {
+                inner.trim_whitespace();
+                if inner
                     .source
-                    .chars()
-                    .next()
-                    .map(|ch| {
-                        ch.is_ascii_lowercase()
-                            && !inner
-                                .source
-                                .starts_with("in ")
-                    })
-                    .unwrap_or(false);
-
-                if leftover {
-                    // Include the space(s) between parts
-                    width = inner.offset - start;
-
-                    // Add identifier-like characters from leftover
-                    for ch in inner
-                        .source
-                        .chars()
-                    {
-                        if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' {
-                            width += ch.len_utf8();
-                        } else {
-                            break;
-                        }
-                    }
+                    .is_empty()
+                {
+                    break;
                 }
+                let start = inner.offset;
+                let expression = inner.read_expression()?;
+                let is_variable = if let Expression::Variable(_) = &expression {
+                    true
+                } else {
+                    false
+                };
+                expressions.push(expression);
 
-                return Err(ParsingError::InvalidCodeBlock(start, width));
+                inner.trim_whitespace();
+                if inner
+                    .source
+                    .starts_with(';')
+                {
+                    inner.advance(1);
+                    expressions.push(Expression::Separator);
+                } else if is_variable
+                    && !inner
+                        .source
+                        .is_empty()
+                {
+                    let width = inner.offset - start;
+                    return Err(ParsingError::InvalidCodeBlock(start, width));
+                }
             }
 
-            Ok(expression)
+            if expressions.is_empty() {
+                return Err(ParsingError::InvalidCodeBlock(inner.offset, 0));
+            }
+
+            Ok(expressions)
         })
     }
 
@@ -1519,6 +1511,12 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
+            if self.source.starts_with('"') {
+                return Err(ParsingError::InvalidFunction(
+                    self.offset - identifier.0.len(),
+                    identifier.0.len(),
+                ));
+            }
             Ok(Expression::Variable(identifier))
         }
     }
@@ -1784,7 +1782,7 @@ impl<'i> Parser<'i> {
 
         let content = self.source;
 
-        let possible = match content.find([' ', '\t', '\n', '(', '{', ',']) {
+        let possible = match content.find([' ', '\t', '\n', '(', '{', ',', '"']) {
             None => content,
             Some(i) => &content[0..i],
         };
@@ -2223,8 +2221,13 @@ impl<'i> Parser<'i> {
                         // standalone CodeBlock wrapped in a Paragraph
 
                         // FIXME this needs to be promoted to a Scope::CodeBlock? Or better yet shouldnt' be here?
-                        let code_block = outer.read_code_block()?;
-                        results.push(Paragraph(vec![Descriptive::CodeInline(code_block)]));
+                        let expressions = outer.read_code_block()?;
+                        for expr in expressions {
+                            if let Expression::Separator = expr {
+                                continue;
+                            }
+                            results.push(Paragraph(vec![Descriptive::CodeInline(expr)]));
+                        }
                     } else {
                         // Paragraph container
                         let descriptives = outer.take_paragraph(|parser| {
@@ -2237,8 +2240,13 @@ impl<'i> Parser<'i> {
                                 }
 
                                 if c == '{' {
-                                    let expression = parser.read_code_block()?;
-                                    content.push(Descriptive::CodeInline(expression));
+                                    let expressions = parser.read_code_block()?;
+                                    for expr in expressions {
+                                        if let Expression::Separator = expr {
+                                            continue;
+                                        }
+                                        content.push(Descriptive::CodeInline(expr));
+                                    }
                                 } else if parser
                                     .source
                                     .starts_with("```")
@@ -2637,11 +2645,11 @@ impl<'i> Parser<'i> {
                 false // Never stop - consume all remaining content
             },
             |outer| {
-                let code = outer.read_code_block()?;
+                let expressions = outer.read_code_block()?;
                 let subscopes = outer.read_scopes()?;
 
                 Ok(Scope::CodeBlock {
-                    expression: code,
+                    expressions,
                     subscopes,
                 })
             },

@@ -1,0 +1,16 @@
+delete_rds_instance :
+
+# Destroy RDS Database
+
+Destroy an RDS database instance. As with EC2, before we can get rid of an
+instance we have to disable termination protection.
+
+    1.  Disable termination protection
+        {
+            click("Modify")
+            navigate("bottom")
+            deselect("Enable deletion protection")
+            click("Continue")
+            select("Apply Immediately")
+            click("Modify DB instance")
+        }
