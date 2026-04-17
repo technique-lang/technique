@@ -500,6 +500,9 @@ fn step_detection() {
     assert!(is_substep_dependent("  a. Indented substep"));
     assert!(!is_substep_dependent("2. Substep can't have number"));
     assert!(!is_substep_dependent("   1. Even if it is indented"));
+    assert!(!is_substep_dependent("i. unus is a sub-substep"));
+    assert!(!is_substep_dependent("v. quinque is a sub-substep"));
+    assert!(!is_substep_dependent("x. decem is a sub-substep"));
 
     // Test parallel substeps (whitespace agnostic)
     assert!(is_substep_parallel("- Parallel substep"));
