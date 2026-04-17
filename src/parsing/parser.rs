@@ -2126,7 +2126,7 @@ impl<'i> Parser<'i> {
             |line| is_substep_dependent(line),
             |outer| {
                 let content = outer.source;
-                let re = regex!(r"^\s*([a-hj-uw-z])\.\s+");
+                let re = regex!(r"^\s*([a-hj-uwy])\.\s+");
                 let cap = re
                     .captures(content)
                     .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
@@ -2187,6 +2187,47 @@ impl<'i> Parser<'i> {
 
                 Ok(Scope::ParallelBlock {
                     bullet: '-',
+                    description: text,
+                    subscopes: scopes,
+                })
+            },
+        )
+    }
+
+    /// Parse a dependent sub-substep (i., ii., iii., iv., etc.)
+    fn read_subsubstep_dependent(&mut self) -> Result<Scope<'i>, ParsingError> {
+        self.take_block_lines(
+            is_subsubstep_dependent,
+            |line| is_subsubstep_dependent(line),
+            |outer| {
+                let content = outer.source;
+                let re = regex!(r"^\s*([ivx]+)\.\s+");
+                let cap = re
+                    .captures(content)
+                    .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
+
+                let numeral = cap
+                    .get(1)
+                    .ok_or(ParsingError::Expected(
+                        outer.offset,
+                        0,
+                        "the ordinal roman numeral indicating a sub-substep",
+                    ))?
+                    .as_str();
+
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .len();
+
+                outer.advance(l);
+
+                let text = outer.read_descriptive()?;
+
+                let scopes = outer.read_scopes()?;
+
+                Ok(Scope::DependentBlock {
+                    ordinal: numeral,
                     description: text,
                     subscopes: scopes,
                 })
@@ -2597,6 +2638,9 @@ impl<'i> Parser<'i> {
                 scopes.push(block);
             } else if is_substep_parallel(content) {
                 let block = self.read_substep_parallel()?;
+                scopes.push(block);
+            } else if is_subsubstep_dependent(content) {
+                let block = self.read_subsubstep_dependent()?;
                 scopes.push(block);
             } else if is_step_dependent(content) {
                 let block = self.read_step_dependent()?;
@@ -3058,7 +3102,7 @@ fn is_section(content: &str) -> bool {
 /// used to compose a number below 40 in roman numerals, as those are
 /// sub-sub-steps.
 fn is_substep_dependent(content: &str) -> bool {
-    let re = regex!(r"^\s*[a-hj-uw-z]\.\s+");
+    let re = regex!(r"^\s*[a-hj-uwy]\.\s+");
     re.is_match(content)
 }
 
