@@ -35,7 +35,7 @@ fn main() {
         .version(VERSION)
         .propagate_version(true)
         .author("Andrew Cowie")
-        .about("The Technique Procedures Language.")
+        .about("The Technique procedure language.")
         .disable_help_subcommand(true)
         .disable_help_flag(true)
         .disable_version_flag(true)

@@ -1,6 +1,6 @@
 # Technique
 
-This is the Technique Procedure Language, a programming language for
+This is the Technique procedure language, a programming language for
 describing procedures in a structured but human-readable form. You can
 consider it a domain-specific language (DSL) for writing procedures and
 checklists.

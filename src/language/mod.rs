@@ -1,4 +1,4 @@
-// Types representing the Technique procedures language
+// Types representing the Technique language surface syntax
 
 mod error;
 mod quantity;
