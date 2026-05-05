@@ -1511,10 +1511,18 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
-            if self.source.starts_with('"') {
+            if self
+                .source
+                .starts_with('"')
+            {
                 return Err(ParsingError::InvalidFunction(
-                    self.offset - identifier.0.len(),
-                    identifier.0.len(),
+                    self.offset
+                        - identifier
+                            .0
+                            .len(),
+                    identifier
+                        .0
+                        .len(),
                 ));
             }
             Ok(Expression::Variable(identifier))
