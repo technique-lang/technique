@@ -10,6 +10,7 @@ use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::parsing;
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
+use technique::translation;
 
 mod editor;
 mod output;
@@ -17,6 +18,7 @@ mod problem;
 
 #[derive(Eq, Debug, PartialEq)]
 enum Output {
+    Terminal,
     Native,
     Silent,
 }
@@ -191,7 +193,7 @@ fn main() {
                 .unwrap();
             let output = match output.as_str() {
                 "native" => Output::Native,
-                "none" => Output::Silent,
+                "none" => Output::Terminal,
                 _ => panic!("Unrecognized --output value"),
             };
 
@@ -242,12 +244,39 @@ fn main() {
                 }
             };
 
-            // TODO continue with validation of the returned technique
+            if let Phase::Parsing = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", technique);
+                    }
+                    Output::Silent => {}
+                }
+                std::process::exit(0);
+            }
 
-            eprintln!("{}", "ok".bright_green());
+            let program = match translation::translate(&technique) {
+                Ok(program) => program,
+                Err(_errors) => {
+                    // Translation error rendering is a later step.
+                    eprintln!("{}", "translation failed".bright_red());
+                    std::process::exit(1);
+                }
+            };
 
-            if let Output::Native = output {
-                println!("{:#?}", technique);
+            if let Phase::Translation = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", program);
+                    }
+                    Output::Silent => {}
+                }
+                std::process::exit(0);
             }
         }
         Some(("format", submatches)) => {
