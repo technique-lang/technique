@@ -5,3 +5,4 @@ pub mod language;
 pub mod parsing;
 pub(crate) mod regex;
 pub mod templating;
+pub mod translation;
