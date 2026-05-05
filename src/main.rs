@@ -21,6 +21,12 @@ enum Output {
     Silent,
 }
 
+#[derive(Eq, Debug, PartialEq)]
+enum Phase {
+    Parsing,
+    Translation,
+}
+
 fn main() {
     const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
@@ -71,6 +77,18 @@ fn main() {
                         .default_value("none")
                         .action(ArgAction::Set)
                         .help("Which kind of diagnostic output to print when checking.")
+                )
+                .arg(
+                    Arg::new("until")
+                        .long("until")
+                        .value_name("phase")
+                        .value_parser(["parsing", "translation"])
+                        .default_value("parsing")
+                        .action(ArgAction::Set)
+                        .help("Stop compilation after the given phase is complete so that the result can be inspected. \
+                            Use this in conjunction with the --output option. The phases are: \
+                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree; then \
+                            translation, which resolves names, checks references, and ensures the input is valid Technique.")
                 )
                 .arg(
                     Arg::new("filename")
@@ -178,6 +196,17 @@ fn main() {
             };
 
             debug!(?output);
+
+            let until = submatches
+                .get_one::<String>("until")
+                .unwrap();
+            let until = match until.as_str() {
+                "parsing" => Phase::Parsing,
+                "translation" => Phase::Translation,
+                _ => panic!("Unrecognized --until value"),
+            };
+
+            debug!(?until);
 
             let filename = submatches
                 .get_one::<String>("filename")
