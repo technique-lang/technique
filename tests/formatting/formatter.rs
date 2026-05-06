@@ -202,10 +202,17 @@ win_le_tour : Bicycle -> YellowJersey
                 parameters: None,
                 signature: None,
                 elements: vec![Element::CodeBlock(
-                    vec![Expression::Execution(Function {
-                        target: Identifier::dummy("exec"),
-                        parameters: vec![Expression::Multiline(Some("bash"), vec!["rm -rf /"])],
-                    })],
+                    vec![Expression::Execution(
+                        Function {
+                            target: Identifier::dummy("exec"),
+                            parameters: vec![Expression::Multiline(
+                                Some("bash"),
+                                vec!["rm -rf /"],
+                                Span::default(),
+                            )],
+                        },
+                        Span::default(),
+                    )],
                     Span::default(),
                 )],
                 span: Span::default(),
@@ -249,13 +256,17 @@ vibe_coding :
                             ordinal: "1",
                             description: vec![Paragraph(vec![
                                 Descriptive::Text("To take the action, we must:"),
-                                Descriptive::CodeInline(Expression::Execution(Function {
-                                    target: Identifier::dummy("exec"),
-                                    parameters: vec![Expression::Multiline(
-                                        Some("bash"),
-                                        vec!["rm -rf /"],
-                                    )],
-                                })),
+                                Descriptive::CodeInline(Expression::Execution(
+                                    Function {
+                                        target: Identifier::dummy("exec"),
+                                        parameters: vec![Expression::Multiline(
+                                            Some("bash"),
+                                            vec!["rm -rf /"],
+                                            Span::default(),
+                                        )],
+                                    },
+                                    Span::default(),
+                                )),
                             ])],
                             subscopes: vec![],
                             span: Span::default(),
@@ -311,19 +322,28 @@ We must take action!
                             subscopes: vec![Scope::AttributeBlock {
                                 attributes: vec![Attribute::Role(Identifier::dummy("journalist"))],
                                 subscopes: vec![Scope::CodeBlock {
-                                    expressions: vec![Expression::Tablet(vec![
-                                        Pair {
-                                            label: "timestamp",
-                                            value: Expression::Execution(Function {
-                                                target: Identifier::dummy("now"),
-                                                parameters: vec![],
-                                            }),
-                                        },
-                                        Pair {
-                                            label: "message",
-                                            value: Expression::Variable(Identifier::dummy("msg")),
-                                        },
-                                    ])],
+                                    expressions: vec![Expression::Tablet(
+                                        vec![
+                                            Pair {
+                                                label: "timestamp",
+                                                value: Expression::Execution(
+                                                    Function {
+                                                        target: Identifier::dummy("now"),
+                                                        parameters: vec![],
+                                                    },
+                                                    Span::default(),
+                                                ),
+                                            },
+                                            Pair {
+                                                label: "message",
+                                                value: Expression::Variable(
+                                                    Identifier::dummy("msg"),
+                                                    Span::default(),
+                                                ),
+                                            },
+                                        ],
+                                        Span::default(),
+                                    )],
                                     subscopes: vec![],
                                     span: Span::default(),
                                 }],
@@ -402,9 +422,11 @@ Record everything, with timestamps.
                                     subscopes: vec![Scope::CodeBlock {
                                         expressions: vec![Expression::Foreach(
                                             vec![Identifier::dummy("specimen")],
-                                            Box::new(Expression::Variable(Identifier::dummy(
-                                                "specimens",
-                                            ))),
+                                            Box::new(Expression::Variable(
+                                                Identifier::dummy("specimens"),
+                                                Span::default(),
+                                            )),
+                                            Span::default(),
                                         )],
                                         subscopes: vec![Scope::AttributeBlock {
                                             attributes: vec![Attribute::Role(Identifier::dummy(

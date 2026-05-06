@@ -55,11 +55,7 @@ impl Render for Fragment {
         } else if self.syntax == "Newline" {
             out.raw(&format!("#{}()\n", func));
         } else {
-            out.raw(&format!(
-                "#{}(\"{}\")",
-                func,
-                escape_string(&self.content)
-            ));
+            out.raw(&format!("#{}(\"{}\")", func, escape_string(&self.content)));
         }
     }
 }

@@ -330,7 +330,7 @@ impl<'i> Formatter<'i> {
 
     fn render_inline_code(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
         match expr {
-            Expression::Tablet(_) | Expression::Multiline(_, _) => {
+            Expression::Tablet(_, _) | Expression::Multiline(_, _, _) => {
                 // These are not inline, caller should handle specially
                 Vec::new()
             }
@@ -657,7 +657,7 @@ impl<'i> Formatter<'i> {
                     line.add_breakable(syntax, text);
                 }
                 Descriptive::CodeInline(expr) => match expr {
-                    Expression::Tablet(_) => {
+                    Expression::Tablet(_, _) => {
                         line.flush();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.append_char('\n');
@@ -669,7 +669,7 @@ impl<'i> Formatter<'i> {
                         line = self.builder();
                         line.add_word(Syntax::Structure, "}");
                     }
-                    Expression::Multiline(_, _) => {
+                    Expression::Multiline(_, _, _) => {
                         line.flush();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.increase(4);
@@ -681,11 +681,11 @@ impl<'i> Formatter<'i> {
                         line.add_word(Syntax::Structure, "}");
                     }
                     _ => match expr {
-                        Expression::Execution(func)
+                        Expression::Execution(func, _)
                             if func
                                 .parameters
                                 .iter()
-                                .any(|p| matches!(p, Expression::Multiline(_, _))) =>
+                                .any(|p| matches!(p, Expression::Multiline(_, _, _))) =>
                         {
                             line.flush();
                             self.add_fragment_reference(Syntax::Neutral, " ");
@@ -878,7 +878,7 @@ impl<'i> Formatter<'i> {
                 let inline = if has_separator {
                     true
                 } else if expressions.len() == 1 {
-                    if let Expression::Tablet(_) = &expressions[0] {
+                    if let Expression::Tablet(_, _) = &expressions[0] {
                         false
                     } else {
                         true
@@ -993,10 +993,10 @@ impl<'i> Formatter<'i> {
 
     pub fn append_expression(&mut self, expression: &'i Expression) {
         match expression {
-            Expression::Variable(identifier) => {
+            Expression::Variable(identifier, _) => {
                 self.add_fragment_reference(Syntax::Variable, identifier.value);
             }
-            Expression::String(pieces) => {
+            Expression::String(pieces, _) => {
                 self.add_fragment_reference(Syntax::Quote, "\"");
                 for piece in pieces {
                     match piece {
@@ -1014,8 +1014,8 @@ impl<'i> Formatter<'i> {
                 }
                 self.add_fragment_reference(Syntax::Quote, "\"");
             }
-            Expression::Number(numeric) => self.append_numeric(numeric),
-            Expression::Multiline(lang, lines) => {
+            Expression::Number(numeric, _) => self.append_numeric(numeric),
+            Expression::Multiline(lang, lines, _) => {
                 self.append_char('\n');
 
                 self.indent();
@@ -1046,12 +1046,12 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Quote, "```");
                 self.append_char('\n');
             }
-            Expression::Repeat(expression) => {
+            Expression::Repeat(expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "repeat");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
-            Expression::Foreach(variables, expression) => {
+            Expression::Foreach(variables, expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "foreach");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_variables(variables);
@@ -1060,16 +1060,16 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
-            Expression::Application(invocation) => self.append_application(invocation),
-            Expression::Execution(function) => self.append_function(function),
-            Expression::Binding(expression, variables) => {
+            Expression::Application(invocation, _) => self.append_application(invocation),
+            Expression::Execution(function, _) => self.append_function(function),
+            Expression::Binding(expression, variables, _) => {
                 self.append_expression(expression);
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.add_fragment_reference(Syntax::Structure, "~");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_variables(variables);
             }
-            Expression::Tablet(pairs) => self.append_tablet(pairs),
+            Expression::Tablet(pairs, _) => self.append_tablet(pairs),
             Expression::Separator => {}
         }
     }
@@ -1175,7 +1175,7 @@ impl<'i> Formatter<'i> {
 
         let mut has_multiline = false;
         for parameter in &function.parameters {
-            if let Expression::Multiline(_, _) = parameter {
+            if let Expression::Multiline(_, _, _) = parameter {
                 has_multiline = true;
                 break;
             }

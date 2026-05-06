@@ -368,19 +368,44 @@ pub enum Piece<'i> {
     Interpolation(Expression<'i>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq)]
 pub enum Expression<'i> {
-    Variable(Identifier<'i>),
-    String(Vec<Piece<'i>>),
-    Number(Numeric<'i>),
-    Multiline(Option<&'i str>, Vec<&'i str>),
-    Repeat(Box<Expression<'i>>),
-    Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>),
-    Application(Invocation<'i>),
-    Execution(Function<'i>),
-    Binding(Box<Expression<'i>>, Vec<Identifier<'i>>),
-    Tablet(Vec<Pair<'i>>),
+    Variable(Identifier<'i>, Span),
+    String(Vec<Piece<'i>>, Span),
+    Number(Numeric<'i>, Span),
+    Multiline(Option<&'i str>, Vec<&'i str>, Span),
+    Repeat(Box<Expression<'i>>, Span),
+    Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>, Span),
+    Application(Invocation<'i>, Span),
+    Execution(Function<'i>, Span),
+    Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
+    Tablet(Vec<Pair<'i>>, Span),
     Separator,
+}
+
+impl PartialEq for Expression<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Expression::Variable(a, _), Expression::Variable(b, _)) => a == b,
+            (Expression::String(a, _), Expression::String(b, _)) => a == b,
+            (Expression::Number(a, _), Expression::Number(b, _)) => a == b,
+            (Expression::Multiline(a1, a2, _), Expression::Multiline(b1, b2, _)) => {
+                a1 == b1 && a2 == b2
+            }
+            (Expression::Repeat(a, _), Expression::Repeat(b, _)) => a == b,
+            (Expression::Foreach(a1, a2, _), Expression::Foreach(b1, b2, _)) => {
+                a1 == b1 && a2 == b2
+            }
+            (Expression::Application(a, _), Expression::Application(b, _)) => a == b,
+            (Expression::Execution(a, _), Expression::Execution(b, _)) => a == b,
+            (Expression::Binding(a1, a2, _), Expression::Binding(b1, b2, _)) => {
+                a1 == b1 && a2 == b2
+            }
+            (Expression::Tablet(a, _), Expression::Tablet(b, _)) => a == b,
+            (Expression::Separator, Expression::Separator) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

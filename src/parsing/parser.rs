@@ -732,6 +732,13 @@ impl<'i> Parser<'i> {
         }
     }
 
+    fn span_since(&self, start: usize) -> Span {
+        Span {
+            offset: start,
+            length: self.offset - start,
+        }
+    }
+
     // because test cases and trivial single-line examples might omit an
     // ending newline, this also returns Ok if end of input is reached.
     fn require_newline(&mut self) -> Result<(), ParsingError> {
@@ -1109,10 +1116,7 @@ impl<'i> Parser<'i> {
                     },
                 ) {
                     Ok(title) => {
-                        let span = Span {
-                            offset: elem_start,
-                            length: parser.offset - elem_start,
-                        };
+                        let span = parser.span_since(elem_start);
                         elements.push(Element::Title(title, span));
                     }
                     Err(error) => {
@@ -1124,10 +1128,7 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 match parser.read_code_block() {
                     Ok(expressions) => {
-                        let span = Span {
-                            offset: elem_start,
-                            length: parser.offset - elem_start,
-                        };
+                        let span = parser.span_since(elem_start);
                         elements.push(Element::CodeBlock(expressions, span));
                     }
                     Err(error) => {
@@ -1140,10 +1141,7 @@ impl<'i> Parser<'i> {
                 if is_attribute_assignment(content) {
                     match parser.read_attribute_scope() {
                         Ok(attribute_block) => {
-                            let span = Span {
-                                offset: elem_start,
-                                length: parser.offset - elem_start,
-                            };
+                            let span = parser.span_since(elem_start);
                             elements.push(Element::Steps(vec![attribute_block], span));
                         }
                         Err(error) => {
@@ -1186,10 +1184,7 @@ impl<'i> Parser<'i> {
                     }
                 }
                 if !steps.is_empty() {
-                    let span = Span {
-                        offset: elem_start,
-                        length: parser.offset - elem_start,
-                    };
+                    let span = parser.span_since(elem_start);
                     elements.push(Element::Steps(steps, span));
                 }
             } else if malformed_step_pattern(content) {
@@ -1224,10 +1219,7 @@ impl<'i> Parser<'i> {
                 ) {
                     Ok(description) => {
                         if !description.is_empty() {
-                            let span = Span {
-                                offset: elem_start,
-                                length: parser.offset - elem_start,
-                            };
+                            let span = parser.span_since(elem_start);
                             elements.push(Element::Description(description, span));
                         }
                     }
@@ -1454,7 +1446,7 @@ impl<'i> Parser<'i> {
                 }
                 let start = inner.offset;
                 let expression = inner.read_expression()?;
-                let is_variable = if let Expression::Variable(_) = &expression {
+                let is_variable = if let Expression::Variable(_, _) = &expression {
                     true
                 } else {
                     false
@@ -1488,6 +1480,7 @@ impl<'i> Parser<'i> {
 
     fn read_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         self.trim_whitespace();
+        let start = self.offset;
         let content = self
             .source
             .trim_ascii_start();
@@ -1514,15 +1507,18 @@ impl<'i> Parser<'i> {
             self.read_tablet_expression()
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
-            Ok(Expression::Number(numeric))
+            let span = self.span_since(start);
+            Ok(Expression::Number(numeric, span))
         } else if is_string_literal(content) {
             let parts = self.take_block_chars("a string literal", '"', '"', false, |inner| {
                 inner.parse_string_pieces(inner.source)
             })?;
-            Ok(Expression::String(parts))
+            let span = self.span_since(start);
+            Ok(Expression::String(parts, span))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
-            Ok(Expression::Application(invocation))
+            let span = self.span_since(start);
+            Ok(Expression::Application(invocation, span))
         } else if is_function(content) {
             // Extract the entire text before the opening parenthesis
             self.trim_whitespace();
@@ -1553,7 +1549,8 @@ impl<'i> Parser<'i> {
             let parameters = self.read_parameters()?;
 
             let function = Function { target, parameters };
-            Ok(Expression::Execution(function))
+            let span = self.span_since(start);
+            Ok(Expression::Execution(function, span))
         } else {
             let identifier = self.read_identifier()?;
             if self
@@ -1569,7 +1566,8 @@ impl<'i> Parser<'i> {
                         .length,
                 ));
             }
-            Ok(Expression::Variable(identifier))
+            let span = identifier.span;
+            Ok(Expression::Variable(identifier, span))
         }
     }
 
@@ -1577,6 +1575,8 @@ impl<'i> Parser<'i> {
         // Parse "foreach <pattern> in <expression>" where pattern is either:
         // - identifier
         // - (identifier, identifier, ...)
+
+        let start = self.offset;
 
         // Skip "foreach" keyword - we already know it's there from starts_with check
         self.advance(7);
@@ -1599,7 +1599,8 @@ impl<'i> Parser<'i> {
 
         let expression = self.read_expression()?;
 
-        Ok(Expression::Foreach(identifiers, Box::new(expression)))
+        let span = self.span_since(start);
+        Ok(Expression::Foreach(identifiers, Box::new(expression), span))
     }
 
     fn read_identifiers(&mut self) -> Result<Vec<Identifier<'i>>, ParsingError> {
@@ -1651,6 +1652,7 @@ impl<'i> Parser<'i> {
 
     fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         // Parse "repeat <expression>"
+        let start = self.offset;
         self.advance(6);
         self.trim_whitespace();
 
@@ -1659,10 +1661,13 @@ impl<'i> Parser<'i> {
         // parsing.
         let expression = self.read_expression()?;
 
-        Ok(Expression::Repeat(Box::new(expression)))
+        let span = self.span_since(start);
+        Ok(Expression::Repeat(Box::new(expression), span))
     }
 
     fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        let start = self.offset;
+
         // Parse the expression before the ~ operator
         let expression = self.take_until(&['~'], |inner| {
             let start_pos = inner.offset;
@@ -1690,11 +1695,13 @@ impl<'i> Parser<'i> {
 
         let identifiers = self.read_identifiers()?;
 
-        Ok(Expression::Binding(Box::new(expression), identifiers))
+        let span = self.span_since(start);
+        Ok(Expression::Binding(Box::new(expression), identifiers, span))
     }
 
     fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
-        self.take_block_chars("a tablet", '[', ']', true, |outer| {
+        let start = self.offset;
+        let pairs = self.take_block_chars("a tablet", '[', ']', true, |outer| {
             let mut pairs = Vec::new();
 
             loop {
@@ -1755,8 +1762,10 @@ impl<'i> Parser<'i> {
                 outer.trim_whitespace();
             }
 
-            Ok(Expression::Tablet(pairs))
-        })
+            Ok(pairs)
+        })?;
+        let span = self.span_since(start);
+        Ok(Expression::Tablet(pairs, span))
     }
 
     fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError> {
@@ -2142,10 +2151,7 @@ impl<'i> Parser<'i> {
                 ordinal: number,
                 description: text,
                 subscopes: scopes,
-                span: Span {
-                    offset: start,
-                    length: outer.offset - start,
-                },
+                span: outer.span_since(start),
             });
         })
     }
@@ -2175,10 +2181,7 @@ impl<'i> Parser<'i> {
                 bullet: '-',
                 description: text,
                 subscopes: scopes,
-                span: Span {
-                    offset: start,
-                    length: outer.offset - start,
-                },
+                span: outer.span_since(start),
             });
         })
     }
@@ -2223,10 +2226,7 @@ impl<'i> Parser<'i> {
                     ordinal: letter,
                     description: text,
                     subscopes: scopes,
-                    span: Span {
-                        offset: start,
-                        length: outer.offset - start,
-                    },
+                    span: outer.span_since(start),
                 })
             },
         )
@@ -2259,10 +2259,7 @@ impl<'i> Parser<'i> {
                     bullet: '-',
                     description: text,
                     subscopes: scopes,
-                    span: Span {
-                        offset: start,
-                        length: outer.offset - start,
-                    },
+                    span: outer.span_since(start),
                 })
             },
         )
@@ -2305,10 +2302,7 @@ impl<'i> Parser<'i> {
                     ordinal: numeral,
                     description: text,
                     subscopes: scopes,
-                    span: Span {
-                        offset: start,
-                        length: outer.offset - start,
-                    },
+                    span: outer.span_since(start),
                 })
             },
         )
@@ -2543,6 +2537,7 @@ impl<'i> Parser<'i> {
                     break;
                 }
 
+                let param_start = outer.offset;
                 if content.starts_with("```") {
                     let (lang, lines) = outer
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())
@@ -2554,16 +2549,19 @@ impl<'i> Parser<'i> {
                             ) => ParsingError::InvalidMultiline(offset, 0),
                             _ => err,
                         })?;
-                    params.push(Expression::Multiline(lang, lines));
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::Multiline(lang, lines, span));
                 } else if content.starts_with("\"") {
                     let parts =
                         outer.take_block_chars("a string literal", '"', '"', false, |inner| {
                             inner.parse_string_pieces(inner.source)
                         })?;
-                    params.push(Expression::String(parts));
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::String(parts, span));
                 } else if is_numeric_quantity(content) {
                     let numeric = outer.read_numeric_quantity()?;
-                    params.push(Expression::Number(numeric));
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::Number(numeric, span));
                 } else if is_numeric_integral(content)
                     || content
                         .as_bytes()
@@ -2576,10 +2574,12 @@ impl<'i> Parser<'i> {
                             .is_some_and(|b| b.is_ascii_digit())
                 {
                     let decimal = outer.read_decimal_part()?;
-                    params.push(Expression::Number(Numeric::Integral(decimal.number)));
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::Number(Numeric::Integral(decimal.number), span));
                 } else {
                     let name = outer.read_identifier()?;
-                    params.push(Expression::Variable(name));
+                    let span = name.span;
+                    params.push(Expression::Variable(name, span));
                 }
 
                 // Handle comma separation
@@ -2743,10 +2743,7 @@ impl<'i> Parser<'i> {
                 let responses = self.read_responses()?;
                 scopes.push(Scope::ResponseBlock {
                     responses,
-                    span: Span {
-                        offset: responses_start,
-                        length: self.offset - responses_start,
-                    },
+                    span: self.span_since(responses_start),
                 });
             } else {
                 break;
@@ -2765,10 +2762,7 @@ impl<'i> Parser<'i> {
             Ok(Scope::AttributeBlock {
                 attributes,
                 subscopes,
-                span: Span {
-                    offset: start,
-                    length: outer.offset - start,
-                },
+                span: outer.span_since(start),
             })
         })
     }
@@ -2791,10 +2785,7 @@ impl<'i> Parser<'i> {
                 Ok(Scope::CodeBlock {
                     expressions,
                     subscopes,
-                    span: Span {
-                        offset: start,
-                        length: outer.offset - start,
-                    },
+                    span: outer.span_since(start),
                 })
             },
         )

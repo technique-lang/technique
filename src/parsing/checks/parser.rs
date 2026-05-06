@@ -465,9 +465,9 @@ fn reading_invocations() {
         Ok(Invocation {
             target: Target::Local(Identifier::dummy("greetings")),
             parameters: Some(vec![
-                Expression::Variable(Identifier::dummy("name")),
-                Expression::Variable(Identifier::dummy("title")),
-                Expression::Variable(Identifier::dummy("occupation"))
+                Expression::Variable(Identifier::dummy("name"), Span::default()),
+                Expression::Variable(Identifier::dummy("title"), Span::default()),
+                Expression::Variable(Identifier::dummy("occupation"), Span::default())
             ])
         })
     );
@@ -1110,7 +1110,10 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Variable(Identifier::dummy("count"))])
+        Ok(vec![Expression::Variable(
+            Identifier::dummy("count"),
+            Span::default()
+        )])
     );
 
     // Test function with simple parameter
@@ -1118,10 +1121,16 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("sum"),
-            parameters: vec![Expression::Variable(Identifier::dummy("count"))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("sum"),
+                parameters: vec![Expression::Variable(
+                    Identifier::dummy("count"),
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiple parameters
@@ -1129,14 +1138,17 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("consume"),
-            parameters: vec![
-                Expression::Variable(Identifier::dummy("apple")),
-                Expression::Variable(Identifier::dummy("banana")),
-                Expression::Variable(Identifier::dummy("chocolate"))
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("consume"),
+                parameters: vec![
+                    Expression::Variable(Identifier::dummy("apple"), Span::default()),
+                    Expression::Variable(Identifier::dummy("banana"), Span::default()),
+                    Expression::Variable(Identifier::dummy("chocolate"), Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with text parameter
@@ -1144,10 +1156,16 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::String(vec![Piece::Text("Hello, World")])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::String(
+                    vec![Piece::Text("Hello, World")],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiline string parameter
@@ -1159,13 +1177,17 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("bash"),
-                vec!["ls -l", "echo \"Done\""]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec!["ls -l", "echo \"Done\""],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with quantity parameter (like timer with duration)
@@ -1173,18 +1195,24 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("timer"),
-            parameters: vec![Expression::Number(Numeric::Scientific(Quantity {
-                mantissa: Decimal {
-                    number: 3,
-                    precision: 0
-                },
-                uncertainty: None,
-                magnitude: None,
-                symbol: "hr"
-            }))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("timer"),
+                parameters: vec![Expression::Number(
+                    Numeric::Scientific(Quantity {
+                        mantissa: Decimal {
+                            number: 3,
+                            precision: 0
+                        },
+                        uncertainty: None,
+                        magnitude: None,
+                        symbol: "hr"
+                    }),
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with integer quantity parameter
@@ -1192,10 +1220,13 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("measure"),
-            parameters: vec![Expression::Number(Numeric::Integral(100))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("measure"),
+                parameters: vec![Expression::Number(Numeric::Integral(100), Span::default())]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiple integer parameters
@@ -1203,13 +1234,16 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("seq"),
-            parameters: vec![
-                Expression::Number(Numeric::Integral(1)),
-                Expression::Number(Numeric::Integral(6))
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("seq"),
+                parameters: vec![
+                    Expression::Number(Numeric::Integral(1), Span::default()),
+                    Expression::Number(Numeric::Integral(6), Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with decimal quantity parameter
@@ -1217,21 +1251,27 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("wait"),
-            parameters: vec![
-                Expression::Number(Numeric::Scientific(Quantity {
-                    mantissa: Decimal {
-                        number: 25,
-                        precision: 1
-                    },
-                    uncertainty: None,
-                    magnitude: None,
-                    symbol: "s"
-                })),
-                Expression::String(vec![Piece::Text("yes")])
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("wait"),
+                parameters: vec![
+                    Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 25,
+                                precision: 1
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "s"
+                        }),
+                        Span::default()
+                    ),
+                    Expression::String(vec![Piece::Text("yes")], Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 }
 
@@ -1252,20 +1292,24 @@ fn multiline() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("bash"),
-                vec![
-                    "./stuff",
-                    "",
-                    "if [ true ]",
-                    "then",
-                    "    ./other args",
-                    "fi"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec![
+                        "./stuff",
+                        "",
+                        "if [ true ]",
+                        "then",
+                        "    ./other args",
+                        "fi"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test multiline without language tag
@@ -1277,10 +1321,17 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(None, vec!["ls -l", "echo \"Done\""])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    None,
+                    vec!["ls -l", "echo \"Done\""],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test multiline with intentional empty lines in the middle
@@ -1296,20 +1347,24 @@ echo "Ending"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("shell"),
-                vec![
-                    "echo \"Starting\"",
-                    "",
-                    "echo \"Middle section\"",
-                    "",
-                    "",
-                    "echo \"Ending\""
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("shell"),
+                    vec![
+                        "echo \"Starting\"",
+                        "",
+                        "echo \"Middle section\"",
+                        "",
+                        "",
+                        "echo \"Ending\""
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test that internal indentation relative to the base is preserved,
@@ -1327,20 +1382,24 @@ echo "Ending"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("python"),
-                vec![
-                    "def hello():",
-                    "    print(\"Hello\")",
-                    "    if True:",
-                    "        print(\"World\")",
-                    "",
-                    "hello()"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("python"),
+                    vec![
+                        "def hello():",
+                        "    print(\"Hello\")",
+                        "    if True:",
+                        "        print(\"World\")",
+                        "",
+                        "hello()"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test that a trailing empty line from the closing delimiter is removed
@@ -1352,10 +1411,17 @@ echo test
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(None, vec!["echo test"])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    None,
+                    vec!["echo test"],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test various indentation edge cases
@@ -1371,20 +1437,24 @@ echo test
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier::dummy("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("yaml"),
-                vec![
-                    "name: test",
-                    "items:",
-                    "  - item1",
-                    "  - item2",
-                    "config:",
-                    "  enabled: true"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::dummy("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("yaml"),
+                    vec![
+                        "name: test",
+                        "items:",
+                        "  - item1",
+                        "  - item2",
+                        "config:",
+                        "  enabled: true"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 }
 
@@ -1397,10 +1467,13 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![Pair {
-            label: "name",
-            value: Expression::String(vec![Piece::Text("Johannes Grammerly")])
-        }])])
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: "name",
+                value: Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
+            }],
+            Span::default()
+        )])
     );
 
     // Test multiline tablet with string values
@@ -1413,16 +1486,22 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "name",
-                value: Expression::String(vec![Piece::Text("Alice of Chains")])
-            },
-            Pair {
-                label: "age",
-                value: Expression::String(vec![Piece::Text("29")])
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "name",
+                    value: Expression::String(
+                        vec![Piece::Text("Alice of Chains")],
+                        Span::default()
+                    )
+                },
+                Pair {
+                    label: "age",
+                    value: Expression::String(vec![Piece::Text("29")], Span::default())
+                }
+            ],
+            Span::default()
+        )])
     );
 
     // Test tablet with mixed value types
@@ -1436,29 +1515,38 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "answer",
-                value: Expression::Number(Numeric::Integral(42))
-            },
-            Pair {
-                label: "message",
-                value: Expression::Variable(Identifier::dummy("msg"))
-            },
-            Pair {
-                label: "timestamp",
-                value: Expression::Execution(Function {
-                    target: Identifier::dummy("now"),
-                    parameters: vec![]
-                })
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42), Span::default())
+                },
+                Pair {
+                    label: "message",
+                    value: Expression::Variable(Identifier::dummy("msg"), Span::default())
+                },
+                Pair {
+                    label: "timestamp",
+                    value: Expression::Execution(
+                        Function {
+                            target: Identifier::dummy("now"),
+                            parameters: vec![]
+                        },
+                        Span::default()
+                    )
+                }
+            ],
+            Span::default()
+        )])
     );
 
     // Test empty tablet
     input.initialize("{ [ ] }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Tablet(vec![])]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Tablet(vec![], Span::default())])
+    );
 
     // Test tablet with interpolated string values
     input.initialize(
@@ -1470,16 +1558,22 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "context",
-                value: Expression::String(vec![Piece::Text("Details about the thing")])
-            },
-            Pair {
-                label: "status",
-                value: Expression::Variable(Identifier::dummy("active"))
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "context",
+                    value: Expression::String(
+                        vec![Piece::Text("Details about the thing")],
+                        Span::default()
+                    )
+                },
+                Pair {
+                    label: "status",
+                    value: Expression::Variable(Identifier::dummy("active"), Span::default())
+                }
+            ],
+            Span::default()
+        )])
     );
 }
 
@@ -1490,20 +1584,35 @@ fn numeric_literals() {
     // Test simple integer
     input.initialize("{ 42 }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Number(Numeric::Integral(42))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Number(
+            Numeric::Integral(42),
+            Span::default()
+        )])
+    );
 
     // Test negative integer
     input.initialize("{ -123 }");
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Number(Numeric::Integral(-123))])
+        Ok(vec![Expression::Number(
+            Numeric::Integral(-123),
+            Span::default()
+        )])
     );
 
     // Test zero
     input.initialize("{ 0 }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Number(Numeric::Integral(0))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Number(
+            Numeric::Integral(0),
+            Span::default()
+        )])
+    );
 }
 
 #[test]
@@ -1545,7 +1654,11 @@ fn test_foreach_expression() {
         result,
         Ok(vec![Expression::Foreach(
             vec![Identifier::dummy("item")],
-            Box::new(Expression::Variable(Identifier::dummy("items")))
+            Box::new(Expression::Variable(
+                Identifier::dummy("items"),
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 }
@@ -1560,13 +1673,17 @@ fn foreach_tuple_pattern() {
         result,
         Ok(vec![Expression::Foreach(
             vec![Identifier::dummy("design"), Identifier::dummy("component")],
-            Box::new(Expression::Execution(Function {
-                target: Identifier::dummy("zip"),
-                parameters: vec![
-                    Expression::Variable(Identifier::dummy("designs")),
-                    Expression::Variable(Identifier::dummy("components"))
-                ]
-            }))
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::dummy("zip"),
+                    parameters: vec![
+                        Expression::Variable(Identifier::dummy("designs"), Span::default()),
+                        Expression::Variable(Identifier::dummy("components"), Span::default())
+                    ]
+                },
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 
@@ -1581,14 +1698,18 @@ fn foreach_tuple_pattern() {
                 Identifier::dummy("b"),
                 Identifier::dummy("c")
             ],
-            Box::new(Expression::Execution(Function {
-                target: Identifier::dummy("zip"),
-                parameters: vec![
-                    Expression::Variable(Identifier::dummy("list1")),
-                    Expression::Variable(Identifier::dummy("list2")),
-                    Expression::Variable(Identifier::dummy("list3"))
-                ]
-            }))
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::dummy("zip"),
+                    parameters: vec![
+                        Expression::Variable(Identifier::dummy("list1"), Span::default()),
+                        Expression::Variable(Identifier::dummy("list2"), Span::default()),
+                        Expression::Variable(Identifier::dummy("list3"), Span::default())
+                    ]
+                },
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 }
@@ -1602,11 +1723,15 @@ fn tuple_binding_expression() {
     assert_eq!(
         result,
         Ok(vec![Expression::Binding(
-            Box::new(Expression::Application(Invocation {
-                target: Target::Local(Identifier::dummy("get_coordinates")),
-                parameters: Some(vec![])
-            })),
-            vec![Identifier::dummy("x"), Identifier::dummy("y")]
+            Box::new(Expression::Application(
+                Invocation {
+                    target: Target::Local(Identifier::dummy("get_coordinates")),
+                    parameters: Some(vec![])
+                },
+                Span::default()
+            )),
+            vec![Identifier::dummy("x"), Identifier::dummy("y")],
+            Span::default()
         )])
     );
 }
@@ -1619,9 +1744,13 @@ fn test_repeat_expression() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Repeat(Box::new(Expression::Variable(
-            Identifier::dummy("count")
-        )))])
+        Ok(vec![Expression::Repeat(
+            Box::new(Expression::Variable(
+                Identifier::dummy("count"),
+                Span::default()
+            )),
+            Span::default()
+        )])
     );
 }
 
@@ -1645,7 +1774,10 @@ fn test_repeat_keyword_boundary() {
     // Should parse as identifier, not repeat
     assert_eq!(
         result,
-        Ok(vec![Expression::Variable(Identifier::dummy("repeater"))])
+        Ok(vec![Expression::Variable(
+            Identifier::dummy("repeater"),
+            Span::default()
+        )])
     );
 }
 
@@ -2231,7 +2363,7 @@ This is { exec(a,
 
     // Second element should be the multiline code inline
     match &descriptives[1] {
-        Descriptive::CodeInline(Expression::Execution(func)) => {
+        Descriptive::CodeInline(Expression::Execution(func, _)) => {
             assert_eq!(
                 func.target
                     .value,
@@ -2243,7 +2375,7 @@ This is { exec(a,
                 3
             );
             // Check that all parameters were parsed correctly
-            if let Expression::Variable(Identifier { value: name, .. }) = &func.parameters[0] {
+            if let Expression::Variable(Identifier { value: name, .. }, _) = &func.parameters[0] {
                 assert_eq!(*name, "a");
             } else {
                 panic!("First parameter should be variable 'a'");

@@ -697,9 +697,11 @@ before_leaving :
                                     subscopes: vec![Scope::CodeBlock {
                                         expressions: vec![Expression::Foreach(
                                             vec![Identifier::dummy("specimen")],
-                                            Box::new(Expression::Variable(Identifier::dummy(
-                                                "specimens"
-                                            )))
+                                            Box::new(Expression::Variable(
+                                                Identifier::dummy("specimens"),
+                                                Span::default()
+                                            )),
+                                            Span::default(),
                                         )],
                                         subscopes: vec![Scope::AttributeBlock {
                                             attributes: vec![Attribute::Role(Identifier::dummy(
@@ -1429,7 +1431,8 @@ III. Implementation
                                                         )),
                                                         parameters: Some(vec![
                                                             Expression::Variable(
-                                                                Identifier::dummy("concept")
+                                                                Identifier::dummy("concept"),
+                                                                Span::default(),
                                                             )
                                                         ]),
                                                     }),
@@ -1448,7 +1451,8 @@ III. Implementation
                                                         )),
                                                         parameters: Some(vec![
                                                             Expression::Variable(
-                                                                Identifier::dummy("concept")
+                                                                Identifier::dummy("concept"),
+                                                                Span::default(),
                                                             )
                                                         ]),
                                                     }),

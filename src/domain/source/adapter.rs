@@ -48,11 +48,13 @@ fn coalesce(fragments: Vec<Fragment>) -> Vec<Fragment> {
                 && frag.syntax != "BlockBegin"
                 && frag.syntax != "BlockEnd"
             {
-                last.content.push_str(&frag.content);
+                last.content
+                    .push_str(&frag.content);
                 continue;
             }
             if is_text_whitespace(&frag) {
-                last.content.push_str(&frag.content);
+                last.content
+                    .push_str(&frag.content);
                 continue;
             }
         }
@@ -64,10 +66,11 @@ fn coalesce(fragments: Vec<Fragment>) -> Vec<Fragment> {
 
 fn is_text_whitespace(frag: &Fragment) -> bool {
     (frag.syntax == "Neutral" || frag.syntax == "Description")
-        && !frag.content.is_empty()
+        && !frag
+            .content
+            .is_empty()
         && frag
             .content
             .bytes()
             .all(|b| b == b' ')
 }
-

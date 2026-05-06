@@ -477,7 +477,10 @@ author of the Technique.
                 },
                 Invocation {
                     target: Target::Local(Identifier::dummy("check_vitals")),
-                    parameters: Some(vec![Expression::Variable(Identifier::dummy("patient"))]),
+                    parameters: Some(vec![Expression::Variable(
+                        Identifier::dummy("patient"),
+                        Span::default(),
+                    )]),
                 },
             ];
 
@@ -504,7 +507,10 @@ If the procedure takes parameters they can be specified in parenthesis:
             let examples = vec![
                 Function {
                     target: Identifier::dummy("exec"),
-                    parameters: vec![Expression::String(vec![Piece::Text("ls -la")])],
+                    parameters: vec![Expression::String(
+                        vec![Piece::Text("ls -la")],
+                        Span::default(),
+                    )],
                 },
                 Function {
                     target: Identifier::dummy("now"),
@@ -513,8 +519,8 @@ If the procedure takes parameters they can be specified in parenthesis:
                 Function {
                     target: Identifier::dummy("calculate"),
                     parameters: vec![
-                        Expression::Variable(Identifier::dummy("a")),
-                        Expression::Variable(Identifier::dummy("b")),
+                        Expression::Variable(Identifier::dummy("a"), Span::default()),
+                        Expression::Variable(Identifier::dummy("b"), Span::default()),
                     ],
                 },
             ];
@@ -541,14 +547,27 @@ expressions as parameters as required:
         }
         ParsingError::InvalidCodeBlock(_, _) => {
             let examples = vec![
-                Expression::Execution(Function {
-                    target: Identifier::dummy("exec"),
-                    parameters: vec![Expression::String(vec![Piece::Text("command")])],
-                }),
-                Expression::Repeat(Box::new(Expression::Number(Numeric::Integral(5)))),
+                Expression::Execution(
+                    Function {
+                        target: Identifier::dummy("exec"),
+                        parameters: vec![Expression::String(
+                            vec![Piece::Text("command")],
+                            Span::default(),
+                        )],
+                    },
+                    Span::default(),
+                ),
+                Expression::Repeat(
+                    Box::new(Expression::Number(Numeric::Integral(5), Span::default())),
+                    Span::default(),
+                ),
                 Expression::Foreach(
                     vec![Identifier::dummy("patient")],
-                    Box::new(Expression::Variable(Identifier::dummy("patients"))),
+                    Box::new(Expression::Variable(
+                        Identifier::dummy("patients"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
             ];
 
@@ -691,11 +710,19 @@ nested underneath a role or place assignment.
             let examples = vec![
                 Expression::Foreach(
                     vec![Identifier::dummy("patient")],
-                    Box::new(Expression::Variable(Identifier::dummy("patients"))),
+                    Box::new(Expression::Variable(
+                        Identifier::dummy("patients"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
                 Expression::Foreach(
                     vec![Identifier::dummy("name"), Identifier::dummy("value")],
-                    Box::new(Expression::Variable(Identifier::dummy("data"))),
+                    Box::new(Expression::Variable(
+                        Identifier::dummy("data"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
             ];
 
