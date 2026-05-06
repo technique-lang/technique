@@ -841,6 +841,8 @@ impl<'i> Parser<'i> {
     }
 
     fn read_technique_header(&mut self) -> Result<Metadata<'i>, ParsingError> {
+        let start = self.offset;
+
         // Process magic line
         let version = if is_magic_line(self.source) {
             let result = self.read_magic_line()?;
@@ -873,6 +875,7 @@ impl<'i> Parser<'i> {
             license,
             copyright,
             domain,
+            span: self.span_since(start),
         })
     }
 
@@ -2335,15 +2338,18 @@ impl<'i> Parser<'i> {
                         // standalone CodeBlock wrapped in a Paragraph
 
                         // FIXME this needs to be promoted to a Scope::CodeBlock? Or better yet shouldnt' be here?
+                        let para_start = outer.offset;
                         let expressions = outer.read_code_block()?;
+                        let para_span = outer.span_since(para_start);
                         for expr in expressions {
                             if let Expression::Separator = expr {
                                 continue;
                             }
-                            results.push(Paragraph(vec![Descriptive::CodeInline(expr)]));
+                            results.push(Paragraph(vec![Descriptive::CodeInline(expr)], para_span));
                         }
                     } else {
                         // Paragraph container
+                        let para_start = outer.offset;
                         let descriptives = outer.take_paragraph(|parser| {
                             let mut content = vec![];
 
@@ -2441,7 +2447,7 @@ impl<'i> Parser<'i> {
                         })?;
 
                         if !descriptives.is_empty() {
-                            results.push(Paragraph(descriptives));
+                            results.push(Paragraph(descriptives, outer.span_since(para_start)));
                         }
                     }
                 }
@@ -2648,7 +2654,7 @@ impl<'i> Parser<'i> {
                         value: "*",
                         span: inner.span_of(star),
                     };
-                    attributes.push(Attribute::Role(identifier));
+                    attributes.push(Attribute::Role(identifier, inner.span_of(trimmed)));
                 }
                 // Check if it's a regular role '@'
                 else if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
@@ -2662,7 +2668,7 @@ impl<'i> Parser<'i> {
                             role_name.len(),
                             role_name.to_string(),
                         ))?;
-                    attributes.push(Attribute::Role(identifier));
+                    attributes.push(Attribute::Role(identifier, inner.span_of(trimmed)));
                 }
                 // Check if it's a place '^'
                 else if let Some(captures) = regex!(r"^\^([a-z][a-z0-9_]*)$").captures(trimmed) {
@@ -2680,7 +2686,7 @@ impl<'i> Parser<'i> {
                             place_name.len(),
                             place_name.to_string(),
                         ))?;
-                    attributes.push(Attribute::Place(identifier));
+                    attributes.push(Attribute::Place(identifier, inner.span_of(trimmed)));
                 } else {
                     // Check if this looks like a malformed attribute (starts with @ or ^)
                     if is_attribute_pattern(trimmed) {

@@ -26,6 +26,7 @@ mod verify {
                 license: Some("MIT"),
                 copyright: None,
                 domain: Some("checklist"),
+                span: Span::default(),
             }),
             body: None,
         };
@@ -74,6 +75,7 @@ first : A -> B
                 license: Some("PD"),
                 copyright: Some("2025 The First Procedure Society, Inc"),
                 domain: None,
+                span: Span::default(),
             }),
             body: Some(Technique::Procedures(vec![
                 Procedure {
@@ -135,17 +137,21 @@ second : [Thing] -> (Who, Where, Why)
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text("Eat breakfast.")])],
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
+                                "Eat breakfast.",
+                            )])],
                             subscopes: vec![],
                             span: Span::default(),
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text("Win a stage:")])],
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
+                                "Win a stage:",
+                            )])],
                             subscopes: vec![
                                 Scope::DependentBlock {
                                     ordinal: "a",
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Ride really fast, then",
                                     )])],
                                     subscopes: vec![],
@@ -153,7 +159,7 @@ second : [Thing] -> (Who, Where, Why)
                                 },
                                 Scope::DependentBlock {
                                     ordinal: "b",
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Win the sprint.",
                                     )])],
                                     subscopes: vec![],
@@ -164,7 +170,9 @@ second : [Thing] -> (Who, Where, Why)
                         },
                         Scope::DependentBlock {
                             ordinal: "3",
-                            description: vec![Paragraph(vec![Descriptive::Text("Eat dinner.")])],
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
+                                "Eat dinner.",
+                            )])],
                             subscopes: vec![],
                             span: Span::default(),
                         },
@@ -248,13 +256,15 @@ vibe_coding :
                 signature: None,
                 elements: vec![
                     Element::Description(
-                        vec![Paragraph(vec![Descriptive::Text("We must take action!")])],
+                        vec![Paragraph::new(vec![Descriptive::Text(
+                            "We must take action!",
+                        )])],
                         Span::default(),
                     ),
                     Element::Steps(
                         vec![Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![
+                            description: vec![Paragraph::new(vec![
                                 Descriptive::Text("To take the action, we must:"),
                                 Descriptive::CodeInline(Expression::Execution(
                                     Function {
@@ -308,7 +318,7 @@ We must take action!
                 signature: None,
                 elements: vec![
                     Element::Description(
-                        vec![Paragraph(vec![Descriptive::Text(
+                        vec![Paragraph::new(vec![Descriptive::Text(
                             "Record everything, with timestamps.",
                         )])],
                         Span::default(),
@@ -316,11 +326,14 @@ We must take action!
                     Element::Steps(
                         vec![Scope::ParallelBlock {
                             bullet: '-',
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Record event as it happens",
                             )])],
                             subscopes: vec![Scope::AttributeBlock {
-                                attributes: vec![Attribute::Role(Identifier::dummy("journalist"))],
+                                attributes: vec![Attribute::Role(
+                                    Identifier::dummy("journalist"),
+                                    Span::default(),
+                                )],
                                 subscopes: vec![Scope::CodeBlock {
                                     expressions: vec![Expression::Tablet(
                                         vec![
@@ -394,13 +407,13 @@ Record everything, with timestamps.
                     Element::Steps(
                         vec![Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Verbally confirm:",
                             )])],
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "The name of the surgical procedure(s).",
                                     )])],
                                     subscopes: vec![],
@@ -408,7 +421,7 @@ Record everything, with timestamps.
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Completion of instrument, sponge, and needle counts.",
                                     )])],
                                     subscopes: vec![],
@@ -416,7 +429,7 @@ Record everything, with timestamps.
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Specimen labelling",
                                     )])],
                                     subscopes: vec![Scope::CodeBlock {
@@ -429,12 +442,13 @@ Record everything, with timestamps.
                                             Span::default(),
                                         )],
                                         subscopes: vec![Scope::AttributeBlock {
-                                            attributes: vec![Attribute::Role(Identifier::dummy(
-                                                "nursing_team",
-                                            ))],
+                                            attributes: vec![Attribute::Role(
+                                                Identifier::dummy("nursing_team"),
+                                                Span::default(),
+                                            )],
                                             subscopes: vec![Scope::DependentBlock {
                                                 ordinal: "a",
-                                                description: vec![Paragraph(vec![
+                                                description: vec![Paragraph::new(vec![
                                                 Descriptive::Text(
                                                     "Read specimen labels aloud, including patient",
                                                 ),
@@ -451,7 +465,7 @@ Record everything, with timestamps.
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Whether there are any equipment problems to be addressed.",
                                     )])],
                                     subscopes: vec![],
@@ -505,13 +519,13 @@ before_leaving :
                     vec![
                         Scope::SectionChunk {
                             numeral: "I",
-                            title: Some(Paragraph(vec![Descriptive::Text("First Section")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("First Section")])),
                             body: Technique::Procedures(vec![]),
                             span: Span::default(),
                         },
                         Scope::SectionChunk {
                             numeral: "II",
-                            title: Some(Paragraph(vec![Descriptive::Text("Second Section")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("Second Section")])),
                             body: Technique::Procedures(vec![]),
                             span: Span::default(),
                         },
@@ -558,10 +572,10 @@ III.
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+                            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
                             subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
-                                description: vec![Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph::new(vec![Descriptive::Text(
                                     "Substep with response",
                                 )])],
                                 subscopes: vec![Scope::ResponseBlock {
@@ -569,10 +583,12 @@ III.
                                         Response {
                                             value: "Yes",
                                             condition: None,
+                                            span: Span::default(),
                                         },
                                         Response {
                                             value: "No",
                                             condition: None,
+                                            span: Span::default(),
                                         },
                                     ],
                                     span: Span::default(),
@@ -583,13 +599,14 @@ III.
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Simple step with response",
                             )])],
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Confirmed",
                                     condition: None,
+                                    span: Span::default(),
                                 }],
                                 span: Span::default(),
                             }],

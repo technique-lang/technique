@@ -557,7 +557,7 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("First step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("First step")])],
             subscopes: vec![],
             span: Span::default(),
         })
@@ -575,7 +575,7 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "a top-level task to be one in parallel with"
             )]),],
             subscopes: vec![],
@@ -587,7 +587,9 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "another top-level task"
+            )]),],
             subscopes: vec![],
             span: Span::default(),
         })
@@ -604,7 +606,7 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Have you done the first thing in the first one?"
             )])],
             subscopes: vec![],
@@ -629,7 +631,9 @@ fn reading_substeps_basic() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "a",
-            description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "First subordinate task"
+            )])],
             subscopes: vec![],
             span: Span::default(),
         })
@@ -642,7 +646,7 @@ fn reading_substeps_basic() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Parallel task")])],
             subscopes: vec![],
             span: Span::default(),
         })
@@ -666,17 +670,17 @@ fn single_step_with_dependent_substeps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
             subscopes: vec![
                 Scope::DependentBlock {
                     ordinal: "a",
-                    description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
                     span: Span::default(),
                 },
                 Scope::DependentBlock {
                     ordinal: "b",
-                    description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
                     span: Span::default(),
                 },
@@ -703,17 +707,17 @@ fn single_step_with_parallel_substeps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
             subscopes: vec![
                 Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
                     span: Span::default(),
                 },
                 Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
                     span: Span::default(),
                 },
@@ -741,10 +745,10 @@ fn multiple_steps_with_substeps() {
         first_result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("First step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("First step")])],
             subscopes: vec![Scope::DependentBlock {
                 ordinal: "a",
-                description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
+                description: vec![Paragraph::new(vec![Descriptive::Text("Substep")])],
                 subscopes: vec![],
                 span: Span::default(),
             }],
@@ -756,7 +760,7 @@ fn multiple_steps_with_substeps() {
         second_result,
         Ok(Scope::DependentBlock {
             ordinal: "2",
-            description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Second step")])],
             subscopes: vec![],
             span: Span::default(),
         })
@@ -807,23 +811,25 @@ fn read_step_with_content() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Have you done the first thing in the first one?"
             )])],
             subscopes: vec![Scope::DependentBlock {
                 ordinal: "a",
-                description: vec![Paragraph(vec![Descriptive::Text(
+                description: vec![Paragraph::new(vec![Descriptive::Text(
                     "Do the first thing. Then ask yourself if you are done:"
                 )])],
                 subscopes: vec![Scope::ResponseBlock {
                     responses: vec![
                         Response {
                             value: "Yes",
-                            condition: None
+                            condition: None,
+                            span: Span::default()
                         },
                         Response {
                             value: "No",
-                            condition: Some("but I have an excuse")
+                            condition: Some("but I have an excuse"),
+                            span: Span::default()
                         }
                     ],
                     span: Span::default(),
@@ -1846,15 +1852,18 @@ fn splitting_by() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Maybe",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1871,7 +1880,8 @@ fn reading_responses() {
         result,
         Ok(vec![Response {
             value: "Yes",
-            condition: None
+            condition: None,
+            span: Span::default()
         }])
     );
 
@@ -1883,11 +1893,13 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1900,15 +1912,18 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Not Applicable",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1920,7 +1935,8 @@ fn reading_responses() {
         result,
         Ok(vec![Response {
             value: "Yes",
-            condition: Some("and equipment available")
+            condition: Some("and equipment available"),
+            span: Span::default()
         }])
     );
 
@@ -1932,11 +1948,13 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Option A",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Option B",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1949,14 +1967,23 @@ fn reading_attributes() {
     // Test simple role
     input.initialize("@chef");
     let result = input.read_attributes();
-    assert_eq!(result, Ok(vec![Attribute::Role(Identifier::dummy("chef"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Attribute::Role(
+            Identifier::dummy("chef"),
+            Span::default()
+        )])
+    );
 
     // Test simple place
     input.initialize("^kitchen");
     let result = input.read_attributes();
     assert_eq!(
         result,
-        Ok(vec![Attribute::Place(Identifier::dummy("kitchen"))])
+        Ok(vec![Attribute::Place(
+            Identifier::dummy("kitchen"),
+            Span::default()
+        )])
     );
 
     // Test multiple roles
@@ -1965,8 +1992,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("master_chef")),
-            Attribute::Role(Identifier::dummy("barista"))
+            Attribute::Role(Identifier::dummy("master_chef"), Span::default()),
+            Attribute::Role(Identifier::dummy("barista"), Span::default())
         ])
     );
 
@@ -1976,8 +2003,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier::dummy("kitchen")),
-            Attribute::Place(Identifier::dummy("bath_room"))
+            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
+            Attribute::Place(Identifier::dummy("bath_room"), Span::default())
         ])
     );
 
@@ -1987,8 +2014,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("chef")),
-            Attribute::Place(Identifier::dummy("bathroom"))
+            Attribute::Role(Identifier::dummy("chef"), Span::default()),
+            Attribute::Place(Identifier::dummy("bathroom"), Span::default())
         ])
     );
 
@@ -1998,8 +2025,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier::dummy("kitchen")),
-            Attribute::Role(Identifier::dummy("barista"))
+            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
+            Attribute::Role(Identifier::dummy("barista"), Span::default())
         ])
     );
 
@@ -2009,10 +2036,10 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("chef")),
-            Attribute::Place(Identifier::dummy("kitchen")),
-            Attribute::Role(Identifier::dummy("barista")),
-            Attribute::Place(Identifier::dummy("dining_room"))
+            Attribute::Role(Identifier::dummy("chef"), Span::default()),
+            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
+            Attribute::Role(Identifier::dummy("barista"), Span::default()),
+            Attribute::Place(Identifier::dummy("dining_room"), Span::default())
         ])
     );
 
@@ -2025,6 +2052,94 @@ fn reading_attributes() {
     input.initialize("kitchen");
     let result = input.read_attributes();
     assert!(result.is_err());
+}
+
+#[test]
+fn attribute_spans_include_marker() {
+    let mut input = Parser::new();
+
+    input.initialize("@chef");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    assert_eq!(
+        result[0],
+        Attribute::Role(Identifier::dummy("chef"), Span::default())
+    );
+    if let Attribute::Role(id, span) = &result[0] {
+        assert_eq!(
+            *span,
+            Span {
+                offset: 0,
+                length: 5
+            }
+        );
+        assert_eq!(
+            id.span,
+            Span {
+                offset: 1,
+                length: 4
+            }
+        );
+    }
+
+    input.initialize("^kitchen");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    if let Attribute::Place(id, span) = &result[0] {
+        assert_eq!(
+            *span,
+            Span {
+                offset: 0,
+                length: 8
+            }
+        );
+        assert_eq!(
+            id.span,
+            Span {
+                offset: 1,
+                length: 7
+            }
+        );
+    }
+
+    input.initialize("@waiter + ^milliways");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    if let Attribute::Role(id, span) = &result[0] {
+        assert_eq!(
+            *span,
+            Span {
+                offset: 0,
+                length: 7
+            }
+        );
+        assert_eq!(
+            id.span,
+            Span {
+                offset: 1,
+                length: 6
+            }
+        );
+    }
+    if let Attribute::Place(id, span) = &result[1] {
+        assert_eq!(
+            *span,
+            Span {
+                offset: 10,
+                length: 10
+            }
+        );
+        assert_eq!(
+            id.span,
+            Span {
+                offset: 11,
+                length: 9
+            }
+        );
+    }
 }
 
 #[test]
@@ -2047,11 +2162,11 @@ fn step_with_role_assignment() {
         Scope::DependentBlock {
             ordinal: "1",
 
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Check the patient's vital signs"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier::dummy("nurse"))],
+                attributes: vec![Attribute::Role(Identifier::dummy("nurse"), Span::default())],
                 subscopes: vec![],
                 span: Span::default(),
             }],
@@ -2080,14 +2195,17 @@ fn substep_with_role_assignment() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Verify patient identity"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier::dummy("surgeon"))],
+                attributes: vec![Attribute::Role(
+                    Identifier::dummy("surgeon"),
+                    Span::default()
+                )],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
-                    description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Check ID")])],
                     subscopes: vec![],
                     span: Span::default(),
                 }],
@@ -2118,12 +2236,17 @@ fn parallel_step_with_role_assignment() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "Monitor patient vitals"
+            )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier::dummy("nursing_team"))],
+                attributes: vec![Attribute::Role(
+                    Identifier::dummy("nursing_team"),
+                    Span::default()
+                )],
                 subscopes: vec![Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Check readings")])],
                     subscopes: vec![],
                     span: Span::default(),
                 }],
@@ -2157,13 +2280,16 @@ fn two_roles_with_substeps() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Review events.")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Review events.")])],
             subscopes: vec![
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(Identifier::dummy("surgeon"))],
+                    attributes: vec![Attribute::Role(
+                        Identifier::dummy("surgeon"),
+                        Span::default()
+                    )],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "a",
-                        description: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
                             "What are the steps?"
                         )])],
                         subscopes: vec![],
@@ -2172,10 +2298,10 @@ fn two_roles_with_substeps() {
                     span: Span::default(),
                 },
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(Identifier::dummy("nurse"))],
+                    attributes: vec![Attribute::Role(Identifier::dummy("nurse"), Span::default())],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "b",
-                        description: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
                             "What are the concerns?"
                         )])],
                         subscopes: vec![],

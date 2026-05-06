@@ -669,17 +669,20 @@ parallel steps, but again this is not compulsory.
             let examples = vec![
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Role(Identifier::dummy("president_of_the_galaxy")),
-                        Attribute::Role(Identifier::dummy("femme_fatale")),
+                        Attribute::Role(
+                            Identifier::dummy("president_of_the_galaxy"),
+                            Span::default(),
+                        ),
+                        Attribute::Role(Identifier::dummy("femme_fatale"), Span::default()),
                     ],
                     subscopes: vec![],
                     span: Span::default(),
                 },
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Place(Identifier::dummy("milliways")),
-                        Attribute::Role(Identifier::dummy("waiter")),
-                        Attribute::Role(Identifier::dummy("dish_of_the_day")),
+                        Attribute::Place(Identifier::dummy("milliways"), Span::default()),
+                        Attribute::Role(Identifier::dummy("waiter"), Span::default()),
+                        Attribute::Role(Identifier::dummy("dish_of_the_day"), Span::default()),
                     ],
                     subscopes: vec![],
                     span: Span::default(),
@@ -751,28 +754,34 @@ a list of tuples.
                     Response {
                         value: "Rock",
                         condition: None,
+                        span: Span::default(),
                     },
                     Response {
                         value: "Paper",
                         condition: None,
+                        span: Span::default(),
                     },
                     Response {
                         value: "Scissors",
                         condition: None,
+                        span: Span::default(),
                     },
                 ],
                 vec![Response {
                     value: "Confirmed",
                     condition: None,
+                    span: Span::default(),
                 }],
                 vec![
                     Response {
                         value: "Yes",
                         condition: Some("but with explanation"),
+                        span: Span::default(),
                     },
                     Response {
                         value: "No",
                         condition: None,
+                        span: Span::default(),
                     },
                 ],
             ];

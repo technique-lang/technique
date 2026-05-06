@@ -16,12 +16,22 @@ pub struct Document<'i> {
     pub body: Option<Technique<'i>>,
 }
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug)]
 pub struct Metadata<'i> {
     pub version: u8,
     pub license: Option<&'i str>,
     pub copyright: Option<&'i str>,
     pub domain: Option<&'i str>,
+    pub span: Span,
+}
+
+impl PartialEq for Metadata<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.version == other.version
+            && self.license == other.license
+            && self.copyright == other.copyright
+            && self.domain == other.domain
+    }
 }
 
 impl Default for Metadata<'_> {
@@ -31,6 +41,7 @@ impl Default for Metadata<'_> {
             license: None,
             copyright: None,
             domain: None,
+            span: Span::default(),
         }
     }
 }
@@ -196,8 +207,20 @@ pub struct Invocation<'i> {
 
 // types for descriptive content
 
-#[derive(Eq, Debug, PartialEq)]
-pub struct Paragraph<'i>(pub Vec<Descriptive<'i>>);
+#[derive(Eq, Debug)]
+pub struct Paragraph<'i>(pub Vec<Descriptive<'i>>, pub Span);
+
+impl PartialEq for Paragraph<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<'i> Paragraph<'i> {
+    pub fn new(descriptives: Vec<Descriptive<'i>>) -> Self {
+        Paragraph(descriptives, Span::default())
+    }
+}
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum Descriptive<'i> {
@@ -334,18 +357,35 @@ impl PartialEq for Scope<'_> {
 
 // enum responses like 'Yes' | 'No'
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug)]
 pub struct Response<'i> {
     pub value: &'i str,
     pub condition: Option<&'i str>,
+    pub span: Span,
+}
+
+impl PartialEq for Response<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value && self.condition == other.condition
+    }
 }
 
 // attributes like @chef
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug)]
 pub enum Attribute<'i> {
-    Role(Identifier<'i>),
-    Place(Identifier<'i>),
+    Role(Identifier<'i>, Span),
+    Place(Identifier<'i>, Span),
+}
+
+impl PartialEq for Attribute<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Attribute::Role(a, _), Attribute::Role(b, _)) => a == b,
+            (Attribute::Place(a, _), Attribute::Place(b, _)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 // now types used within code blocks
@@ -582,7 +622,11 @@ pub fn validate_response(input: &str) -> Option<Response<'_>> {
         None => None,
     };
 
-    Some(Response { value, condition })
+    Some(Response {
+        value,
+        condition,
+        span: Span::default(),
+    })
 }
 
 #[cfg(test)]
@@ -789,6 +833,7 @@ mod check {
             license: None,
             copyright: None,
             domain: None,
+            span: Span::default(),
         };
 
         t1
@@ -801,6 +846,7 @@ mod check {
             license: None,
             copyright: None,
             domain: None,
+            span: Span::default(),
         };
 
         assert_eq!(Metadata::default(), t1);
@@ -810,6 +856,7 @@ mod check {
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
             domain: Some("checklist"),
+            span: Span::default(),
         };
 
         let t3 = maker();

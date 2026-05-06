@@ -127,7 +127,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Role(id) => Some(id.value),
+                    Attribute::Role(id, _) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -142,7 +142,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Place(id) => Some(id.value),
+                    Attribute::Place(id, _) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -557,7 +557,7 @@ mod check {
     // Pure text: "Ensure physical and digital safety"
     #[test]
     fn text_only_paragraph() {
-        let p = Paragraph(vec![Descriptive::Text(
+        let p = Paragraph::new(vec![Descriptive::Text(
             "Ensure physical and digital safety",
         )]);
         assert_eq!(p.text(), "Ensure physical and digital safety");
@@ -570,7 +570,7 @@ mod check {
     // Bare invocation: <ensure_safety>
     #[test]
     fn invocation_only_paragraph() {
-        let p = Paragraph(vec![Descriptive::Application(local("ensure_safety"))]);
+        let p = Paragraph::new(vec![Descriptive::Application(local("ensure_safety"))]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["ensure_safety"]);
         assert_eq!(p.content(), "ensure_safety");
@@ -580,7 +580,7 @@ mod check {
     // Text is present so content() returns just the text.
     #[test]
     fn mixed_text_and_invocation() {
-        let p = Paragraph(vec![
+        let p = Paragraph::new(vec![
             Descriptive::Text("Define Requirements"),
             Descriptive::Application(local("define_requirements")),
         ]);
@@ -592,7 +592,7 @@ mod check {
     // CodeInline with repeat: { repeat <incident_action_cycle> }
     #[test]
     fn repeat_expression() {
-        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Repeat(
+        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Repeat(
             Box::new(Expression::Application(
                 local("incident_action_cycle"),
                 Span::default(),
@@ -607,7 +607,7 @@ mod check {
     // Binding wrapping an invocation: <observe>(s) ~ e
     #[test]
     fn binding_with_invocation() {
-        let p = Paragraph(vec![Descriptive::Binding(
+        let p = Paragraph::new(vec![Descriptive::Binding(
             Box::new(Descriptive::Application(local("observe"))),
             vec![Identifier::dummy("e")],
         )]);
@@ -619,7 +619,7 @@ mod check {
     // CodeInline with foreach: { foreach design in designs }
     #[test]
     fn foreach_expression() {
-        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Foreach(
+        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Foreach(
             vec![Identifier::dummy("design")],
             Box::new(Expression::Application(local("implement"), Span::default())),
             Span::default(),

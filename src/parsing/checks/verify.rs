@@ -20,7 +20,8 @@ fn technique_header() {
             version: 1,
             license: None,
             copyright: None,
-            domain: None
+            domain: None,
+            span: Span::default(),
         })
     );
 
@@ -39,7 +40,8 @@ fn technique_header() {
             version: 1,
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
-            domain: Some("checklist")
+            domain: Some("checklist"),
+            span: Span::default(),
         })
     );
 }
@@ -169,14 +171,16 @@ This is the first one.
             elements: vec![
                 Element::Title("The First", Span::default()),
                 Element::Description(
-                    vec![Paragraph(vec![Descriptive::Text("This is the first one.")])],
+                    vec![Paragraph::new(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])],
                     Span::default()
                 ),
                 Element::Steps(
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Do the first thing in the first one."
                             )])],
 
@@ -185,7 +189,7 @@ This is the first one.
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
 
@@ -231,25 +235,29 @@ This is the first one.
             elements: vec![
                 Element::Title("The First", Span::default()),
                 Element::Description(
-                    vec![Paragraph(vec![Descriptive::Text("This is the first one.")])],
+                    vec![Paragraph::new(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])],
                     Span::default()
                 ),
                 Element::Steps(
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![
                                     Response {
                                         value: "Yes",
-                                        condition: None
+                                        condition: None,
+                                        span: Span::default()
                                     },
                                     Response {
                                         value: "No",
-                                        condition: Some("but I have an excuse")
+                                        condition: Some("but I have an excuse"),
+                                        span: Span::default()
                                     }
                                 ],
                                 span: Span::default(),
@@ -258,7 +266,7 @@ This is the first one.
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
 
@@ -305,31 +313,35 @@ This is the first one.
             elements: vec![
                 Element::Title("The First", Span::default()),
                 Element::Description(
-                    vec![Paragraph(vec![Descriptive::Text("This is the first one.")])],
+                    vec![Paragraph::new(vec![Descriptive::Text(
+                        "This is the first one."
+                    )])],
                     Span::default()
                 ),
                 Element::Steps(
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Have you done the first thing in the first one?"
                             )])],
 
                             subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
-                                description: vec![Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph::new(vec![Descriptive::Text(
                                     "Do the first thing. Then ask yourself if you are done:"
                                 )])],
                                 subscopes: vec![Scope::ResponseBlock {
                                     responses: vec![
                                         Response {
                                             value: "Yes",
-                                            condition: None
+                                            condition: None,
+                                            span: Span::default()
                                         },
                                         Response {
                                             value: "No",
-                                            condition: Some("but I have an excuse")
+                                            condition: Some("but I have an excuse"),
+                                            span: Span::default()
                                         }
                                     ],
                                     span: Span::default(),
@@ -340,7 +352,7 @@ This is the first one.
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Do the second thing in the first one."
                             )])],
 
@@ -398,7 +410,7 @@ fn realistic_procedure() {
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![
+                            description: vec![Paragraph::new(vec![
                                 Descriptive::Text(
                                     "Has the patient confirmed his/her identity, site, procedure,"
                                 ),
@@ -407,7 +419,8 @@ fn realistic_procedure() {
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None
+                                    condition: None,
+                                    span: Span::default()
                                 }],
                                 span: Span::default(),
                             }],
@@ -415,18 +428,20 @@ fn realistic_procedure() {
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Is the site marked?"
                             )])],
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![
                                     Response {
                                         value: "Yes",
-                                        condition: None
+                                        condition: None,
+                                        span: Span::default()
                                     },
                                     Response {
                                         value: "Not Applicable",
-                                        condition: None
+                                        condition: None,
+                                        span: Span::default()
                                     }
                                 ],
                                 span: Span::default(),
@@ -435,13 +450,14 @@ fn realistic_procedure() {
                         },
                         Scope::DependentBlock {
                             ordinal: "3",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Is the anaesthesia machine and medication check complete?"
                             )])],
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None
+                                    condition: None,
+                                    span: Span::default()
                                 }],
                                 span: Span::default(),
                             }],
@@ -449,13 +465,14 @@ fn realistic_procedure() {
                         },
                         Scope::DependentBlock {
                             ordinal: "4",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Is the pulse oximeter on the patient and functioning?"
                             )])],
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None
+                                    condition: None,
+                                    span: Span::default()
                                 }],
                                 span: Span::default(),
                             }],
@@ -463,25 +480,27 @@ fn realistic_procedure() {
                         },
                         Scope::DependentBlock {
                             ordinal: "5",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Does the patient have a:"
                             )])],
 
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Known allergy?"
                                     )])],
                                     subscopes: vec![Scope::ResponseBlock {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None
+                                                condition: None,
+                                                span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
-                                                condition: None
+                                                condition: None,
+                                                span: Span::default()
                                             }
                                         ],
                                         span: Span::default(),
@@ -490,20 +509,22 @@ fn realistic_procedure() {
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Difficult airway or aspiration risk?"
                                     )])],
                                     subscopes: vec![Scope::ResponseBlock {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None
+                                                condition: None,
+                                                span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
                                                 condition: Some(
                                                     "and equipment/assistance available"
-                                                )
+                                                ),
+                                                span: Span::default(),
                                             }
                                         ],
                                         span: Span::default(),
@@ -512,20 +533,22 @@ fn realistic_procedure() {
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Risk of blood loss > 500 mL?"
                                     )])],
                                     subscopes: vec![Scope::ResponseBlock {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None
+                                                condition: None,
+                                                span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
                                                 condition: Some(
                                                     "and two IVs planned and fluids available"
-                                                )
+                                                ),
+                                                span: Span::default(),
                                             }
                                         ],
                                         span: Span::default(),
@@ -570,15 +593,20 @@ label_the_specimens :
             elements: vec![Element::Steps(
                 vec![Scope::DependentBlock {
                     ordinal: "1",
-                    description: vec![Paragraph(vec![Descriptive::Text("Specimen labelling")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text(
+                        "Specimen labelling"
+                    )])],
 
                     subscopes: vec![
                         Scope::AttributeBlock {
-                            attributes: vec![Attribute::Role(Identifier::dummy("nursing_team"))],
+                            attributes: vec![Attribute::Role(
+                                Identifier::dummy("nursing_team"),
+                                Span::default()
+                            )],
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Label blood tests"
                                     )])],
 
@@ -587,7 +615,7 @@ label_the_specimens :
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Label tissue samples"
                                     )])],
 
@@ -598,10 +626,13 @@ label_the_specimens :
                             span: Span::default(),
                         },
                         Scope::AttributeBlock {
-                            attributes: vec![Attribute::Role(Identifier::dummy("admin_staff"))],
+                            attributes: vec![Attribute::Role(
+                                Identifier::dummy("admin_staff"),
+                                Span::default()
+                            )],
                             subscopes: vec![Scope::DependentBlock {
                                 ordinal: "a",
-                                description: vec![Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph::new(vec![Descriptive::Text(
                                     "Prepare the envelopes"
                                 )])],
 
@@ -665,14 +696,14 @@ before_leaving :
                     vec![
                         Scope::DependentBlock {
                             ordinal: "1",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Verbally confirm:"
                             )])],
 
                             subscopes: vec![
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "The name of the surgical procedure(s)."
                                     )])],
 
@@ -681,7 +712,7 @@ before_leaving :
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Completion of instrument, sponge, and needle counts."
                                     )])],
 
@@ -690,7 +721,7 @@ before_leaving :
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Specimen labelling"
                                     )])],
 
@@ -704,12 +735,13 @@ before_leaving :
                                             Span::default(),
                                         )],
                                         subscopes: vec![Scope::AttributeBlock {
-                                            attributes: vec![Attribute::Role(Identifier::dummy(
-                                                "nursing_team",
-                                            ))],
+                                            attributes: vec![Attribute::Role(
+                                                Identifier::dummy("nursing_team"),
+                                                Span::default(),
+                                            )],
                                             subscopes: vec![Scope::DependentBlock {
                                                 ordinal: "a",
-                                                description: vec![Paragraph(vec![
+                                                description: vec![Paragraph::new(vec![
                                                 Descriptive::Text(
                                                     "Read specimen labels aloud, including patient"
                                                 ),
@@ -727,7 +759,7 @@ before_leaving :
                                 },
                                 Scope::ParallelBlock {
                                     bullet: '-',
-                                    description: vec![Paragraph(vec![Descriptive::Text(
+                                    description: vec![Paragraph::new(vec![Descriptive::Text(
                                         "Whether there are any equipment problems to be addressed."
                                     )])],
 
@@ -739,16 +771,19 @@ before_leaving :
                         },
                         Scope::DependentBlock {
                             ordinal: "2",
-                            description: vec![Paragraph(vec![Descriptive::Text(
+                            description: vec![Paragraph::new(vec![Descriptive::Text(
                                 "Post-operative care:"
                             )])],
 
                             subscopes: vec![
                                 Scope::AttributeBlock {
-                                    attributes: vec![Attribute::Role(Identifier::dummy("surgeon"))],
+                                    attributes: vec![Attribute::Role(
+                                        Identifier::dummy("surgeon"),
+                                        Span::default()
+                                    )],
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "a",
-                                        description: vec![Paragraph(vec![
+                                        description: vec![Paragraph::new(vec![
                                         Descriptive::Text(
                                             "What are the key concerns for recovery and management"
                                         ),
@@ -761,12 +796,13 @@ before_leaving :
                                     span: Span::default(),
                                 },
                                 Scope::AttributeBlock {
-                                    attributes: vec![Attribute::Role(Identifier::dummy(
-                                        "anesthetist"
-                                    ))],
+                                    attributes: vec![Attribute::Role(
+                                        Identifier::dummy("anesthetist"),
+                                        Span::default(),
+                                    )],
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "b",
-                                        description: vec![Paragraph(vec![
+                                        description: vec![Paragraph::new(vec![
                                         Descriptive::Text(
                                             "What are the key concerns for recovery and management"
                                         ),
@@ -779,12 +815,13 @@ before_leaving :
                                     span: Span::default(),
                                 },
                                 Scope::AttributeBlock {
-                                    attributes: vec![Attribute::Role(Identifier::dummy(
-                                        "nursing_team"
-                                    ))],
+                                    attributes: vec![Attribute::Role(
+                                        Identifier::dummy("nursing_team"),
+                                        Span::default(),
+                                    )],
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "c",
-                                        description: vec![Paragraph(vec![
+                                        description: vec![Paragraph::new(vec![
                                         Descriptive::Text(
                                             "What are the key concerns for recovery and management"
                                         ),
@@ -840,7 +877,7 @@ fn parallel_role_assignments() {
             assert_eq!(ordinal, "5");
             assert_eq!(
                 content,
-                vec![Paragraph(vec![Descriptive::Text(
+                vec![Paragraph::new(vec![Descriptive::Text(
                     "Review anticipated critical events."
                 )])]
             );
@@ -856,7 +893,10 @@ fn parallel_role_assignments() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("surgeon"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("surgeon"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 3); // a, b, c
             } else {
@@ -872,7 +912,10 @@ fn parallel_role_assignments() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("anaesthetist"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("anaesthetist"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 1); // d
             } else {
@@ -888,7 +931,10 @@ fn parallel_role_assignments() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("nursing_team"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("nursing_team"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 2); // e, f
             } else {
@@ -933,7 +979,7 @@ fn multiple_roles_with_dependent_substeps() {
             assert_eq!(ordinal, "1");
             assert_eq!(
                 content,
-                vec![Paragraph(vec![Descriptive::Text(
+                vec![Paragraph::new(vec![Descriptive::Text(
                     "Review surgical procedure"
                 )])]
             );
@@ -948,7 +994,10 @@ fn multiple_roles_with_dependent_substeps() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("surgeon"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("surgeon"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 3);
             } else {
@@ -964,7 +1013,10 @@ fn multiple_roles_with_dependent_substeps() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("anaesthetist"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("anaesthetist"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 2);
             } else {
@@ -980,7 +1032,10 @@ fn multiple_roles_with_dependent_substeps() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier::dummy("nursing_team"))]
+                    vec![Attribute::Role(
+                        Identifier::dummy("nursing_team"),
+                        Span::default()
+                    )]
                 );
                 assert_eq!(substeps.len(), 3);
             } else {
@@ -1032,28 +1087,35 @@ fn mixed_substeps_in_roles() {
         step,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Emergency response")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "Emergency response"
+            )])],
 
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier::dummy("team_lead"))],
+                attributes: vec![Attribute::Role(
+                    Identifier::dummy("team_lead"),
+                    Span::default()
+                )],
                 subscopes: vec![
                     Scope::DependentBlock {
                         ordinal: "a",
-                        description: vec![Paragraph(vec![Descriptive::Text("Assess situation")])],
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
+                            "Assess situation"
+                        )])],
 
                         subscopes: vec![],
                         span: Span::default(),
                     },
                     Scope::DependentBlock {
                         ordinal: "b",
-                        description: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
                             "Coordinate response"
                         )])],
 
                         subscopes: vec![
                             Scope::ParallelBlock {
                                 bullet: '-',
-                                description: vec![Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph::new(vec![Descriptive::Text(
                                     "Monitor communications"
                                 )])],
 
@@ -1062,7 +1124,7 @@ fn mixed_substeps_in_roles() {
                             },
                             Scope::ParallelBlock {
                                 bullet: '-',
-                                description: vec![Paragraph(vec![Descriptive::Text(
+                                description: vec![Paragraph::new(vec![Descriptive::Text(
                                     "Track resources"
                                 )])],
 
@@ -1074,7 +1136,7 @@ fn mixed_substeps_in_roles() {
                     },
                     Scope::DependentBlock {
                         ordinal: "c",
-                        description: vec![Paragraph(vec![Descriptive::Text("File report")])],
+                        description: vec![Paragraph::new(vec![Descriptive::Text("File report")])],
 
                         subscopes: vec![],
                         span: Span::default(),
@@ -1104,20 +1166,24 @@ fn substeps_with_responses() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
 
             subscopes: vec![Scope::DependentBlock {
                 ordinal: "a",
-                description: vec![Paragraph(vec![Descriptive::Text("Substep with response")])],
+                description: vec![Paragraph::new(vec![Descriptive::Text(
+                    "Substep with response"
+                )])],
                 subscopes: vec![Scope::ResponseBlock {
                     responses: vec![
                         Response {
                             value: "Yes",
                             condition: None,
+                            span: Span::default()
                         },
                         Response {
                             value: "No",
                             condition: None,
+                            span: Span::default()
                         },
                     ],
                     span: Span::default(),
@@ -1138,7 +1204,7 @@ fn naked_bindings() {
     let descriptive = input.read_descriptive();
     assert_eq!(
         descriptive,
-        Ok(vec![Paragraph(vec![Descriptive::Binding(
+        Ok(vec![Paragraph::new(vec![Descriptive::Binding(
             Box::new(Descriptive::Text("What is the result?")),
             vec![Identifier::dummy("answer")]
         )])])
@@ -1150,7 +1216,7 @@ fn naked_bindings() {
     let descriptive = input.read_descriptive();
     assert_eq!(
         descriptive,
-        Ok(vec![Paragraph(vec![
+        Ok(vec![Paragraph::new(vec![
             Descriptive::Binding(
                 Box::new(Descriptive::Text("Enter your name")),
                 vec![Identifier::dummy("name")]
@@ -1167,7 +1233,7 @@ fn naked_bindings() {
     let descriptive = input.read_descriptive();
     assert_eq!(
         descriptive,
-        Ok(vec![Paragraph(vec![
+        Ok(vec![Paragraph::new(vec![
             Descriptive::Text("First"),
             Descriptive::Binding(
                 Box::new(Descriptive::Application(Invocation {
@@ -1234,7 +1300,7 @@ second_section_second_procedure :
                     vec![
                         Scope::SectionChunk {
                             numeral: "I",
-                            title: Some(Paragraph(vec![Descriptive::Text("First Section")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("First Section")])),
                             body: Technique::Procedures(vec![
                                 Procedure {
                                     name: Identifier::dummy("first_section_first_procedure"),
@@ -1255,7 +1321,7 @@ second_section_second_procedure :
                         },
                         Scope::SectionChunk {
                             numeral: "II",
-                            title: Some(Paragraph(vec![Descriptive::Text("Second Section")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("Second Section")])),
                             body: Technique::Procedures(vec![
                                 Procedure {
                                     name: Identifier::dummy("second_section_first_procedure"),
@@ -1399,13 +1465,13 @@ III. Implementation
                     vec![
                         Scope::SectionChunk {
                             numeral: "I",
-                            title: Some(Paragraph(vec![Descriptive::Text("Concept")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("Concept")])),
                             body: Technique::Empty,
                             span: Span::default(),
                         },
                         Scope::SectionChunk {
                             numeral: "II",
-                            title: Some(Paragraph(vec![Descriptive::Text(
+                            title: Some(Paragraph::new(vec![Descriptive::Text(
                                 "Requirements Definition and Architecture"
                             )])),
                             body: Technique::Procedures(vec![
@@ -1423,7 +1489,7 @@ III. Implementation
                                         vec![
                                             Scope::DependentBlock {
                                                 ordinal: "2",
-                                                description: vec![Paragraph(vec![
+                                                description: vec![Paragraph::new(vec![
                                                     Descriptive::Text("Define Requirements"),
                                                     Descriptive::Application(Invocation {
                                                         target: Target::Local(Identifier::dummy(
@@ -1443,7 +1509,7 @@ III. Implementation
                                             },
                                             Scope::DependentBlock {
                                                 ordinal: "3",
-                                                description: vec![Paragraph(vec![
+                                                description: vec![Paragraph::new(vec![
                                                     Descriptive::Text("Determine Architecture"),
                                                     Descriptive::Application(Invocation {
                                                         target: Target::Local(Identifier::dummy(
@@ -1491,7 +1557,7 @@ III. Implementation
                         },
                         Scope::SectionChunk {
                             numeral: "III",
-                            title: Some(Paragraph(vec![Descriptive::Text("Implementation")])),
+                            title: Some(Paragraph::new(vec![Descriptive::Text("Implementation")])),
                             body: Technique::Empty,
                             span: Span::default(),
                         },

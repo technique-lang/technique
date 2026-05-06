@@ -979,11 +979,11 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " + ");
             }
             match attribute {
-                Attribute::Role(name) => {
+                Attribute::Role(name, _) => {
                     self.add_fragment_reference(Syntax::Attribute, "@");
                     self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
-                Attribute::Place(name) => {
+                Attribute::Place(name, _) => {
                     self.add_fragment_reference(Syntax::Attribute, "^");
                     self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
