@@ -2,6 +2,13 @@
 
 use crate::regex::*;
 
+/// Byte range within the original source. `length` excludes trailing whitespace.
+#[derive(Copy, Clone, Default, Eq, Debug, PartialEq)]
+pub struct Span {
+    pub offset: usize,
+    pub length: usize,
+}
+
 #[derive(Eq, Debug, PartialEq)]
 pub struct Document<'i> {
     pub source: Option<&'i str>,
