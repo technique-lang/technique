@@ -22,7 +22,7 @@ pub struct Program<'i> {
 }
 
 impl<'i> Program<'i> {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Program {
             procedures: Vec::new(),
         }
@@ -62,7 +62,6 @@ pub enum Operation<'i> {
         target: language::Identifier<'i>,
         arguments: Vec<Operation<'i>>,
     },
-
     Sequence(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,
