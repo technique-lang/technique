@@ -94,7 +94,7 @@ pub fn render_forma<'i>(forma: &'i Forma, renderer: &dyn Render) -> String {
 }
 
 pub fn render_identifier<'i>(identifier: &'i Identifier, renderer: &dyn Render) -> String {
-    renderer.style(Syntax::Declaration, identifier.0)
+    renderer.style(Syntax::Declaration, identifier.value)
 }
 
 pub fn render_response<'i>(response: &'i Response, renderer: &dyn Render) -> String {
@@ -151,7 +151,7 @@ pub fn render_procedure_declaration<'i>(procedure: &'i Procedure, renderer: &dyn
         Syntax::Declaration,
         procedure
             .name
-            .0,
+            .value,
     );
     if let Some(parameters) = &procedure.parameters {
         sub.append_parameters(parameters);
@@ -478,7 +478,7 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::BlockBegin, "");
 
         let name = &procedure.name;
-        self.add_fragment_reference(Syntax::Declaration, name.0);
+        self.add_fragment_reference(Syntax::Declaration, name.value);
 
         if let Some(parameters) = &procedure.parameters {
             // note that append_arguments() is for general expression
@@ -615,7 +615,7 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Structure, ",");
                 self.add_fragment_reference(Syntax::Neutral, " ");
             }
-            self.add_fragment_reference(Syntax::Variable, variable.0);
+            self.add_fragment_reference(Syntax::Variable, variable.value);
         }
         self.add_fragment_reference(Syntax::Structure, ")");
     }
@@ -976,11 +976,11 @@ impl<'i> Formatter<'i> {
             match attribute {
                 Attribute::Role(name) => {
                     self.add_fragment_reference(Syntax::Attribute, "@");
-                    self.add_fragment_reference(Syntax::Attribute, name.0);
+                    self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
                 Attribute::Place(name) => {
                     self.add_fragment_reference(Syntax::Attribute, "^");
-                    self.add_fragment_reference(Syntax::Attribute, name.0);
+                    self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
             }
         }
@@ -989,7 +989,7 @@ impl<'i> Formatter<'i> {
     pub fn append_expression(&mut self, expression: &'i Expression) {
         match expression {
             Expression::Variable(identifier) => {
-                self.add_fragment_reference(Syntax::Variable, identifier.0);
+                self.add_fragment_reference(Syntax::Variable, identifier.value);
             }
             Expression::String(pieces) => {
                 self.add_fragment_reference(Syntax::Quote, "\"");
@@ -1083,7 +1083,7 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Structure, ",");
                 self.add_fragment_reference(Syntax::Neutral, " ");
             }
-            self.add_fragment_reference(Syntax::Variable, variable.0);
+            self.add_fragment_reference(Syntax::Variable, variable.value);
         }
         if variables.len() > 1 {
             self.add_fragment_reference(Syntax::Structure, ")");
@@ -1127,7 +1127,7 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Quote, "<");
         match &invocation.target {
             Target::Local(identifier) => {
-                self.add_fragment_reference(Syntax::Invocation, identifier.0)
+                self.add_fragment_reference(Syntax::Invocation, identifier.value)
             }
             Target::Remote(external) => self.add_fragment_reference(Syntax::Invocation, external.0),
         }
@@ -1162,7 +1162,7 @@ impl<'i> Formatter<'i> {
             Syntax::Function,
             function
                 .target
-                .0,
+                .value,
         );
         self.add_fragment_reference(Syntax::Structure, "(");
 

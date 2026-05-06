@@ -307,7 +307,7 @@ fn builtin_from_expression(expr: &language::Expression) -> Option<String> {
         language::Expression::Application(inv) => builtin_from_invocation(inv),
         language::Expression::Execution(func) => builtin_suffix(
             func.target
-                .0,
+                .value,
             &func.parameters,
         ),
         language::Expression::Binding(inner, _) => builtin_from_expression(inner),
@@ -317,7 +317,7 @@ fn builtin_from_expression(expr: &language::Expression) -> Option<String> {
 
 fn builtin_from_invocation(inv: &language::Invocation) -> Option<String> {
     let name = match &inv.target {
-        language::Target::Local(id) => id.0,
+        language::Target::Local(id) => id.value,
         _ => return None,
     };
     match &inv.parameters {

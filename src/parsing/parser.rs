@@ -717,6 +717,19 @@ impl<'i> Parser<'i> {
         parser
     }
 
+    /// Compute a span for `slice`, which must be a sub-slice of `self.source`
+    /// (or be derived from one). Uses pointer arithmetic against the current
+    /// `self.source` to recover the slice's offset within it.
+    fn span_of(&self, slice: &str) -> Span {
+        let inner = (slice.as_ptr() as usize) - (self
+            .source
+            .as_ptr() as usize);
+        Span {
+            offset: self.offset + inner,
+            length: slice.len(),
+        }
+    }
+
     // because test cases and trivial single-line examples might omit an
     // ending newline, this also returns Ok if end of input is reached.
     fn require_newline(&mut self) -> Result<(), ParsingError> {
@@ -926,11 +939,13 @@ impl<'i> Parser<'i> {
         let text = one.as_str();
         let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
             let before = before.trim();
-            let name = validate_identifier(before).ok_or(ParsingError::InvalidIdentifier(
-                self.offset,
-                before.len(),
-                before.to_string(),
-            ))?;
+            let name = validate_identifier(before, self.span_of(before)).ok_or(
+                ParsingError::InvalidIdentifier(
+                    self.offset,
+                    before.len(),
+                    before.to_string(),
+                ),
+            )?;
 
             // Extract parameters from parentheses
             if !list.ends_with(')') {
@@ -943,13 +958,12 @@ impl<'i> Parser<'i> {
             } else {
                 let mut params = Vec::new();
                 for item in list.split(',') {
-                    let param = validate_identifier(item.trim_ascii()).ok_or(
+                    let trimmed = item.trim_ascii();
+                    let param = validate_identifier(trimmed, self.span_of(trimmed)).ok_or(
                         ParsingError::InvalidIdentifier(
                             self.offset,
-                            item.trim_ascii()
-                                .len(),
-                            item.trim_ascii()
-                                .to_string(),
+                            trimmed.len(),
+                            trimmed.to_string(),
                         ),
                     )?;
                     params.push(param);
@@ -979,11 +993,13 @@ impl<'i> Parser<'i> {
                 return Err(ParsingError::InvalidParameters(error_offset, param_width));
             }
 
-            let name = validate_identifier(text).ok_or(ParsingError::InvalidIdentifier(
-                self.offset,
-                text.len(),
-                text.to_string(),
-            ))?;
+            let name = validate_identifier(text, self.span_of(text)).ok_or(
+                ParsingError::InvalidIdentifier(
+                    self.offset,
+                    text.len(),
+                    text.to_string(),
+                ),
+            )?;
             (name, None)
         };
 
@@ -1487,7 +1503,7 @@ impl<'i> Parser<'i> {
                 .unwrap(); // is_function() already checked
             let text = &content[0..paren];
 
-            let target = validate_identifier(text);
+            let target = validate_identifier(text, self.span_of(text));
 
             if target.is_none() {
                 if text.contains(' ') || text.contains('<') || text.contains('>') {
@@ -1513,8 +1529,8 @@ impl<'i> Parser<'i> {
             let identifier = self.read_identifier()?;
             if self.source.starts_with('"') {
                 return Err(ParsingError::InvalidFunction(
-                    self.offset - identifier.0.len(),
-                    identifier.0.len(),
+                    identifier.span.offset,
+                    identifier.span.length,
                 ));
             }
             Ok(Expression::Variable(identifier))
@@ -1787,11 +1803,13 @@ impl<'i> Parser<'i> {
             Some(i) => &content[0..i],
         };
 
-        let identifier = validate_identifier(possible).ok_or(ParsingError::InvalidIdentifier(
-            self.offset,
-            possible.len(),
-            possible.to_string(),
-        ))?;
+        let identifier = validate_identifier(possible, self.span_of(possible)).ok_or(
+            ParsingError::InvalidIdentifier(
+                self.offset,
+                possible.len(),
+                possible.to_string(),
+            ),
+        )?;
 
         self.advance(possible.len());
 
@@ -2032,9 +2050,10 @@ impl<'i> Parser<'i> {
             if content.starts_with("https://") {
                 Ok(Target::Remote(External(content)))
             } else {
-                let identifier = validate_identifier(content).ok_or_else(|| {
-                    ParsingError::InvalidInvocation(start_offset + 1, content.len())
-                })?;
+                let identifier =
+                    validate_identifier(content, inner.span_of(content)).ok_or_else(|| {
+                        ParsingError::InvalidInvocation(start_offset + 1, content.len())
+                    })?;
                 Ok(Target::Local(identifier))
             }
         })
@@ -2564,7 +2583,12 @@ impl<'i> Parser<'i> {
 
                 // Check if it's the special @* "reset attribute" role
                 if trimmed == "@*" {
-                    let identifier = Identifier("*");
+                    // span points at the `*` character
+                    let star = &trimmed[1..];
+                    let identifier = Identifier {
+                        value: "*",
+                        span: inner.span_of(star),
+                    };
                     attributes.push(Attribute::Role(identifier));
                 }
                 // Check if it's a regular role '@'
@@ -2573,8 +2597,8 @@ impl<'i> Parser<'i> {
                         .get(1)
                         .ok_or(ParsingError::Expected(inner.offset, 0, "role name after @"))?
                         .as_str();
-                    let identifier =
-                        validate_identifier(role_name).ok_or(ParsingError::InvalidIdentifier(
+                    let identifier = validate_identifier(role_name, inner.span_of(role_name))
+                        .ok_or(ParsingError::InvalidIdentifier(
                             inner.offset,
                             role_name.len(),
                             role_name.to_string(),
@@ -2591,8 +2615,8 @@ impl<'i> Parser<'i> {
                             "place name after ^",
                         ))?
                         .as_str();
-                    let identifier =
-                        validate_identifier(place_name).ok_or(ParsingError::InvalidIdentifier(
+                    let identifier = validate_identifier(place_name, inner.span_of(place_name))
+                        .ok_or(ParsingError::InvalidIdentifier(
                             inner.offset,
                             place_name.len(),
                             place_name.to_string(),

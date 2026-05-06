@@ -69,8 +69,26 @@ impl<'i> Procedure<'i> {
     }
 }
 
-#[derive(Eq, Debug, PartialEq)]
-pub struct Identifier<'i>(pub &'i str);
+#[derive(Eq, Debug)]
+pub struct Identifier<'i> {
+    pub value: &'i str,
+    pub span: Span,
+}
+
+/// Equality is structural: spans are diagnostic metadata, not part of identity.
+impl PartialEq for Identifier<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<'i> Identifier<'i> {
+    /// Test helper: builds an `Identifier` with a default span. Real parser
+    /// output always carries a real span; only fixtures should use this.
+    pub fn dummy(value: &'i str) -> Self {
+        Identifier { value, span: Span::default() }
+    }
+}
 
 #[derive(Eq, Debug, PartialEq)]
 pub struct External<'i>(pub &'i str);
@@ -253,14 +271,14 @@ pub(crate) fn validate_domain(input: &str) -> Option<&str> {
     }
 }
 
-pub(crate) fn validate_identifier(input: &str) -> Option<Identifier<'_>> {
+pub(crate) fn validate_identifier(input: &str, span: Span) -> Option<Identifier<'_>> {
     if input.len() == 0 {
         return None;
     }
 
     let re = regex!(r"^[a-z][a-z0-9_]*$");
     if re.is_match(input) {
-        Some(Identifier(input))
+        Some(Identifier { value: input, span })
     } else {
         None
     }
@@ -386,18 +404,28 @@ mod check {
 
     #[test]
     fn identifier_rules() {
-        assert_eq!(validate_identifier("a"), Some(Identifier("a")));
-        assert_eq!(validate_identifier("ab"), Some(Identifier("ab")));
-        assert_eq!(validate_identifier("johnny5"), Some(Identifier("johnny5")));
-        assert_eq!(validate_identifier("Pizza"), None);
-        assert_eq!(validate_identifier("pizZa"), None);
-        assert!(validate_identifier("0trust").is_none());
+        let s = Span::default();
         assert_eq!(
-            validate_identifier("make_dinner"),
-            Some(Identifier("make_dinner"))
+            validate_identifier("a", s),
+            Some(Identifier::dummy("a"))
         );
-        assert!(validate_identifier("MakeDinner").is_none());
-        assert!(validate_identifier("make-dinner").is_none());
+        assert_eq!(
+            validate_identifier("ab", s),
+            Some(Identifier::dummy("ab"))
+        );
+        assert_eq!(
+            validate_identifier("johnny5", s),
+            Some(Identifier::dummy("johnny5"))
+        );
+        assert_eq!(validate_identifier("Pizza", s), None);
+        assert_eq!(validate_identifier("pizZa", s), None);
+        assert!(validate_identifier("0trust", s).is_none());
+        assert_eq!(
+            validate_identifier("make_dinner", s),
+            Some(Identifier::dummy("make_dinner"))
+        );
+        assert!(validate_identifier("MakeDinner", s).is_none());
+        assert!(validate_identifier("make-dinner", s).is_none());
     }
 
     #[test]

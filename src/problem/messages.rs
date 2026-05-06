@@ -38,10 +38,10 @@ there was no more input remaining in the current scope.
         ParsingError::MissingParenthesis(_, _) => {
             let examples = vec![Descriptive::Binding(
                 Box::new(Descriptive::Application(Invocation {
-                    target: Target::Local(Identifier("mix_pangalactic_gargle_blaster")),
+                    target: Target::Local(Identifier::dummy("mix_pangalactic_gargle_blaster")),
                     parameters: None,
                 })),
-                vec![Identifier("zaphod"), Identifier("trillian")],
+                vec![Identifier::dummy("zaphod"), Identifier::dummy("trillian")],
             )];
 
             (
@@ -126,25 +126,25 @@ to be used when rendering the Technique. Common domains include
         ParsingError::InvalidIdentifier(_, _, _) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("attempt1"),
+                    name: Identifier::dummy("attempt1"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("i"),
+                    name: Identifier::dummy("i"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("l33t_hax0r"),
+                    name: Identifier::dummy("l33t_hax0r"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
@@ -275,25 +275,25 @@ this form.
         ParsingError::InvalidDeclaration(_, _) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("f"),
+                    name: Identifier::dummy("f"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("implementation"),
+                    name: Identifier::dummy("implementation"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("f"),
+                    name: Identifier::dummy("f"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Single(Forma("A")),
@@ -302,7 +302,7 @@ this form.
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("implementation"),
+                    name: Identifier::dummy("implementation"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Single(Forma("Design")),
@@ -311,7 +311,7 @@ this form.
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
@@ -320,7 +320,7 @@ this form.
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
@@ -329,8 +329,8 @@ this form.
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
-                    parameters: Some(vec![Identifier("b"), Identifier("m")]),
+                    name: Identifier::dummy("make_coffee"),
+                    parameters: Some(vec![Identifier::dummy("b"), Identifier::dummy("m")]),
                     signature: Some(Signature {
                         requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
                         provides: Genus::Single(Forma("Coffee")),
@@ -377,19 +377,19 @@ Finally, variables can be assigned for the names of the input parameters:
         ParsingError::InvalidParameters(_, _) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("create_bypass"),
-                    parameters: Some(vec![Identifier("a"), Identifier("b")]),
+                    name: Identifier::dummy("create_bypass"),
+                    parameters: Some(vec![Identifier::dummy("a"), Identifier::dummy("b")]),
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("bulldoze"),
-                    parameters: Some(vec![Identifier("c")]),
+                    name: Identifier::dummy("bulldoze"),
+                    parameters: Some(vec![Identifier::dummy("c")]),
                     signature: None,
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("lawsuit"),
+                    name: Identifier::dummy("lawsuit"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Single(Forma("Council")),
@@ -398,8 +398,8 @@ Finally, variables can be assigned for the names of the input parameters:
                     elements: Vec::new(),
                 },
                 Procedure {
-                    name: Identifier("lawsuit"),
-                    parameters: Some(vec![Identifier("c")]),
+                    name: Identifier::dummy("lawsuit"),
+                    parameters: Some(vec![Identifier::dummy("c")]),
                     signature: Some(Signature {
                         requires: Genus::Single(Forma("Council")),
                         provides: Genus::List(Forma("Penny")),
@@ -456,12 +456,12 @@ author of the Technique.
         ParsingError::InvalidInvocation(_, _) => {
             let examples = vec![
                 Invocation {
-                    target: Target::Local(Identifier("make_coffee")),
+                    target: Target::Local(Identifier::dummy("make_coffee")),
                     parameters: None,
                 },
                 Invocation {
-                    target: Target::Local(Identifier("check_vitals")),
-                    parameters: Some(vec![Expression::Variable(Identifier("patient"))]),
+                    target: Target::Local(Identifier::dummy("check_vitals")),
+                    parameters: Some(vec![Expression::Variable(Identifier::dummy("patient"))]),
                 },
             ];
 
@@ -487,18 +487,18 @@ If the procedure takes parameters they can be specified in parenthesis:
         ParsingError::InvalidFunction(_, _) => {
             let examples = vec![
                 Function {
-                    target: Identifier("exec"),
+                    target: Identifier::dummy("exec"),
                     parameters: vec![Expression::String(vec![Piece::Text("ls -la")])],
                 },
                 Function {
-                    target: Identifier("now"),
+                    target: Identifier::dummy("now"),
                     parameters: vec![],
                 },
                 Function {
-                    target: Identifier("calculate"),
+                    target: Identifier::dummy("calculate"),
                     parameters: vec![
-                        Expression::Variable(Identifier("a")),
-                        Expression::Variable(Identifier("b")),
+                        Expression::Variable(Identifier::dummy("a")),
+                        Expression::Variable(Identifier::dummy("b")),
                     ],
                 },
             ];
@@ -526,13 +526,13 @@ expressions as parameters as required:
         ParsingError::InvalidCodeBlock(_, _) => {
             let examples = vec![
                 Expression::Execution(Function {
-                    target: Identifier("exec"),
+                    target: Identifier::dummy("exec"),
                     parameters: vec![Expression::String(vec![Piece::Text("command")])],
                 }),
                 Expression::Repeat(Box::new(Expression::Number(Numeric::Integral(5)))),
                 Expression::Foreach(
-                    vec![Identifier("patient")],
-                    Box::new(Expression::Variable(Identifier("patients"))),
+                    vec![Identifier::dummy("patient")],
+                    Box::new(Expression::Variable(Identifier::dummy("patients"))),
                 ),
             ];
 
@@ -634,16 +634,16 @@ parallel steps, but again this is not compulsory.
             let examples = vec![
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Role(Identifier("president_of_the_galaxy")),
-                        Attribute::Role(Identifier("femme_fatale")),
+                        Attribute::Role(Identifier::dummy("president_of_the_galaxy")),
+                        Attribute::Role(Identifier::dummy("femme_fatale")),
                     ],
                     subscopes: vec![],
                 },
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Place(Identifier("milliways")),
-                        Attribute::Role(Identifier("waiter")),
-                        Attribute::Role(Identifier("dish_of_the_day")),
+                        Attribute::Place(Identifier::dummy("milliways")),
+                        Attribute::Role(Identifier::dummy("waiter")),
+                        Attribute::Role(Identifier::dummy("dish_of_the_day")),
                     ],
                     subscopes: vec![],
                 },
@@ -672,12 +672,12 @@ nested underneath a role or place assignment.
         ParsingError::InvalidForeach(_, _) => {
             let examples = vec![
                 Expression::Foreach(
-                    vec![Identifier("patient")],
-                    Box::new(Expression::Variable(Identifier("patients"))),
+                    vec![Identifier::dummy("patient")],
+                    Box::new(Expression::Variable(Identifier::dummy("patients"))),
                 ),
                 Expression::Foreach(
-                    vec![Identifier("name"), Identifier("value")],
-                    Box::new(Expression::Variable(Identifier("data"))),
+                    vec![Identifier::dummy("name"), Identifier::dummy("value")],
+                    Box::new(Expression::Variable(Identifier::dummy("data"))),
                 ),
             ];
 

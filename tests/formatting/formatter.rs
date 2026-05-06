@@ -46,7 +46,7 @@ mod verify {
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("first"),
+                name: Identifier::dummy("first"),
                 parameters: None,
                 signature: Some(Signature {
                     requires: Genus::Single(Forma("A")),
@@ -76,7 +76,7 @@ first : A -> B
             }),
             body: Some(Technique::Procedures(vec![
                 Procedure {
-                    name: Identifier("first"),
+                    name: Identifier::dummy("first"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::Single(Forma("A")),
@@ -85,7 +85,7 @@ first : A -> B
                     elements: vec![],
                 },
                 Procedure {
-                    name: Identifier("second"),
+                    name: Identifier::dummy("second"),
                     parameters: None,
                     signature: Some(Signature {
                         requires: Genus::List(Forma("Thing")),
@@ -118,7 +118,7 @@ second : [Thing] -> (Who, Where, Why)
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("win_le_tour"),
+                name: Identifier::dummy("win_le_tour"),
                 parameters: None,
                 signature: Some(Signature {
                     requires: Genus::Single(Forma("Bicycle")),
@@ -182,11 +182,11 @@ win_le_tour : Bicycle -> YellowJersey
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("vibe_coding"),
+                name: Identifier::dummy("vibe_coding"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::CodeBlock(vec![Expression::Execution(Function {
-                    target: Identifier("exec"),
+                    target: Identifier::dummy("exec"),
                     parameters: vec![Expression::Multiline(Some("bash"), vec!["rm -rf /"])],
                 })])],
             }])),
@@ -216,7 +216,7 @@ vibe_coding :
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("action"),
+                name: Identifier::dummy("action"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -228,7 +228,7 @@ vibe_coding :
                         description: vec![Paragraph(vec![
                             Descriptive::Text("To take the action, we must:"),
                             Descriptive::CodeInline(Expression::Execution(Function {
-                                target: Identifier("exec"),
+                                target: Identifier::dummy("exec"),
                                 parameters: vec![Expression::Multiline(
                                     Some("bash"),
                                     vec!["rm -rf /"],
@@ -266,7 +266,7 @@ We must take action!
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("journal"),
+                name: Identifier::dummy("journal"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -279,19 +279,19 @@ We must take action!
                             "Record event as it happens",
                         )])],
                         subscopes: vec![Scope::AttributeBlock {
-                            attributes: vec![Attribute::Role(Identifier("journalist"))],
+                            attributes: vec![Attribute::Role(Identifier::dummy("journalist"))],
                             subscopes: vec![Scope::CodeBlock {
                                 expressions: vec![Expression::Tablet(vec![
                                     Pair {
                                         label: "timestamp",
                                         value: Expression::Execution(Function {
-                                            target: Identifier("now"),
+                                            target: Identifier::dummy("now"),
                                             parameters: vec![],
                                         }),
                                     },
                                     Pair {
                                         label: "message",
-                                        value: Expression::Variable(Identifier("msg")),
+                                        value: Expression::Variable(Identifier::dummy("msg")),
                                     },
                                 ])],
                                 subscopes: vec![],
@@ -330,7 +330,7 @@ Record everything, with timestamps.
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("before_leaving"),
+                name: Identifier::dummy("before_leaving"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -360,11 +360,11 @@ Record everything, with timestamps.
                                 )])],
                                 subscopes: vec![Scope::CodeBlock {
                                     expressions: vec![Expression::Foreach(
-                                        vec![Identifier("specimen")],
-                                        Box::new(Expression::Variable(Identifier("specimens"))),
+                                        vec![Identifier::dummy("specimen")],
+                                        Box::new(Expression::Variable(Identifier::dummy("specimens"))),
                                     )],
                                     subscopes: vec![Scope::AttributeBlock {
-                                        attributes: vec![Attribute::Role(Identifier(
+                                        attributes: vec![Attribute::Role(Identifier::dummy(
                                             "nursing_team",
                                         ))],
                                         subscopes: vec![Scope::DependentBlock {
@@ -424,7 +424,7 @@ before_leaving :
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("main_procedure"),
+                name: Identifier::dummy("main_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(vec![
@@ -470,7 +470,7 @@ III.
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("test_procedure"),
+                name: Identifier::dummy("test_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(vec![

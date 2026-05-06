@@ -127,7 +127,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Role(id) => Some(id.0),
+                    Attribute::Role(id) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -142,7 +142,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Place(id) => Some(id.0),
+                    Attribute::Place(id) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -232,7 +232,7 @@ impl<'i> Procedure<'i> {
     /// Returns the procedure name.
     pub fn name(&self) -> &'i str {
         self.name
-            .0
+            .value
     }
 }
 
@@ -268,7 +268,7 @@ fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
                 format!(
                     "{}(",
                     func.target
-                        .0
+                        .value
                 ),
                 body,
             );
@@ -285,13 +285,13 @@ fn render_expression(expr: &Expression) -> String {
         Expression::Foreach(ids, inner) => {
             let vars = if ids.len() == 1 {
                 ids[0]
-                    .0
+                    .value
                     .to_string()
             } else {
                 format!(
                     "({})",
                     ids.iter()
-                        .map(|id| id.0)
+                        .map(|id| id.value)
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -300,7 +300,7 @@ fn render_expression(expr: &Expression) -> String {
         }
         Expression::Application(inv) => {
             let name = match &inv.target {
-                Target::Local(id) => id.0,
+                Target::Local(id) => id.value,
                 Target::Remote(ext) => ext.0,
             };
             if let Some(params) = &inv.parameters {
@@ -322,13 +322,13 @@ fn render_expression(expr: &Expression) -> String {
             format!(
                 "{}({})",
                 func.target
-                    .0,
+                    .value,
                 args.join(", ")
             )
         }
         Expression::Multiline(_, lines) => lines.join("\n"),
         Expression::Variable(id) => {
-            id.0.to_string()
+            id.value.to_string()
         }
         Expression::Binding(inner, _) => render_expression(inner),
         Expression::String(pieces) => {
@@ -476,7 +476,7 @@ impl<'i> Paragraph<'i> {
 
     fn invocation_name(inv: &crate::language::Invocation<'i>) -> &'i str {
         match &inv.target {
-            crate::language::Target::Local(id) => id.0,
+            crate::language::Target::Local(id) => id.value,
             crate::language::Target::Remote(ext) => ext.0,
         }
     }
@@ -547,7 +547,7 @@ mod check {
 
     fn local<'a>(name: &'a str) -> Invocation<'a> {
         Invocation {
-            target: Target::Local(Identifier(name)),
+            target: Target::Local(Identifier::dummy(name)),
             parameters: None,
         }
     }
@@ -603,7 +603,7 @@ mod check {
     fn binding_with_invocation() {
         let p = Paragraph(vec![Descriptive::Binding(
             Box::new(Descriptive::Application(local("observe"))),
-            vec![Identifier("e")],
+            vec![Identifier::dummy("e")],
         )]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["observe"]);
@@ -614,7 +614,7 @@ mod check {
     #[test]
     fn foreach_expression() {
         let p = Paragraph(vec![Descriptive::CodeInline(Expression::Foreach(
-            vec![Identifier("design")],
+            vec![Identifier::dummy("design")],
             Box::new(Expression::Application(local("implement"))),
         ))]);
         assert_eq!(p.text(), "");

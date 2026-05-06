@@ -58,7 +58,7 @@ making_coffee : (Beans, Milk) -> Coffee
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("making_coffee"),
+            name: Identifier::dummy("making_coffee"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
@@ -85,7 +85,7 @@ second : C -> D
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("first"),
+            name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Single(Forma("A")),
@@ -99,7 +99,7 @@ second : C -> D
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("second"),
+            name: Identifier::dummy("second"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Single(Forma("C")),
@@ -124,8 +124,8 @@ making_coffee(e) : Ingredients -> Coffee
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("making_coffee"),
-            parameters: Some(vec![Identifier("e")]),
+            name: Identifier::dummy("making_coffee"),
+            parameters: Some(vec![Identifier::dummy("e")]),
             signature: Some(Signature {
                 requires: Genus::Single(Forma("Ingredients")),
                 provides: Genus::Single(Forma("Coffee"))
@@ -156,7 +156,7 @@ This is the first one.
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("first"),
+            name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Single(Forma("A")),
@@ -211,7 +211,7 @@ This is the first one.
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("first"),
+            name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Single(Forma("A")),
@@ -277,7 +277,7 @@ This is the first one.
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("first"),
+            name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
                 requires: Genus::Single(Forma("A")),
@@ -361,7 +361,7 @@ fn realistic_procedure() {
     assert_eq!(
         procedure,
         Procedure {
-            name: Identifier("before_anesthesia"),
+            name: Identifier::dummy("before_anesthesia"),
             parameters: None,
             signature: None,
             elements: vec![
@@ -515,7 +515,7 @@ label_the_specimens :
     assert_eq!(
         procedure,
         Ok(Procedure {
-            name: Identifier("label_the_specimens"),
+            name: Identifier::dummy("label_the_specimens"),
             parameters: None,
             signature: None,
             elements: vec![Element::Steps(vec![Scope::DependentBlock {
@@ -524,7 +524,7 @@ label_the_specimens :
 
                 subscopes: vec![
                     Scope::AttributeBlock {
-                        attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                        attributes: vec![Attribute::Role(Identifier::dummy("nursing_team"))],
                         subscopes: vec![
                             Scope::ParallelBlock {
                                 bullet: '-',
@@ -545,7 +545,7 @@ label_the_specimens :
                         ]
                     },
                     Scope::AttributeBlock {
-                        attributes: vec![Attribute::Role(Identifier("admin_staff"))],
+                        attributes: vec![Attribute::Role(Identifier::dummy("admin_staff"))],
                         subscopes: vec![Scope::DependentBlock {
                             ordinal: "a",
                             description: vec![Paragraph(vec![Descriptive::Text(
@@ -597,7 +597,7 @@ before_leaving :
     assert_eq!(
         procedure,
         Procedure {
-            name: Identifier("before_leaving"),
+            name: Identifier::dummy("before_leaving"),
             parameters: None,
             signature: None,
             elements: vec![
@@ -632,12 +632,12 @@ before_leaving :
 
                                 subscopes: vec![Scope::CodeBlock {
                                     expressions: vec![Expression::Foreach(
-                                        vec![Identifier("specimen")],
-                                        Box::new(Expression::Variable(Identifier("specimens")))
+                                        vec![Identifier::dummy("specimen")],
+                                        Box::new(Expression::Variable(Identifier::dummy("specimens")))
                                     )],
                                     subscopes: vec![Scope::AttributeBlock {
-                                        attributes: vec![Attribute::Role(Identifier(
-                                            "nursing_team"
+                                        attributes: vec![Attribute::Role(Identifier::dummy(
+                                            "nursing_team",
                                         ))],
                                         subscopes: vec![Scope::DependentBlock {
                                             ordinal: "a",
@@ -671,7 +671,7 @@ before_leaving :
 
                         subscopes: vec![
                             Scope::AttributeBlock {
-                                attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                                attributes: vec![Attribute::Role(Identifier::dummy("surgeon"))],
                                 subscopes: vec![Scope::DependentBlock {
                                     ordinal: "a",
                                     description: vec![Paragraph(vec![
@@ -685,7 +685,7 @@ before_leaving :
                                 }]
                             },
                             Scope::AttributeBlock {
-                                attributes: vec![Attribute::Role(Identifier("anesthetist"))],
+                                attributes: vec![Attribute::Role(Identifier::dummy("anesthetist"))],
                                 subscopes: vec![Scope::DependentBlock {
                                     ordinal: "b",
                                     description: vec![Paragraph(vec![
@@ -699,7 +699,7 @@ before_leaving :
                                 }]
                             },
                             Scope::AttributeBlock {
-                                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                                attributes: vec![Attribute::Role(Identifier::dummy("nursing_team"))],
                                 subscopes: vec![Scope::DependentBlock {
                                     ordinal: "c",
                                     description: vec![Paragraph(vec![
@@ -764,7 +764,7 @@ fn parallel_role_assignments() {
                 subscopes: substeps,
             } = &scopes[0]
             {
-                assert_eq!(*attributes, vec![Attribute::Role(Identifier("surgeon"))]);
+                assert_eq!(*attributes, vec![Attribute::Role(Identifier::dummy("surgeon"))]);
                 assert_eq!(substeps.len(), 3); // a, b, c
             } else {
                 panic!("Expected AttributedBlock for surgeon");
@@ -778,7 +778,7 @@ fn parallel_role_assignments() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier("anaesthetist"))]
+                    vec![Attribute::Role(Identifier::dummy("anaesthetist"))]
                 );
                 assert_eq!(substeps.len(), 1); // d
             } else {
@@ -793,7 +793,7 @@ fn parallel_role_assignments() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier("nursing_team"))]
+                    vec![Attribute::Role(Identifier::dummy("nursing_team"))]
                 );
                 assert_eq!(substeps.len(), 2); // e, f
             } else {
@@ -849,7 +849,7 @@ fn multiple_roles_with_dependent_substeps() {
                 subscopes: substeps,
             } = &scopes[0]
             {
-                assert_eq!(*attributes, vec![Attribute::Role(Identifier("surgeon"))]);
+                assert_eq!(*attributes, vec![Attribute::Role(Identifier::dummy("surgeon"))]);
                 assert_eq!(substeps.len(), 3);
             } else {
                 panic!("Expected AttributedBlock for surgeon");
@@ -863,7 +863,7 @@ fn multiple_roles_with_dependent_substeps() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier("anaesthetist"))]
+                    vec![Attribute::Role(Identifier::dummy("anaesthetist"))]
                 );
                 assert_eq!(substeps.len(), 2);
             } else {
@@ -878,7 +878,7 @@ fn multiple_roles_with_dependent_substeps() {
             {
                 assert_eq!(
                     *attributes,
-                    vec![Attribute::Role(Identifier("nursing_team"))]
+                    vec![Attribute::Role(Identifier::dummy("nursing_team"))]
                 );
                 assert_eq!(substeps.len(), 3);
             } else {
@@ -933,7 +933,7 @@ fn mixed_substeps_in_roles() {
             description: vec![Paragraph(vec![Descriptive::Text("Emergency response")])],
 
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier("team_lead"))],
+                attributes: vec![Attribute::Role(Identifier::dummy("team_lead"))],
                 subscopes: vec![
                     Scope::DependentBlock {
                         ordinal: "a",
@@ -1028,7 +1028,7 @@ fn naked_bindings() {
         descriptive,
         Ok(vec![Paragraph(vec![Descriptive::Binding(
             Box::new(Descriptive::Text("What is the result?")),
-            vec![Identifier("answer")]
+            vec![Identifier::dummy("answer")]
         )])])
     );
 
@@ -1041,7 +1041,7 @@ fn naked_bindings() {
         Ok(vec![Paragraph(vec![
             Descriptive::Binding(
                 Box::new(Descriptive::Text("Enter your name")),
-                vec![Identifier("name")]
+                vec![Identifier::dummy("name")]
             ),
             Descriptive::Text("Continue with next step")
         ])])
@@ -1059,14 +1059,14 @@ fn naked_bindings() {
             Descriptive::Text("First"),
             Descriptive::Binding(
                 Box::new(Descriptive::Application(Invocation {
-                    target: Target::Local(Identifier("do_something")),
+                    target: Target::Local(Identifier::dummy("do_something")),
                     parameters: None,
                 })),
-                vec![Identifier("result")]
+                vec![Identifier::dummy("result")]
             ),
             Descriptive::Binding(
                 Box::new(Descriptive::Text("then describe the outcome")),
-                vec![Identifier("description")]
+                vec![Identifier::dummy("description")]
             )
         ])])
     );
@@ -1115,7 +1115,7 @@ second_section_second_procedure :
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("main_procedure"),
+                name: Identifier::dummy("main_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(vec![
@@ -1124,13 +1124,13 @@ second_section_second_procedure :
                         title: Some(Paragraph(vec![Descriptive::Text("First Section")])),
                         body: Technique::Procedures(vec![
                             Procedure {
-                                name: Identifier("first_section_first_procedure"),
+                                name: Identifier::dummy("first_section_first_procedure"),
                                 parameters: None,
                                 signature: None,
                                 elements: vec![Element::Title("One dot One")]
                             },
                             Procedure {
-                                name: Identifier("first_section_second_procedure"),
+                                name: Identifier::dummy("first_section_second_procedure"),
                                 parameters: None,
                                 signature: None,
                                 elements: vec![Element::Title("One dot Two")]
@@ -1142,13 +1142,13 @@ second_section_second_procedure :
                         title: Some(Paragraph(vec![Descriptive::Text("Second Section")])),
                         body: Technique::Procedures(vec![
                             Procedure {
-                                name: Identifier("second_section_first_procedure"),
+                                name: Identifier::dummy("second_section_first_procedure"),
                                 parameters: None,
                                 signature: None,
                                 elements: vec![Element::Title("Two dot One")]
                             },
                             Procedure {
-                                name: Identifier("second_section_second_procedure"),
+                                name: Identifier::dummy("second_section_second_procedure"),
                                 parameters: None,
                                 signature: None,
                                 elements: vec![Element::Title("Two dot Two")]
@@ -1206,8 +1206,8 @@ procedure_four : Concept -> Architecture
             } = &steps[0]
             {
                 assert_eq!(section1_procs.len(), 2);
-                assert_eq!(section1_procs[0].name, Identifier("procedure_one"));
-                assert_eq!(section1_procs[1].name, Identifier("procedure_two"));
+                assert_eq!(section1_procs[0].name, Identifier::dummy("procedure_one"));
+                assert_eq!(section1_procs[1].name, Identifier::dummy("procedure_two"));
             } else {
                 panic!("First section should contain procedures");
             }
@@ -1219,8 +1219,8 @@ procedure_four : Concept -> Architecture
             } = &steps[1]
             {
                 assert_eq!(section2_procs.len(), 2);
-                assert_eq!(section2_procs[0].name, Identifier("procedure_three"));
-                assert_eq!(section2_procs[1].name, Identifier("procedure_four"));
+                assert_eq!(section2_procs[0].name, Identifier::dummy("procedure_three"));
+                assert_eq!(section2_procs[1].name, Identifier::dummy("procedure_four"));
             } else {
                 panic!("Second section should contain procedures");
             }
@@ -1270,7 +1270,7 @@ III. Implementation
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier("main_procedure"),
+                name: Identifier::dummy("main_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(vec![
@@ -1286,7 +1286,7 @@ III. Implementation
                         )])),
                         body: Technique::Procedures(vec![
                             Procedure {
-                                name: Identifier("requirements_and_architecture"),
+                                name: Identifier::dummy("requirements_and_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
                                     requires: Genus::Single(Forma("Concept")),
@@ -1301,11 +1301,11 @@ III. Implementation
                                         description: vec![Paragraph(vec![
                                             Descriptive::Text("Define Requirements"),
                                             Descriptive::Application(Invocation {
-                                                target: Target::Local(Identifier(
-                                                    "define_requirements"
+                                                target: Target::Local(Identifier::dummy(
+                                                    "define_requirements",
                                                 )),
                                                 parameters: Some(vec![Expression::Variable(
-                                                    Identifier("concept")
+                                                    Identifier::dummy("concept")
                                                 )]),
                                             }),
                                         ])],
@@ -1317,11 +1317,11 @@ III. Implementation
                                         description: vec![Paragraph(vec![
                                             Descriptive::Text("Determine Architecture"),
                                             Descriptive::Application(Invocation {
-                                                target: Target::Local(Identifier(
-                                                    "determine_architecture"
+                                                target: Target::Local(Identifier::dummy(
+                                                    "determine_architecture",
                                                 )),
                                                 parameters: Some(vec![Expression::Variable(
-                                                    Identifier("concept")
+                                                    Identifier::dummy("concept")
                                                 )]),
                                             }),
                                         ])],
@@ -1331,7 +1331,7 @@ III. Implementation
                                 ])],
                             },
                             Procedure {
-                                name: Identifier("define_requirements"),
+                                name: Identifier::dummy("define_requirements"),
                                 parameters: None,
                                 signature: Some(Signature {
                                     requires: Genus::Single(Forma("Concept")),
@@ -1340,7 +1340,7 @@ III. Implementation
                                 elements: vec![],
                             },
                             Procedure {
-                                name: Identifier("determine_architecture"),
+                                name: Identifier::dummy("determine_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
                                     requires: Genus::Single(Forma("Concept")),

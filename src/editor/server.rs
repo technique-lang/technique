@@ -499,7 +499,7 @@ impl TechniqueLanguageServer {
 
                         let name = procedure
                             .name
-                            .0;
+                            .value;
 
                         // Calculate the byte offset of the name using pointer arithmetic
                         let offset = calculate_slice_offset(content, name).unwrap_or(0);
