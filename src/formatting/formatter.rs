@@ -503,7 +503,7 @@ impl<'i> Formatter<'i> {
         let mut elements = procedure
             .elements
             .iter();
-        if let Some(Element::Title(_)) = procedure
+        if let Some(Element::Title(_, _)) = procedure
             .elements
             .first()
         {
@@ -525,21 +525,21 @@ impl<'i> Formatter<'i> {
 
     fn append_element(&mut self, element: &'i Element) {
         match element {
-            Element::Title(title) => {
+            Element::Title(title, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.add_fragment_reference(Syntax::Header, "# ");
                 self.add_fragment_reference(Syntax::Title, title);
                 self.add_fragment_reference(Syntax::Newline, "\n");
             }
-            Element::Description(paragraphs) => {
+            Element::Description(paragraphs, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_paragraphs(paragraphs);
             }
-            Element::Steps(steps) => {
+            Element::Steps(steps, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_steps(steps);
             }
-            Element::CodeBlock(expressions) => {
+            Element::CodeBlock(expressions, _) => {
                 self.add_fragment_reference(Syntax::Structure, "{");
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
@@ -747,6 +747,7 @@ impl<'i> Formatter<'i> {
                 ordinal,
                 description: content,
                 subscopes: scopes,
+                ..
             } => {
                 self.indent();
                 self.add_fragment_string(Syntax::StepItem, format!("{}.", ordinal));
@@ -771,6 +772,7 @@ impl<'i> Formatter<'i> {
                 bullet,
                 description,
                 subscopes,
+                ..
             } => {
                 self.indent();
                 self.add_fragment_string(Syntax::StepItem, bullet.to_string());
@@ -824,6 +826,7 @@ impl<'i> Formatter<'i> {
             Scope::AttributeBlock {
                 attributes,
                 subscopes,
+                ..
             } => {
                 if subscopes.len() == 0 {
                     self.indent();
@@ -861,6 +864,7 @@ impl<'i> Formatter<'i> {
             Scope::CodeBlock {
                 expressions,
                 subscopes: substeps,
+                ..
             } => {
                 let has_separator = expressions
                     .iter()
@@ -921,7 +925,7 @@ impl<'i> Formatter<'i> {
                 self.append_scopes(substeps);
                 self.decrease(4);
             }
-            Scope::ResponseBlock { responses } => {
+            Scope::ResponseBlock { responses, .. } => {
                 self.increase(4);
                 self.indent();
                 self.append_responses(responses);
@@ -931,6 +935,7 @@ impl<'i> Formatter<'i> {
                 numeral,
                 title,
                 body,
+                ..
             } => {
                 self.add_fragment_reference(Syntax::StepItem, numeral);
                 self.add_fragment_reference(Syntax::Structure, ".");
@@ -1129,7 +1134,9 @@ impl<'i> Formatter<'i> {
             Target::Local(identifier) => {
                 self.add_fragment_reference(Syntax::Invocation, identifier.value)
             }
-            Target::Remote(external) => self.add_fragment_reference(Syntax::Invocation, external.value),
+            Target::Remote(external) => {
+                self.add_fragment_reference(Syntax::Invocation, external.value)
+            }
         }
         self.add_fragment_reference(Syntax::Quote, ">");
         if let Some(parameters) = &invocation.parameters {

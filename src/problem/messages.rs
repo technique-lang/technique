@@ -130,24 +130,28 @@ to be used when rendering the Technique. Common domains include
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("attempt1"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("i"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("l33t_hax0r"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -279,18 +283,21 @@ this form.
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("implementation"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("f"),
@@ -300,6 +307,7 @@ this form.
                         provides: Genus::Single(Forma::dummy("B")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("implementation"),
@@ -309,6 +317,7 @@ this form.
                         provides: Genus::Single(Forma::dummy("Product")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("make_coffee"),
@@ -318,6 +327,7 @@ this form.
                         provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("make_coffee"),
@@ -327,6 +337,7 @@ this form.
                         provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("make_coffee"),
@@ -336,6 +347,7 @@ this form.
                         provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -381,12 +393,14 @@ Finally, variables can be assigned for the names of the input parameters:
                     parameters: Some(vec![Identifier::dummy("a"), Identifier::dummy("b")]),
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("bulldoze"),
                     parameters: Some(vec![Identifier::dummy("c")]),
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("lawsuit"),
@@ -396,6 +410,7 @@ Finally, variables can be assigned for the names of the input parameters:
                         provides: Genus::List(Forma::dummy("Penny")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
                     name: Identifier::dummy("lawsuit"),
@@ -405,6 +420,7 @@ Finally, variables can be assigned for the names of the input parameters:
                         provides: Genus::List(Forma::dummy("Penny")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -638,6 +654,7 @@ parallel steps, but again this is not compulsory.
                         Attribute::Role(Identifier::dummy("femme_fatale")),
                     ],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::AttributeBlock {
                     attributes: vec![
@@ -646,6 +663,7 @@ parallel steps, but again this is not compulsory.
                         Attribute::Role(Identifier::dummy("dish_of_the_day")),
                     ],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ];
 

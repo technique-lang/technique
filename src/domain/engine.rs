@@ -45,7 +45,7 @@ impl<'i> Procedure<'i> {
         self.elements
             .iter()
             .flat_map(|element| match element {
-                Element::Steps(steps) => steps.iter(),
+                Element::Steps(steps, _) => steps.iter(),
                 _ => [].iter(),
             })
     }
@@ -55,7 +55,7 @@ impl<'i> Procedure<'i> {
         self.elements
             .iter()
             .flat_map(|element| match element {
-                Element::Description(paragraphs) => paragraphs.iter(),
+                Element::Description(paragraphs, _) => paragraphs.iter(),
                 _ => [].iter(),
             })
     }
@@ -115,7 +115,7 @@ impl<'i> Scope<'i> {
     /// Returns an iterator over responses if this is a ResponseBlock.
     pub fn responses(&self) -> impl Iterator<Item = &Response<'i>> {
         let slice: &[Response<'i>] = match self {
-            Scope::ResponseBlock { responses } => responses,
+            Scope::ResponseBlock { responses, .. } => responses,
             _ => &[],
         };
         slice.iter()
@@ -327,9 +327,9 @@ fn render_expression(expr: &Expression) -> String {
             )
         }
         Expression::Multiline(_, lines) => lines.join("\n"),
-        Expression::Variable(id) => {
-            id.value.to_string()
-        }
+        Expression::Variable(id) => id
+            .value
+            .to_string(),
         Expression::Binding(inner, _) => render_expression(inner),
         Expression::String(pieces) => {
             let mut result = String::new();

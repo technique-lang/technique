@@ -42,20 +42,42 @@ pub enum Technique<'i> {
     Empty,
 }
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug)]
 pub enum Element<'i> {
-    Title(&'i str),
-    Description(Vec<Paragraph<'i>>),
-    Steps(Vec<Scope<'i>>),
-    CodeBlock(Vec<Expression<'i>>),
+    Title(&'i str, Span),
+    Description(Vec<Paragraph<'i>>, Span),
+    Steps(Vec<Scope<'i>>, Span),
+    CodeBlock(Vec<Expression<'i>>, Span),
 }
 
-#[derive(Eq, Debug, PartialEq)]
+impl PartialEq for Element<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Element::Title(a, _), Element::Title(b, _)) => a == b,
+            (Element::Description(a, _), Element::Description(b, _)) => a == b,
+            (Element::Steps(a, _), Element::Steps(b, _)) => a == b,
+            (Element::CodeBlock(a, _), Element::CodeBlock(b, _)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Eq, Debug)]
 pub struct Procedure<'i> {
     pub name: Identifier<'i>,
     pub parameters: Option<Vec<Identifier<'i>>>,
     pub signature: Option<Signature<'i>>,
     pub elements: Vec<Element<'i>>,
+    pub span: Span,
+}
+
+impl PartialEq for Procedure<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.parameters == other.parameters
+            && self.signature == other.signature
+            && self.elements == other.elements
+    }
 }
 
 impl<'i> Procedure<'i> {
@@ -63,7 +85,7 @@ impl<'i> Procedure<'i> {
         self.elements
             .iter()
             .find_map(|element| match element {
-                Element::Title(title) => return Some(*title),
+                Element::Title(title, _) => return Some(*title),
                 _ => None,
             })
     }
@@ -85,7 +107,13 @@ impl<'i> Identifier<'i> {
     /// Test helper: builds an `Identifier` with a default span. See also the
     /// `PartialEq` instance.
     pub const fn dummy(value: &'i str) -> Self {
-        Identifier { value, span: Span { offset: 0, length: 0 } }
+        Identifier {
+            value,
+            span: Span {
+                offset: 0,
+                length: 0,
+            },
+        }
     }
 }
 
@@ -103,7 +131,13 @@ impl PartialEq for External<'_> {
 
 impl<'i> External<'i> {
     pub const fn dummy(value: &'i str) -> Self {
-        External { value, span: Span { offset: 0, length: 0 } }
+        External {
+            value,
+            span: Span {
+                offset: 0,
+                length: 0,
+            },
+        }
     }
 }
 
@@ -127,7 +161,13 @@ impl PartialEq for Forma<'_> {
 
 impl<'i> Forma<'i> {
     pub const fn dummy(value: &'i str) -> Self {
-        Forma { value, span: Span { offset: 0, length: 0 } }
+        Forma {
+            value,
+            span: Span {
+                offset: 0,
+                length: 0,
+            },
+        }
     }
 }
 
@@ -169,35 +209,40 @@ pub enum Descriptive<'i> {
 
 // types for Steps within procedures
 
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, Debug)]
 pub enum Scope<'i> {
     DependentBlock {
         ordinal: &'i str,
         description: Vec<Paragraph<'i>>,
         subscopes: Vec<Scope<'i>>,
+        span: Span,
     },
 
     ParallelBlock {
         bullet: char,
         description: Vec<Paragraph<'i>>,
         subscopes: Vec<Scope<'i>>,
+        span: Span,
     },
 
     // Attribute scope: @role (or other attributes) with substeps
     AttributeBlock {
         attributes: Vec<Attribute<'i>>,
         subscopes: Vec<Scope<'i>>,
+        span: Span,
     },
 
     // Code block scope: { foreach ... } with substeps
     CodeBlock {
         expressions: Vec<Expression<'i>>,
         subscopes: Vec<Scope<'i>>,
+        span: Span,
     },
 
     // Response block scope: 'Yes' | 'No' responses
     ResponseBlock {
         responses: Vec<Response<'i>>,
+        span: Span,
     },
 
     // Section chunk scope: organizational container with technique content
@@ -205,7 +250,86 @@ pub enum Scope<'i> {
         numeral: &'i str,
         title: Option<Paragraph<'i>>,
         body: Technique<'i>,
+        span: Span,
     },
+}
+
+impl PartialEq for Scope<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Scope::DependentBlock {
+                    ordinal: a1,
+                    description: a2,
+                    subscopes: a3,
+                    ..
+                },
+                Scope::DependentBlock {
+                    ordinal: b1,
+                    description: b2,
+                    subscopes: b3,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2 && a3 == b3,
+            (
+                Scope::ParallelBlock {
+                    bullet: a1,
+                    description: a2,
+                    subscopes: a3,
+                    ..
+                },
+                Scope::ParallelBlock {
+                    bullet: b1,
+                    description: b2,
+                    subscopes: b3,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2 && a3 == b3,
+            (
+                Scope::AttributeBlock {
+                    attributes: a1,
+                    subscopes: a2,
+                    ..
+                },
+                Scope::AttributeBlock {
+                    attributes: b1,
+                    subscopes: b2,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2,
+            (
+                Scope::CodeBlock {
+                    expressions: a1,
+                    subscopes: a2,
+                    ..
+                },
+                Scope::CodeBlock {
+                    expressions: b1,
+                    subscopes: b2,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2,
+            (
+                Scope::ResponseBlock { responses: a, .. },
+                Scope::ResponseBlock { responses: b, .. },
+            ) => a == b,
+            (
+                Scope::SectionChunk {
+                    numeral: a1,
+                    title: a2,
+                    body: a3,
+                    ..
+                },
+                Scope::SectionChunk {
+                    numeral: b1,
+                    title: b2,
+                    body: b3,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2 && a3 == b3,
+            _ => false,
+        }
+    }
 }
 
 // enum responses like 'Yes' | 'No'
@@ -443,14 +567,8 @@ mod check {
     #[test]
     fn identifier_rules() {
         let s = Span::default();
-        assert_eq!(
-            validate_identifier("a", s),
-            Some(Identifier::dummy("a"))
-        );
-        assert_eq!(
-            validate_identifier("ab", s),
-            Some(Identifier::dummy("ab"))
-        );
+        assert_eq!(validate_identifier("a", s), Some(Identifier::dummy("a")));
+        assert_eq!(validate_identifier("ab", s), Some(Identifier::dummy("ab")));
         assert_eq!(
             validate_identifier("johnny5", s),
             Some(Identifier::dummy("johnny5"))
@@ -468,19 +586,31 @@ mod check {
 
     #[test]
     fn forma_rules() {
-        assert_eq!(validate_forma("A", Span::default()), Some(Forma::dummy("A")));
-        assert_eq!(validate_forma("Beans", Span::default()), Some(Forma::dummy("Beans")));
+        assert_eq!(
+            validate_forma("A", Span::default()),
+            Some(Forma::dummy("A"))
+        );
+        assert_eq!(
+            validate_forma("Beans", Span::default()),
+            Some(Forma::dummy("Beans"))
+        );
         assert_eq!(validate_forma("lower", Span::default()), None);
     }
 
     #[test]
     fn genus_rules_single() {
-        assert_eq!(validate_genus("A", Span::default()), Some(Genus::Single(Forma::dummy("A"))));
+        assert_eq!(
+            validate_genus("A", Span::default()),
+            Some(Genus::Single(Forma::dummy("A")))
+        );
     }
 
     #[test]
     fn genus_rules_list() {
-        assert_eq!(validate_genus("[A]", Span::default()), Some(Genus::List(Forma::dummy("A"))));
+        assert_eq!(
+            validate_genus("[A]", Span::default()),
+            Some(Genus::List(Forma::dummy("A")))
+        );
 
         // Test list with whitespace
         assert_eq!(
@@ -507,13 +637,19 @@ mod check {
 
         assert_eq!(
             validate_genus("(Coffee, Tea)", Span::default()),
-            Some(Genus::Tuple(vec![Forma::dummy("Coffee"), Forma::dummy("Tea")]))
+            Some(Genus::Tuple(vec![
+                Forma::dummy("Coffee"),
+                Forma::dummy("Tea")
+            ]))
         );
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
 
-        assert_eq!(validate_genus("(A)", Span::default()), Some(Genus::Tuple(vec![Forma::dummy("A")])));
+        assert_eq!(
+            validate_genus("(A)", Span::default()),
+            Some(Genus::Tuple(vec![Forma::dummy("A")]))
+        );
 
         // Test parenthesized tuples with whitespace
         assert_eq!(
@@ -540,7 +676,10 @@ mod check {
 
         assert_eq!(
             validate_genus("Coffee, Tea", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("Coffee"), Forma::dummy("Tea")]))
+            Some(Genus::Naked(vec![
+                Forma::dummy("Coffee"),
+                Forma::dummy("Tea")
+            ]))
         );
 
         assert_eq!(

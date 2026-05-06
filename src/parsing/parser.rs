@@ -311,7 +311,7 @@ impl<'i> Parser<'i> {
                             if is_section(self.source) {
                                 match self.read_section() {
                                     Ok(section) => {
-                                        if let Some(Element::Steps(ref mut steps)) = procedure
+                                        if let Some(Element::Steps(ref mut steps, _)) = procedure
                                             .elements
                                             .last_mut()
                                         {
@@ -320,7 +320,10 @@ impl<'i> Parser<'i> {
                                             // Create a new Steps element if one doesn't exist
                                             procedure
                                                 .elements
-                                                .push(Element::Steps(vec![section]));
+                                                .push(Element::Steps(
+                                                    vec![section],
+                                                    Span::default(),
+                                                ));
                                         }
                                     }
                                     Err(error) => {
@@ -719,9 +722,10 @@ impl<'i> Parser<'i> {
 
     /// `slice` must be a sub-slice of `self.source`.
     fn span_of(&self, slice: &str) -> Span {
-        let inner = (slice.as_ptr() as usize) - (self
-            .source
-            .as_ptr() as usize);
+        let inner = (slice.as_ptr() as usize)
+            - (self
+                .source
+                .as_ptr() as usize);
         Span {
             offset: self.offset + inner,
             length: slice.len(),
@@ -903,12 +907,10 @@ impl<'i> Parser<'i> {
             offset: self.offset + two.start(),
             length: two.len(),
         };
-        let requires = validate_genus(one.as_str(), one_span).ok_or(
-            ParsingError::InvalidGenus(one_span.offset, one_span.length),
-        )?;
-        let provides = validate_genus(two.as_str(), two_span).ok_or(
-            ParsingError::InvalidGenus(two_span.offset, two_span.length),
-        )?;
+        let requires = validate_genus(one.as_str(), one_span)
+            .ok_or(ParsingError::InvalidGenus(one_span.offset, one_span.length))?;
+        let provides = validate_genus(two.as_str(), two_span)
+            .ok_or(ParsingError::InvalidGenus(two_span.offset, two_span.length))?;
 
         Ok(Signature { requires, provides })
     }
@@ -944,11 +946,7 @@ impl<'i> Parser<'i> {
         let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
             let before = before.trim();
             let name = validate_identifier(before, self.span_of(before)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    self.offset,
-                    before.len(),
-                    before.to_string(),
-                ),
+                ParsingError::InvalidIdentifier(self.offset, before.len(), before.to_string()),
             )?;
 
             // Extract parameters from parentheses
@@ -998,11 +996,7 @@ impl<'i> Parser<'i> {
             }
 
             let name = validate_identifier(text, self.span_of(text)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    self.offset,
-                    text.len(),
-                    text.to_string(),
-                ),
+                ParsingError::InvalidIdentifier(self.offset, text.len(), text.to_string()),
             )?;
             (name, None)
         };
@@ -1100,6 +1094,7 @@ impl<'i> Parser<'i> {
             }
 
             let content = parser.source;
+            let elem_start = parser.offset;
 
             if is_procedure_title(content) {
                 match parser.take_block_lines(
@@ -1113,7 +1108,13 @@ impl<'i> Parser<'i> {
                         Ok(text)
                     },
                 ) {
-                    Ok(title) => elements.push(Element::Title(title)),
+                    Ok(title) => {
+                        let span = Span {
+                            offset: elem_start,
+                            length: parser.offset - elem_start,
+                        };
+                        elements.push(Element::Title(title, span));
+                    }
                     Err(error) => {
                         self.problems
                             .push(error);
@@ -1122,7 +1123,13 @@ impl<'i> Parser<'i> {
                 }
             } else if is_code_block(content) {
                 match parser.read_code_block() {
-                    Ok(expressions) => elements.push(Element::CodeBlock(expressions)),
+                    Ok(expressions) => {
+                        let span = Span {
+                            offset: elem_start,
+                            length: parser.offset - elem_start,
+                        };
+                        elements.push(Element::CodeBlock(expressions, span));
+                    }
                     Err(error) => {
                         self.problems
                             .push(error);
@@ -1132,7 +1139,13 @@ impl<'i> Parser<'i> {
             } else if is_attribute_pattern(content) {
                 if is_attribute_assignment(content) {
                     match parser.read_attribute_scope() {
-                        Ok(attribute_block) => elements.push(Element::Steps(vec![attribute_block])),
+                        Ok(attribute_block) => {
+                            let span = Span {
+                                offset: elem_start,
+                                length: parser.offset - elem_start,
+                            };
+                            elements.push(Element::Steps(vec![attribute_block], span));
+                        }
                         Err(error) => {
                             self.problems
                                 .push(error);
@@ -1173,7 +1186,11 @@ impl<'i> Parser<'i> {
                     }
                 }
                 if !steps.is_empty() {
-                    elements.push(Element::Steps(steps));
+                    let span = Span {
+                        offset: elem_start,
+                        length: parser.offset - elem_start,
+                    };
+                    elements.push(Element::Steps(steps, span));
                 }
             } else if malformed_step_pattern(content) {
                 // Store error but continue parsing
@@ -1207,7 +1224,11 @@ impl<'i> Parser<'i> {
                 ) {
                     Ok(description) => {
                         if !description.is_empty() {
-                            elements.push(Element::Description(description));
+                            let span = Span {
+                                offset: elem_start,
+                                length: parser.offset - elem_start,
+                            };
+                            elements.push(Element::Description(description, span));
                         }
                     }
                     Err(error) => {
@@ -1224,6 +1245,7 @@ impl<'i> Parser<'i> {
             parameters: declaration.1,
             signature: declaration.2,
             elements,
+            span: Span::default(),
         })
     }
 
@@ -1302,6 +1324,7 @@ impl<'i> Parser<'i> {
                     numeral,
                     title,
                     body: Technique::Empty,
+                    span: Span::default(),
                 })
             } else if is_procedure_declaration(outer.source) {
                 // Section contains procedures
@@ -1328,6 +1351,7 @@ impl<'i> Parser<'i> {
                     numeral,
                     title,
                     body: Technique::Procedures(procedures),
+                    span: Span::default(),
                 })
             } else {
                 // Section contains steps - parse as steps
@@ -1354,6 +1378,7 @@ impl<'i> Parser<'i> {
                     numeral,
                     title,
                     body: Technique::Steps(steps),
+                    span: Span::default(),
                 })
             }
         })
@@ -1531,10 +1556,17 @@ impl<'i> Parser<'i> {
             Ok(Expression::Execution(function))
         } else {
             let identifier = self.read_identifier()?;
-            if self.source.starts_with('"') {
+            if self
+                .source
+                .starts_with('"')
+            {
                 return Err(ParsingError::InvalidFunction(
-                    identifier.span.offset,
-                    identifier.span.length,
+                    identifier
+                        .span
+                        .offset,
+                    identifier
+                        .span
+                        .length,
                 ));
             }
             Ok(Expression::Variable(identifier))
@@ -1808,11 +1840,7 @@ impl<'i> Parser<'i> {
         };
 
         let identifier = validate_identifier(possible, self.span_of(possible)).ok_or(
-            ParsingError::InvalidIdentifier(
-                self.offset,
-                possible.len(),
-                possible.to_string(),
-            ),
+            ParsingError::InvalidIdentifier(self.offset, possible.len(), possible.to_string()),
         )?;
 
         self.advance(possible.len());
@@ -2081,6 +2109,7 @@ impl<'i> Parser<'i> {
     fn read_step_dependent(&mut self) -> Result<Scope<'i>, ParsingError> {
         self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
             outer.trim_whitespace();
+            let start = outer.offset;
 
             // Parse ordinal
             let re = regex!(r"^\s*(\d+)\.\s+");
@@ -2113,6 +2142,10 @@ impl<'i> Parser<'i> {
                 ordinal: number,
                 description: text,
                 subscopes: scopes,
+                span: Span {
+                    offset: start,
+                    length: outer.offset - start,
+                },
             });
         })
     }
@@ -2121,6 +2154,7 @@ impl<'i> Parser<'i> {
     fn read_step_parallel(&mut self) -> Result<Scope<'i>, ParsingError> {
         self.take_block_lines(is_step_parallel, is_step_parallel, |outer| {
             outer.trim_whitespace();
+            let start = outer.offset;
 
             // Parse bullet
             if !outer
@@ -2141,6 +2175,10 @@ impl<'i> Parser<'i> {
                 bullet: '-',
                 description: text,
                 subscopes: scopes,
+                span: Span {
+                    offset: start,
+                    length: outer.offset - start,
+                },
             });
         })
     }
@@ -2151,6 +2189,7 @@ impl<'i> Parser<'i> {
             is_substep_dependent,
             |line| is_substep_dependent(line),
             |outer| {
+                let start = outer.offset;
                 let content = outer.source;
                 let re = regex!(r"^\s*([a-hj-uwy])\.\s+");
                 let cap = re
@@ -2184,6 +2223,10 @@ impl<'i> Parser<'i> {
                     ordinal: letter,
                     description: text,
                     subscopes: scopes,
+                    span: Span {
+                        offset: start,
+                        length: outer.offset - start,
+                    },
                 })
             },
         )
@@ -2195,6 +2238,7 @@ impl<'i> Parser<'i> {
             is_substep_parallel,
             |line| is_substep_parallel(line),
             |outer| {
+                let start = outer.offset;
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
                     .find(outer.source)
@@ -2215,6 +2259,10 @@ impl<'i> Parser<'i> {
                     bullet: '-',
                     description: text,
                     subscopes: scopes,
+                    span: Span {
+                        offset: start,
+                        length: outer.offset - start,
+                    },
                 })
             },
         )
@@ -2226,6 +2274,7 @@ impl<'i> Parser<'i> {
             is_subsubstep_dependent,
             |line| is_subsubstep_dependent(line),
             |outer| {
+                let start = outer.offset;
                 let content = outer.source;
                 let re = regex!(r"^\s*([ivx]+)\.\s+");
                 let cap = re
@@ -2256,6 +2305,10 @@ impl<'i> Parser<'i> {
                     ordinal: numeral,
                     description: text,
                     subscopes: scopes,
+                    span: Span {
+                        offset: start,
+                        length: outer.offset - start,
+                    },
                 })
             },
         )
@@ -2686,8 +2739,15 @@ impl<'i> Parser<'i> {
             } else if malformed_response_pattern(content) {
                 return Err(ParsingError::InvalidResponse(self.offset, 0));
             } else if is_enum_response(content) {
+                let responses_start = self.offset;
                 let responses = self.read_responses()?;
-                scopes.push(Scope::ResponseBlock { responses });
+                scopes.push(Scope::ResponseBlock {
+                    responses,
+                    span: Span {
+                        offset: responses_start,
+                        length: self.offset - responses_start,
+                    },
+                });
             } else {
                 break;
             }
@@ -2698,12 +2758,17 @@ impl<'i> Parser<'i> {
     /// Parse an attribute block (role or place assignment) with its subscopes
     fn read_attribute_scope(&mut self) -> Result<Scope<'i>, ParsingError> {
         self.take_block_lines(is_attribute_assignment, is_attribute_assignment, |outer| {
+            let start = outer.offset;
             let attributes = outer.read_attributes()?;
             let subscopes = outer.read_scopes()?;
 
             Ok(Scope::AttributeBlock {
                 attributes,
                 subscopes,
+                span: Span {
+                    offset: start,
+                    length: outer.offset - start,
+                },
             })
         })
     }
@@ -2719,12 +2784,17 @@ impl<'i> Parser<'i> {
                 false // Never stop - consume all remaining content
             },
             |outer| {
+                let start = outer.offset;
                 let expressions = outer.read_code_block()?;
                 let subscopes = outer.read_scopes()?;
 
                 Ok(Scope::CodeBlock {
                     expressions,
                     subscopes,
+                    span: Span {
+                        offset: start,
+                        length: outer.offset - start,
+                    },
                 })
             },
         )

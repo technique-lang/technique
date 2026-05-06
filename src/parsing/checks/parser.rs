@@ -559,6 +559,7 @@ fn read_toplevel_steps() {
             ordinal: "1",
             description: vec![Paragraph(vec![Descriptive::Text("First step")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -578,6 +579,7 @@ fn read_toplevel_steps() {
                 "a top-level task to be one in parallel with"
             )]),],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
     let result = input.read_step_parallel();
@@ -587,6 +589,7 @@ fn read_toplevel_steps() {
             bullet: '-',
             description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -605,6 +608,7 @@ fn read_toplevel_steps() {
                 "Have you done the first thing in the first one?"
             )])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -627,6 +631,7 @@ fn reading_substeps_basic() {
             ordinal: "a",
             description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -639,6 +644,7 @@ fn reading_substeps_basic() {
             bullet: '-',
             description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 }
@@ -666,13 +672,16 @@ fn single_step_with_dependent_substeps() {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::DependentBlock {
                     ordinal: "b",
                     description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ],
+            span: Span::default(),
         })
     );
 }
@@ -700,13 +709,16 @@ fn single_step_with_parallel_substeps() {
                     bullet: '-',
                     description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::ParallelBlock {
                     bullet: '-',
                     description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ],
+            span: Span::default(),
         })
     );
 }
@@ -734,7 +746,9 @@ fn multiple_steps_with_substeps() {
                 ordinal: "a",
                 description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
                 subscopes: vec![],
+                span: Span::default(),
             }],
+            span: Span::default(),
         })
     );
 
@@ -744,6 +758,7 @@ fn multiple_steps_with_substeps() {
             ordinal: "2",
             description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 }
@@ -810,9 +825,12 @@ fn read_step_with_content() {
                             value: "No",
                             condition: Some("but I have an excuse")
                         }
-                    ]
-                }]
+                    ],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
             }],
+            span: Span::default(),
         })
     );
 
@@ -850,7 +868,7 @@ This is the first one.
                 .elements
                 .iter()
                 .find_map(|element| match element {
-                    Element::Steps(steps) => Some(steps),
+                    Element::Steps(steps, _) => Some(steps),
                     _ => None,
                 });
             assert_eq!(
@@ -1090,7 +1108,10 @@ fn code_blocks() {
     // Test simple identifier in code block
     input.initialize("{ count }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Variable(Identifier::dummy("count"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Variable(Identifier::dummy("count"))])
+    );
 
     // Test function with simple parameter
     input.initialize("{ sum(count) }");
@@ -1555,7 +1576,11 @@ fn foreach_tuple_pattern() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier::dummy("a"), Identifier::dummy("b"), Identifier::dummy("c")],
+            vec![
+                Identifier::dummy("a"),
+                Identifier::dummy("b"),
+                Identifier::dummy("c")
+            ],
             Box::new(Expression::Execution(Function {
                 target: Identifier::dummy("zip"),
                 parameters: vec![
@@ -1797,7 +1822,10 @@ fn reading_attributes() {
     // Test simple place
     input.initialize("^kitchen");
     let result = input.read_attributes();
-    assert_eq!(result, Ok(vec![Attribute::Place(Identifier::dummy("kitchen"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Attribute::Place(Identifier::dummy("kitchen"))])
+    );
 
     // Test multiple roles
     input.initialize("@master_chef + @barista");
@@ -1893,7 +1921,9 @@ fn step_with_role_assignment() {
             subscopes: vec![Scope::AttributeBlock {
                 attributes: vec![Attribute::Role(Identifier::dummy("nurse"))],
                 subscopes: vec![],
-            }]
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1926,9 +1956,12 @@ fn substep_with_role_assignment() {
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
-                    subscopes: vec![]
-                }]
-            }]
+                    subscopes: vec![],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1959,9 +1992,12 @@ fn parallel_step_with_role_assignment() {
                 subscopes: vec![Scope::ParallelBlock {
                     bullet: '-',
                     description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
-                    subscopes: vec![]
-                }]
-            }]
+                    subscopes: vec![],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1998,8 +2034,10 @@ fn two_roles_with_substeps() {
                         description: vec![Paragraph(vec![Descriptive::Text(
                             "What are the steps?"
                         )])],
-                        subscopes: vec![]
-                    }]
+                        subscopes: vec![],
+                        span: Span::default(),
+                    }],
+                    span: Span::default(),
                 },
                 Scope::AttributeBlock {
                     attributes: vec![Attribute::Role(Identifier::dummy("nurse"))],
@@ -2008,10 +2046,13 @@ fn two_roles_with_substeps() {
                         description: vec![Paragraph(vec![Descriptive::Text(
                             "What are the concerns?"
                         )])],
-                        subscopes: vec![]
-                    }]
+                        subscopes: vec![],
+                        span: Span::default(),
+                    }],
+                    span: Span::default(),
                 }
-            ]
+            ],
+            span: Span::default(),
         }
     );
 }
