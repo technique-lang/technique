@@ -1,10 +1,16 @@
 // Intermediate Representation types for translated Technique procedures.
 //
 // These types complement those found in `crate::language::types` for the
-// parser's abstract syntax tree but lifts and reshapes constructs toward a
-// form that can be walked - and subsequently executed.
+// parser's abstract syntax tree but lift and reshape constructs toward a form
+// that can be walked by an interpreter. Where the parsed input already
+// carries the right shape - descriptive paragraphs, signatures, response
+// values, attributes - the types here borrow from the parser's internal
+// abstract syntax tree output rather than mirroring it. Where translation
+// adds information - resolved procedure references, attributes lifted onto
+// steps, the desugared spine of a procedure body - then the object here will
+// own the data.
 
-use crate::language::Identifier;
+use crate::language;
 
 /// Top-level Technique translated to a runnable program.
 #[derive(Debug, Eq, PartialEq, Default)]
@@ -24,7 +30,7 @@ impl<'i> Program<'i> {
 }
 
 /// Index of a procedure in `Program.procedures`. Used as the resolved form
-/// of a procedure invocation.
+/// for the target of an invocation.
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct ProcedureId(pub usize);
 
@@ -32,24 +38,96 @@ pub struct ProcedureId(pub usize);
 pub struct Procedure<'i> {
     /// If this is a synthetic wrapper around a top-level `Technique::Steps`
     /// then `None`, otherwise all procedures have names.
-    pub name: Option<Identifier<'i>>,
-    pub body: Block<'i>,
+    pub name: Option<language::Identifier<'i>>,
+    pub title: Option<&'i str>,
+    pub description: &'i [language::Paragraph<'i>],
+    pub parameters: Option<&'i [language::Identifier<'i>]>,
+    pub signature: Option<&'i language::Signature<'i>>,
+    pub body: Operation<'i>,
 }
 
-/// A sequence of operations forming any scope, be it procedure body, a step,
-/// the body of a control structure creating a loop, etc.
-#[derive(Debug, Eq, PartialEq, Default)]
-pub struct Block<'i> {
-    pub operations: Vec<Operation<'i>>,
-}
-
-/// One unit of work in a `Block`.
+/// Every node of the Intermediate Representation form resulting from
+/// desugaring the surface language is an `Operation` (c.f. opcode in an
+/// instruction set). Later this will be instantiated into a tree that the
+/// interpreter can walks recursively and reduce.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Operation<'i> {
-    Placeholder(std::marker::PhantomData<&'i ()>),
+    Variable(language::Identifier<'i>),
+    Number(language::Numeric<'i>),
+    String(Vec<Fragment<'i>>),
+    Multiline(Option<&'i str>, Vec<&'i str>),
+    Tablet(Vec<Entry<'i>>),
+    Invoke(Invoke<'i>),
+    Execution {
+        target: language::Identifier<'i>,
+        arguments: Vec<Operation<'i>>,
+    },
+
+    Sequence(Vec<Operation<'i>>),
+    Section {
+        numeral: &'i str,
+        title: Option<&'i language::Paragraph<'i>>,
+        body: Box<Operation<'i>>,
+    },
+    Step {
+        ordinal: Ordinal<'i>,
+        attributes: Vec<&'i [language::Attribute<'i>]>,
+        description: &'i [language::Paragraph<'i>],
+        body: Box<Operation<'i>>,
+        expects: Option<&'i [language::Response<'i>]>,
+    },
+    Loop {
+        names: Vec<language::Identifier<'i>>,
+        over: Option<Box<Operation<'i>>>,
+        body: Box<Operation<'i>>,
+    },
+    Bind {
+        names: Vec<language::Identifier<'i>>,
+        value: Box<Operation<'i>>,
+    },
+}
+
+/// A step's lexical kind. `Dependent` carries the verbatim ordinal string as
+/// captured by the parser (`"1"`, `"a"`, `"iii"`, ...); `Parallel` has no
+/// captured form, its position deriving from its index in the surrounding
+/// `Sequence`.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Ordinal<'i> {
+    Dependent(&'i str),
+    Parallel,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum TranslationError<'i> {
-    Placeholder(std::marker::PhantomData<&'i ()>),
+pub struct Invoke<'i> {
+    pub target: ProcedureRef<'i>,
+    pub arguments: Vec<Operation<'i>>,
+}
+
+/// Reference to a procedure. The collect pass registers every declared
+/// procedure into `Program.procedures`; the resolve pass walks the IR
+/// replacing matching `Unresolved` references with `Resolved`. Names that
+/// don't match any declared procedure remain `Unresolved` - they are
+/// typically builtin functions (`exec`, `now`, `zip`, ...) and are not
+/// translation errors.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ProcedureRef<'i> {
+    Unresolved(language::Identifier<'i>),
+    Resolved(ProcedureId),
+}
+
+/// A fragment of a string literal: either inline text or an interpolated
+/// expression. Defined IR-side (rather than reusing `language::Piece`)
+/// because interpolations are themselves `Operation`s and may carry resolved
+/// procedure references.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Fragment<'i> {
+    Text(&'i str),
+    Interpolation(Operation<'i>),
+}
+
+/// An entry in a tablet: a label paired with a value-producing operation.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Entry<'i> {
+    pub label: &'i str,
+    pub value: Operation<'i>,
 }
