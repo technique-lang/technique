@@ -1,11 +1,9 @@
-// Error-case checks for translation. Currently a placeholder; populated as
-// translation steps land their corresponding error variants
-// (duplicate procedure name, orphan response, etc.).
+// Error-case checks for translation. Populated as translation steps land
+// their corresponding error variants.
 
 use super::*;
 
 #[test]
-fn placeholder() {
-    // Ensures the module compiles before real error tests are added.
-    let _ = TranslationError::Placeholder(std::marker::PhantomData);
+fn translation_error_variants_construct() {
+    let _ = TranslationError::OrphanResponse;
 }

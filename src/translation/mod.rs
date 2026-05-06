@@ -1,11 +1,13 @@
 //! Translation from the surface AST (`crate::language`) to an Intermediate
-//! Representation suitable for a runner.
+//! Representation suitable for an interpreter.
 
-mod passes;
+mod translator;
 mod types;
 
-pub use passes::translate;
-pub use types::{Block, Operation, Procedure, ProcedureId, Program, TranslationError};
+pub use translator::{translate, TranslationError};
+pub use types::{
+    Invoke, Operation, Ordinal, Pair, Piece, Procedure, ProcedureId, ProcedureRef, Program,
+};
 
 #[cfg(test)]
 #[path = "checks/translate.rs"]

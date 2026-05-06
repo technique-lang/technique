@@ -1,7 +1,10 @@
-use super::messages::generate_error_message;
+use super::messages::{generate_error_message, generate_translation_error};
 use owo_colors::OwoColorize;
 use std::path::Path;
-use technique::{formatting::Render, language::LoadingError, parsing::ParsingError};
+use technique::{
+    formatting::Render, language::LoadingError, parsing::ParsingError,
+    translation::TranslationError,
+};
 
 /// Format a parsing error with full details including source code context
 pub fn full_parsing_error<'i>(
@@ -87,6 +90,19 @@ pub fn concise_parsing_error<'i>(
         column,
         problem.bold(),
     )
+}
+
+/// Format a translation error with concise single-line output. Translation
+/// errors do not yet carry source positions, so file:line:column is omitted.
+pub fn concise_translation_error<'i>(
+    error: &TranslationError<'i>,
+    filename: &'i Path,
+    renderer: &impl Render,
+) -> String {
+    let (problem, _) = generate_translation_error(error, renderer);
+    let input = generate_filename(filename);
+
+    format!("{}: {}: {}", "error".bright_red(), input, problem.bold(),)
 }
 
 /// Format a LoadingError with concise single-line output

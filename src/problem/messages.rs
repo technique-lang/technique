@@ -1,5 +1,7 @@
 use crate::problem::Present;
-use technique::{formatting::Render, language::*, parsing::ParsingError};
+use technique::{
+    formatting::Render, language::*, parsing::ParsingError, translation::TranslationError,
+};
 
 /// Generate problem and detail messages for parsing errors using AST construction
 pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
@@ -959,5 +961,30 @@ Hyphens, underscores, spaces, or subscripts are not valid in unit symbols.
                 .to_string(),
             )
         }
+    }
+}
+
+/// Generate problem and detail messages for translation errors.
+pub fn generate_translation_error<'i>(
+    error: &TranslationError<'i>,
+    _renderer: &dyn Render,
+) -> (String, String) {
+    match error {
+        TranslationError::DuplicateProcedure(Identifier(name)) => (
+            format!("Duplicate procedure name '{}'", name),
+            "A procedure with this name has already been declared in this document.".to_string(),
+        ),
+        TranslationError::DuplicateTitle(Identifier(name)) => (
+            format!("Duplicate title in procedure '{}'", name),
+            "A procedure can have at most one title.".to_string(),
+        ),
+        TranslationError::InterleavedDescription(Identifier(name)) => (
+            format!("Description out of place in procedure '{}'", name),
+            "A procedure's free-text description must appear immediately after the title and before any steps or code blocks.".to_string(),
+        ),
+        TranslationError::OrphanResponse => (
+            "Response block without a parent step".to_string(),
+            "A response block ('Yes' | 'No') must follow a step it qualifies; it cannot stand alone.".to_string(),
+        ),
     }
 }

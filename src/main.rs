@@ -259,9 +259,19 @@ fn main() {
 
             let program = match translation::translate(&technique) {
                 Ok(program) => program,
-                Err(_errors) => {
-                    // Translation error rendering is a later step.
-                    eprintln!("{}", "translation failed".bright_red());
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_translation_error(&error, &filename, &Terminal)
+                        );
+                    }
                     std::process::exit(1);
                 }
             };
