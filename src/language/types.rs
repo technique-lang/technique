@@ -117,7 +117,7 @@ impl PartialEq for Identifier<'_> {
 impl<'i> Identifier<'i> {
     /// Test helper: builds an `Identifier` with a default span. See also the
     /// `PartialEq` instance.
-    pub const fn dummy(value: &'i str) -> Self {
+    pub const fn new(value: &'i str) -> Self {
         Identifier {
             value,
             span: Span {
@@ -141,7 +141,7 @@ impl PartialEq for External<'_> {
 }
 
 impl<'i> External<'i> {
-    pub const fn dummy(value: &'i str) -> Self {
+    pub const fn new(value: &'i str) -> Self {
         External {
             value,
             span: Span {
@@ -171,7 +171,7 @@ impl PartialEq for Forma<'_> {
 }
 
 impl<'i> Forma<'i> {
-    pub const fn dummy(value: &'i str) -> Self {
+    pub const fn new(value: &'i str) -> Self {
         Forma {
             value,
             span: Span {
@@ -636,18 +636,18 @@ mod check {
     #[test]
     fn identifier_rules() {
         let s = Span::default();
-        assert_eq!(validate_identifier("a", s), Some(Identifier::dummy("a")));
-        assert_eq!(validate_identifier("ab", s), Some(Identifier::dummy("ab")));
+        assert_eq!(validate_identifier("a", s), Some(Identifier::new("a")));
+        assert_eq!(validate_identifier("ab", s), Some(Identifier::new("ab")));
         assert_eq!(
             validate_identifier("johnny5", s),
-            Some(Identifier::dummy("johnny5"))
+            Some(Identifier::new("johnny5"))
         );
         assert_eq!(validate_identifier("Pizza", s), None);
         assert_eq!(validate_identifier("pizZa", s), None);
         assert!(validate_identifier("0trust", s).is_none());
         assert_eq!(
             validate_identifier("make_dinner", s),
-            Some(Identifier::dummy("make_dinner"))
+            Some(Identifier::new("make_dinner"))
         );
         assert!(validate_identifier("MakeDinner", s).is_none());
         assert!(validate_identifier("make-dinner", s).is_none());
@@ -655,13 +655,10 @@ mod check {
 
     #[test]
     fn forma_rules() {
-        assert_eq!(
-            validate_forma("A", Span::default()),
-            Some(Forma::dummy("A"))
-        );
+        assert_eq!(validate_forma("A", Span::default()), Some(Forma::new("A")));
         assert_eq!(
             validate_forma("Beans", Span::default()),
-            Some(Forma::dummy("Beans"))
+            Some(Forma::new("Beans"))
         );
         assert_eq!(validate_forma("lower", Span::default()), None);
     }
@@ -670,7 +667,7 @@ mod check {
     fn genus_rules_single() {
         assert_eq!(
             validate_genus("A", Span::default()),
-            Some(Genus::Single(Forma::dummy("A")))
+            Some(Genus::Single(Forma::new("A")))
         );
     }
 
@@ -678,18 +675,18 @@ mod check {
     fn genus_rules_list() {
         assert_eq!(
             validate_genus("[A]", Span::default()),
-            Some(Genus::List(Forma::dummy("A")))
+            Some(Genus::List(Forma::new("A")))
         );
 
         // Test list with whitespace
         assert_eq!(
             validate_genus("[ Input ]", Span::default()),
-            Some(Genus::List(Forma::dummy("Input")))
+            Some(Genus::List(Forma::new("Input")))
         );
 
         assert_eq!(
             validate_genus("[\tOutput\t]", Span::default()),
-            Some(Genus::List(Forma::dummy("Output")))
+            Some(Genus::List(Forma::new("Output")))
         );
 
         // Test malformed lists
@@ -701,15 +698,12 @@ mod check {
     fn genus_rules_tuple_parens() {
         assert_eq!(
             validate_genus("(A, B)", Span::default()),
-            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Tuple(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         assert_eq!(
             validate_genus("(Coffee, Tea)", Span::default()),
-            Some(Genus::Tuple(vec![
-                Forma::dummy("Coffee"),
-                Forma::dummy("Tea")
-            ]))
+            Some(Genus::Tuple(vec![Forma::new("Coffee"), Forma::new("Tea")]))
         );
 
         // not actually sure whether we should be normalizing this? Probably
@@ -717,18 +711,18 @@ mod check {
 
         assert_eq!(
             validate_genus("(A)", Span::default()),
-            Some(Genus::Tuple(vec![Forma::dummy("A")]))
+            Some(Genus::Tuple(vec![Forma::new("A")]))
         );
 
         // Test parenthesized tuples with whitespace
         assert_eq!(
             validate_genus("( A , B )", Span::default()),
-            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Tuple(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         assert_eq!(
             validate_genus("(\tA\t,\tB\t)", Span::default()),
-            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Tuple(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         // Test malformed tuples
@@ -740,45 +734,42 @@ mod check {
     fn genus_rules_tuple_bare() {
         assert_eq!(
             validate_genus("A, B", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Naked(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         assert_eq!(
             validate_genus("Coffee, Tea", Span::default()),
-            Some(Genus::Naked(vec![
-                Forma::dummy("Coffee"),
-                Forma::dummy("Tea")
-            ]))
+            Some(Genus::Naked(vec![Forma::new("Coffee"), Forma::new("Tea")]))
         );
 
         assert_eq!(
             validate_genus("Input, Data, Config", Span::default()),
             Some(Genus::Naked(vec![
-                Forma::dummy("Input"),
-                Forma::dummy("Data"),
-                Forma::dummy("Config")
+                Forma::new("Input"),
+                Forma::new("Data"),
+                Forma::new("Config")
             ]))
         );
 
         assert_eq!(
             validate_genus("A,B", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Naked(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         assert_eq!(
             validate_genus("A , B", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Naked(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         // Test edge cases with whitespace
         assert_eq!(
             validate_genus("  A  ,  B  ", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Naked(vec![Forma::new("A"), Forma::new("B")]))
         );
 
         assert_eq!(
             validate_genus("\tA\t,\tB\t", Span::default()),
-            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
+            Some(Genus::Naked(vec![Forma::new("A"), Forma::new("B")]))
         );
     }
 

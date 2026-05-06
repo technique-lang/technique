@@ -140,11 +140,11 @@ fn identifier_rules() {
     let mut input = Parser::new();
     input.initialize("p");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("p")));
+    assert_eq!(result, Ok(Identifier::new("p")));
 
     input.initialize("cook_pizza");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("cook_pizza")));
+    assert_eq!(result, Ok(Identifier::new("cook_pizza")));
 
     input.initialize("cook-pizza");
     let result = input.read_identifier();
@@ -159,8 +159,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma::dummy("A")),
-            provides: Genus::Single(Forma::dummy("B"))
+            requires: Genus::Single(Forma::new("A")),
+            provides: Genus::Single(Forma::new("B"))
         })
     );
 
@@ -169,8 +169,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma::dummy("Beans")),
-            provides: Genus::Single(Forma::dummy("Coffee"))
+            requires: Genus::Single(Forma::new("Beans")),
+            provides: Genus::Single(Forma::new("Coffee"))
         })
     );
 
@@ -179,8 +179,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::List(Forma::dummy("Bits")),
-            provides: Genus::Single(Forma::dummy("Bob"))
+            requires: Genus::List(Forma::new("Bits")),
+            provides: Genus::Single(Forma::new("Bob"))
         })
     );
 
@@ -189,8 +189,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma::dummy("Complex")),
-            provides: Genus::Tuple(vec![Forma::dummy("Real"), Forma::dummy("Imaginary")])
+            requires: Genus::Single(Forma::new("Complex")),
+            provides: Genus::Tuple(vec![Forma::new("Real"), Forma::new("Imaginary")])
         })
     );
 }
@@ -203,7 +203,7 @@ fn declaration_simple() {
     assert!(is_procedure_declaration(input.source));
 
     let result = input.parse_procedure_declaration();
-    assert_eq!(result, Ok((Identifier::dummy("making_coffee"), None, None)));
+    assert_eq!(result, Ok((Identifier::new("making_coffee"), None, None)));
 }
 
 #[test]
@@ -216,11 +216,11 @@ fn declaration_full() {
     assert_eq!(
         result,
         Ok((
-            Identifier::dummy("f"),
+            Identifier::new("f"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma::dummy("A")),
-                provides: Genus::Single(Forma::dummy("B"))
+                requires: Genus::Single(Forma::new("A")),
+                provides: Genus::Single(Forma::new("B"))
             })
         ))
     );
@@ -232,11 +232,11 @@ fn declaration_full() {
     assert_eq!(
         result,
         Ok((
-            Identifier::dummy("making_coffee"),
+            Identifier::new("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
-                provides: Genus::List(Forma::dummy("Coffee"))
+                requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                provides: Genus::List(Forma::new("Coffee"))
             })
         ))
     );
@@ -289,11 +289,11 @@ making_coffee :
     assert_eq!(
         result,
         Ok((
-            Identifier::dummy("making_coffee"),
+            Identifier::new("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma::dummy("Ingredients")),
-                provides: Genus::Single(Forma::dummy("Coffee"))
+                requires: Genus::Single(Forma::new("Ingredients")),
+                provides: Genus::Single(Forma::new("Coffee"))
             })
         ))
     );
@@ -312,11 +312,11 @@ making_coffee(b, m) :
     assert_eq!(
         result,
         Ok((
-            Identifier::dummy("making_coffee"),
-            Some(vec![Identifier::dummy("b"), Identifier::dummy("m")]),
+            Identifier::new("making_coffee"),
+            Some(vec![Identifier::new("b"), Identifier::new("m")]),
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
-                provides: Genus::Single(Forma::dummy("Coffee"))
+                requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                provides: Genus::Single(Forma::new("Coffee"))
             })
         ))
     );
@@ -415,19 +415,19 @@ fn taking_until() {
     // Test take_until() with an identifier up to a limiting character
     input.initialize("hello,world");
     let result = input.take_until(&[','], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier::dummy("hello")));
+    assert_eq!(result, Ok(Identifier::new("hello")));
     assert_eq!(input.source, ",world");
 
     // Test take_until() with whitespace delimiters
     input.initialize("test \t\nmore");
     let result = input.take_until(&[' ', '\t', '\n'], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier::dummy("test")));
+    assert_eq!(result, Ok(Identifier::new("test")));
     assert_eq!(input.source, " \t\nmore");
 
     // Test take_until() when no delimiter found (it should take everything)
     input.initialize("onlytext");
     let result = input.take_until(&[',', ';'], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier::dummy("onlytext")));
+    assert_eq!(result, Ok(Identifier::new("onlytext")));
     assert_eq!(input.source, "");
 }
 
@@ -441,7 +441,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier::dummy("hello")),
+            target: Target::Local(Identifier::new("hello")),
             parameters: None
         })
     );
@@ -452,7 +452,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier::dummy("hello_world")),
+            target: Target::Local(Identifier::new("hello_world")),
             parameters: Some(vec![])
         })
     );
@@ -463,11 +463,11 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier::dummy("greetings")),
+            target: Target::Local(Identifier::new("greetings")),
             parameters: Some(vec![
-                Expression::Variable(Identifier::dummy("name"), Span::default()),
-                Expression::Variable(Identifier::dummy("title"), Span::default()),
-                Expression::Variable(Identifier::dummy("occupation"), Span::default())
+                Expression::Variable(Identifier::new("name"), Span::default()),
+                Expression::Variable(Identifier::new("title"), Span::default()),
+                Expression::Variable(Identifier::new("occupation"), Span::default())
             ])
         })
     );
@@ -480,7 +480,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Remote(External::dummy("https://example.com/proc")),
+            target: Target::Remote(External::new("https://example.com/proc")),
             parameters: None
         })
     );
@@ -1117,7 +1117,7 @@ fn code_blocks() {
     assert_eq!(
         result,
         Ok(vec![Expression::Variable(
-            Identifier::dummy("count"),
+            Identifier::new("count"),
             Span::default()
         )])
     );
@@ -1129,9 +1129,9 @@ fn code_blocks() {
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("sum"),
+                target: Identifier::new("sum"),
                 parameters: vec![Expression::Variable(
-                    Identifier::dummy("count"),
+                    Identifier::new("count"),
                     Span::default()
                 )]
             },
@@ -1146,11 +1146,11 @@ fn code_blocks() {
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("consume"),
+                target: Identifier::new("consume"),
                 parameters: vec![
-                    Expression::Variable(Identifier::dummy("apple"), Span::default()),
-                    Expression::Variable(Identifier::dummy("banana"), Span::default()),
-                    Expression::Variable(Identifier::dummy("chocolate"), Span::default())
+                    Expression::Variable(Identifier::new("apple"), Span::default()),
+                    Expression::Variable(Identifier::new("banana"), Span::default()),
+                    Expression::Variable(Identifier::new("chocolate"), Span::default())
                 ]
             },
             Span::default()
@@ -1164,7 +1164,7 @@ fn code_blocks() {
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::String(
                     vec![Piece::Text("Hello, World")],
                     Span::default()
@@ -1185,7 +1185,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     Some("bash"),
                     vec!["ls -l", "echo \"Done\""],
@@ -1203,7 +1203,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("timer"),
+                target: Identifier::new("timer"),
                 parameters: vec![Expression::Number(
                     Numeric::Scientific(Quantity {
                         mantissa: Decimal {
@@ -1228,7 +1228,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("measure"),
+                target: Identifier::new("measure"),
                 parameters: vec![Expression::Number(Numeric::Integral(100), Span::default())]
             },
             Span::default()
@@ -1242,7 +1242,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("seq"),
+                target: Identifier::new("seq"),
                 parameters: vec![
                     Expression::Number(Numeric::Integral(1), Span::default()),
                     Expression::Number(Numeric::Integral(6), Span::default())
@@ -1259,7 +1259,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("wait"),
+                target: Identifier::new("wait"),
                 parameters: vec![
                     Expression::Number(
                         Numeric::Scientific(Quantity {
@@ -1300,7 +1300,7 @@ fn multiline() {
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     Some("bash"),
                     vec![
@@ -1329,7 +1329,7 @@ echo "Done"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     None,
                     vec!["ls -l", "echo \"Done\""],
@@ -1355,7 +1355,7 @@ echo "Ending"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     Some("shell"),
                     vec![
@@ -1390,7 +1390,7 @@ echo "Ending"```) }"#,
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     Some("python"),
                     vec![
@@ -1419,7 +1419,7 @@ echo test
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     None,
                     vec!["echo test"],
@@ -1445,7 +1445,7 @@ echo test
         result,
         Ok(vec![Expression::Execution(
             Function {
-                target: Identifier::dummy("exec"),
+                target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
                     Some("yaml"),
                     vec![
@@ -1529,13 +1529,13 @@ fn tablets() {
                 },
                 Pair {
                     label: "message",
-                    value: Expression::Variable(Identifier::dummy("msg"), Span::default())
+                    value: Expression::Variable(Identifier::new("msg"), Span::default())
                 },
                 Pair {
                     label: "timestamp",
                     value: Expression::Execution(
                         Function {
-                            target: Identifier::dummy("now"),
+                            target: Identifier::new("now"),
                             parameters: vec![]
                         },
                         Span::default()
@@ -1575,7 +1575,7 @@ fn tablets() {
                 },
                 Pair {
                     label: "status",
-                    value: Expression::Variable(Identifier::dummy("active"), Span::default())
+                    value: Expression::Variable(Identifier::new("active"), Span::default())
                 }
             ],
             Span::default()
@@ -1628,25 +1628,25 @@ fn reading_identifiers() {
     // Parse a basic identifier
     input.initialize("hello");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("hello")));
+    assert_eq!(result, Ok(Identifier::new("hello")));
     assert_eq!(input.source, "");
 
     // Parse an identifier with trailing content
     input.initialize("count more");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("count")));
+    assert_eq!(result, Ok(Identifier::new("count")));
     assert_eq!(input.source, " more");
 
     // Parse an identifier with leading whitespace and trailing content
     input.initialize("  \t  test_name  after");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("test_name")));
+    assert_eq!(result, Ok(Identifier::new("test_name")));
     assert_eq!(input.source, "  after");
 
     // Parse an identifier with various delimiters
     input.initialize("name(param)");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier::dummy("name")));
+    assert_eq!(result, Ok(Identifier::new("name")));
     assert_eq!(input.source, "(param)");
 }
 
@@ -1659,9 +1659,9 @@ fn test_foreach_expression() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier::dummy("item")],
+            vec![Identifier::new("item")],
             Box::new(Expression::Variable(
-                Identifier::dummy("items"),
+                Identifier::new("items"),
                 Span::default()
             )),
             Span::default()
@@ -1678,13 +1678,13 @@ fn foreach_tuple_pattern() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier::dummy("design"), Identifier::dummy("component")],
+            vec![Identifier::new("design"), Identifier::new("component")],
             Box::new(Expression::Execution(
                 Function {
-                    target: Identifier::dummy("zip"),
+                    target: Identifier::new("zip"),
                     parameters: vec![
-                        Expression::Variable(Identifier::dummy("designs"), Span::default()),
-                        Expression::Variable(Identifier::dummy("components"), Span::default())
+                        Expression::Variable(Identifier::new("designs"), Span::default()),
+                        Expression::Variable(Identifier::new("components"), Span::default())
                     ]
                 },
                 Span::default()
@@ -1700,17 +1700,17 @@ fn foreach_tuple_pattern() {
         result,
         Ok(vec![Expression::Foreach(
             vec![
-                Identifier::dummy("a"),
-                Identifier::dummy("b"),
-                Identifier::dummy("c")
+                Identifier::new("a"),
+                Identifier::new("b"),
+                Identifier::new("c")
             ],
             Box::new(Expression::Execution(
                 Function {
-                    target: Identifier::dummy("zip"),
+                    target: Identifier::new("zip"),
                     parameters: vec![
-                        Expression::Variable(Identifier::dummy("list1"), Span::default()),
-                        Expression::Variable(Identifier::dummy("list2"), Span::default()),
-                        Expression::Variable(Identifier::dummy("list3"), Span::default())
+                        Expression::Variable(Identifier::new("list1"), Span::default()),
+                        Expression::Variable(Identifier::new("list2"), Span::default()),
+                        Expression::Variable(Identifier::new("list3"), Span::default())
                     ]
                 },
                 Span::default()
@@ -1731,12 +1731,12 @@ fn tuple_binding_expression() {
         Ok(vec![Expression::Binding(
             Box::new(Expression::Application(
                 Invocation {
-                    target: Target::Local(Identifier::dummy("get_coordinates")),
+                    target: Target::Local(Identifier::new("get_coordinates")),
                     parameters: Some(vec![])
                 },
                 Span::default()
             )),
-            vec![Identifier::dummy("x"), Identifier::dummy("y")],
+            vec![Identifier::new("x"), Identifier::new("y")],
             Span::default()
         )])
     );
@@ -1752,7 +1752,7 @@ fn test_repeat_expression() {
         result,
         Ok(vec![Expression::Repeat(
             Box::new(Expression::Variable(
-                Identifier::dummy("count"),
+                Identifier::new("count"),
                 Span::default()
             )),
             Span::default()
@@ -1781,7 +1781,7 @@ fn test_repeat_keyword_boundary() {
     assert_eq!(
         result,
         Ok(vec![Expression::Variable(
-            Identifier::dummy("repeater"),
+            Identifier::new("repeater"),
             Span::default()
         )])
     );
@@ -1808,9 +1808,9 @@ fn splitting_by() {
     assert_eq!(
         result,
         Ok(vec![
-            Identifier::dummy("apple"),
-            Identifier::dummy("banana"),
-            Identifier::dummy("cherry")
+            Identifier::new("apple"),
+            Identifier::new("banana"),
+            Identifier::new("cherry")
         ])
     );
     assert_eq!(input.source, "");
@@ -1821,16 +1821,16 @@ fn splitting_by() {
     assert_eq!(
         result,
         Ok(vec![
-            Identifier::dummy("un"),
-            Identifier::dummy("deux"),
-            Identifier::dummy("trois")
+            Identifier::new("un"),
+            Identifier::new("deux"),
+            Identifier::new("trois")
         ])
     );
 
     // Ensure a single item (no delimiter present in input) works
     input.initialize("seulement");
     let result = input.take_split_by(',', |inner| inner.read_identifier());
-    assert_eq!(result, Ok(vec![Identifier::dummy("seulement")]));
+    assert_eq!(result, Ok(vec![Identifier::new("seulement")]));
 
     // an empty chunk causes an error
     input.initialize("un,,trois");
@@ -1970,7 +1970,7 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![Attribute::Role(
-            Identifier::dummy("chef"),
+            Identifier::new("chef"),
             Span::default()
         )])
     );
@@ -1981,7 +1981,7 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![Attribute::Place(
-            Identifier::dummy("kitchen"),
+            Identifier::new("kitchen"),
             Span::default()
         )])
     );
@@ -1992,8 +1992,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("master_chef"), Span::default()),
-            Attribute::Role(Identifier::dummy("barista"), Span::default())
+            Attribute::Role(Identifier::new("master_chef"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default())
         ])
     );
 
@@ -2003,8 +2003,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
-            Attribute::Place(Identifier::dummy("bath_room"), Span::default())
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Place(Identifier::new("bath_room"), Span::default())
         ])
     );
 
@@ -2014,8 +2014,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("chef"), Span::default()),
-            Attribute::Place(Identifier::dummy("bathroom"), Span::default())
+            Attribute::Role(Identifier::new("chef"), Span::default()),
+            Attribute::Place(Identifier::new("bathroom"), Span::default())
         ])
     );
 
@@ -2025,8 +2025,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
-            Attribute::Role(Identifier::dummy("barista"), Span::default())
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default())
         ])
     );
 
@@ -2036,10 +2036,10 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier::dummy("chef"), Span::default()),
-            Attribute::Place(Identifier::dummy("kitchen"), Span::default()),
-            Attribute::Role(Identifier::dummy("barista"), Span::default()),
-            Attribute::Place(Identifier::dummy("dining_room"), Span::default())
+            Attribute::Role(Identifier::new("chef"), Span::default()),
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default()),
+            Attribute::Place(Identifier::new("dining_room"), Span::default())
         ])
     );
 
@@ -2064,7 +2064,7 @@ fn attribute_spans_include_marker() {
         .unwrap();
     assert_eq!(
         result[0],
-        Attribute::Role(Identifier::dummy("chef"), Span::default())
+        Attribute::Role(Identifier::new("chef"), Span::default())
     );
     if let Attribute::Role(id, span) = &result[0] {
         assert_eq!(
@@ -2166,7 +2166,7 @@ fn step_with_role_assignment() {
                 "Check the patient's vital signs"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier::dummy("nurse"), Span::default())],
+                attributes: vec![Attribute::Role(Identifier::new("nurse"), Span::default())],
                 subscopes: vec![],
                 span: Span::default(),
             }],
@@ -2199,10 +2199,7 @@ fn substep_with_role_assignment() {
                 "Verify patient identity"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(
-                    Identifier::dummy("surgeon"),
-                    Span::default()
-                )],
+                attributes: vec![Attribute::Role(Identifier::new("surgeon"), Span::default())],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
                     description: vec![Paragraph::new(vec![Descriptive::Text("Check ID")])],
@@ -2241,7 +2238,7 @@ fn parallel_step_with_role_assignment() {
             )])],
             subscopes: vec![Scope::AttributeBlock {
                 attributes: vec![Attribute::Role(
-                    Identifier::dummy("nursing_team"),
+                    Identifier::new("nursing_team"),
                     Span::default()
                 )],
                 subscopes: vec![Scope::ParallelBlock {
@@ -2283,10 +2280,7 @@ fn two_roles_with_substeps() {
             description: vec![Paragraph::new(vec![Descriptive::Text("Review events.")])],
             subscopes: vec![
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(
-                        Identifier::dummy("surgeon"),
-                        Span::default()
-                    )],
+                    attributes: vec![Attribute::Role(Identifier::new("surgeon"), Span::default())],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "a",
                         description: vec![Paragraph::new(vec![Descriptive::Text(
@@ -2298,7 +2292,7 @@ fn two_roles_with_substeps() {
                     span: Span::default(),
                 },
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(Identifier::dummy("nurse"), Span::default())],
+                    attributes: vec![Attribute::Role(Identifier::new("nurse"), Span::default())],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "b",
                         description: vec![Paragraph::new(vec![Descriptive::Text(

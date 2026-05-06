@@ -47,11 +47,11 @@ mod verify {
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("first"),
+                name: Identifier::new("first"),
                 parameters: None,
                 signature: Some(Signature {
-                    requires: Genus::Single(Forma::dummy("A")),
-                    provides: Genus::Single(Forma::dummy("B")),
+                    requires: Genus::Single(Forma::new("A")),
+                    provides: Genus::Single(Forma::new("B")),
                 }),
                 elements: vec![],
                 span: Span::default(),
@@ -79,24 +79,24 @@ first : A -> B
             }),
             body: Some(Technique::Procedures(vec![
                 Procedure {
-                    name: Identifier::dummy("first"),
+                    name: Identifier::new("first"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma::dummy("A")),
-                        provides: Genus::Single(Forma::dummy("B")),
+                        requires: Genus::Single(Forma::new("A")),
+                        provides: Genus::Single(Forma::new("B")),
                     }),
                     elements: vec![],
                     span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier::dummy("second"),
+                    name: Identifier::new("second"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::List(Forma::dummy("Thing")),
+                        requires: Genus::List(Forma::new("Thing")),
                         provides: Genus::Tuple(vec![
-                            Forma::dummy("Who"),
-                            Forma::dummy("Where"),
-                            Forma::dummy("Why"),
+                            Forma::new("Who"),
+                            Forma::new("Where"),
+                            Forma::new("Why"),
                         ]),
                     }),
                     elements: vec![],
@@ -127,11 +127,11 @@ second : [Thing] -> (Who, Where, Why)
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("win_le_tour"),
+                name: Identifier::new("win_le_tour"),
                 parameters: None,
                 signature: Some(Signature {
-                    requires: Genus::Single(Forma::dummy("Bicycle")),
-                    provides: Genus::Single(Forma::dummy("YellowJersey")),
+                    requires: Genus::Single(Forma::new("Bicycle")),
+                    provides: Genus::Single(Forma::new("YellowJersey")),
                 }),
                 elements: vec![Element::Steps(
                     vec![
@@ -206,13 +206,13 @@ win_le_tour : Bicycle -> YellowJersey
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("vibe_coding"),
+                name: Identifier::new("vibe_coding"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::CodeBlock(
                     vec![Expression::Execution(
                         Function {
-                            target: Identifier::dummy("exec"),
+                            target: Identifier::new("exec"),
                             parameters: vec![Expression::Multiline(
                                 Some("bash"),
                                 vec!["rm -rf /"],
@@ -251,7 +251,7 @@ vibe_coding :
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("action"),
+                name: Identifier::new("action"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -268,7 +268,7 @@ vibe_coding :
                                 Descriptive::Text("To take the action, we must:"),
                                 Descriptive::CodeInline(Expression::Execution(
                                     Function {
-                                        target: Identifier::dummy("exec"),
+                                        target: Identifier::new("exec"),
                                         parameters: vec![Expression::Multiline(
                                             Some("bash"),
                                             vec!["rm -rf /"],
@@ -313,7 +313,7 @@ We must take action!
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("journal"),
+                name: Identifier::new("journal"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -331,7 +331,7 @@ We must take action!
                             )])],
                             subscopes: vec![Scope::AttributeBlock {
                                 attributes: vec![Attribute::Role(
-                                    Identifier::dummy("journalist"),
+                                    Identifier::new("journalist"),
                                     Span::default(),
                                 )],
                                 subscopes: vec![Scope::CodeBlock {
@@ -341,7 +341,7 @@ We must take action!
                                                 label: "timestamp",
                                                 value: Expression::Execution(
                                                     Function {
-                                                        target: Identifier::dummy("now"),
+                                                        target: Identifier::new("now"),
                                                         parameters: vec![],
                                                     },
                                                     Span::default(),
@@ -350,7 +350,7 @@ We must take action!
                                             Pair {
                                                 label: "message",
                                                 value: Expression::Variable(
-                                                    Identifier::dummy("msg"),
+                                                    Identifier::new("msg"),
                                                     Span::default(),
                                                 ),
                                             },
@@ -399,7 +399,7 @@ Record everything, with timestamps.
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("before_leaving"),
+                name: Identifier::new("before_leaving"),
                 parameters: None,
                 signature: None,
                 elements: vec![
@@ -434,16 +434,16 @@ Record everything, with timestamps.
                                     )])],
                                     subscopes: vec![Scope::CodeBlock {
                                         expressions: vec![Expression::Foreach(
-                                            vec![Identifier::dummy("specimen")],
+                                            vec![Identifier::new("specimen")],
                                             Box::new(Expression::Variable(
-                                                Identifier::dummy("specimens"),
+                                                Identifier::new("specimens"),
                                                 Span::default(),
                                             )),
                                             Span::default(),
                                         )],
                                         subscopes: vec![Scope::AttributeBlock {
                                             attributes: vec![Attribute::Role(
-                                                Identifier::dummy("nursing_team"),
+                                                Identifier::new("nursing_team"),
                                                 Span::default(),
                                             )],
                                             subscopes: vec![Scope::DependentBlock {
@@ -512,7 +512,7 @@ before_leaving :
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("main_procedure"),
+                name: Identifier::new("main_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(
@@ -565,7 +565,7 @@ III.
             source: None,
             header: None,
             body: Some(Technique::Procedures(vec![Procedure {
-                name: Identifier::dummy("test_procedure"),
+                name: Identifier::new("test_procedure"),
                 parameters: None,
                 signature: None,
                 elements: vec![Element::Steps(

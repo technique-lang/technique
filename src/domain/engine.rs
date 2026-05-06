@@ -549,7 +549,7 @@ mod check {
 
     fn local<'a>(name: &'a str) -> Invocation<'a> {
         Invocation {
-            target: Target::Local(Identifier::dummy(name)),
+            target: Target::Local(Identifier::new(name)),
             parameters: None,
         }
     }
@@ -609,7 +609,7 @@ mod check {
     fn binding_with_invocation() {
         let p = Paragraph::new(vec![Descriptive::Binding(
             Box::new(Descriptive::Application(local("observe"))),
-            vec![Identifier::dummy("e")],
+            vec![Identifier::new("e")],
         )]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["observe"]);
@@ -620,7 +620,7 @@ mod check {
     #[test]
     fn foreach_expression() {
         let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Foreach(
-            vec![Identifier::dummy("design")],
+            vec![Identifier::new("design")],
             Box::new(Expression::Application(local("implement"), Span::default())),
             Span::default(),
         ))]);

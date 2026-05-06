@@ -1415,7 +1415,7 @@ mod check {
     fn genus() {
         let mut output = Formatter::new(78);
 
-        let forma = Forma::dummy("Jedi");
+        let forma = Forma::new("Jedi");
         output.append_forma(&forma);
         assert_eq!(output.to_string(), "Jedi");
 
@@ -1424,21 +1424,21 @@ mod check {
         assert_eq!(output.to_string(), "()");
 
         output.reset();
-        let single = Genus::Single(Forma::dummy("Stormtrooper"));
+        let single = Genus::Single(Forma::new("Stormtrooper"));
         output.append_genus(&single);
         assert_eq!(output.to_string(), "Stormtrooper");
 
         output.reset();
-        let list = Genus::List(Forma::dummy("Pilot"));
+        let list = Genus::List(Forma::new("Pilot"));
         output.append_genus(&list);
         assert_eq!(output.to_string(), "[Pilot]");
 
         output.reset();
         let genus = Genus::Tuple(vec![
-            Forma::dummy("Kid"),
-            Forma::dummy("Pilot"),
-            Forma::dummy("Scoundrel"),
-            Forma::dummy("Princess"),
+            Forma::new("Kid"),
+            Forma::new("Pilot"),
+            Forma::new("Scoundrel"),
+            Forma::new("Princess"),
         ]);
         output.append_genus(&genus);
         assert_eq!(output.to_string(), "(Kid, Pilot, Scoundrel, Princess)");
@@ -1451,24 +1451,24 @@ mod check {
         let mut output = Formatter::new(78);
 
         let sig = Signature {
-            requires: Genus::Single(Forma::dummy("Alderaan")),
-            provides: Genus::Single(Forma::dummy("AsteroidField")),
+            requires: Genus::Single(Forma::new("Alderaan")),
+            provides: Genus::Single(Forma::new("AsteroidField")),
         };
         output.append_signature(&sig);
         assert_eq!(output.to_string(), "Alderaan -> AsteroidField");
 
         output.reset();
         let sig = Signature {
-            requires: Genus::List(Forma::dummy("Clone")),
-            provides: Genus::Single(Forma::dummy("Army")),
+            requires: Genus::List(Forma::new("Clone")),
+            provides: Genus::Single(Forma::new("Army")),
         };
         output.append_signature(&sig);
         assert_eq!(output.to_string(), "[Clone] -> Army");
 
         output.reset();
         let signature = Signature {
-            requires: Genus::Single(Forma::dummy("TaxationOfTradeRoutes")),
-            provides: Genus::Tuple(vec![Forma::dummy("Rebels"), Forma::dummy("Empire")]),
+            requires: Genus::Single(Forma::new("TaxationOfTradeRoutes")),
+            provides: Genus::Tuple(vec![Forma::new("Rebels"), Forma::new("Empire")]),
         };
         output.append_signature(&signature);
         assert_eq!(
