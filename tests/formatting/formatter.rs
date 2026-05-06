@@ -49,8 +49,8 @@ mod verify {
                 name: Identifier::dummy("first"),
                 parameters: None,
                 signature: Some(Signature {
-                    requires: Genus::Single(Forma("A")),
-                    provides: Genus::Single(Forma("B")),
+                    requires: Genus::Single(Forma::dummy("A")),
+                    provides: Genus::Single(Forma::dummy("B")),
                 }),
                 elements: vec![],
             }])),
@@ -79,8 +79,8 @@ first : A -> B
                     name: Identifier::dummy("first"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("A")),
-                        provides: Genus::Single(Forma("B")),
+                        requires: Genus::Single(Forma::dummy("A")),
+                        provides: Genus::Single(Forma::dummy("B")),
                     }),
                     elements: vec![],
                 },
@@ -88,8 +88,8 @@ first : A -> B
                     name: Identifier::dummy("second"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::List(Forma("Thing")),
-                        provides: Genus::Tuple(vec![Forma("Who"), Forma("Where"), Forma("Why")]),
+                        requires: Genus::List(Forma::dummy("Thing")),
+                        provides: Genus::Tuple(vec![Forma::dummy("Who"), Forma::dummy("Where"), Forma::dummy("Why")]),
                     }),
                     elements: vec![],
                 },
@@ -121,8 +121,8 @@ second : [Thing] -> (Who, Where, Why)
                 name: Identifier::dummy("win_le_tour"),
                 parameters: None,
                 signature: Some(Signature {
-                    requires: Genus::Single(Forma("Bicycle")),
-                    provides: Genus::Single(Forma("YellowJersey")),
+                    requires: Genus::Single(Forma::dummy("Bicycle")),
+                    provides: Genus::Single(Forma::dummy("YellowJersey")),
                 }),
                 elements: vec![Element::Steps(vec![
                     Scope::DependentBlock {

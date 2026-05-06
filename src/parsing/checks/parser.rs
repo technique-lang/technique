@@ -159,8 +159,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("A")),
-            provides: Genus::Single(Forma("B"))
+            requires: Genus::Single(Forma::dummy("A")),
+            provides: Genus::Single(Forma::dummy("B"))
         })
     );
 
@@ -169,8 +169,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("Beans")),
-            provides: Genus::Single(Forma("Coffee"))
+            requires: Genus::Single(Forma::dummy("Beans")),
+            provides: Genus::Single(Forma::dummy("Coffee"))
         })
     );
 
@@ -179,8 +179,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::List(Forma("Bits")),
-            provides: Genus::Single(Forma("Bob"))
+            requires: Genus::List(Forma::dummy("Bits")),
+            provides: Genus::Single(Forma::dummy("Bob"))
         })
     );
 
@@ -189,8 +189,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("Complex")),
-            provides: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+            requires: Genus::Single(Forma::dummy("Complex")),
+            provides: Genus::Tuple(vec![Forma::dummy("Real"), Forma::dummy("Imaginary")])
         })
     );
 }
@@ -219,8 +219,8 @@ fn declaration_full() {
             Identifier::dummy("f"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::dummy("A")),
+                provides: Genus::Single(Forma::dummy("B"))
             })
         ))
     );
@@ -235,8 +235,8 @@ fn declaration_full() {
             Identifier::dummy("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                provides: Genus::List(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                provides: Genus::List(Forma::dummy("Coffee"))
             })
         ))
     );
@@ -292,8 +292,8 @@ making_coffee :
             Identifier::dummy("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma("Ingredients")),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Single(Forma::dummy("Ingredients")),
+                provides: Genus::Single(Forma::dummy("Coffee"))
             })
         ))
     );
@@ -315,8 +315,8 @@ making_coffee(b, m) :
             Identifier::dummy("making_coffee"),
             Some(vec![Identifier::dummy("b"), Identifier::dummy("m")]),
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                provides: Genus::Single(Forma::dummy("Coffee"))
             })
         ))
     );
@@ -480,7 +480,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Remote(External("https://example.com/proc")),
+            target: Target::Remote(External::dummy("https://example.com/proc")),
             parameters: None
         })
     );

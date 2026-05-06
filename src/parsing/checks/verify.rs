@@ -61,8 +61,8 @@ making_coffee : (Beans, Milk) -> Coffee
             name: Identifier::dummy("making_coffee"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                provides: Genus::Single(Forma::dummy("Coffee"))
             }),
             elements: vec![],
         })
@@ -88,8 +88,8 @@ second : C -> D
             name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::dummy("A")),
+                provides: Genus::Single(Forma::dummy("B"))
             }),
             elements: vec![],
         })
@@ -102,8 +102,8 @@ second : C -> D
             name: Identifier::dummy("second"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Single(Forma("C")),
-                provides: Genus::Single(Forma("D"))
+                requires: Genus::Single(Forma::dummy("C")),
+                provides: Genus::Single(Forma::dummy("D"))
             }),
             elements: vec![],
         })
@@ -127,8 +127,8 @@ making_coffee(e) : Ingredients -> Coffee
             name: Identifier::dummy("making_coffee"),
             parameters: Some(vec![Identifier::dummy("e")]),
             signature: Some(Signature {
-                requires: Genus::Single(Forma("Ingredients")),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Single(Forma::dummy("Ingredients")),
+                provides: Genus::Single(Forma::dummy("Coffee"))
             }),
             elements: vec![],
         })
@@ -159,8 +159,8 @@ This is the first one.
             name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::dummy("A")),
+                provides: Genus::Single(Forma::dummy("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -214,8 +214,8 @@ This is the first one.
             name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::dummy("A")),
+                provides: Genus::Single(Forma::dummy("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -280,8 +280,8 @@ This is the first one.
             name: Identifier::dummy("first"),
             parameters: None,
             signature: Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::dummy("A")),
+                provides: Genus::Single(Forma::dummy("B"))
             }),
             elements: vec![
                 Element::Title("The First"),
@@ -1289,10 +1289,10 @@ III. Implementation
                                 name: Identifier::dummy("requirements_and_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    requires: Genus::Single(Forma("Concept")),
+                                    requires: Genus::Single(Forma::dummy("Concept")),
                                     provides: Genus::Naked(vec![
-                                        Forma("Requirements"),
-                                        Forma("Architecture")
+                                        Forma::dummy("Requirements"),
+                                        Forma::dummy("Architecture")
                                     ]),
                                 }),
                                 elements: vec![Element::Steps(vec![
@@ -1334,8 +1334,8 @@ III. Implementation
                                 name: Identifier::dummy("define_requirements"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    requires: Genus::Single(Forma("Concept")),
-                                    provides: Genus::Single(Forma("Requirements")),
+                                    requires: Genus::Single(Forma::dummy("Concept")),
+                                    provides: Genus::Single(Forma::dummy("Requirements")),
                                 }),
                                 elements: vec![],
                             },
@@ -1343,8 +1343,8 @@ III. Implementation
                                 name: Identifier::dummy("determine_architecture"),
                                 parameters: None,
                                 signature: Some(Signature {
-                                    requires: Genus::Single(Forma("Concept")),
-                                    provides: Genus::Single(Forma("Architecture")),
+                                    requires: Genus::Single(Forma::dummy("Concept")),
+                                    provides: Genus::Single(Forma::dummy("Architecture")),
                                 }),
                                 elements: vec![],
                             },

@@ -717,9 +717,7 @@ impl<'i> Parser<'i> {
         parser
     }
 
-    /// Compute a span for `slice`, which must be a sub-slice of `self.source`
-    /// (or be derived from one). Uses pointer arithmetic against the current
-    /// `self.source` to recover the slice's offset within it.
+    /// `slice` must be a sub-slice of `self.source`.
     fn span_of(&self, slice: &str) -> Span {
         let inner = (slice.as_ptr() as usize) - (self
             .source
@@ -897,14 +895,20 @@ impl<'i> Parser<'i> {
                 "a Genus for the provides",
             ))?;
 
-        let requires = validate_genus(one.as_str()).ok_or(ParsingError::InvalidGenus(
-            self.offset + one.start(),
-            one.len(),
-        ))?;
-        let provides = validate_genus(two.as_str()).ok_or(ParsingError::InvalidGenus(
-            self.offset + two.start(),
-            two.len(),
-        ))?;
+        let one_span = Span {
+            offset: self.offset + one.start(),
+            length: one.len(),
+        };
+        let two_span = Span {
+            offset: self.offset + two.start(),
+            length: two.len(),
+        };
+        let requires = validate_genus(one.as_str(), one_span).ok_or(
+            ParsingError::InvalidGenus(one_span.offset, one_span.length),
+        )?;
+        let provides = validate_genus(two.as_str(), two_span).ok_or(
+            ParsingError::InvalidGenus(two_span.offset, two_span.length),
+        )?;
 
         Ok(Signature { requires, provides })
     }
@@ -2048,7 +2052,10 @@ impl<'i> Parser<'i> {
                 .source
                 .trim();
             if content.starts_with("https://") {
-                Ok(Target::Remote(External(content)))
+                Ok(Target::Remote(External {
+                    value: content,
+                    span: inner.span_of(content),
+                }))
             } else {
                 let identifier =
                     validate_identifier(content, inner.span_of(content)).ok_or_else(|| {
@@ -2583,7 +2590,6 @@ impl<'i> Parser<'i> {
 
                 // Check if it's the special @* "reset attribute" role
                 if trimmed == "@*" {
-                    // span points at the `*` character
                     let star = &trimmed[1..];
                     let identifier = Identifier {
                         value: "*",

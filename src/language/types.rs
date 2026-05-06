@@ -75,7 +75,6 @@ pub struct Identifier<'i> {
     pub span: Span,
 }
 
-/// Equality is structural: spans are diagnostic metadata, not part of identity.
 impl PartialEq for Identifier<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
@@ -83,15 +82,30 @@ impl PartialEq for Identifier<'_> {
 }
 
 impl<'i> Identifier<'i> {
-    /// Test helper: builds an `Identifier` with a default span. Real parser
-    /// output always carries a real span; only fixtures should use this.
-    pub fn dummy(value: &'i str) -> Self {
-        Identifier { value, span: Span::default() }
+    /// Test helper: builds an `Identifier` with a default span. See also the
+    /// `PartialEq` instance.
+    pub const fn dummy(value: &'i str) -> Self {
+        Identifier { value, span: Span { offset: 0, length: 0 } }
     }
 }
 
-#[derive(Eq, Debug, PartialEq)]
-pub struct External<'i>(pub &'i str);
+#[derive(Eq, Debug)]
+pub struct External<'i> {
+    pub value: &'i str,
+    pub span: Span,
+}
+
+impl PartialEq for External<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<'i> External<'i> {
+    pub const fn dummy(value: &'i str) -> Self {
+        External { value, span: Span { offset: 0, length: 0 } }
+    }
+}
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum Target<'i> {
@@ -99,8 +113,23 @@ pub enum Target<'i> {
     Remote(External<'i>),
 }
 
-#[derive(Eq, Debug, PartialEq)]
-pub struct Forma<'i>(pub &'i str);
+#[derive(Eq, Debug)]
+pub struct Forma<'i> {
+    pub value: &'i str,
+    pub span: Span,
+}
+
+impl PartialEq for Forma<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<'i> Forma<'i> {
+    pub const fn dummy(value: &'i str) -> Self {
+        Forma { value, span: Span { offset: 0, length: 0 } }
+    }
+}
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum Genus<'i> {
@@ -284,7 +313,7 @@ pub(crate) fn validate_identifier(input: &str, span: Span) -> Option<Identifier<
     }
 }
 
-pub(crate) fn validate_forma(input: &str) -> Option<Forma<'_>> {
+pub(crate) fn validate_forma(input: &str, span: Span) -> Option<Forma<'_>> {
     if input.len() == 0 {
         return None;
     }
@@ -305,15 +334,24 @@ pub(crate) fn validate_forma(input: &str) -> Option<Forma<'_>> {
         }
     }
 
-    Some(Forma(input))
+    Some(Forma { value: input, span })
 }
 
-fn parse_tuple(input: &str) -> Option<Vec<Forma<'_>>> {
+/// `child` must be a sub-slice of `parent`.
+fn sub_span(parent: &str, child: &str, parent_span: Span) -> Span {
+    let inner = (child.as_ptr() as usize) - (parent.as_ptr() as usize);
+    Span {
+        offset: parent_span.offset + inner,
+        length: child.len(),
+    }
+}
+
+fn parse_tuple(input: &str, span: Span) -> Option<Vec<Forma<'_>>> {
     let mut formas: Vec<Forma> = Vec::new();
 
     for text in input.split(",") {
         let text = text.trim_ascii();
-        let forma = validate_forma(text)?;
+        let forma = validate_forma(text, sub_span(input, text, span))?;
         formas.push(forma);
     }
 
@@ -321,7 +359,7 @@ fn parse_tuple(input: &str) -> Option<Vec<Forma<'_>>> {
 }
 
 /// This one copes with (and discards) any internal whitespace encountered.
-pub(crate) fn validate_genus(input: &str) -> Option<Genus<'_>> {
+pub(crate) fn validate_genus(input: &str, span: Span) -> Option<Genus<'_>> {
     let first = input
         .chars()
         .next()
@@ -340,7 +378,7 @@ pub(crate) fn validate_genus(input: &str) -> Option<Genus<'_>> {
                 return None;
             }
 
-            let forma = validate_forma(content)?;
+            let forma = validate_forma(content, sub_span(input, content, span))?;
 
             Some(Genus::List(forma))
         }
@@ -356,7 +394,7 @@ pub(crate) fn validate_genus(input: &str) -> Option<Genus<'_>> {
                 return Some(Genus::Unit);
             }
 
-            let formas = parse_tuple(content)?;
+            let formas = parse_tuple(content, sub_span(input, content, span))?;
             Some(Genus::Tuple(formas))
         }
         _ => {
@@ -366,10 +404,10 @@ pub(crate) fn validate_genus(input: &str) -> Option<Genus<'_>> {
 
             // Check if this is a bare tuple (comma-separated but non-parenthesized)
             if input.contains(',') {
-                let formas = parse_tuple(input)?;
+                let formas = parse_tuple(input, span)?;
                 Some(Genus::Naked(formas))
             } else {
-                let forma = validate_forma(input)?;
+                let forma = validate_forma(input, span)?;
                 Some(Genus::Single(forma))
             }
         }
@@ -430,128 +468,128 @@ mod check {
 
     #[test]
     fn forma_rules() {
-        assert_eq!(validate_forma("A"), Some(Forma("A")));
-        assert_eq!(validate_forma("Beans"), Some(Forma("Beans")));
-        assert_eq!(validate_forma("lower"), None);
+        assert_eq!(validate_forma("A", Span::default()), Some(Forma::dummy("A")));
+        assert_eq!(validate_forma("Beans", Span::default()), Some(Forma::dummy("Beans")));
+        assert_eq!(validate_forma("lower", Span::default()), None);
     }
 
     #[test]
     fn genus_rules_single() {
-        assert_eq!(validate_genus("A"), Some(Genus::Single(Forma("A"))));
+        assert_eq!(validate_genus("A", Span::default()), Some(Genus::Single(Forma::dummy("A"))));
     }
 
     #[test]
     fn genus_rules_list() {
-        assert_eq!(validate_genus("[A]"), Some(Genus::List(Forma("A"))));
+        assert_eq!(validate_genus("[A]", Span::default()), Some(Genus::List(Forma::dummy("A"))));
 
         // Test list with whitespace
         assert_eq!(
-            validate_genus("[ Input ]"),
-            Some(Genus::List(Forma("Input")))
+            validate_genus("[ Input ]", Span::default()),
+            Some(Genus::List(Forma::dummy("Input")))
         );
 
         assert_eq!(
-            validate_genus("[\tOutput\t]"),
-            Some(Genus::List(Forma("Output")))
+            validate_genus("[\tOutput\t]", Span::default()),
+            Some(Genus::List(Forma::dummy("Output")))
         );
 
         // Test malformed lists
-        assert_eq!(validate_genus("[Input"), None);
-        assert_eq!(validate_genus("Input]"), None);
+        assert_eq!(validate_genus("[Input", Span::default()), None);
+        assert_eq!(validate_genus("Input]", Span::default()), None);
     }
 
     #[test]
     fn genus_rules_tuple_parens() {
         assert_eq!(
-            validate_genus("(A, B)"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            validate_genus("(A, B)", Span::default()),
+            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         assert_eq!(
-            validate_genus("(Coffee, Tea)"),
-            Some(Genus::Tuple(vec![Forma("Coffee"), Forma("Tea")]))
+            validate_genus("(Coffee, Tea)", Span::default()),
+            Some(Genus::Tuple(vec![Forma::dummy("Coffee"), Forma::dummy("Tea")]))
         );
 
         // not actually sure whether we should be normalizing this? Probably
         // not, because formatting and linting is a separate concern.
 
-        assert_eq!(validate_genus("(A)"), Some(Genus::Tuple(vec![Forma("A")])));
+        assert_eq!(validate_genus("(A)", Span::default()), Some(Genus::Tuple(vec![Forma::dummy("A")])));
 
         // Test parenthesized tuples with whitespace
         assert_eq!(
-            validate_genus("( A , B )"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            validate_genus("( A , B )", Span::default()),
+            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         assert_eq!(
-            validate_genus("(\tA\t,\tB\t)"),
-            Some(Genus::Tuple(vec![Forma("A"), Forma("B")]))
+            validate_genus("(\tA\t,\tB\t)", Span::default()),
+            Some(Genus::Tuple(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         // Test malformed tuples
-        assert_eq!(validate_genus("(Input"), None);
-        assert_eq!(validate_genus("Input)"), None);
+        assert_eq!(validate_genus("(Input", Span::default()), None);
+        assert_eq!(validate_genus("Input)", Span::default()), None);
     }
 
     #[test]
     fn genus_rules_tuple_bare() {
         assert_eq!(
-            validate_genus("A, B"),
-            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
+            validate_genus("A, B", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         assert_eq!(
-            validate_genus("Coffee, Tea"),
-            Some(Genus::Naked(vec![Forma("Coffee"), Forma("Tea")]))
+            validate_genus("Coffee, Tea", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("Coffee"), Forma::dummy("Tea")]))
         );
 
         assert_eq!(
-            validate_genus("Input, Data, Config"),
+            validate_genus("Input, Data, Config", Span::default()),
             Some(Genus::Naked(vec![
-                Forma("Input"),
-                Forma("Data"),
-                Forma("Config")
+                Forma::dummy("Input"),
+                Forma::dummy("Data"),
+                Forma::dummy("Config")
             ]))
         );
 
         assert_eq!(
-            validate_genus("A,B"),
-            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
+            validate_genus("A,B", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         assert_eq!(
-            validate_genus("A , B"),
-            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
+            validate_genus("A , B", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         // Test edge cases with whitespace
         assert_eq!(
-            validate_genus("  A  ,  B  "),
-            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
+            validate_genus("  A  ,  B  ", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
 
         assert_eq!(
-            validate_genus("\tA\t,\tB\t"),
-            Some(Genus::Naked(vec![Forma("A"), Forma("B")]))
+            validate_genus("\tA\t,\tB\t", Span::default()),
+            Some(Genus::Naked(vec![Forma::dummy("A"), Forma::dummy("B")]))
         );
     }
 
     #[test]
     fn genus_rules_unit() {
-        assert_eq!(validate_genus("()"), Some(Genus::Unit));
+        assert_eq!(validate_genus("()", Span::default()), Some(Genus::Unit));
 
         // Test unit with whitespace
-        assert_eq!(validate_genus("(   )"), Some(Genus::Unit));
-        assert_eq!(validate_genus("(\t)"), Some(Genus::Unit));
+        assert_eq!(validate_genus("(   )", Span::default()), Some(Genus::Unit));
+        assert_eq!(validate_genus("(\t)", Span::default()), Some(Genus::Unit));
     }
 
     #[test]
     fn genus_rules_malformed() {
         // Test malformed brackets/parens
-        assert_eq!(validate_genus("[Input"), None);
-        assert_eq!(validate_genus("Input]"), None);
-        assert_eq!(validate_genus("(Input"), None);
-        assert_eq!(validate_genus("Input)"), None);
+        assert_eq!(validate_genus("[Input", Span::default()), None);
+        assert_eq!(validate_genus("Input]", Span::default()), None);
+        assert_eq!(validate_genus("(Input", Span::default()), None);
+        assert_eq!(validate_genus("Input)", Span::default()), None);
     }
     #[test]
     fn license_rules() {

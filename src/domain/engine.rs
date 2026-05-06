@@ -301,7 +301,7 @@ fn render_expression(expr: &Expression) -> String {
         Expression::Application(inv) => {
             let name = match &inv.target {
                 Target::Local(id) => id.value,
-                Target::Remote(ext) => ext.0,
+                Target::Remote(ext) => ext.value,
             };
             if let Some(params) = &inv.parameters {
                 let args: Vec<_> = params
@@ -477,7 +477,7 @@ impl<'i> Paragraph<'i> {
     fn invocation_name(inv: &crate::language::Invocation<'i>) -> &'i str {
         match &inv.target {
             crate::language::Target::Local(id) => id.value,
-            crate::language::Target::Remote(ext) => ext.0,
+            crate::language::Target::Remote(ext) => ext.value,
         }
     }
 }

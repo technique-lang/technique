@@ -621,7 +621,7 @@ impl<'i> Formatter<'i> {
     }
 
     pub fn append_forma(&mut self, forma: &'i Forma) {
-        self.add_fragment_reference(Syntax::Forma, forma.0)
+        self.add_fragment_reference(Syntax::Forma, forma.value)
     }
 
     fn append_paragraphs(&mut self, paragraphs: &'i Vec<Paragraph>) {
@@ -1129,7 +1129,7 @@ impl<'i> Formatter<'i> {
             Target::Local(identifier) => {
                 self.add_fragment_reference(Syntax::Invocation, identifier.value)
             }
-            Target::Remote(external) => self.add_fragment_reference(Syntax::Invocation, external.0),
+            Target::Remote(external) => self.add_fragment_reference(Syntax::Invocation, external.value),
         }
         self.add_fragment_reference(Syntax::Quote, ">");
         if let Some(parameters) = &invocation.parameters {
@@ -1408,7 +1408,8 @@ mod check {
     fn genus() {
         let mut output = Formatter::new(78);
 
-        output.append_forma(&Forma("Jedi"));
+        let forma = Forma::dummy("Jedi");
+        output.append_forma(&forma);
         assert_eq!(output.to_string(), "Jedi");
 
         output.reset();
@@ -1416,19 +1417,21 @@ mod check {
         assert_eq!(output.to_string(), "()");
 
         output.reset();
-        output.append_genus(&Genus::Single(Forma("Stormtrooper")));
+        let single = Genus::Single(Forma::dummy("Stormtrooper"));
+        output.append_genus(&single);
         assert_eq!(output.to_string(), "Stormtrooper");
 
         output.reset();
-        output.append_genus(&Genus::List(Forma("Pilot")));
+        let list = Genus::List(Forma::dummy("Pilot"));
+        output.append_genus(&list);
         assert_eq!(output.to_string(), "[Pilot]");
 
         output.reset();
         let genus = Genus::Tuple(vec![
-            Forma("Kid"),
-            Forma("Pilot"),
-            Forma("Scoundrel"),
-            Forma("Princess"),
+            Forma::dummy("Kid"),
+            Forma::dummy("Pilot"),
+            Forma::dummy("Scoundrel"),
+            Forma::dummy("Princess"),
         ]);
         output.append_genus(&genus);
         assert_eq!(output.to_string(), "(Kid, Pilot, Scoundrel, Princess)");
@@ -1440,23 +1443,25 @@ mod check {
     fn signatures() {
         let mut output = Formatter::new(78);
 
-        output.append_signature(&Signature {
-            requires: Genus::Single(Forma("Alderaan")),
-            provides: Genus::Single(Forma("AsteroidField")),
-        });
+        let sig = Signature {
+            requires: Genus::Single(Forma::dummy("Alderaan")),
+            provides: Genus::Single(Forma::dummy("AsteroidField")),
+        };
+        output.append_signature(&sig);
         assert_eq!(output.to_string(), "Alderaan -> AsteroidField");
 
         output.reset();
-        output.append_signature(&Signature {
-            requires: Genus::List(Forma("Clone")),
-            provides: Genus::Single(Forma("Army")),
-        });
+        let sig = Signature {
+            requires: Genus::List(Forma::dummy("Clone")),
+            provides: Genus::Single(Forma::dummy("Army")),
+        };
+        output.append_signature(&sig);
         assert_eq!(output.to_string(), "[Clone] -> Army");
 
         output.reset();
         let signature = Signature {
-            requires: Genus::Single(Forma("TaxationOfTradeRoutes")),
-            provides: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
+            requires: Genus::Single(Forma::dummy("TaxationOfTradeRoutes")),
+            provides: Genus::Tuple(vec![Forma::dummy("Rebels"), Forma::dummy("Empire")]),
         };
         output.append_signature(&signature);
         assert_eq!(

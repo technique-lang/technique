@@ -174,9 +174,9 @@ letters, numbers, and underscores. Valid examples include:
         }
         ParsingError::InvalidForma(_, _) => {
             let examples = vec![
-                Forma("Coffee"),
-                Forma("Ingredients"),
-                Forma("PatientRecord"),
+                Forma::dummy("Coffee"),
+                Forma::dummy("Ingredients"),
+                Forma::dummy("PatientRecord"),
             ];
 
             (
@@ -200,10 +200,10 @@ For example:
         }
         ParsingError::InvalidGenus(_, _) => {
             let examples = vec![
-                Genus::Single(Forma("Coffee")),
-                Genus::Tuple(vec![Forma("Beans"), Forma("Water")]),
-                Genus::Naked(vec![Forma("Beans"), Forma("Water")]),
-                Genus::List(Forma("Patient")),
+                Genus::Single(Forma::dummy("Coffee")),
+                Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Water")]),
+                Genus::Naked(vec![Forma::dummy("Beans"), Forma::dummy("Water")]),
+                Genus::List(Forma::dummy("Patient")),
                 Genus::Unit,
             ];
 
@@ -237,16 +237,16 @@ doesn't have an input or result, per se.
         ParsingError::InvalidSignature(_, _) => {
             let examples = vec![
                 Signature {
-                    requires: Genus::Single(Forma("A")),
-                    provides: Genus::Single(Forma("B")),
+                    requires: Genus::Single(Forma::dummy("A")),
+                    provides: Genus::Single(Forma::dummy("B")),
                 },
                 Signature {
-                    requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                    provides: Genus::Single(Forma("Coffee")),
+                    requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                    provides: Genus::Single(Forma::dummy("Coffee")),
                 },
                 Signature {
-                    requires: Genus::List(Forma("FunctionalRequirement")),
-                    provides: Genus::Single(Forma("Architecture")),
+                    requires: Genus::List(Forma::dummy("FunctionalRequirement")),
+                    provides: Genus::Single(Forma::dummy("Architecture")),
                 },
             ];
 
@@ -296,8 +296,8 @@ this form.
                     name: Identifier::dummy("f"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("A")),
-                        provides: Genus::Single(Forma("B")),
+                        requires: Genus::Single(Forma::dummy("A")),
+                        provides: Genus::Single(Forma::dummy("B")),
                     }),
                     elements: Vec::new(),
                 },
@@ -305,8 +305,8 @@ this form.
                     name: Identifier::dummy("implementation"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Design")),
-                        provides: Genus::Single(Forma("Product")),
+                        requires: Genus::Single(Forma::dummy("Design")),
+                        provides: Genus::Single(Forma::dummy("Product")),
                     }),
                     elements: Vec::new(),
                 },
@@ -314,8 +314,8 @@ this form.
                     name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                        provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -323,8 +323,8 @@ this form.
                     name: Identifier::dummy("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Tuple(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                        provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -332,8 +332,8 @@ this form.
                     name: Identifier::dummy("make_coffee"),
                     parameters: Some(vec![Identifier::dummy("b"), Identifier::dummy("m")]),
                     signature: Some(Signature {
-                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma::dummy("Beans"), Forma::dummy("Milk")]),
+                        provides: Genus::Single(Forma::dummy("Coffee")),
                     }),
                     elements: Vec::new(),
                 },
@@ -392,8 +392,8 @@ Finally, variables can be assigned for the names of the input parameters:
                     name: Identifier::dummy("lawsuit"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Council")),
-                        provides: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma::dummy("Council")),
+                        provides: Genus::List(Forma::dummy("Penny")),
                     }),
                     elements: Vec::new(),
                 },
@@ -401,8 +401,8 @@ Finally, variables can be assigned for the names of the input parameters:
                     name: Identifier::dummy("lawsuit"),
                     parameters: Some(vec![Identifier::dummy("c")]),
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Council")),
-                        provides: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma::dummy("Council")),
+                        provides: Genus::List(Forma::dummy("Penny")),
                     }),
                     elements: Vec::new(),
                 },
