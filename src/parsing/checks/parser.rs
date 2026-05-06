@@ -617,7 +617,7 @@ fn read_toplevel_steps() {
     // Test invalid step
     input.initialize("Not a step");
     let result = input.read_step_dependent();
-    assert_eq!(result, Err(ParsingError::InvalidStep(0, 0)));
+    assert_eq!(result, Err(ParsingError::InvalidStep(Span::new(0, 0))));
 }
 
 #[test]
@@ -1767,7 +1767,10 @@ fn test_foreach_keyword_boundary() {
     input.initialize("{ foreachitem in items }");
 
     let result = input.read_code_block();
-    assert_eq!(result, Err(ParsingError::InvalidCodeBlock(2, 12)));
+    assert_eq!(
+        result,
+        Err(ParsingError::InvalidCodeBlock(Span::new(2, 12)))
+    );
 }
 
 #[test]
@@ -1845,7 +1848,8 @@ fn splitting_by() {
     // different split character
     input.initialize("'Yes'|'No'|'Maybe'");
     let result = input.take_split_by('|', |inner| {
-        validate_response(inner.source).ok_or(ParsingError::IllegalParserState(inner.offset, 0))
+        validate_response(inner.source)
+            .ok_or(ParsingError::IllegalParserState(Span::new(inner.offset, 0)))
     });
     assert_eq!(
         result,
@@ -2067,20 +2071,8 @@ fn attribute_spans_include_marker() {
         Attribute::Role(Identifier::new("chef"), Span::default())
     );
     if let Attribute::Role(id, span) = &result[0] {
-        assert_eq!(
-            *span,
-            Span {
-                offset: 0,
-                length: 5
-            }
-        );
-        assert_eq!(
-            id.span,
-            Span {
-                offset: 1,
-                length: 4
-            }
-        );
+        assert_eq!(*span, Span::new(0, 5));
+        assert_eq!(id.span, Span::new(1, 4));
     }
 
     input.initialize("^kitchen");
@@ -2088,20 +2080,8 @@ fn attribute_spans_include_marker() {
         .read_attributes()
         .unwrap();
     if let Attribute::Place(id, span) = &result[0] {
-        assert_eq!(
-            *span,
-            Span {
-                offset: 0,
-                length: 8
-            }
-        );
-        assert_eq!(
-            id.span,
-            Span {
-                offset: 1,
-                length: 7
-            }
-        );
+        assert_eq!(*span, Span::new(0, 8));
+        assert_eq!(id.span, Span::new(1, 7));
     }
 
     input.initialize("@waiter + ^milliways");
@@ -2109,36 +2089,12 @@ fn attribute_spans_include_marker() {
         .read_attributes()
         .unwrap();
     if let Attribute::Role(id, span) = &result[0] {
-        assert_eq!(
-            *span,
-            Span {
-                offset: 0,
-                length: 7
-            }
-        );
-        assert_eq!(
-            id.span,
-            Span {
-                offset: 1,
-                length: 6
-            }
-        );
+        assert_eq!(*span, Span::new(0, 7));
+        assert_eq!(id.span, Span::new(1, 6));
     }
     if let Attribute::Place(id, span) = &result[1] {
-        assert_eq!(
-            *span,
-            Span {
-                offset: 10,
-                length: 10
-            }
-        );
-        assert_eq!(
-            id.span,
-            Span {
-                offset: 11,
-                length: 9
-            }
-        );
+        assert_eq!(*span, Span::new(10, 10));
+        assert_eq!(id.span, Span::new(11, 9));
     }
 }
 
@@ -2337,7 +2293,7 @@ fn parse_collecting_errors_basic() {
             assert!(errors.len() > 0);
             assert!(errors
                 .iter()
-                .any(|e| matches!(e, ParsingError::InvalidHeader(_, _))));
+                .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
         }
     }
 
@@ -2434,7 +2390,7 @@ fn test_redundant_error_removal_unclosed_interpolation() {
     // Should get the specific UnclosedInterpolation error, not a generic
     // one
     match result {
-        Err(ParsingError::UnclosedInterpolation(_, _)) => {
+        Err(ParsingError::UnclosedInterpolation(_)) => {
             // Good - we got the specific error
         }
         Err(other) => {

@@ -4,26 +4,26 @@ use technique::{formatting::Render, language::*, parsing::ParsingError};
 /// Generate problem and detail messages for parsing errors using AST construction
 pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
     match error {
-        ParsingError::IllegalParserState(_, _) => (
+        ParsingError::IllegalParserState(_) => (
             "Illegal parser state".to_string(),
             "Internal parser error. This should not have happened! Sorry.".to_string(),
         ),
-        ParsingError::Unimplemented(_, _) => (
+        ParsingError::Unimplemented(_) => (
             "Feature not yet implemented".to_string(),
             "This feature is planned but not yet available.".to_string(),
         ),
-        ParsingError::Unrecognized(_, _) => (
+        ParsingError::Unrecognized(_) => (
             "Unrecognized input".to_string(),
             "The parser encountered unexpected content".to_string(),
         ),
-        ParsingError::Expected(_, _, value) => (
+        ParsingError::Expected(_, value) => (
             format!("Expected {}", value),
             format!(
                 "The parser was looking for {} but found something else.",
                 value
             ),
         ),
-        ParsingError::ExpectedMatchingChar(_, _, subject, start, end) => (
+        ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
             format!("Expected matching character '{}'", end),
             format!(
                 r#"
@@ -35,7 +35,7 @@ there was no more input remaining in the current scope.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::MissingParenthesis(_, _) => {
+        ParsingError::MissingParenthesis(_) => {
             let examples = vec![Descriptive::Binding(
                 Box::new(Descriptive::Application(Invocation {
                     target: Target::Local(Identifier::new("mix_pangalactic_gargle_blaster")),
@@ -59,7 +59,7 @@ enclose those names in parenthesis. For example:
                 .to_string(),
             )
         }
-        ParsingError::UnclosedInterpolation(_, _) => (
+        ParsingError::UnclosedInterpolation(_) => (
             "Unclosed string interpolation".to_string(),
             r#"
 Every '{' that starts an interpolation within a string must have a
@@ -69,7 +69,7 @@ literal resumes.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidHeader(_, _) => {
+        ParsingError::InvalidHeader(_) => {
             // Format the sample metadata using the same code as the formatter
             let mut formatted_example = String::new();
             formatted_example
@@ -115,15 +115,15 @@ to be used when rendering the Technique. Common domains include
                 ),
             )
         }
-        ParsingError::InvalidCharacter(_, _, c) => (
+        ParsingError::InvalidCharacter(_, c) => (
             format!("Invalid character '{}'", c),
             "This character is not allowed here.".to_string(),
         ),
-        ParsingError::UnexpectedEndOfInput(_, _) => (
+        ParsingError::UnexpectedEndOfInput(_) => (
             "Unexpected end of input".to_string(),
             "The file ended before the parser expected it to".to_string(),
         ),
-        ParsingError::InvalidIdentifier(_, _, _) => {
+        ParsingError::InvalidIdentifier(_, _) => {
             let examples = vec![
                 Procedure {
                     name: Identifier::new("make_coffee"),
@@ -176,7 +176,7 @@ letters, numbers, and underscores. Valid examples include:
                 .to_string(),
             )
         }
-        ParsingError::InvalidForma(_, _) => {
+        ParsingError::InvalidForma(_) => {
             let examples = vec![
                 Forma::new("Coffee"),
                 Forma::new("Ingredients"),
@@ -202,7 +202,7 @@ For example:
                 .to_string(),
             )
         }
-        ParsingError::InvalidGenus(_, _) => {
+        ParsingError::InvalidGenus(_) => {
             let examples = vec![
                 Genus::Single(Forma::new("Coffee")),
                 Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Water")]),
@@ -238,7 +238,7 @@ doesn't have an input or result, per se.
                 .to_string(),
             )
         }
-        ParsingError::InvalidSignature(_, _) => {
+        ParsingError::InvalidSignature(_) => {
             let examples = vec![
                 Signature {
                     requires: Genus::Single(Forma::new("A")),
@@ -276,7 +276,7 @@ this form.
                 .to_string(),
             )
         }
-        ParsingError::InvalidDeclaration(_, _) => {
+        ParsingError::InvalidDeclaration(_) => {
             let examples = vec![
                 Procedure {
                     name: Identifier::new("f"),
@@ -386,7 +386,7 @@ Finally, variables can be assigned for the names of the input parameters:
                 .to_string(),
             )
         }
-        ParsingError::InvalidParameters(_, _) => {
+        ParsingError::InvalidParameters(_) => {
             let examples = vec![
                 Procedure {
                     name: Identifier::new("create_bypass"),
@@ -449,7 +449,7 @@ declarations (and in fact the same):
                 .to_string(),
             )
         }
-        ParsingError::InvalidSection(_, _) => {
+        ParsingError::InvalidSection(_) => {
             // Roman numeral sections don't have AST representation
             (
                 "Invalid section heading".to_string(),
@@ -469,7 +469,7 @@ author of the Technique.
                 .to_string(),
             )
         }
-        ParsingError::InvalidInvocation(_, _) => {
+        ParsingError::InvalidInvocation(_) => {
             let examples = vec![
                 Invocation {
                     target: Target::Local(Identifier::new("make_coffee")),
@@ -503,7 +503,7 @@ If the procedure takes parameters they can be specified in parenthesis:
                 .to_string(),
             )
         }
-        ParsingError::InvalidFunction(_, _) => {
+        ParsingError::InvalidFunction(_) => {
             let examples = vec![
                 Function {
                     target: Identifier::new("exec"),
@@ -545,7 +545,7 @@ expressions as parameters as required:
                 .to_string(),
             )
         }
-        ParsingError::InvalidCodeBlock(_, _) => {
+        ParsingError::InvalidCodeBlock(_) => {
             let examples = vec![
                 Expression::Execution(
                     Function {
@@ -589,7 +589,7 @@ Inline code blocks are enclosed in braces:
                 .to_string(),
             )
         }
-        ParsingError::InvalidMultiline(_, _) => (
+        ParsingError::InvalidMultiline(_) => (
             "Invalid multi-line string".to_string(),
             r#"
 Multi-line strings can be written by surrounding the content in triple
@@ -619,7 +619,7 @@ it may be used by output templates when rendering the procedure.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidStep(_, _) => (
+        ParsingError::InvalidStep(_) => (
             "Invalid step format".to_string(),
             r#"
 Steps must start with a number or lower-case letter (in the case of dependent
@@ -639,7 +639,7 @@ dash. They can be done in either order, or concurrently:
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidSubstep(_, _) => (
+        ParsingError::InvalidSubstep(_) => (
             "Invalid substep format".to_string(),
             r#"
 Substeps can be nested below top-level dependent steps or top-level parallel
@@ -665,7 +665,7 @@ parallel steps, but again this is not compulsory.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidAttribute(_, _) => {
+        ParsingError::InvalidAttribute(_) => {
             let examples = vec![
                 Scope::AttributeBlock {
                     attributes: vec![
@@ -709,7 +709,7 @@ nested underneath a role or place assignment.
                 .to_string(),
             )
         }
-        ParsingError::InvalidForeach(_, _) => {
+        ParsingError::InvalidForeach(_) => {
             let examples = vec![
                 Expression::Foreach(
                     vec![Identifier::new("patient")],
@@ -748,7 +748,7 @@ a list of tuples.
                 .to_string(),
             )
         }
-        ParsingError::InvalidResponse(_, _) => {
+        ParsingError::InvalidResponse(_) => {
             let examples = vec![
                 vec![
                     Response {
@@ -816,7 +816,7 @@ By convention the response values are Proper Case.
                 .to_string(),
             )
         }
-        ParsingError::InvalidIntegral(_, _) => {
+        ParsingError::InvalidIntegral(_) => {
             let examples = vec![
                 Numeric::Integral(42),
                 Numeric::Integral(-123),
@@ -844,7 +844,7 @@ Integers cannot contain decimal points or units."#,
                 .to_string(),
             )
         }
-        ParsingError::InvalidQuantity(_, _) => {
+        ParsingError::InvalidQuantity(_) => {
             let examples = vec![
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
@@ -909,7 +909,7 @@ a magnitude:
                 .to_string(),
             )
         }
-        ParsingError::InvalidQuantityDecimal(_, _) => (
+        ParsingError::InvalidQuantityDecimal(_) => (
             "Invalid number in quantity".to_string(),
             r#"
 The numeric part of a quantity may be positive or negative, and may have a
@@ -922,7 +922,7 @@ Values less than 1 must have a leading '0' before the decimal."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantityUncertainty(_, _) => (
+        ParsingError::InvalidQuantityUncertainty(_) => (
             "Invalid uncertainty in quantity".to_string(),
             r#"
 Uncertainty values must be positive numbers:
@@ -933,7 +933,7 @@ You can use '±' or `+/-`, followed by a decimal."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantityMagnitude(_, _) => (
+        ParsingError::InvalidQuantityMagnitude(_) => (
             "Invalid magnitude format".to_string(),
             r#"
 The magnitude of a quantity can be expressed in the usual scientific format
@@ -948,7 +948,7 @@ The base must be 10, and the exponent must be an integer."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantitySymbol(_, _) => {
+        ParsingError::InvalidQuantitySymbol(_) => {
             let examples = vec![
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {

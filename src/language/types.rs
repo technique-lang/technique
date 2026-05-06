@@ -3,10 +3,16 @@
 use crate::regex::*;
 
 /// Byte range within the original source. `length` excludes trailing whitespace.
-#[derive(Copy, Clone, Default, Eq, Debug, PartialEq)]
+#[derive(Copy, Clone, Default, Eq, Debug, PartialEq, PartialOrd, Ord)]
 pub struct Span {
     pub offset: usize,
     pub length: usize,
+}
+
+impl Span {
+    pub const fn new(offset: usize, length: usize) -> Self {
+        Span { offset, length }
+    }
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -120,10 +126,7 @@ impl<'i> Identifier<'i> {
     pub const fn new(value: &'i str) -> Self {
         Identifier {
             value,
-            span: Span {
-                offset: 0,
-                length: 0,
-            },
+            span: Span::new(0, 0),
         }
     }
 }
@@ -144,10 +147,7 @@ impl<'i> External<'i> {
     pub const fn new(value: &'i str) -> Self {
         External {
             value,
-            span: Span {
-                offset: 0,
-                length: 0,
-            },
+            span: Span::new(0, 0),
         }
     }
 }
@@ -174,10 +174,7 @@ impl<'i> Forma<'i> {
     pub const fn new(value: &'i str) -> Self {
         Forma {
             value,
-            span: Span {
-                offset: 0,
-                length: 0,
-            },
+            span: Span::new(0, 0),
         }
     }
 }
@@ -529,10 +526,7 @@ pub(crate) fn validate_forma(input: &str, span: Span) -> Option<Forma<'_>> {
 /// `child` must be a sub-slice of `parent`.
 fn sub_span(parent: &str, child: &str, parent_span: Span) -> Span {
     let inner = (child.as_ptr() as usize) - (parent.as_ptr() as usize);
-    Span {
-        offset: parent_span.offset + inner,
-        length: child.len(),
-    }
+    Span::new(parent_span.offset + inner, child.len())
 }
 
 fn parse_tuple(input: &str, span: Span) -> Option<Vec<Forma<'_>>> {

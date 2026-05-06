@@ -26,115 +26,88 @@ pub fn parse_with_recovery<'i>(
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ParsingError {
     // lowest priority
-    IllegalParserState(usize, usize), // offset, width (0 = unknown)
-    Unimplemented(usize, usize),
-    Unrecognized(usize, usize), // improve this
-    UnexpectedEndOfInput(usize, usize),
-    Expected(usize, usize, &'static str), // offset, width, expected
-    ExpectedMatchingChar(usize, usize, &'static str, char, char),
-    MissingParenthesis(usize, usize),
+    IllegalParserState(Span),
+    Unimplemented(Span),
+    Unrecognized(Span),
+    UnexpectedEndOfInput(Span),
+    Expected(Span, &'static str),
+    ExpectedMatchingChar(Span, &'static str, char, char),
+    MissingParenthesis(Span),
     // more specific errors
-    InvalidCharacter(usize, usize, char),
-    InvalidHeader(usize, usize),
-    InvalidIdentifier(usize, usize, String),
-    InvalidForma(usize, usize),
-    InvalidGenus(usize, usize),
-    InvalidSignature(usize, usize),
-    InvalidParameters(usize, usize),
-    InvalidDeclaration(usize, usize),
-    InvalidSection(usize, usize),
-    InvalidInvocation(usize, usize),
-    InvalidFunction(usize, usize),
-    InvalidCodeBlock(usize, usize),
-    InvalidStep(usize, usize),
-    InvalidSubstep(usize, usize),
-    InvalidAttribute(usize, usize),
-    InvalidResponse(usize, usize),
-    InvalidMultiline(usize, usize),
-    InvalidForeach(usize, usize),
-    InvalidIntegral(usize, usize),
-    InvalidQuantity(usize, usize),
-    InvalidQuantityDecimal(usize, usize),
-    InvalidQuantityUncertainty(usize, usize),
-    InvalidQuantityMagnitude(usize, usize),
-    InvalidQuantitySymbol(usize, usize),
+    InvalidCharacter(Span, char),
+    InvalidHeader(Span),
+    InvalidIdentifier(Span, String),
+    InvalidForma(Span),
+    InvalidGenus(Span),
+    InvalidSignature(Span),
+    InvalidParameters(Span),
+    InvalidDeclaration(Span),
+    InvalidSection(Span),
+    InvalidInvocation(Span),
+    InvalidFunction(Span),
+    InvalidCodeBlock(Span),
+    InvalidStep(Span),
+    InvalidSubstep(Span),
+    InvalidAttribute(Span),
+    InvalidResponse(Span),
+    InvalidMultiline(Span),
+    InvalidForeach(Span),
+    InvalidIntegral(Span),
+    InvalidQuantity(Span),
+    InvalidQuantityDecimal(Span),
+    InvalidQuantityUncertainty(Span),
+    InvalidQuantityMagnitude(Span),
+    InvalidQuantitySymbol(Span),
     // highest priority
-    UnclosedInterpolation(usize, usize),
+    UnclosedInterpolation(Span),
 }
 
 impl ParsingError {
-    pub fn offset(&self) -> usize {
+    pub fn span(&self) -> Span {
         match self {
-            ParsingError::IllegalParserState(offset, _) => *offset,
-            ParsingError::Unimplemented(offset, _) => *offset,
-            ParsingError::Unrecognized(offset, _) => *offset,
-            ParsingError::Expected(offset, _, _) => *offset,
-            ParsingError::ExpectedMatchingChar(offset, _, _, _, _) => *offset,
-            ParsingError::MissingParenthesis(offset, _) => *offset,
-            ParsingError::UnclosedInterpolation(offset, _) => *offset,
-            ParsingError::InvalidHeader(offset, _) => *offset,
-            ParsingError::InvalidCharacter(offset, _, _) => *offset,
-            ParsingError::UnexpectedEndOfInput(offset, _) => *offset,
-            ParsingError::InvalidIdentifier(offset, _, _) => *offset,
-            ParsingError::InvalidForma(offset, _) => *offset,
-            ParsingError::InvalidGenus(offset, _) => *offset,
-            ParsingError::InvalidSignature(offset, _) => *offset,
-            ParsingError::InvalidDeclaration(offset, _) => *offset,
-            ParsingError::InvalidParameters(offset, _) => *offset,
-            ParsingError::InvalidSection(offset, _) => *offset,
-            ParsingError::InvalidInvocation(offset, _) => *offset,
-            ParsingError::InvalidFunction(offset, _) => *offset,
-            ParsingError::InvalidCodeBlock(offset, _) => *offset,
-            ParsingError::InvalidMultiline(offset, _) => *offset,
-            ParsingError::InvalidStep(offset, _) => *offset,
-            ParsingError::InvalidSubstep(offset, _) => *offset,
-            ParsingError::InvalidAttribute(offset, _) => *offset,
-            ParsingError::InvalidForeach(offset, _) => *offset,
-            ParsingError::InvalidResponse(offset, _) => *offset,
-            ParsingError::InvalidIntegral(offset, _) => *offset,
-            ParsingError::InvalidQuantity(offset, _) => *offset,
-            ParsingError::InvalidQuantityDecimal(offset, _) => *offset,
-            ParsingError::InvalidQuantityUncertainty(offset, _) => *offset,
-            ParsingError::InvalidQuantityMagnitude(offset, _) => *offset,
-            ParsingError::InvalidQuantitySymbol(offset, _) => *offset,
+            ParsingError::IllegalParserState(span)
+            | ParsingError::Unimplemented(span)
+            | ParsingError::Unrecognized(span)
+            | ParsingError::UnexpectedEndOfInput(span)
+            | ParsingError::MissingParenthesis(span)
+            | ParsingError::InvalidHeader(span)
+            | ParsingError::InvalidForma(span)
+            | ParsingError::InvalidGenus(span)
+            | ParsingError::InvalidSignature(span)
+            | ParsingError::InvalidParameters(span)
+            | ParsingError::InvalidDeclaration(span)
+            | ParsingError::InvalidSection(span)
+            | ParsingError::InvalidInvocation(span)
+            | ParsingError::InvalidFunction(span)
+            | ParsingError::InvalidCodeBlock(span)
+            | ParsingError::InvalidStep(span)
+            | ParsingError::InvalidSubstep(span)
+            | ParsingError::InvalidAttribute(span)
+            | ParsingError::InvalidResponse(span)
+            | ParsingError::InvalidMultiline(span)
+            | ParsingError::InvalidForeach(span)
+            | ParsingError::InvalidIntegral(span)
+            | ParsingError::InvalidQuantity(span)
+            | ParsingError::InvalidQuantityDecimal(span)
+            | ParsingError::InvalidQuantityUncertainty(span)
+            | ParsingError::InvalidQuantityMagnitude(span)
+            | ParsingError::InvalidQuantitySymbol(span)
+            | ParsingError::UnclosedInterpolation(span) => *span,
+            ParsingError::Expected(span, _)
+            | ParsingError::ExpectedMatchingChar(span, _, _, _)
+            | ParsingError::InvalidCharacter(span, _)
+            | ParsingError::InvalidIdentifier(span, _) => *span,
         }
     }
 
+    pub fn offset(&self) -> usize {
+        self.span()
+            .offset
+    }
+
     pub fn width(&self) -> usize {
-        match self {
-            ParsingError::IllegalParserState(_, width) => *width,
-            ParsingError::Unimplemented(_, width) => *width,
-            ParsingError::Unrecognized(_, width) => *width,
-            ParsingError::Expected(_, width, _) => *width,
-            ParsingError::ExpectedMatchingChar(_, width, _, _, _) => *width,
-            ParsingError::MissingParenthesis(_, width) => *width,
-            ParsingError::UnclosedInterpolation(_, width) => *width,
-            ParsingError::InvalidHeader(_, width) => *width,
-            ParsingError::InvalidCharacter(_, width, _) => *width,
-            ParsingError::UnexpectedEndOfInput(_, width) => *width,
-            ParsingError::InvalidIdentifier(_, width, _) => *width,
-            ParsingError::InvalidForma(_, width) => *width,
-            ParsingError::InvalidGenus(_, width) => *width,
-            ParsingError::InvalidSignature(_, width) => *width,
-            ParsingError::InvalidDeclaration(_, width) => *width,
-            ParsingError::InvalidParameters(_, width) => *width,
-            ParsingError::InvalidSection(_, width) => *width,
-            ParsingError::InvalidInvocation(_, width) => *width,
-            ParsingError::InvalidFunction(_, width) => *width,
-            ParsingError::InvalidCodeBlock(_, width) => *width,
-            ParsingError::InvalidMultiline(_, width) => *width,
-            ParsingError::InvalidStep(_, width) => *width,
-            ParsingError::InvalidSubstep(_, width) => *width,
-            ParsingError::InvalidAttribute(_, width) => *width,
-            ParsingError::InvalidForeach(_, width) => *width,
-            ParsingError::InvalidResponse(_, width) => *width,
-            ParsingError::InvalidIntegral(_, width) => *width,
-            ParsingError::InvalidQuantity(_, width) => *width,
-            ParsingError::InvalidQuantityDecimal(_, width) => *width,
-            ParsingError::InvalidQuantityUncertainty(_, width) => *width,
-            ParsingError::InvalidQuantityMagnitude(_, width) => *width,
-            ParsingError::InvalidQuantitySymbol(_, width) => *width,
-        }
+        self.span()
+            .length
     }
 }
 
@@ -289,7 +262,7 @@ impl<'i> Parser<'i> {
                         }
                     } else {
                         self.problems
-                            .push(ParsingError::Unrecognized(self.offset, 0));
+                            .push(ParsingError::Unrecognized(Span::new(self.offset, 0)));
                         self.skip_to_next_line();
                     }
                 }
@@ -364,7 +337,7 @@ impl<'i> Parser<'i> {
                 }
             } else {
                 self.problems
-                    .push(ParsingError::Unrecognized(self.offset, 0));
+                    .push(ParsingError::Unrecognized(Span::new(self.offset, 0)));
                 self.skip_to_next_line();
             }
         }
@@ -535,15 +508,13 @@ impl<'i> Parser<'i> {
 
         if !begun {
             return Err(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "the start character",
             ));
         }
         if l == 0 {
             return Err(ParsingError::ExpectedMatchingChar(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 subject,
                 start_char,
                 end_char,
@@ -582,8 +553,7 @@ impl<'i> Parser<'i> {
             .source
             .find(delimiter)
             .ok_or(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "a starting delimiter",
             ))?;
 
@@ -592,8 +562,7 @@ impl<'i> Parser<'i> {
         let end = self.source[start..]
             .find(delimiter)
             .ok_or(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "the corresponding end delimiter",
             ))?;
 
@@ -655,8 +624,7 @@ impl<'i> Parser<'i> {
             let trimmed = chunk.trim_ascii();
             if trimmed.is_empty() {
                 return Err(ParsingError::Expected(
-                    self.offset,
-                    0,
+                    Span::new(self.offset, 0),
                     "non-empty content between delimiters",
                 ));
             }
@@ -726,17 +694,11 @@ impl<'i> Parser<'i> {
             - (self
                 .source
                 .as_ptr() as usize);
-        Span {
-            offset: self.offset + inner,
-            length: slice.len(),
-        }
+        Span::new(self.offset + inner, slice.len())
     }
 
     fn span_since(&self, start: usize) -> Span {
-        Span {
-            offset: start,
-            length: self.offset - start,
-        }
+        Span::new(start, self.offset - start)
     }
 
     // because test cases and trivial single-line examples might omit an
@@ -755,7 +717,7 @@ impl<'i> Parser<'i> {
             } else if c.is_ascii_whitespace() {
                 continue;
             } else {
-                return Err(ParsingError::InvalidCharacter(self.offset, 0, c));
+                return Err(ParsingError::InvalidCharacter(Span::new(self.offset, 0), c));
             }
         }
 
@@ -779,7 +741,10 @@ impl<'i> Parser<'i> {
                 Ok(1)
             } else {
                 let error_offset = analyze_magic_line(inner.source);
-                Err(ParsingError::InvalidHeader(inner.offset + error_offset, 0))
+                Err(ParsingError::InvalidHeader(Span::new(
+                    inner.offset + error_offset,
+                    0,
+                )))
             }
         })
     }
@@ -792,7 +757,7 @@ impl<'i> Parser<'i> {
 
             let cap = re
                 .captures(inner.source)
-                .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
+                .ok_or(ParsingError::InvalidHeader(Span::new(inner.offset, 0)))?;
 
             // Now to extracting the values we need. We get the license code from
             // the first capture. It must be present otherwise we don't have a
@@ -801,10 +766,13 @@ impl<'i> Parser<'i> {
 
             let one = cap
                 .get(1)
-                .ok_or(ParsingError::Expected(inner.offset, 0, "the license name"))?;
+                .ok_or(ParsingError::Expected(
+                    Span::new(inner.offset, 0),
+                    "the license name",
+                ))?;
 
             let result = validate_license(one.as_str())
-                .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
+                .ok_or(ParsingError::InvalidHeader(Span::new(inner.offset, 0)))?;
             let license = Some(result);
 
             // Now dig out the copyright, if present:
@@ -812,7 +780,7 @@ impl<'i> Parser<'i> {
             let copyright = match cap.get(2) {
                 Some(two) => {
                     let result = validate_copyright(two.as_str())
-                        .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
+                        .ok_or(ParsingError::InvalidHeader(Span::new(inner.offset, 0)))?;
                     Some(result)
                 }
                 None => None,
@@ -828,14 +796,17 @@ impl<'i> Parser<'i> {
 
             let cap = re
                 .captures(inner.source)
-                .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
+                .ok_or(ParsingError::InvalidHeader(Span::new(inner.offset, 0)))?;
 
             let one = cap
                 .get(1)
-                .ok_or(ParsingError::Expected(inner.offset, 0, "a domain name"))?;
+                .ok_or(ParsingError::Expected(
+                    Span::new(inner.offset, 0),
+                    "a domain name",
+                ))?;
 
             let result = validate_domain(one.as_str())
-                .ok_or(ParsingError::InvalidHeader(inner.offset, 0))?;
+                .ok_or(ParsingError::InvalidHeader(Span::new(inner.offset, 0)))?;
             Ok(Some(result))
         })
     }
@@ -849,7 +820,7 @@ impl<'i> Parser<'i> {
             self.require_newline()?;
             result
         } else {
-            Err(ParsingError::Expected(0, 0, "The % symbol"))?
+            Err(ParsingError::Expected(Span::new(0, 0), "The % symbol"))?
         };
 
         // Process SPDX line
@@ -886,41 +857,35 @@ impl<'i> Parser<'i> {
             Some(c) => c,
             None => {
                 let arrow_offset = analyze_malformed_signature(self.source);
-                return Err(ParsingError::InvalidSignature(
+                return Err(ParsingError::InvalidSignature(Span::new(
                     self.offset + arrow_offset,
                     0,
-                ));
+                )));
             }
         };
 
         let one = cap
             .get(1)
             .ok_or(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "a Genus for the requires",
             ))?;
 
         let two = cap
             .get(2)
             .ok_or(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "a Genus for the provides",
             ))?;
 
-        let one_span = Span {
-            offset: self.offset + one.start(),
-            length: one.len(),
-        };
-        let two_span = Span {
-            offset: self.offset + two.start(),
-            length: two.len(),
-        };
-        let requires = validate_genus(one.as_str(), one_span)
-            .ok_or(ParsingError::InvalidGenus(one_span.offset, one_span.length))?;
-        let provides = validate_genus(two.as_str(), two_span)
-            .ok_or(ParsingError::InvalidGenus(two_span.offset, two_span.length))?;
+        let one_span = Span::new(self.offset + one.start(), one.len());
+        let two_span = Span::new(self.offset + two.start(), two.len());
+        let requires = validate_genus(one.as_str(), one_span).ok_or(ParsingError::InvalidGenus(
+            Span::new(one_span.offset, one_span.length),
+        ))?;
+        let provides = validate_genus(two.as_str(), two_span).ok_or(ParsingError::InvalidGenus(
+            Span::new(two_span.offset, two_span.length),
+        ))?;
 
         Ok(Signature { requires, provides })
     }
@@ -942,13 +907,12 @@ impl<'i> Parser<'i> {
 
         let cap = re
             .captures(self.source)
-            .ok_or(ParsingError::InvalidDeclaration(self.offset, 0))?;
+            .ok_or(ParsingError::InvalidDeclaration(Span::new(self.offset, 0)))?;
 
         let one = cap
             .get(1)
             .ok_or(ParsingError::Expected(
-                self.offset,
-                0,
+                Span::new(self.offset, 0),
                 "an Identifier for the procedure declaration",
             ))?;
 
@@ -956,12 +920,15 @@ impl<'i> Parser<'i> {
         let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
             let before = before.trim();
             let name = validate_identifier(before, self.span_of(before)).ok_or(
-                ParsingError::InvalidIdentifier(self.offset, before.len(), before.to_string()),
+                ParsingError::InvalidIdentifier(
+                    Span::new(self.offset, before.len()),
+                    before.to_string(),
+                ),
             )?;
 
             // Extract parameters from parentheses
             if !list.ends_with(')') {
-                return Err(ParsingError::InvalidDeclaration(self.offset, 0));
+                return Err(ParsingError::InvalidDeclaration(Span::new(self.offset, 0)));
             }
             let list = &list[..list.len() - 1].trim_ascii();
 
@@ -973,8 +940,7 @@ impl<'i> Parser<'i> {
                     let trimmed = item.trim_ascii();
                     let param = validate_identifier(trimmed, self.span_of(trimmed)).ok_or(
                         ParsingError::InvalidIdentifier(
-                            self.offset,
-                            trimmed.len(),
+                            Span::new(self.offset, trimmed.len()),
                             trimmed.to_string(),
                         ),
                     )?;
@@ -1002,11 +968,17 @@ impl<'i> Parser<'i> {
                     - text.as_ptr() as isize;
                 let error_offset = self.offset + one.start() + first_param_pos as usize;
                 let param_width = text.len() - first_param_pos as usize;
-                return Err(ParsingError::InvalidParameters(error_offset, param_width));
+                return Err(ParsingError::InvalidParameters(Span::new(
+                    error_offset,
+                    param_width,
+                )));
             }
 
             let name = validate_identifier(text, self.span_of(text)).ok_or(
-                ParsingError::InvalidIdentifier(self.offset, text.len(), text.to_string()),
+                ParsingError::InvalidIdentifier(
+                    Span::new(self.offset, text.len()),
+                    text.to_string(),
+                ),
             )?;
             (name, None)
         };
@@ -1032,7 +1004,7 @@ impl<'i> Parser<'i> {
             Ok(title)
         } else {
             // we shouldn't have invoked this unless we have a title to parse!
-            Err(ParsingError::IllegalParserState(self.offset, 0))
+            Err(ParsingError::IllegalParserState(Span::new(self.offset, 0)))
         }
     }
 
@@ -1155,7 +1127,10 @@ impl<'i> Parser<'i> {
                     }
                 } else {
                     self.problems
-                        .push(ParsingError::InvalidAttribute(parser.offset, content.len()));
+                        .push(ParsingError::InvalidAttribute(Span::new(
+                            parser.offset,
+                            content.len(),
+                        )));
                     parser.skip_to_next_line();
                 }
             } else if is_step(content) {
@@ -1193,7 +1168,7 @@ impl<'i> Parser<'i> {
             } else if malformed_step_pattern(content) {
                 // Store error but continue parsing
                 self.problems
-                    .push(ParsingError::InvalidStep(parser.offset, 0));
+                    .push(ParsingError::InvalidStep(Span::new(parser.offset, 0)));
                 parser.skip_to_next_line();
             } else {
                 match parser.take_block_lines(
@@ -1396,11 +1371,16 @@ impl<'i> Parser<'i> {
         let re = regex!(r"^\s*([IVX]+)\.\s*(.*)$");
         let cap = re
             .captures(line)
-            .ok_or(ParsingError::InvalidSection(self.offset, 0))?;
+            .ok_or(ParsingError::InvalidSection(Span::new(self.offset, 0)))?;
 
         let numeral = match cap.get(1) {
             Some(one) => one.as_str(),
-            None => return Err(ParsingError::Expected(self.offset, 0, "section header")),
+            None => {
+                return Err(ParsingError::Expected(
+                    Span::new(self.offset, 0),
+                    "section header",
+                ))
+            }
         };
 
         // Though section text appear as titles, they are in fact steps and so
@@ -1419,7 +1399,7 @@ impl<'i> Parser<'i> {
                     let paragraphs = parser.read_descriptive()?;
 
                     if paragraphs.len() != 1 {
-                        return Err(ParsingError::InvalidSection(self.offset, 0));
+                        return Err(ParsingError::InvalidSection(Span::new(self.offset, 0)));
                     }
                     let paragraph = paragraphs
                         .into_iter()
@@ -1469,12 +1449,12 @@ impl<'i> Parser<'i> {
                         .is_empty()
                 {
                     let width = inner.offset - start;
-                    return Err(ParsingError::InvalidCodeBlock(start, width));
+                    return Err(ParsingError::InvalidCodeBlock(Span::new(start, width)));
                 }
             }
 
             if expressions.is_empty() {
-                return Err(ParsingError::InvalidCodeBlock(inner.offset, 0));
+                return Err(ParsingError::InvalidCodeBlock(Span::new(inner.offset, 0)));
             }
 
             Ok(expressions)
@@ -1498,14 +1478,14 @@ impl<'i> Parser<'i> {
                 self.advance(tilde_pos + 1); // Move past ~
                 self.trim_whitespace();
             }
-            return Err(ParsingError::MissingParenthesis(self.offset, 0));
+            return Err(ParsingError::MissingParenthesis(Span::new(self.offset, 0)));
         } else if is_repeat_keyword(content) {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
         } else if content.starts_with("foreach ") {
             // Malformed foreach expression
-            return Err(ParsingError::InvalidForeach(self.offset, 0));
+            return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
         } else if content.starts_with('[') {
             self.read_tablet_expression()
         } else if is_numeric(content) {
@@ -1540,9 +1520,15 @@ impl<'i> Parser<'i> {
                     } else {
                         content.len()
                     };
-                    return Err(ParsingError::InvalidCodeBlock(self.offset, width));
+                    return Err(ParsingError::InvalidCodeBlock(Span::new(
+                        self.offset,
+                        width,
+                    )));
                 } else {
-                    return Err(ParsingError::InvalidFunction(self.offset, text.len()));
+                    return Err(ParsingError::InvalidFunction(Span::new(
+                        self.offset,
+                        text.len(),
+                    )));
                 }
             }
 
@@ -1560,14 +1546,7 @@ impl<'i> Parser<'i> {
                 .source
                 .starts_with('"')
             {
-                return Err(ParsingError::InvalidFunction(
-                    identifier
-                        .span
-                        .offset,
-                    identifier
-                        .span
-                        .length,
-                ));
+                return Err(ParsingError::InvalidFunction(identifier.span));
             }
             let span = identifier.span;
             Ok(Expression::Variable(identifier, span))
@@ -1596,7 +1575,7 @@ impl<'i> Parser<'i> {
             .unwrap()
             .is_ascii_whitespace()
         {
-            return Err(ParsingError::InvalidForeach(self.offset, 0));
+            return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
         }
         self.trim_whitespace();
 
@@ -1641,7 +1620,7 @@ impl<'i> Parser<'i> {
                 }
 
                 if identifiers.is_empty() {
-                    return Err(ParsingError::InvalidForeach(outer.offset, 0));
+                    return Err(ParsingError::InvalidForeach(Span::new(outer.offset, 0)));
                 }
 
                 Ok(identifiers)
@@ -1688,7 +1667,7 @@ impl<'i> Parser<'i> {
                     + inner
                         .source
                         .len();
-                Err(ParsingError::InvalidCodeBlock(start_pos, width))
+                Err(ParsingError::InvalidCodeBlock(Span::new(start_pos, width)))
             }
         })?;
 
@@ -1723,8 +1702,7 @@ impl<'i> Parser<'i> {
                     .starts_with('"')
                 {
                     return Err(ParsingError::Expected(
-                        outer.offset,
-                        0,
+                        Span::new(outer.offset, 0),
                         "a string label for the field, in double-quotes",
                     ));
                 }
@@ -1739,8 +1717,7 @@ impl<'i> Parser<'i> {
                     .starts_with('=')
                 {
                     return Err(ParsingError::Expected(
-                        outer.offset,
-                        0,
+                        Span::new(outer.offset, 0),
                         "a '=' after the field name to indicate what value is to be assigned to it",
                     ));
                 }
@@ -1753,7 +1730,10 @@ impl<'i> Parser<'i> {
 
                     let content = inner.source;
                     if content.is_empty() {
-                        return Err(ParsingError::Expected(inner.offset, 0, "value expression"));
+                        return Err(ParsingError::Expected(
+                            Span::new(inner.offset, 0),
+                            "value expression",
+                        ));
                     };
 
                     inner.read_expression()
@@ -1820,10 +1800,10 @@ impl<'i> Parser<'i> {
                     }
                     None => {
                         // Unmatched brace - point to the opening brace position
-                        return Err(ParsingError::UnclosedInterpolation(
+                        return Err(ParsingError::UnclosedInterpolation(Span::new(
                             self.offset + absolute_brace_start,
                             0,
-                        ));
+                        )));
                     }
                 }
             } else {
@@ -1852,7 +1832,10 @@ impl<'i> Parser<'i> {
         };
 
         let identifier = validate_identifier(possible, self.span_of(possible)).ok_or(
-            ParsingError::InvalidIdentifier(self.offset, possible.len(), possible.to_string()),
+            ParsingError::InvalidIdentifier(
+                Span::new(self.offset, possible.len()),
+                possible.to_string(),
+            ),
         )?;
 
         self.advance(possible.len());
@@ -1871,7 +1854,7 @@ impl<'i> Parser<'i> {
         } else if is_numeric_quantity(content) {
             self.read_numeric_quantity()
         } else {
-            Err(ParsingError::InvalidQuantity(self.offset, 0))
+            Err(ParsingError::InvalidQuantity(Span::new(self.offset, 0)))
         }
     }
 
@@ -1886,7 +1869,7 @@ impl<'i> Parser<'i> {
             self.advance(content.len());
             Ok(Numeric::Integral(amount))
         } else {
-            Err(ParsingError::InvalidIntegral(self.offset, 0))
+            Err(ParsingError::InvalidIntegral(Span::new(self.offset, 0)))
         }
     }
 
@@ -1945,7 +1928,10 @@ impl<'i> Parser<'i> {
                 .source
                 .starts_with("10")
             {
-                return Err(ParsingError::InvalidQuantityMagnitude(self.offset, 0));
+                return Err(ParsingError::InvalidQuantityMagnitude(Span::new(
+                    self.offset,
+                    0,
+                )));
             }
             self.advance(2); // Skip "10"
 
@@ -1958,7 +1944,10 @@ impl<'i> Parser<'i> {
             } else if let Some(exp) = self.read_exponent_superscript() {
                 Some(exp)
             } else {
-                return Err(ParsingError::InvalidQuantityMagnitude(self.offset, 0));
+                return Err(ParsingError::InvalidQuantityMagnitude(Span::new(
+                    self.offset,
+                    0,
+                )));
             }
         } else {
             None
@@ -1988,10 +1977,16 @@ impl<'i> Parser<'i> {
                 self.advance(decimal_str.len());
                 Ok(decimal)
             } else {
-                Err(ParsingError::InvalidQuantityDecimal(self.offset, 0))
+                Err(ParsingError::InvalidQuantityDecimal(Span::new(
+                    self.offset,
+                    0,
+                )))
             }
         } else {
-            Err(ParsingError::InvalidQuantityDecimal(self.offset, 0))
+            Err(ParsingError::InvalidQuantityDecimal(Span::new(
+                self.offset,
+                0,
+            )))
         }
     }
 
@@ -2005,10 +2000,16 @@ impl<'i> Parser<'i> {
                 self.advance(decimal_str.len());
                 Ok(decimal)
             } else {
-                Err(ParsingError::InvalidQuantityUncertainty(self.offset, 0))
+                Err(ParsingError::InvalidQuantityUncertainty(Span::new(
+                    self.offset,
+                    0,
+                )))
             }
         } else {
-            Err(ParsingError::InvalidQuantityUncertainty(self.offset, 0))
+            Err(ParsingError::InvalidQuantityUncertainty(Span::new(
+                self.offset,
+                0,
+            )))
         }
     }
 
@@ -2022,10 +2023,16 @@ impl<'i> Parser<'i> {
                 self.advance(exp_str.len());
                 Ok(exp)
             } else {
-                Err(ParsingError::InvalidQuantityMagnitude(self.offset, 0))
+                Err(ParsingError::InvalidQuantityMagnitude(Span::new(
+                    self.offset,
+                    0,
+                )))
             }
         } else {
-            Err(ParsingError::InvalidQuantityMagnitude(self.offset, 0))
+            Err(ParsingError::InvalidQuantityMagnitude(Span::new(
+                self.offset,
+                0,
+            )))
         }
     }
 
@@ -2068,15 +2075,18 @@ impl<'i> Parser<'i> {
                 valid_end = byte_offset + ch.len_utf8();
             } else {
                 // Invalid character found - point directly at it
-                return Err(ParsingError::InvalidQuantitySymbol(
+                return Err(ParsingError::InvalidQuantitySymbol(Span::new(
                     self.offset + byte_offset,
                     ch.len_utf8(),
-                ));
+                )));
             }
         }
 
         if valid_end == 0 {
-            return Err(ParsingError::InvalidQuantitySymbol(self.offset, 1));
+            return Err(ParsingError::InvalidQuantitySymbol(Span::new(
+                self.offset,
+                1,
+            )));
         }
 
         let symbol = &self.source[..valid_end];
@@ -2099,7 +2109,7 @@ impl<'i> Parser<'i> {
             } else {
                 let identifier =
                     validate_identifier(content, inner.span_of(content)).ok_or_else(|| {
-                        ParsingError::InvalidInvocation(start_offset + 1, content.len())
+                        ParsingError::InvalidInvocation(Span::new(start_offset + 1, content.len()))
                     })?;
                 Ok(Target::Local(identifier))
             }
@@ -2127,13 +2137,12 @@ impl<'i> Parser<'i> {
             let re = regex!(r"^\s*(\d+)\.\s+");
             let cap = re
                 .captures(outer.source)
-                .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
+                .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
 
             let number = cap
                 .get(1)
                 .ok_or(ParsingError::Expected(
-                    outer.offset,
-                    0,
+                    Span::new(outer.offset, 0),
                     "the ordinal Step number",
                 ))?
                 .as_str();
@@ -2170,7 +2179,7 @@ impl<'i> Parser<'i> {
                 .source
                 .starts_with('-')
             {
-                return Err(ParsingError::IllegalParserState(outer.offset, 0));
+                return Err(ParsingError::IllegalParserState(Span::new(outer.offset, 0)));
             }
             outer.advance(1); // skip over '-'
             outer.trim_whitespace();
@@ -2200,13 +2209,12 @@ impl<'i> Parser<'i> {
                 let re = regex!(r"^\s*([a-hj-uwy])\.\s+");
                 let cap = re
                     .captures(content)
-                    .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
+                    .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
 
                 let letter = cap
                     .get(1)
                     .ok_or(ParsingError::Expected(
-                        outer.offset,
-                        0,
+                        Span::new(outer.offset, 0),
                         "the ordinal Sub-Step letter",
                     ))?
                     .as_str();
@@ -2245,7 +2253,7 @@ impl<'i> Parser<'i> {
                 let re = regex!(r"^\s*-\s+");
                 let zero = re
                     .find(outer.source)
-                    .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
+                    .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
 
                 // Skip past the dash and space
                 let l = zero.len();
@@ -2279,13 +2287,12 @@ impl<'i> Parser<'i> {
                 let re = regex!(r"^\s*([ivx]+)\.\s+");
                 let cap = re
                     .captures(content)
-                    .ok_or(ParsingError::InvalidStep(outer.offset, 0))?;
+                    .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
 
                 let numeral = cap
                     .get(1)
                     .ok_or(ParsingError::Expected(
-                        outer.offset,
-                        0,
+                        Span::new(outer.offset, 0),
                         "the ordinal roman numeral indicating a sub-substep",
                     ))?
                     .as_str();
@@ -2372,7 +2379,10 @@ impl<'i> Parser<'i> {
                                     .starts_with("```")
                                 {
                                     // Multiline blocks are not allowed in descriptive text
-                                    return Err(ParsingError::InvalidMultiline(parser.offset, 0));
+                                    return Err(ParsingError::InvalidMultiline(Span::new(
+                                        parser.offset,
+                                        0,
+                                    )));
                                 } else if c == '<' {
                                     let invocation = parser.read_invocation()?;
                                     parser.trim_whitespace();
@@ -2389,7 +2399,7 @@ impl<'i> Parser<'i> {
                                             .starts_with(',')
                                         {
                                             return Err(ParsingError::MissingParenthesis(
-                                                start_pos, 0,
+                                                Span::new(start_pos, 0),
                                             ));
                                         }
 
@@ -2409,8 +2419,7 @@ impl<'i> Parser<'i> {
                                             // Check for invalid multiline patterns in text
                                             if content.contains("```") {
                                                 return Err(ParsingError::InvalidMultiline(
-                                                    inner.offset,
-                                                    0,
+                                                    Span::new(inner.offset, 0),
                                                 ));
                                             }
                                             Ok(content)
@@ -2429,7 +2438,7 @@ impl<'i> Parser<'i> {
                                             .starts_with(',')
                                         {
                                             return Err(ParsingError::MissingParenthesis(
-                                                start_pos, 0,
+                                                Span::new(start_pos, 0),
                                             ));
                                         }
 
@@ -2460,7 +2469,8 @@ impl<'i> Parser<'i> {
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
     fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
         self.take_split_by('|', |inner| {
-            validate_response(inner.source).ok_or(ParsingError::InvalidResponse(inner.offset, 0))
+            validate_response(inner.source)
+                .ok_or(ParsingError::InvalidResponse(Span::new(inner.offset, 0)))
         })
     }
 
@@ -2503,7 +2513,7 @@ impl<'i> Parser<'i> {
                 .trim_ascii()
                 .is_empty()
             {
-                return Err(ParsingError::InvalidMultiline(self.offset, 0));
+                return Err(ParsingError::InvalidMultiline(Span::new(self.offset, 0)));
             }
 
             result.push(after)
@@ -2548,11 +2558,9 @@ impl<'i> Parser<'i> {
                     let (lang, lines) = outer
                         .take_block_delimited("```", |inner| inner.parse_multiline_content())
                         .map_err(|err| match err {
-                            ParsingError::Expected(
-                                offset,
-                                _,
-                                "the corresponding end delimiter",
-                            ) => ParsingError::InvalidMultiline(offset, 0),
+                            ParsingError::Expected(span, "the corresponding end delimiter") => {
+                                ParsingError::InvalidMultiline(Span::new(span.offset, 0))
+                            }
                             _ => err,
                         })?;
                     let span = outer.span_since(param_start);
@@ -2660,12 +2668,14 @@ impl<'i> Parser<'i> {
                 else if let Some(captures) = regex!(r"^@([a-z][a-z0-9_]*)$").captures(trimmed) {
                     let role_name = captures
                         .get(1)
-                        .ok_or(ParsingError::Expected(inner.offset, 0, "role name after @"))?
+                        .ok_or(ParsingError::Expected(
+                            Span::new(inner.offset, 0),
+                            "role name after @",
+                        ))?
                         .as_str();
                     let identifier = validate_identifier(role_name, inner.span_of(role_name))
                         .ok_or(ParsingError::InvalidIdentifier(
-                            inner.offset,
-                            role_name.len(),
+                            Span::new(inner.offset, role_name.len()),
                             role_name.to_string(),
                         ))?;
                     attributes.push(Attribute::Role(identifier, inner.span_of(trimmed)));
@@ -2675,15 +2685,13 @@ impl<'i> Parser<'i> {
                     let place_name = captures
                         .get(1)
                         .ok_or(ParsingError::Expected(
-                            inner.offset,
-                            0,
+                            Span::new(inner.offset, 0),
                             "place name after ^",
                         ))?
                         .as_str();
                     let identifier = validate_identifier(place_name, inner.span_of(place_name))
                         .ok_or(ParsingError::InvalidIdentifier(
-                            inner.offset,
-                            place_name.len(),
+                            Span::new(inner.offset, place_name.len()),
                             place_name.to_string(),
                         ))?;
                     attributes.push(Attribute::Place(identifier, inner.span_of(trimmed)));
@@ -2691,9 +2699,12 @@ impl<'i> Parser<'i> {
                     // Check if this looks like a malformed attribute (starts with @ or ^)
                     if is_attribute_pattern(trimmed) {
                         // This might be multiple attributes without proper + joiners
-                        return Err(ParsingError::InvalidAttribute(inner.offset, line.len()));
+                        return Err(ParsingError::InvalidAttribute(Span::new(
+                            inner.offset,
+                            line.len(),
+                        )));
                     } else {
-                        return Err(ParsingError::InvalidStep(inner.offset, 0));
+                        return Err(ParsingError::InvalidStep(Span::new(inner.offset, 0)));
                     }
                 }
             }
@@ -2720,7 +2731,10 @@ impl<'i> Parser<'i> {
                     let block = self.read_attribute_scope()?;
                     scopes.push(block);
                 } else {
-                    return Err(ParsingError::InvalidAttribute(self.offset, content.len()));
+                    return Err(ParsingError::InvalidAttribute(Span::new(
+                        self.offset,
+                        content.len(),
+                    )));
                 }
             } else if is_substep_dependent(content) {
                 let block = self.read_substep_dependent()?;
@@ -2741,9 +2755,9 @@ impl<'i> Parser<'i> {
                 let block = self.read_code_scope()?;
                 scopes.push(block);
             } else if malformed_step_pattern(content) {
-                return Err(ParsingError::InvalidSubstep(self.offset, 0));
+                return Err(ParsingError::InvalidSubstep(Span::new(self.offset, 0)));
             } else if malformed_response_pattern(content) {
-                return Err(ParsingError::InvalidResponse(self.offset, 0));
+                return Err(ParsingError::InvalidResponse(Span::new(self.offset, 0)));
             } else if is_enum_response(content) {
                 let responses_start = self.offset;
                 let responses = self.read_responses()?;
