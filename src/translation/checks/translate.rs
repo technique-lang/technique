@@ -820,3 +820,63 @@ run :
     assert_eq!(entries[0].label, "speed");
     assert_eq!(entries[1].label, "weight");
 }
+
+#[test]
+fn foreach_codeblock_becomes_loop_with_subscopes_as_body() {
+    let source = r#"
+% technique v1
+
+run :
+
+@worker
+    { foreach node in seq(1, 6) }
+        1.  Check Availability
+        2.  Confirm.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop { names, over, body } = &ops[0] else {
+        panic!("expected Loop, got {:?}", ops[0]);
+    };
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0].value, "node");
+    assert!(over.is_some(), "foreach has a source");
+
+    let Operation::Sequence(inner) = body.as_ref() else {
+        panic!("expected inner Sequence");
+    };
+    assert_eq!(inner.len(), 2);
+}
+
+#[test]
+fn foreach_with_tuple_names_borrows_all() {
+    let source = r#"
+% technique v1
+
+run :
+
+@worker
+    { foreach (design, component) in zip(designs, components) }
+        a.  process
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop { names, .. } = &ops[0] else {
+        panic!("expected Loop");
+    };
+    assert_eq!(names.len(), 2);
+    assert_eq!(names[0].value, "design");
+    assert_eq!(names[1].value, "component");
+}

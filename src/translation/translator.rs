@@ -238,7 +238,24 @@ impl<'i> Translator<'i> {
             language::Scope::AttributeBlock { .. } | language::Scope::ResponseBlock { .. } => {
                 unreachable!()
             }
-            language::Scope::CodeBlock { .. } => todo!("code block"),
+            language::Scope::CodeBlock {
+                expressions,
+                subscopes,
+                ..
+            } => match expressions.first() {
+                Some(language::Expression::Foreach(names, source, _)) => Operation::Loop {
+                    names,
+                    over: Some(Box::new(self.translate_expression(source))),
+                    body: Box::new(self.translate_subscopes(subscopes, attrs)),
+                },
+                Some(language::Expression::Repeat(_, _)) => Operation::Loop {
+                    names: &[],
+                    over: None,
+                    body: Box::new(self.translate_subscopes(subscopes, attrs)),
+                },
+                Some(other) => self.translate_expression(other),
+                None => self.translate_subscopes(subscopes, attrs),
+            },
         }
     }
 
