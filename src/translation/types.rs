@@ -18,24 +18,24 @@ pub struct Program<'i> {
     /// All procedures declared in the input document, in source order. If an
     /// anonymous wrapper for a top-level `Technique::Steps`-only document was
     /// created it will be at index 0.
-    pub procedures: Vec<Procedure<'i>>,
+    pub subroutines: Vec<Subroutine<'i>>,
 }
 
 impl<'i> Program<'i> {
     pub fn new() -> Self {
         Program {
-            procedures: Vec::new(),
+            subroutines: Vec::new(),
         }
     }
 }
 
-/// Index of a procedure in `Program.procedures`. Used as the resolved form
+/// Index of a subroutine in `Program.subroutines`. Used as the resolved form
 /// for the target of an invocation.
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub struct ProcedureId(pub usize);
+pub struct SubroutineId(pub usize);
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Procedure<'i> {
+pub struct Subroutine<'i> {
     /// If this is a synthetic wrapper around a top-level `Technique::Steps`
     /// then `None`, otherwise all procedures have names.
     pub name: Option<language::Identifier<'i>>,
@@ -44,6 +44,35 @@ pub struct Procedure<'i> {
     pub parameters: Option<&'i [language::Identifier<'i>]>,
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
+}
+
+impl<'i> Subroutine<'i> {
+    /// Stub procedure with the given name and otherwise empty fields.
+    /// Subsequent translation passes fill in title, description, parameters,
+    /// signature, and body.
+    pub fn new(name: language::Identifier<'i>) -> Self {
+        Subroutine {
+            name: Some(name),
+            title: None,
+            description: &[],
+            parameters: None,
+            signature: None,
+            body: Operation::Sequence(Vec::new()),
+        }
+    }
+
+    /// Synthetic anonymous-wrapper procedure used when a document has no
+    /// procedure shell (a top-level `Technique::Steps`-only document).
+    pub fn anonymous() -> Self {
+        Subroutine {
+            name: None,
+            title: None,
+            description: &[],
+            parameters: None,
+            signature: None,
+            body: Operation::Sequence(Vec::new()),
+        }
+    }
 }
 
 /// Every node of the Intermediate Representation form resulting from
@@ -98,26 +127,26 @@ pub enum Ordinal<'i> {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Invoke<'i> {
-    pub target: ProcedureRef<'i>,
+    pub target: SubroutineRef<'i>,
     pub arguments: Vec<Operation<'i>>,
 }
 
-/// Reference to a procedure. The collect pass registers every declared
-/// procedure into `Program.procedures`; the resolve pass walks the IR
+/// Reference to a subroutine. The collect pass registers every declared
+/// subroutine into `Program.subroutines`; the resolve pass walks the IR
 /// replacing matching `Unresolved` references with `Resolved`. Names that
-/// don't match any declared procedure remain `Unresolved` - they are
+/// don't match any declared subroutine remain `Unresolved` - they are
 /// typically builtin functions (`exec`, `now`, `zip`, ...) and are not
 /// translation errors.
 #[derive(Debug, Eq, PartialEq)]
-pub enum ProcedureRef<'i> {
+pub enum SubroutineRef<'i> {
     Unresolved(language::Identifier<'i>),
-    Resolved(ProcedureId),
+    Resolved(SubroutineId),
 }
 
 /// A fragment of a string literal: either inline text or an interpolated
 /// expression. Defined IR-side (rather than reusing `language::Piece`)
 /// because interpolations are themselves `Operation`s and may carry resolved
-/// procedure references.
+/// subroutine references.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Fragment<'i> {
     Text(&'i str),

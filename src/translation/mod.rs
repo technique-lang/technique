@@ -6,7 +6,7 @@ mod types;
 
 pub use translator::{translate, TranslationError};
 pub use types::{
-    Entry, Fragment, Invoke, Operation, Ordinal, Procedure, ProcedureId, ProcedureRef, Program,
+    Entry, Fragment, Invoke, Operation, Ordinal, Program, Subroutine, SubroutineId, SubroutineRef,
 };
 
 #[cfg(test)]

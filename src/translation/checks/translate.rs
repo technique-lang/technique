@@ -16,7 +16,7 @@ fn empty_input_yields_empty_program() {
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
     assert!(program
-        .procedures
+        .subroutines
         .is_empty());
 }
 
@@ -34,12 +34,12 @@ make_coffee :
 
     assert_eq!(
         program
-            .procedures
+            .subroutines
             .len(),
         1
     );
     assert_eq!(
-        program.procedures[0].name,
+        program.subroutines[0].name,
         Some(language::Identifier::new("make_coffee"))
     );
 }
@@ -61,7 +61,7 @@ third :
     let program = translate(&document).expect("translate");
 
     let names: Vec<_> = program
-        .procedures
+        .subroutines
         .iter()
         .map(|p| {
             p.name
@@ -89,7 +89,7 @@ inner : () -> ()
     let program = translate(&document).expect("translate");
 
     let names: Vec<_> = program
-        .procedures
+        .subroutines
         .iter()
         .map(|p| {
             p.name
@@ -98,4 +98,103 @@ inner : () -> ()
         })
         .collect();
     assert_eq!(names, vec![Some("outer"), Some("inner")]);
+}
+
+#[test]
+fn procedure_title_extracted() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+# Coffee Time
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert_eq!(program.subroutines[0].title, Some("Coffee Time"));
+}
+
+#[test]
+fn procedure_description_extracted() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+# Coffee Time
+
+This is how to make coffee.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert_eq!(
+        program.subroutines[0]
+            .description
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn procedure_parameters_borrowed() {
+    let source = r#"
+% technique v1
+
+make_coffee(beans, water) :
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = program.subroutines[0]
+        .parameters
+        .expect("parameters present");
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].value, "beans");
+    assert_eq!(params[1].value, "water");
+}
+
+#[test]
+fn procedure_signature_borrowed() {
+    let source = r#"
+% technique v1
+
+make_coffee : Beans -> Coffee
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert!(program.subroutines[0]
+        .signature
+        .is_some());
+}
+
+#[test]
+fn anonymous_wrapper_for_top_level_steps() {
+    let source = r#"
+1.  First step
+
+2.  Second step
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert_eq!(
+        program
+            .subroutines
+            .len(),
+        1
+    );
+    assert_eq!(program.subroutines[0].name, None);
 }

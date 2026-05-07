@@ -4,30 +4,23 @@
 use std::collections::HashMap;
 
 use crate::language;
-use crate::language::Document;
+use crate::language::{Document, Span};
 
-use super::types::{Operation, Procedure, ProcedureId, Program};
+use super::types::{Program, Subroutine, SubroutineId};
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut program = Program::new();
     let mut errors = Vec::new();
-    let mut known: HashMap<&'i str, ProcedureId> = HashMap::new();
+    let mut known: HashMap<&'i str, SubroutineId> = HashMap::new();
 
     if let Some(body) = &document.body {
         if let language::Technique::Steps(_) = body {
             // Top-level Steps-only document is wrapped in a synthetic
-            // anonymous procedure at index 0, so downstream code can
-            // assume a uniform Vec<Procedure>.
+            // anonymous subroutine at index 0, so downstream code can
+            // assume a uniform Vec<Subroutine>.
             program
-                .procedures
-                .push(Procedure {
-                    name: None,
-                    title: None,
-                    description: &[],
-                    parameters: None,
-                    signature: None,
-                    body: Operation::Sequence(Vec::new()),
-                });
+                .subroutines
+                .push(Subroutine::anonymous());
         }
         collect_technique(body, &mut program, &mut known, &mut errors);
     }
@@ -55,13 +48,13 @@ pub enum TranslationError<'i> {
 
 // Walk a Technique node, registering any procedures it declares directly or
 // transitively through nested sections. Procedures are hoisted into the flat
-// Program.procedures list regardless of where in the section tree they were
+// Program.subroutines list regardless of where in the section tree they were
 // declared. The top-level synthetic anonymous wrapper (for a
 // Technique::Steps-only document) is added by translate(), not here.
 fn collect_technique<'i>(
     technique: &'i language::Technique<'i>,
     program: &mut Program<'i>,
-    known: &mut HashMap<&'i str, ProcedureId>,
+    known: &mut HashMap<&'i str, SubroutineId>,
     errors: &mut Vec<TranslationError<'i>>,
 ) {
     match technique {
@@ -70,7 +63,7 @@ fn collect_technique<'i>(
                 if let Some(id) = register_procedure(procedure, program, known, errors) {
                     translate_procedure(id, procedure, program, errors);
                 }
-                
+
                 // Element::Steps scopes may contain Sections, whose bodies
                 // can in turn declare further procedures. Walk the
                 // procedure's scopes so those nested declarations are
@@ -96,14 +89,14 @@ fn collect_technique<'i>(
 
 // Pass 1: gather a procedure's name. Fails fast on duplicate, returning None
 // so the caller can skip the shell-translation step. On first occurrence,
-// reserves a slot in Program.procedures with a stub Procedure that subsequent
-// passes fill in.
+// reserves a slot in Program.subroutines with a stub Subroutine that
+// subsequent passes fill in.
 fn register_procedure<'i>(
     procedure: &'i language::Procedure<'i>,
     program: &mut Program<'i>,
-    known: &mut HashMap<&'i str, ProcedureId>,
+    known: &mut HashMap<&'i str, SubroutineId>,
     errors: &mut Vec<TranslationError<'i>>,
-) -> Option<ProcedureId> {
+) -> Option<SubroutineId> {
     let name = procedure
         .name
         .value;
@@ -119,22 +112,15 @@ fn register_procedure<'i>(
         return None;
     }
 
-    let id = ProcedureId(
+    let id = SubroutineId(
         program
-            .procedures
+            .subroutines
             .len(),
     );
     known.insert(name, id);
     program
-        .procedures
-        .push(Procedure {
-            name: Some(language::Identifier { value: name, span }),
-            title: None,
-            description: &[],
-            parameters: None,
-            signature: None,
-            body: Operation::Sequence(Vec::new()),
-        });
+        .subroutines
+        .push(Subroutine::new(language::Identifier { value: name, span }));
     Some(id)
 }
 
@@ -142,13 +128,13 @@ fn register_procedure<'i>(
 // its title, description, parameters, and signature. The body Operation is
 // left empty; subsequent translation steps fill it.
 fn translate_procedure<'i>(
-    id: ProcedureId,
+    id: SubroutineId,
     procedure: &'i language::Procedure<'i>,
     program: &mut Program<'i>,
     errors: &mut Vec<TranslationError<'i>>,
 ) {
     let (title, description) = extract_title_and_description(procedure, errors);
-    let entry = &mut program.procedures[id.0];
+    let entry = &mut program.subroutines[id.0];
     entry.title = title;
     entry.description = description;
     entry.parameters = procedure
@@ -223,7 +209,7 @@ fn extract_title_and_description<'i>(
 fn collect_scope<'i>(
     scope: &'i language::Scope<'i>,
     program: &mut Program<'i>,
-    known: &mut HashMap<&'i str, ProcedureId>,
+    known: &mut HashMap<&'i str, SubroutineId>,
     errors: &mut Vec<TranslationError<'i>>,
 ) {
     match scope {
