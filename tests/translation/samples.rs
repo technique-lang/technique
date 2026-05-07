@@ -39,6 +39,6 @@ fn check_directory(dir: &Path) {
 
 #[test]
 fn ensure_translate() {
-    check_directory(Path::new("tests/samples/"));
+    check_directory(Path::new("tests/samples/parsing/"));
     check_directory(Path::new("examples/minimal/"));
 }
