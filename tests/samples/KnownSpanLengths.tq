@@ -1,0 +1,14 @@
+% technique v1
+! MIT; © ACME
+& checklist
+
+greet(name) : Person -> Greeting
+
+# Hello World
+
+Say hello to someone.
+
+    1.  Look at the person.
+        @greeter
+    2.  Say { exec("hello") } to them.
+            'Done' | 'Skipped' but too shy | 'Elvis Has Left The Building'

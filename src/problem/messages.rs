@@ -6,26 +6,26 @@ use technique::{
 /// Generate problem and detail messages for parsing errors using AST construction
 pub fn generate_error_message<'i>(error: &ParsingError, renderer: &dyn Render) -> (String, String) {
     match error {
-        ParsingError::IllegalParserState(_, _) => (
+        ParsingError::IllegalParserState(_) => (
             "Illegal parser state".to_string(),
             "Internal parser error. This should not have happened! Sorry.".to_string(),
         ),
-        ParsingError::Unimplemented(_, _) => (
+        ParsingError::Unimplemented(_) => (
             "Feature not yet implemented".to_string(),
             "This feature is planned but not yet available.".to_string(),
         ),
-        ParsingError::Unrecognized(_, _) => (
+        ParsingError::Unrecognized(_) => (
             "Unrecognized input".to_string(),
             "The parser encountered unexpected content".to_string(),
         ),
-        ParsingError::Expected(_, _, value) => (
+        ParsingError::Expected(_, value) => (
             format!("Expected {}", value),
             format!(
                 "The parser was looking for {} but found something else.",
                 value
             ),
         ),
-        ParsingError::ExpectedMatchingChar(_, _, subject, start, end) => (
+        ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
             format!("Expected matching character '{}'", end),
             format!(
                 r#"
@@ -37,13 +37,13 @@ there was no more input remaining in the current scope.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::MissingParenthesis(_, _) => {
+        ParsingError::MissingParenthesis(_) => {
             let examples = vec![Descriptive::Binding(
                 Box::new(Descriptive::Application(Invocation {
-                    target: Target::Local(Identifier("mix_pangalactic_gargle_blaster")),
+                    target: Target::Local(Identifier::new("mix_pangalactic_gargle_blaster")),
                     parameters: None,
                 })),
-                vec![Identifier("zaphod"), Identifier("trillian")],
+                vec![Identifier::new("zaphod"), Identifier::new("trillian")],
             )];
 
             (
@@ -61,7 +61,7 @@ enclose those names in parenthesis. For example:
                 .to_string(),
             )
         }
-        ParsingError::UnclosedInterpolation(_, _) => (
+        ParsingError::UnclosedInterpolation(_) => (
             "Unclosed string interpolation".to_string(),
             r#"
 Every '{' that starts an interpolation within a string must have a
@@ -71,7 +71,7 @@ literal resumes.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidHeader(_, _) => {
+        ParsingError::InvalidHeader(_) => {
             // Format the sample metadata using the same code as the formatter
             let mut formatted_example = String::new();
             formatted_example
@@ -117,39 +117,43 @@ to be used when rendering the Technique. Common domains include
                 ),
             )
         }
-        ParsingError::InvalidCharacter(_, _, c) => (
+        ParsingError::InvalidCharacter(_, c) => (
             format!("Invalid character '{}'", c),
             "This character is not allowed here.".to_string(),
         ),
-        ParsingError::UnexpectedEndOfInput(_, _) => (
+        ParsingError::UnexpectedEndOfInput(_) => (
             "Unexpected end of input".to_string(),
             "The file ended before the parser expected it to".to_string(),
         ),
-        ParsingError::InvalidIdentifier(_, _, _) => {
+        ParsingError::InvalidIdentifier(_, _) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::new("make_coffee"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("attempt1"),
+                    name: Identifier::new("attempt1"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("i"),
+                    name: Identifier::new("i"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("l33t_hax0r"),
+                    name: Identifier::new("l33t_hax0r"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -174,11 +178,11 @@ letters, numbers, and underscores. Valid examples include:
                 .to_string(),
             )
         }
-        ParsingError::InvalidForma(_, _) => {
+        ParsingError::InvalidForma(_) => {
             let examples = vec![
-                Forma("Coffee"),
-                Forma("Ingredients"),
-                Forma("PatientRecord"),
+                Forma::new("Coffee"),
+                Forma::new("Ingredients"),
+                Forma::new("PatientRecord"),
             ];
 
             (
@@ -200,12 +204,12 @@ For example:
                 .to_string(),
             )
         }
-        ParsingError::InvalidGenus(_, _) => {
+        ParsingError::InvalidGenus(_) => {
             let examples = vec![
-                Genus::Single(Forma("Coffee")),
-                Genus::Tuple(vec![Forma("Beans"), Forma("Water")]),
-                Genus::Naked(vec![Forma("Beans"), Forma("Water")]),
-                Genus::List(Forma("Patient")),
+                Genus::Single(Forma::new("Coffee")),
+                Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Water")]),
+                Genus::Naked(vec![Forma::new("Beans"), Forma::new("Water")]),
+                Genus::List(Forma::new("Patient")),
                 Genus::Unit,
             ];
 
@@ -236,19 +240,19 @@ doesn't have an input or result, per se.
                 .to_string(),
             )
         }
-        ParsingError::InvalidSignature(_, _) => {
+        ParsingError::InvalidSignature(_) => {
             let examples = vec![
                 Signature {
-                    requires: Genus::Single(Forma("A")),
-                    provides: Genus::Single(Forma("B")),
+                    requires: Genus::Single(Forma::new("A")),
+                    provides: Genus::Single(Forma::new("B")),
                 },
                 Signature {
-                    requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                    provides: Genus::Single(Forma("Coffee")),
+                    requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                    provides: Genus::Single(Forma::new("Coffee")),
                 },
                 Signature {
-                    requires: Genus::List(Forma("FunctionalRequirement")),
-                    provides: Genus::Single(Forma("Architecture")),
+                    requires: Genus::List(Forma::new("FunctionalRequirement")),
+                    provides: Genus::Single(Forma::new("Architecture")),
                 },
             ];
 
@@ -274,70 +278,78 @@ this form.
                 .to_string(),
             )
         }
-        ParsingError::InvalidDeclaration(_, _) => {
+        ParsingError::InvalidDeclaration(_) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("f"),
+                    name: Identifier::new("f"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("implementation"),
+                    name: Identifier::new("implementation"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::new("make_coffee"),
                     parameters: None,
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("f"),
+                    name: Identifier::new("f"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("A")),
-                        provides: Genus::Single(Forma("B")),
+                        requires: Genus::Single(Forma::new("A")),
+                        provides: Genus::Single(Forma::new("B")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("implementation"),
+                    name: Identifier::new("implementation"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Design")),
-                        provides: Genus::Single(Forma("Product")),
+                        requires: Genus::Single(Forma::new("Design")),
+                        provides: Genus::Single(Forma::new("Product")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::new("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                        provides: Genus::Single(Forma::new("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
+                    name: Identifier::new("make_coffee"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                        provides: Genus::Single(Forma::new("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("make_coffee"),
-                    parameters: Some(vec![Identifier("b"), Identifier("m")]),
+                    name: Identifier::new("make_coffee"),
+                    parameters: Some(vec![Identifier::new("b"), Identifier::new("m")]),
                     signature: Some(Signature {
-                        requires: Genus::Naked(vec![Forma("Beans"), Forma("Milk")]),
-                        provides: Genus::Single(Forma("Coffee")),
+                        requires: Genus::Naked(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                        provides: Genus::Single(Forma::new("Coffee")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -376,37 +388,41 @@ Finally, variables can be assigned for the names of the input parameters:
                 .to_string(),
             )
         }
-        ParsingError::InvalidParameters(_, _) => {
+        ParsingError::InvalidParameters(_) => {
             let examples = vec![
                 Procedure {
-                    name: Identifier("create_bypass"),
-                    parameters: Some(vec![Identifier("a"), Identifier("b")]),
+                    name: Identifier::new("create_bypass"),
+                    parameters: Some(vec![Identifier::new("a"), Identifier::new("b")]),
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("bulldoze"),
-                    parameters: Some(vec![Identifier("c")]),
+                    name: Identifier::new("bulldoze"),
+                    parameters: Some(vec![Identifier::new("c")]),
                     signature: None,
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("lawsuit"),
+                    name: Identifier::new("lawsuit"),
                     parameters: None,
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Council")),
-                        provides: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma::new("Council")),
+                        provides: Genus::List(Forma::new("Penny")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
                 Procedure {
-                    name: Identifier("lawsuit"),
-                    parameters: Some(vec![Identifier("c")]),
+                    name: Identifier::new("lawsuit"),
+                    parameters: Some(vec![Identifier::new("c")]),
                     signature: Some(Signature {
-                        requires: Genus::Single(Forma("Council")),
-                        provides: Genus::List(Forma("Penny")),
+                        requires: Genus::Single(Forma::new("Council")),
+                        provides: Genus::List(Forma::new("Penny")),
                     }),
                     elements: Vec::new(),
+                    span: Span::default(),
                 },
             ];
 
@@ -435,7 +451,7 @@ declarations (and in fact the same):
                 .to_string(),
             )
         }
-        ParsingError::InvalidSection(_, _) => {
+        ParsingError::InvalidSection(_) => {
             // Roman numeral sections don't have AST representation
             (
                 "Invalid section heading".to_string(),
@@ -455,15 +471,18 @@ author of the Technique.
                 .to_string(),
             )
         }
-        ParsingError::InvalidInvocation(_, _) => {
+        ParsingError::InvalidInvocation(_) => {
             let examples = vec![
                 Invocation {
-                    target: Target::Local(Identifier("make_coffee")),
+                    target: Target::Local(Identifier::new("make_coffee")),
                     parameters: None,
                 },
                 Invocation {
-                    target: Target::Local(Identifier("check_vitals")),
-                    parameters: Some(vec![Expression::Variable(Identifier("patient"))]),
+                    target: Target::Local(Identifier::new("check_vitals")),
+                    parameters: Some(vec![Expression::Variable(
+                        Identifier::new("patient"),
+                        Span::default(),
+                    )]),
                 },
             ];
 
@@ -486,21 +505,24 @@ If the procedure takes parameters they can be specified in parenthesis:
                 .to_string(),
             )
         }
-        ParsingError::InvalidFunction(_, _) => {
+        ParsingError::InvalidFunction(_) => {
             let examples = vec![
                 Function {
-                    target: Identifier("exec"),
-                    parameters: vec![Expression::String(vec![Piece::Text("ls -la")])],
+                    target: Identifier::new("exec"),
+                    parameters: vec![Expression::String(
+                        vec![Piece::Text("ls -la")],
+                        Span::default(),
+                    )],
                 },
                 Function {
-                    target: Identifier("now"),
+                    target: Identifier::new("now"),
                     parameters: vec![],
                 },
                 Function {
-                    target: Identifier("calculate"),
+                    target: Identifier::new("calculate"),
                     parameters: vec![
-                        Expression::Variable(Identifier("a")),
-                        Expression::Variable(Identifier("b")),
+                        Expression::Variable(Identifier::new("a"), Span::default()),
+                        Expression::Variable(Identifier::new("b"), Span::default()),
                     ],
                 },
             ];
@@ -525,16 +547,29 @@ expressions as parameters as required:
                 .to_string(),
             )
         }
-        ParsingError::InvalidCodeBlock(_, _) => {
+        ParsingError::InvalidCodeBlock(_) => {
             let examples = vec![
-                Expression::Execution(Function {
-                    target: Identifier("exec"),
-                    parameters: vec![Expression::String(vec![Piece::Text("command")])],
-                }),
-                Expression::Repeat(Box::new(Expression::Number(Numeric::Integral(5)))),
+                Expression::Execution(
+                    Function {
+                        target: Identifier::new("exec"),
+                        parameters: vec![Expression::String(
+                            vec![Piece::Text("command")],
+                            Span::default(),
+                        )],
+                    },
+                    Span::default(),
+                ),
+                Expression::Repeat(
+                    Box::new(Expression::Number(Numeric::Integral(5), Span::default())),
+                    Span::default(),
+                ),
                 Expression::Foreach(
-                    vec![Identifier("patient")],
-                    Box::new(Expression::Variable(Identifier("patients"))),
+                    vec![Identifier::new("patient")],
+                    Box::new(Expression::Variable(
+                        Identifier::new("patients"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
             ];
 
@@ -556,7 +591,7 @@ Inline code blocks are enclosed in braces:
                 .to_string(),
             )
         }
-        ParsingError::InvalidMultiline(_, _) => (
+        ParsingError::InvalidMultiline(_) => (
             "Invalid multi-line string".to_string(),
             r#"
 Multi-line strings can be written by surrounding the content in triple
@@ -586,7 +621,7 @@ it may be used by output templates when rendering the procedure.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidStep(_, _) => (
+        ParsingError::InvalidStep(_) => (
             "Invalid step format".to_string(),
             r#"
 Steps must start with a number or lower-case letter (in the case of dependent
@@ -606,7 +641,7 @@ dash. They can be done in either order, or concurrently:
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidSubstep(_, _) => (
+        ParsingError::InvalidSubstep(_) => (
             "Invalid substep format".to_string(),
             r#"
 Substeps can be nested below top-level dependent steps or top-level parallel
@@ -632,22 +667,27 @@ parallel steps, but again this is not compulsory.
             .trim_ascii()
             .to_string(),
         ),
-        ParsingError::InvalidAttribute(_, _) => {
+        ParsingError::InvalidAttribute(_) => {
             let examples = vec![
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Role(Identifier("president_of_the_galaxy")),
-                        Attribute::Role(Identifier("femme_fatale")),
+                        Attribute::Role(
+                            Identifier::new("president_of_the_galaxy"),
+                            Span::default(),
+                        ),
+                        Attribute::Role(Identifier::new("femme_fatale"), Span::default()),
                     ],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::AttributeBlock {
                     attributes: vec![
-                        Attribute::Place(Identifier("milliways")),
-                        Attribute::Role(Identifier("waiter")),
-                        Attribute::Role(Identifier("dish_of_the_day")),
+                        Attribute::Place(Identifier::new("milliways"), Span::default()),
+                        Attribute::Role(Identifier::new("waiter"), Span::default()),
+                        Attribute::Role(Identifier::new("dish_of_the_day"), Span::default()),
                     ],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ];
 
@@ -671,15 +711,23 @@ nested underneath a role or place assignment.
                 .to_string(),
             )
         }
-        ParsingError::InvalidForeach(_, _) => {
+        ParsingError::InvalidForeach(_) => {
             let examples = vec![
                 Expression::Foreach(
-                    vec![Identifier("patient")],
-                    Box::new(Expression::Variable(Identifier("patients"))),
+                    vec![Identifier::new("patient")],
+                    Box::new(Expression::Variable(
+                        Identifier::new("patients"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
                 Expression::Foreach(
-                    vec![Identifier("name"), Identifier("value")],
-                    Box::new(Expression::Variable(Identifier("data"))),
+                    vec![Identifier::new("name"), Identifier::new("value")],
+                    Box::new(Expression::Variable(
+                        Identifier::new("data"),
+                        Span::default(),
+                    )),
+                    Span::default(),
                 ),
             ];
 
@@ -702,34 +750,40 @@ a list of tuples.
                 .to_string(),
             )
         }
-        ParsingError::InvalidResponse(_, _) => {
+        ParsingError::InvalidResponse(_) => {
             let examples = vec![
                 vec![
                     Response {
                         value: "Rock",
                         condition: None,
+                        span: Span::default(),
                     },
                     Response {
                         value: "Paper",
                         condition: None,
+                        span: Span::default(),
                     },
                     Response {
                         value: "Scissors",
                         condition: None,
+                        span: Span::default(),
                     },
                 ],
                 vec![Response {
                     value: "Confirmed",
                     condition: None,
+                    span: Span::default(),
                 }],
                 vec![
                     Response {
                         value: "Yes",
                         condition: Some("but with explanation"),
+                        span: Span::default(),
                     },
                     Response {
                         value: "No",
                         condition: None,
+                        span: Span::default(),
                     },
                 ],
             ];
@@ -764,7 +818,7 @@ By convention the response values are Proper Case.
                 .to_string(),
             )
         }
-        ParsingError::InvalidIntegral(_, _) => {
+        ParsingError::InvalidIntegral(_) => {
             let examples = vec![
                 Numeric::Integral(42),
                 Numeric::Integral(-123),
@@ -792,7 +846,7 @@ Integers cannot contain decimal points or units."#,
                 .to_string(),
             )
         }
-        ParsingError::InvalidQuantity(_, _) => {
+        ParsingError::InvalidQuantity(_) => {
             let examples = vec![
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
@@ -857,7 +911,7 @@ a magnitude:
                 .to_string(),
             )
         }
-        ParsingError::InvalidQuantityDecimal(_, _) => (
+        ParsingError::InvalidQuantityDecimal(_) => (
             "Invalid number in quantity".to_string(),
             r#"
 The numeric part of a quantity may be positive or negative, and may have a
@@ -870,7 +924,7 @@ Values less than 1 must have a leading '0' before the decimal."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantityUncertainty(_, _) => (
+        ParsingError::InvalidQuantityUncertainty(_) => (
             "Invalid uncertainty in quantity".to_string(),
             r#"
 Uncertainty values must be positive numbers:
@@ -881,7 +935,7 @@ You can use '±' or `+/-`, followed by a decimal."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantityMagnitude(_, _) => (
+        ParsingError::InvalidQuantityMagnitude(_) => (
             "Invalid magnitude format".to_string(),
             r#"
 The magnitude of a quantity can be expressed in the usual scientific format
@@ -896,7 +950,7 @@ The base must be 10, and the exponent must be an integer."#
                 .trim_ascii()
                 .to_string(),
         ),
-        ParsingError::InvalidQuantitySymbol(_, _) => {
+        ParsingError::InvalidQuantitySymbol(_) => {
             let examples = vec![
                 Numeric::Scientific(Quantity {
                     mantissa: Decimal {
@@ -970,15 +1024,15 @@ pub fn generate_translation_error<'i>(
     _renderer: &dyn Render,
 ) -> (String, String) {
     match error {
-        TranslationError::DuplicateProcedure(Identifier(name)) => (
+        TranslationError::DuplicateProcedure(Identifier { value: name, .. }) => (
             format!("Duplicate procedure name '{}'", name),
             "A procedure with this name has already been declared in this document.".to_string(),
         ),
-        TranslationError::DuplicateTitle(Identifier(name)) => (
+        TranslationError::DuplicateTitle(Identifier { value: name, .. }) => (
             format!("Duplicate title in procedure '{}'", name),
             "A procedure can have at most one title.".to_string(),
         ),
-        TranslationError::InterleavedDescription(Identifier(name)) => (
+        TranslationError::InterleavedDescription(Identifier { value: name, .. }) => (
             format!("Description out of place in procedure '{}'", name),
             "A procedure's free-text description must appear immediately after the title and before any steps or code blocks.".to_string(),
         ),

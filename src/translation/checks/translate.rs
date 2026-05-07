@@ -40,7 +40,7 @@ make_coffee :
     );
     assert_eq!(
         program.procedures[0].name,
-        Some(language::Identifier("make_coffee"))
+        Some(language::Identifier::new("make_coffee"))
     );
 }
 
@@ -66,7 +66,7 @@ third :
         .map(|p| {
             p.name
                 .as_ref()
-                .map(|id| id.0)
+                .map(|id| id.value)
         })
         .collect();
     assert_eq!(names, vec![Some("first"), Some("second"), Some("third")]);
@@ -94,7 +94,7 @@ inner : () -> ()
         .map(|p| {
             p.name
                 .as_ref()
-                .map(|id| id.0)
+                .map(|id| id.value)
         })
         .collect();
     assert_eq!(names, vec![Some("outer"), Some("inner")]);

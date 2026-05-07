@@ -53,7 +53,7 @@ fn collect_technique<'i>(
                 // discovered; the walk is independent of whether this
                 // procedure itself was a duplicate.
                 for element in &procedure.elements {
-                    if let language::Element::Steps(scopes) = element {
+                    if let language::Element::Steps(scopes, _) = element {
                         for scope in scopes {
                             collect_scope(scope, program, known, errors);
                         }
@@ -78,12 +78,15 @@ fn register_procedure<'i>(
 ) {
     let name = procedure
         .name
-        .0;
+        .value;
+    let span = procedure
+        .name
+        .span;
 
     if known.contains_key(name) {
-        errors.push(TranslationError::DuplicateProcedure(language::Identifier(
-            name,
-        )));
+        errors.push(TranslationError::DuplicateProcedure(
+            language::Identifier { value: name, span },
+        ));
         return;
     }
 
@@ -96,7 +99,7 @@ fn register_procedure<'i>(
     program
         .procedures
         .push(Procedure {
-            name: Some(language::Identifier(name)),
+            name: Some(language::Identifier { value: name, span }),
             title: None,
             description: &[],
             parameters: None,

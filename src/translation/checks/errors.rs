@@ -29,6 +29,6 @@ make_coffee :
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0],
-        TranslationError::DuplicateProcedure(language::Identifier("make_coffee"))
+        TranslationError::DuplicateProcedure(language::Identifier::new("make_coffee"))
     );
 }

@@ -45,7 +45,7 @@ impl<'i> Procedure<'i> {
         self.elements
             .iter()
             .flat_map(|element| match element {
-                Element::Steps(steps) => steps.iter(),
+                Element::Steps(steps, _) => steps.iter(),
                 _ => [].iter(),
             })
     }
@@ -55,7 +55,7 @@ impl<'i> Procedure<'i> {
         self.elements
             .iter()
             .flat_map(|element| match element {
-                Element::Description(paragraphs) => paragraphs.iter(),
+                Element::Description(paragraphs, _) => paragraphs.iter(),
                 _ => [].iter(),
             })
     }
@@ -115,7 +115,7 @@ impl<'i> Scope<'i> {
     /// Returns an iterator over responses if this is a ResponseBlock.
     pub fn responses(&self) -> impl Iterator<Item = &Response<'i>> {
         let slice: &[Response<'i>] = match self {
-            Scope::ResponseBlock { responses } => responses,
+            Scope::ResponseBlock { responses, .. } => responses,
             _ => &[],
         };
         slice.iter()
@@ -127,7 +127,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Role(id) => Some(id.0),
+                    Attribute::Role(id, _) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -142,7 +142,7 @@ impl<'i> Scope<'i> {
             Scope::AttributeBlock { attributes, .. } => attributes
                 .iter()
                 .filter_map(|attr| match attr {
-                    Attribute::Place(id) => Some(id.0),
+                    Attribute::Place(id, _) => Some(id.value),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -156,7 +156,7 @@ impl<'i> Scope<'i> {
         match self {
             Scope::CodeBlock { expressions, .. } => {
                 if expressions.len() == 1 {
-                    if let Expression::Tablet(pairs) = &expressions[0] {
+                    if let Expression::Tablet(pairs, _) = &expressions[0] {
                         return Some(pairs);
                     }
                 }
@@ -232,7 +232,7 @@ impl<'i> Procedure<'i> {
     /// Returns the procedure name.
     pub fn name(&self) -> &'i str {
         self.name
-            .0
+            .value
     }
 }
 
@@ -252,10 +252,10 @@ impl<'i> Response<'i> {
 /// Returns (expression_text, body_lines) where body_lines captures multiline
 /// content separately for distinct styling.
 fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
-    if let Expression::Execution(func) = expr {
+    if let Expression::Execution(func, _) = expr {
         let mut body = Vec::new();
         for param in &func.parameters {
-            if let Expression::Multiline(_, lines) = param {
+            if let Expression::Multiline(_, lines, _) = param {
                 body.extend(
                     lines
                         .iter()
@@ -268,7 +268,7 @@ fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
                 format!(
                     "{}(",
                     func.target
-                        .0
+                        .value
                 ),
                 body,
             );
@@ -279,29 +279,29 @@ fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
 
 fn render_expression(expr: &Expression) -> String {
     match expr {
-        Expression::Repeat(inner) => {
+        Expression::Repeat(inner, _) => {
             format!("repeat {}", render_expression(inner))
         }
-        Expression::Foreach(ids, inner) => {
+        Expression::Foreach(ids, inner, _) => {
             let vars = if ids.len() == 1 {
                 ids[0]
-                    .0
+                    .value
                     .to_string()
             } else {
                 format!(
                     "({})",
                     ids.iter()
-                        .map(|id| id.0)
+                        .map(|id| id.value)
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
             };
             format!("foreach {} in {}", vars, render_expression(inner))
         }
-        Expression::Application(inv) => {
+        Expression::Application(inv, _) => {
             let name = match &inv.target {
-                Target::Local(id) => id.0,
-                Target::Remote(ext) => ext.0,
+                Target::Local(id) => id.value,
+                Target::Remote(ext) => ext.value,
             };
             if let Some(params) = &inv.parameters {
                 let args: Vec<_> = params
@@ -313,7 +313,7 @@ fn render_expression(expr: &Expression) -> String {
                 format!("<{}>", name)
             }
         }
-        Expression::Execution(func) => {
+        Expression::Execution(func, _) => {
             let args: Vec<_> = func
                 .parameters
                 .iter()
@@ -322,16 +322,16 @@ fn render_expression(expr: &Expression) -> String {
             format!(
                 "{}({})",
                 func.target
-                    .0,
+                    .value,
                 args.join(", ")
             )
         }
-        Expression::Multiline(_, lines) => lines.join("\n"),
-        Expression::Variable(id) => {
-            id.0.to_string()
-        }
-        Expression::Binding(inner, _) => render_expression(inner),
-        Expression::String(pieces) => {
+        Expression::Multiline(_, lines, _) => lines.join("\n"),
+        Expression::Variable(id, _) => id
+            .value
+            .to_string(),
+        Expression::Binding(inner, _, _) => render_expression(inner),
+        Expression::String(pieces, _) => {
             let mut result = String::new();
             for piece in pieces {
                 match piece {
@@ -341,9 +341,9 @@ fn render_expression(expr: &Expression) -> String {
             }
             result
         }
-        Expression::Number(Numeric::Scientific(q)) => q.to_string(),
-        Expression::Number(Numeric::Integral(n)) => n.to_string(),
-        Expression::Tablet(_) => String::new(),
+        Expression::Number(Numeric::Scientific(q), _) => q.to_string(),
+        Expression::Number(Numeric::Integral(n), _) => n.to_string(),
+        Expression::Tablet(_, _) => String::new(),
         Expression::Separator => String::new(),
     }
 }
@@ -411,16 +411,16 @@ impl<'i> Paragraph<'i> {
 
     fn expression_content(expr: &crate::language::Expression<'i>) -> String {
         match expr {
-            crate::language::Expression::Application(invocation) => {
+            crate::language::Expression::Application(invocation, _) => {
                 Self::invocation_name(invocation).to_string()
             }
-            crate::language::Expression::Repeat(inner) => {
+            crate::language::Expression::Repeat(inner, _) => {
                 format!("repeat {}", Self::expression_content(inner))
             }
-            crate::language::Expression::Foreach(_, inner) => {
+            crate::language::Expression::Foreach(_, inner, _) => {
                 format!("foreach {}", Self::expression_content(inner))
             }
-            crate::language::Expression::Binding(inner, _) => Self::expression_content(inner),
+            crate::language::Expression::Binding(inner, _, _) => Self::expression_content(inner),
             _ => String::new(),
         }
     }
@@ -458,16 +458,16 @@ impl<'i> Paragraph<'i> {
         expr: &crate::language::Expression<'i>,
     ) {
         match expr {
-            crate::language::Expression::Application(inv) => {
+            crate::language::Expression::Application(inv, _) => {
                 targets.push(Self::invocation_name(inv));
             }
-            crate::language::Expression::Repeat(inner) => {
+            crate::language::Expression::Repeat(inner, _) => {
                 Self::extract_expression_invocations(targets, inner);
             }
-            crate::language::Expression::Foreach(_, inner) => {
+            crate::language::Expression::Foreach(_, inner, _) => {
                 Self::extract_expression_invocations(targets, inner);
             }
-            crate::language::Expression::Binding(inner, _) => {
+            crate::language::Expression::Binding(inner, _, _) => {
                 Self::extract_expression_invocations(targets, inner);
             }
             _ => {}
@@ -476,8 +476,8 @@ impl<'i> Paragraph<'i> {
 
     fn invocation_name(inv: &crate::language::Invocation<'i>) -> &'i str {
         match &inv.target {
-            crate::language::Target::Local(id) => id.0,
-            crate::language::Target::Remote(ext) => ext.0,
+            crate::language::Target::Local(id) => id.value,
+            crate::language::Target::Remote(ext) => ext.value,
         }
     }
 }
@@ -543,11 +543,13 @@ impl Prose {
 
 #[cfg(test)]
 mod check {
-    use crate::language::{Descriptive, Expression, Identifier, Invocation, Paragraph, Target};
+    use crate::language::{
+        Descriptive, Expression, Identifier, Invocation, Paragraph, Span, Target,
+    };
 
     fn local<'a>(name: &'a str) -> Invocation<'a> {
         Invocation {
-            target: Target::Local(Identifier(name)),
+            target: Target::Local(Identifier::new(name)),
             parameters: None,
         }
     }
@@ -555,7 +557,7 @@ mod check {
     // Pure text: "Ensure physical and digital safety"
     #[test]
     fn text_only_paragraph() {
-        let p = Paragraph(vec![Descriptive::Text(
+        let p = Paragraph::new(vec![Descriptive::Text(
             "Ensure physical and digital safety",
         )]);
         assert_eq!(p.text(), "Ensure physical and digital safety");
@@ -568,7 +570,7 @@ mod check {
     // Bare invocation: <ensure_safety>
     #[test]
     fn invocation_only_paragraph() {
-        let p = Paragraph(vec![Descriptive::Application(local("ensure_safety"))]);
+        let p = Paragraph::new(vec![Descriptive::Application(local("ensure_safety"))]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["ensure_safety"]);
         assert_eq!(p.content(), "ensure_safety");
@@ -578,7 +580,7 @@ mod check {
     // Text is present so content() returns just the text.
     #[test]
     fn mixed_text_and_invocation() {
-        let p = Paragraph(vec![
+        let p = Paragraph::new(vec![
             Descriptive::Text("Define Requirements"),
             Descriptive::Application(local("define_requirements")),
         ]);
@@ -590,9 +592,13 @@ mod check {
     // CodeInline with repeat: { repeat <incident_action_cycle> }
     #[test]
     fn repeat_expression() {
-        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Repeat(Box::new(
-            Expression::Application(local("incident_action_cycle")),
-        )))]);
+        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Repeat(
+            Box::new(Expression::Application(
+                local("incident_action_cycle"),
+                Span::default(),
+            )),
+            Span::default(),
+        ))]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["incident_action_cycle"]);
         assert_eq!(p.content(), "repeat incident_action_cycle");
@@ -601,9 +607,9 @@ mod check {
     // Binding wrapping an invocation: <observe>(s) ~ e
     #[test]
     fn binding_with_invocation() {
-        let p = Paragraph(vec![Descriptive::Binding(
+        let p = Paragraph::new(vec![Descriptive::Binding(
             Box::new(Descriptive::Application(local("observe"))),
-            vec![Identifier("e")],
+            vec![Identifier::new("e")],
         )]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["observe"]);
@@ -613,9 +619,10 @@ mod check {
     // CodeInline with foreach: { foreach design in designs }
     #[test]
     fn foreach_expression() {
-        let p = Paragraph(vec![Descriptive::CodeInline(Expression::Foreach(
-            vec![Identifier("design")],
-            Box::new(Expression::Application(local("implement"))),
+        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Foreach(
+            vec![Identifier::new("design")],
+            Box::new(Expression::Application(local("implement"), Span::default())),
+            Span::default(),
         ))]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["implement"]);
