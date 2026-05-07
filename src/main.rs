@@ -17,6 +17,7 @@ mod output;
 mod problem;
 
 #[derive(Eq, Debug, PartialEq)]
+#[allow(dead_code)]
 enum Output {
     Terminal,
     Native,
