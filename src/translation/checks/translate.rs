@@ -563,3 +563,54 @@ make_coffee :
     };
     assert_eq!(id.value, "chef");
 }
+
+#[test]
+fn response_block_attaches_to_parent_step() {
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Is everything ready?
+
+        'Yes' | 'No'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { expects, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let responses = expects.expect("expects present");
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0].value, "Yes");
+    assert_eq!(responses[1].value, "No");
+}
+
+#[test]
+fn step_without_response_block_has_none_expects() {
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Plain step.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { expects, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert!(expects.is_none());
+}
