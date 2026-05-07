@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use crate::language;
 use crate::language::{Document, Span};
 
-use super::types::{Operation, Ordinal, Program, Subroutine, SubroutineId};
+use super::types::{
+    Entry, Fragment, Invoke, Operation, Ordinal, Program, Subroutine, SubroutineId, SubroutineRef,
+};
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut translator = Translator::new();
@@ -110,19 +112,13 @@ impl<'i> Translator<'i> {
         let name = procedure
             .name
             .value;
-        let span = procedure
-            .name
-            .span;
 
         if self
             .known
             .contains_key(name)
         {
             self.problems
-                .push(TranslationError::DuplicateProcedure(language::Identifier {
-                    value: name,
-                    span,
-                }));
+                .push(TranslationError::DuplicateProcedure(procedure.name));
             return None;
         }
 
@@ -135,7 +131,7 @@ impl<'i> Translator<'i> {
             .insert(name, id);
         self.program
             .subroutines
-            .push(Subroutine::new(language::Identifier { value: name, span }));
+            .push(Subroutine::new(procedure.name));
         Some(id)
     }
 
@@ -147,10 +143,18 @@ impl<'i> Translator<'i> {
         // build body
         let mut ops = Vec::new();
         for element in &procedure.elements {
-            if let language::Element::Steps(scopes, _) = element {
-                for scope in scopes {
-                    self.append_attributes(&mut ops, scope, &[]);
+            match element {
+                language::Element::Steps(scopes, _) => {
+                    for scope in scopes {
+                        self.append_attributes(&mut ops, scope, &[]);
+                    }
                 }
+                language::Element::CodeBlock(expressions, _) => {
+                    for expression in expressions {
+                        ops.push(self.translate_expression(expression));
+                    }
+                }
+                _ => {}
             }
         }
         let body = Operation::Sequence(ops);
@@ -325,14 +329,7 @@ impl<'i> Translator<'i> {
                     if title.is_some() {
                         self.problems
                             .push(TranslationError::DuplicateTitle {
-                                procedure: language::Identifier {
-                                    value: procedure
-                                        .name
-                                        .value,
-                                    span: procedure
-                                        .name
-                                        .span,
-                                },
+                                procedure: procedure.name,
                                 at: *span,
                             });
                     } else {
@@ -343,14 +340,7 @@ impl<'i> Translator<'i> {
                     if blocked {
                         self.problems
                             .push(TranslationError::InterleavedDescription {
-                                procedure: language::Identifier {
-                                    value: procedure
-                                        .name
-                                        .value,
-                                    span: procedure
-                                        .name
-                                        .span,
-                                },
+                                procedure: procedure.name,
                                 at: *span,
                             });
                     } else if description.is_none() {
@@ -381,5 +371,82 @@ impl<'i> Translator<'i> {
             }
             language::Scope::ResponseBlock { .. } => {}
         }
+    }
+
+    fn translate_expression(&mut self, expression: &'i language::Expression<'i>) -> Operation<'i> {
+        match expression {
+            language::Expression::Variable(id, _) => Operation::Variable(*id),
+            language::Expression::Number(numeric, _) => Operation::Number(*numeric),
+            language::Expression::String(pieces, _) => {
+                let fragments = pieces
+                    .iter()
+                    .map(|piece| match piece {
+                        language::Piece::Text(text) => Fragment::Text(text),
+                        language::Piece::Interpolation(expr) => {
+                            Fragment::Interpolation(self.translate_expression(expr))
+                        }
+                    })
+                    .collect();
+                Operation::String(fragments)
+            }
+            language::Expression::Multiline(lang, lines, _) => {
+                Operation::Multiline(*lang, lines.clone())
+            }
+            language::Expression::Tablet(pairs, _) => {
+                let entries = pairs
+                    .iter()
+                    .map(|pair| Entry {
+                        label: pair.label,
+                        value: self.translate_expression(&pair.value),
+                    })
+                    .collect();
+                Operation::Tablet(entries)
+            }
+            language::Expression::Application(invocation, _) => {
+                Operation::Invoke(self.translate_invocation(invocation))
+            }
+            language::Expression::Execution(function, _) => Operation::Execution {
+                target: function.target,
+                arguments: function
+                    .parameters
+                    .iter()
+                    .map(|expr| self.translate_expression(expr))
+                    .collect(),
+            },
+            language::Expression::Repeat(body, _) => Operation::Loop {
+                names: &[],
+                over: None,
+                body: Box::new(self.translate_expression(body)),
+            },
+            // Standalone Foreach has no body in the AST; the body is supplied
+            // by the enclosing CodeBlock's subscopes when one is present (see
+            // CodeBlock translation). As a bare expression we emit a Loop
+            // with an empty Sequence body.
+            language::Expression::Foreach(names, source, _) => Operation::Loop {
+                names,
+                over: Some(Box::new(self.translate_expression(source))),
+                body: Box::new(Operation::Sequence(Vec::new())),
+            },
+            language::Expression::Binding(value, names, _) => Operation::Bind {
+                names,
+                value: Box::new(self.translate_expression(value)),
+            },
+            language::Expression::Separator => Operation::Sequence(Vec::new()),
+        }
+    }
+
+    fn translate_invocation(&mut self, invocation: &'i language::Invocation<'i>) -> Invoke<'i> {
+        let target = match &invocation.target {
+            language::Target::Local(id) => SubroutineRef::Unresolved(*id),
+            language::Target::Remote(_) => todo!("remote invocation target"),
+        };
+        let arguments = match &invocation.parameters {
+            Some(params) => params
+                .iter()
+                .map(|expr| self.translate_expression(expr))
+                .collect(),
+            None => Vec::new(),
+        };
+        Invoke { target, arguments }
     }
 }

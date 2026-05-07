@@ -108,7 +108,7 @@ impl<'i> Procedure<'i> {
     }
 }
 
-#[derive(Eq, Debug)]
+#[derive(Clone, Copy, Eq, Debug)]
 pub struct Identifier<'i> {
     pub value: &'i str,
     pub span: Span,
@@ -445,7 +445,7 @@ impl PartialEq for Expression<'_> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Numeric<'i> {
     Integral(i64),
     Scientific(Quantity<'i>),

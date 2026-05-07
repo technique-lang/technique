@@ -105,12 +105,12 @@ pub enum Operation<'i> {
         expects: Option<&'i [language::Response<'i>]>,
     },
     Loop {
-        names: Vec<language::Identifier<'i>>,
+        names: &'i [language::Identifier<'i>],
         over: Option<Box<Operation<'i>>>,
         body: Box<Operation<'i>>,
     },
     Bind {
-        names: Vec<language::Identifier<'i>>,
+        names: &'i [language::Identifier<'i>],
         value: Box<Operation<'i>>,
     },
 }

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::language;
 use crate::parsing;
-use crate::translation::{translate, Operation, Ordinal};
+use crate::translation::{translate, Fragment, Operation, Ordinal, SubroutineRef};
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -613,4 +613,210 @@ check :
         panic!("expected Step");
     };
     assert!(expects.is_none());
+}
+
+#[test]
+fn expression_variable_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    x
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Variable(id) = &ops[0] else {
+        panic!("expected Variable, got {:?}", ops[0]);
+    };
+    assert_eq!(id.value, "x");
+}
+
+#[test]
+fn expression_number_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    42
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Number(numeric) = &ops[0] else {
+        panic!("expected Number, got {:?}", ops[0]);
+    };
+    let language::Numeric::Integral(n) = numeric else {
+        panic!("expected Integral");
+    };
+    assert_eq!(*n, 42);
+}
+
+#[test]
+fn expression_string_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    journal("hello")
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Execution { arguments, .. } = &ops[0] else {
+        panic!("expected Execution");
+    };
+    let Operation::String(fragments) = &arguments[0] else {
+        panic!("expected String");
+    };
+    assert_eq!(fragments.len(), 1);
+    let Fragment::Text(text) = &fragments[0] else {
+        panic!("expected Text fragment");
+    };
+    assert_eq!(*text, "hello");
+}
+
+#[test]
+fn expression_execution_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    sum(1, 2)
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Execution { target, arguments } = &ops[0] else {
+        panic!("expected Execution, got {:?}", ops[0]);
+    };
+    assert_eq!(target.value, "sum");
+    assert_eq!(arguments.len(), 2);
+}
+
+#[test]
+fn expression_application_translates_as_unresolved_invoke() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    <other>(x)
+}
+
+other : X -> Y
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Invoke(invoke) = &ops[0] else {
+        panic!("expected Invoke, got {:?}", ops[0]);
+    };
+    let SubroutineRef::Unresolved(id) = &invoke.target else {
+        panic!("expected Unresolved (resolution is a later pass)");
+    };
+    assert_eq!(id.value, "other");
+    assert_eq!(
+        invoke
+            .arguments
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn expression_binding_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    42 ~ answer
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Bind { names, value } = &ops[0] else {
+        panic!("expected Bind, got {:?}", ops[0]);
+    };
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0].value, "answer");
+    let Operation::Number(_) = value.as_ref() else {
+        panic!("expected Number value");
+    };
+}
+
+#[test]
+fn expression_tablet_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    [
+        "speed" = 3.0 × 10⁸ m/s
+        "weight" = 84.0 kg
+    ]
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Tablet(entries) = &ops[0] else {
+        panic!("expected Tablet, got {:?}", ops[0]);
+    };
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].label, "speed");
+    assert_eq!(entries[1].label, "weight");
 }

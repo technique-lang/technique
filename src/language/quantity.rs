@@ -23,7 +23,7 @@
 use crate::regex::*;
 use std::fmt::{self, Display};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Quantity<'i> {
     pub mantissa: Decimal,
     pub uncertainty: Option<Decimal>,
