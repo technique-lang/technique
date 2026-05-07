@@ -99,7 +99,6 @@ pub enum Operation<'i> {
         attributes: Vec<&'i [language::Attribute<'i>]>,
         description: &'i [language::Paragraph<'i>],
         body: Box<Operation<'i>>,
-        expects: Option<&'i [language::Response<'i>]>,
     },
     Loop {
         names: &'i [language::Identifier<'i>],

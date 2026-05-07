@@ -145,8 +145,11 @@ impl<'i> Translator<'i> {
     fn translate_procedure(&mut self, id: SubroutineId, procedure: &'i language::Procedure<'i>) {
         let (title, description) = self.extract_procedure_elements(procedure);
 
-        // build body
+        // build body. Executable Descriptives in the procedure's
+        // description form an "anonymous step 0" prefix in source order
+        // ahead of the explicit Steps and CodeBlock elements.
         let mut ops = Vec::new();
+        self.translate_descriptions(&mut ops, description);
         for element in &procedure.elements {
             match element {
                 language::Element::Steps(scopes, _) => {
@@ -211,13 +214,16 @@ impl<'i> Translator<'i> {
                 subscopes,
                 ..
             } => {
-                let (body, expects) = self.translate_step_subscopes(subscopes, attrs);
+                let mut body_ops = Vec::new();
+                self.translate_descriptions(&mut body_ops, description);
+                for sub in subscopes {
+                    self.append_attributes(&mut body_ops, sub, attrs);
+                }
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
                     description: description.as_slice(),
-                    body: Box::new(body),
-                    expects,
+                    body: Box::new(Operation::Sequence(body_ops)),
                 }
             }
             language::Scope::ParallelBlock {
@@ -225,21 +231,23 @@ impl<'i> Translator<'i> {
                 subscopes,
                 ..
             } => {
-                let (body, expects) = self.translate_step_subscopes(subscopes, attrs);
+                let mut body_ops = Vec::new();
+                self.translate_descriptions(&mut body_ops, description);
+                for sub in subscopes {
+                    self.append_attributes(&mut body_ops, sub, attrs);
+                }
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
                     description: description.as_slice(),
-                    body: Box::new(body),
-                    expects,
+                    body: Box::new(Operation::Sequence(body_ops)),
                 }
             }
             // AttributeBlock and ResponseBlock are intercepted by
             // append_attributes before reaching here: AttributeBlock
             // contributes its attribute list to enclosed Steps, and
-            // ResponseBlock either attaches to its parent Step's `expects`
-            // (handled by translate_step_subscopes) or is reported as an
-            // orphan.
+            // ResponseBlock lifts to the nearest enclosing Scope's expects
+            // slot (or surfaces as OrphanResponse).
             language::Scope::AttributeBlock { .. } | language::Scope::ResponseBlock { .. } => {
                 unreachable!()
             }
@@ -248,42 +256,73 @@ impl<'i> Translator<'i> {
                 subscopes,
                 ..
             } => match expressions.first() {
-                Some(language::Expression::Foreach(names, source, _)) => Operation::Loop {
-                    names,
-                    over: Some(Box::new(self.translate_expression(source))),
-                    body: Box::new(self.translate_subscopes(subscopes, attrs)),
-                },
-                Some(language::Expression::Repeat(_, _)) => Operation::Loop {
-                    names: &[],
-                    over: None,
-                    body: Box::new(self.translate_subscopes(subscopes, attrs)),
-                },
+                Some(language::Expression::Foreach(names, source, _)) => {
+                    let body = self.translate_subscopes(subscopes, attrs);
+                    Operation::Loop {
+                        names,
+                        over: Some(Box::new(self.translate_expression(source))),
+                        body: Box::new(body),
+                    }
+                }
+                Some(language::Expression::Repeat(_, _)) => {
+                    let body = self.translate_subscopes(subscopes, attrs);
+                    Operation::Loop {
+                        names: &[],
+                        over: None,
+                        body: Box::new(body),
+                    }
+                }
                 Some(other) => self.translate_expression(other),
                 None => self.translate_subscopes(subscopes, attrs),
             },
         }
     }
 
-    // Walk a step's subscopes, splitting ResponseBlock(s) off for the step's
-    // `expects` field while emitting the remaining scopes as the step's
-    // body. If multiple ResponseBlock subscopes appear, the first wins.
-    fn translate_step_subscopes(
+    // Hoist executable Descriptives out of description paragraphs and
+    // append them to `ops` as an "anonymous step 0" prefix.
+    fn translate_descriptions(
         &mut self,
-        subscopes: &'i [language::Scope<'i>],
-        attrs: &[&'i [language::Attribute<'i>]],
-    ) -> (Operation<'i>, Option<&'i [language::Response<'i>]>) {
-        let mut expects: Option<&'i [language::Response<'i>]> = None;
-        let mut ops = Vec::new();
-        for sub in subscopes {
-            if let language::Scope::ResponseBlock { responses, .. } = sub {
-                if expects.is_none() {
-                    expects = Some(responses.as_slice());
+        ops: &mut Vec<Operation<'i>>,
+        paragraphs: &'i [language::Paragraph<'i>],
+    ) {
+        for paragraph in paragraphs {
+            let language::Paragraph(descriptives, _) = paragraph;
+            for descriptive in descriptives {
+                if let Some(op) = self.executable_from_descriptive(descriptive) {
+                    ops.push(op);
                 }
-            } else {
-                self.append_attributes(&mut ops, sub, attrs);
             }
         }
-        (Operation::Sequence(ops), expects)
+    }
+
+    /// Plain Text is display-only and not hoisted. Every other Descriptive
+    /// requires runtime evaluation: Application invokes a procedure;
+    /// CodeInline evaluates the inner Expression (a Variable read needs the
+    /// value before the description can be rendered, just as much as an
+    /// Application does); Binding captures a result. The description
+    /// Paragraph stays borrowed on the enclosing Step for the renderer to
+    /// fill the CodeInline holes from these Operations' results.
+    fn executable_from_descriptive(
+        &mut self,
+        descriptive: &'i language::Descriptive<'i>,
+    ) -> Option<Operation<'i>> {
+        match descriptive {
+            language::Descriptive::Text(_) => None,
+            language::Descriptive::CodeInline(expr) => Some(self.translate_expression(expr)),
+            language::Descriptive::Application(invocation) => {
+                Some(Operation::Invoke(self.translate_invocation(invocation)))
+            }
+            // Naked binding `text ~ var` or `<call> ~ var`.
+            language::Descriptive::Binding(inner, names) => {
+                let value = self
+                    .executable_from_descriptive(inner)
+                    .unwrap_or_else(|| Operation::Sequence(Vec::new()));
+                Some(Operation::Bind {
+                    names: names.as_slice(),
+                    value: Box::new(value),
+                })
+            }
+        }
     }
 
     // Translate a single scope into operations appended to `ops`. Most

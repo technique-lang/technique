@@ -565,57 +565,6 @@ make_coffee :
 }
 
 #[test]
-fn response_block_attaches_to_parent_step() {
-    let source = r#"
-% technique v1
-
-check :
-
-1.  Is everything ready?
-
-        'Yes' | 'No'
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
-        panic!("expected Sequence");
-    };
-    let Operation::Step { expects, .. } = &ops[0] else {
-        panic!("expected Step");
-    };
-    let responses = expects.expect("expects present");
-    assert_eq!(responses.len(), 2);
-    assert_eq!(responses[0].value, "Yes");
-    assert_eq!(responses[1].value, "No");
-}
-
-#[test]
-fn step_without_response_block_has_none_expects() {
-    let source = r#"
-% technique v1
-
-check :
-
-1.  Plain step.
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
-        panic!("expected Sequence");
-    };
-    let Operation::Step { expects, .. } = &ops[0] else {
-        panic!("expected Step");
-    };
-    assert!(expects.is_none());
-}
-
-#[test]
 fn expression_variable_translates() {
     let source = r#"
 % technique v1
@@ -1003,4 +952,236 @@ run :
             .value,
         "journal"
     );
+}
+
+#[test]
+fn step_text_binding_hoists_into_body() {
+    // `text ~ name` in a step's description hoists out as a Bind operation
+    // in the step's body. The inner Text has no executable form, so the
+    // bound value is a placeholder empty Sequence.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  What is the situation now? ~ situation
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Bind { names, value } = &body_ops[0] else {
+        panic!("expected Bind, got {:?}", body_ops[0]);
+    };
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0].value, "situation");
+    let Operation::Sequence(inner) = value.as_ref() else {
+        panic!("expected empty Sequence as binding value");
+    };
+    assert!(inner.is_empty());
+}
+
+#[test]
+fn step_application_binding_hoists_with_invoke_value() {
+    // `<call> ~ name` hoists as Bind whose value is the Invoke.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Get the result <helper> ~ outcome
+
+helper : () -> Result
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Bind { names, value } = &body_ops[0] else {
+        panic!("expected Bind");
+    };
+    assert_eq!(names[0].value, "outcome");
+    let Operation::Invoke(_) = value.as_ref() else {
+        panic!("expected Invoke as binding value");
+    };
+}
+
+#[test]
+fn step_inline_application_hoists_as_invoke() {
+    // A bare `<call>` (no binding) inside a step's description hoists as
+    // an Invoke operation in the step body.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Do <helper> first.
+
+helper : () -> Result
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Invoke(_) = &body_ops[0] else {
+        panic!("expected Invoke, got {:?}", body_ops[0]);
+    };
+}
+
+#[test]
+fn step_plain_text_does_not_hoist() {
+    // Plain text in a step description is display-only; nothing hoists.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Just a plain step with no executable bits.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert!(body_ops.is_empty());
+}
+
+#[test]
+fn step_inline_codeblock_with_side_effect_hoists() {
+    // `{ exec_call(args) }` written inline in a step description hoists
+    // out as an Execute operation in the step body.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Log the start { journal("started") }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Execute(_) = &body_ops[0] else {
+        panic!("expected Execute, got {:?}", body_ops[0]);
+    };
+}
+
+#[test]
+fn step_inline_variable_hoists_as_variable_op() {
+    // `{ x }` requires runtime evaluation: the runner must wait for `x` to
+    // be bound and substitute its value into the rendered description. So
+    // the CodeInline hoists as Operation::Variable in the step body.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Display { x }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(body_ops) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Variable(id) = &body_ops[0] else {
+        panic!("expected Variable, got {:?}", body_ops[0]);
+    };
+    assert_eq!(id.value, "x");
+}
+
+#[test]
+fn procedure_description_executables_hoist_as_prefix() {
+    // Hoisting at the procedure level: an executable Descriptive in the
+    // procedure's description forms an "anonymous step 0" prefix ahead of
+    // the explicit Steps.
+    let source = r#"
+% technique v1
+
+run :
+
+Initialise <init>
+
+1.  Continue from there.
+
+init : () -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    // Prefix Invoke from the description, then the explicit Step.
+    assert_eq!(ops.len(), 2);
+    let Operation::Invoke(_) = &ops[0] else {
+        panic!("expected Invoke prefix, got {:?}", ops[0]);
+    };
+    let Operation::Step { .. } = &ops[1] else {
+        panic!("expected Step, got {:?}", ops[1]);
+    };
 }
