@@ -1,29 +1,11 @@
-use std::fs;
 use std::path::Path;
 
 use technique::parsing;
 
+use crate::common::list_technique_documents;
+
 fn check_directory(dir: &Path) {
-    // Ensure the directory exists
-    assert!(dir.exists(), "samples directory missing");
-
-    let entries = fs::read_dir(dir).expect("Failed to read samples directory");
-
-    let mut files = Vec::new();
-    for entry in entries {
-        let entry = entry.expect("Failed to read directory entry");
-        let path = entry.path();
-
-        if path
-            .extension()
-            .and_then(|s| s.to_str())
-            == Some("tq")
-        {
-            files.push(path);
-        }
-    }
-
-    assert!(!files.is_empty(), "No .tq files found in samples directory");
+    let files = list_technique_documents(dir);
 
     let mut failures = Vec::new();
 

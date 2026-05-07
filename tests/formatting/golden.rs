@@ -1,9 +1,10 @@
-use std::fs;
 use std::path::Path;
 
 use technique::formatting::Identity;
 use technique::highlighting::render;
 use technique::parsing;
+
+use crate::common::list_technique_documents;
 
 /// Golden test for the format command
 ///
@@ -57,35 +58,10 @@ fn show_diff(original: &str, formatted: &str, file_path: &Path) {
 }
 
 fn check_directory(dir: &Path) {
-    // Ensure the directory exists
-    assert!(dir.exists(), "examples directory missing");
-
-    // Get all .tq files in the directory
-    let entries = fs::read_dir(dir).expect("Failed to read examples directory");
-
-    let mut files = Vec::new();
-    for entry in entries {
-        let entry = entry.expect("Failed to read directory entry");
-        let path = entry.path();
-
-        if path
-            .extension()
-            .and_then(|s| s.to_str())
-            == Some("tq")
-        {
-            files.push(path);
-        }
-    }
-
-    // Ensure we found some test files
-    assert!(
-        !files.is_empty(),
-        "No .tq files found in examples directory"
-    );
+    let files = list_technique_documents(dir);
 
     let mut failures = Vec::new();
 
-    // Test each file
     for file in &files {
         // Load the original content
         let original = parsing::load(&file)
