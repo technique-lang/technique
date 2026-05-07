@@ -618,6 +618,7 @@ impl<'i> Parser<'i> {
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
     {
         let content = self.source;
+        let base = content.as_ptr() as usize;
         let mut results = Vec::new();
 
         for chunk in content.split(delimiter) {
@@ -628,7 +629,8 @@ impl<'i> Parser<'i> {
                     "non-empty content between delimiters",
                 ));
             }
-            let mut parser = self.subparser(0, trimmed);
+            let indent = trimmed.as_ptr() as usize - base;
+            let mut parser = self.subparser(indent, trimmed);
             results.push(function(&mut parser)?);
             self.problems
                 .extend(parser.problems);
@@ -1059,6 +1061,8 @@ impl<'i> Parser<'i> {
         &mut self,
         parser: &mut Parser<'i>,
     ) -> Result<Procedure<'i>, ParsingError> {
+        let start = parser.offset;
+
         // Extract the declaration with recovery
         let declaration = match self.parse_declaration(parser) {
             Ok(decl) => decl,
@@ -1215,7 +1219,7 @@ impl<'i> Parser<'i> {
             parameters: declaration.1,
             signature: declaration.2,
             elements,
-            span: Span::default(),
+            span: parser.span_since(start),
         })
     }
 
@@ -2469,8 +2473,15 @@ impl<'i> Parser<'i> {
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
     fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
         self.take_split_by('|', |inner| {
-            validate_response(inner.source)
-                .ok_or(ParsingError::InvalidResponse(Span::new(inner.offset, 0)))
+            let mut resp = validate_response(inner.source)
+                .ok_or(ParsingError::InvalidResponse(Span::new(inner.offset, 0)))?;
+            resp.span = Span::new(
+                inner.offset,
+                inner
+                    .source
+                    .len(),
+            );
+            Ok(resp)
         })
     }
 

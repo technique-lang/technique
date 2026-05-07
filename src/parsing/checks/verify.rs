@@ -1563,3 +1563,90 @@ III. Implementation
         }
     )
 }
+
+#[test]
+fn spans_are_populated() {
+    let source = std::fs::read_to_string("tests/samples/KnownSpanLengths.tq").unwrap();
+
+    let mut input = Parser::new();
+    input.initialize(&source);
+
+    let metadata = input
+        .read_technique_header()
+        .unwrap();
+    assert_eq!(metadata.span, Span::new(0, 42));
+
+    input.trim_whitespace();
+    let procedure = input
+        .read_procedure()
+        .unwrap();
+    assert_eq!(procedure.span, Span::new(43, 231));
+    assert_eq!(
+        procedure
+            .name
+            .span,
+        Span::new(43, 5)
+    );
+
+    let params = procedure
+        .parameters
+        .as_ref()
+        .unwrap();
+    assert_eq!(params[0].span, Span::new(49, 4));
+
+    if let Genus::Single(f) = &procedure
+        .signature
+        .as_ref()
+        .unwrap()
+        .requires
+    {
+        assert_eq!(f.span, Span::new(57, 6));
+    }
+    if let Genus::Single(f) = &procedure
+        .signature
+        .as_ref()
+        .unwrap()
+        .provides
+    {
+        assert_eq!(f.span, Span::new(67, 8));
+    }
+
+    if let Element::Title(_, span) = &procedure.elements[0] {
+        assert_eq!(*span, Span::new(77, 14));
+    }
+    if let Element::Description(_, span) = &procedure.elements[1] {
+        assert_eq!(*span, Span::new(92, 23));
+    }
+    if let Element::Steps(scopes, span) = &procedure.elements[2] {
+        assert_eq!(*span, Span::new(119, 155));
+
+        if let Scope::DependentBlock {
+            span, subscopes, ..
+        } = &scopes[0]
+        {
+            assert_eq!(*span, Span::new(119, 41));
+            if let Scope::AttributeBlock {
+                attributes, span, ..
+            } = &subscopes[0]
+            {
+                assert_eq!(*span, Span::new(151, 9));
+                if let Attribute::Role(id, attr_span) = &attributes[0] {
+                    assert_eq!(*attr_span, Span::new(151, 8));
+                    assert_eq!(id.span, Span::new(152, 7));
+                }
+            }
+        }
+        if let Scope::DependentBlock {
+            span, subscopes, ..
+        } = &scopes[1]
+        {
+            assert_eq!(*span, Span::new(164, 110));
+
+            if let Scope::ResponseBlock { responses, .. } = &subscopes[0] {
+                assert_eq!(responses[0].span, Span::new(211, 6));
+                assert_eq!(responses[1].span, Span::new(220, 21));
+                assert_eq!(responses[2].span, Span::new(244, 29));
+            }
+        }
+    }
+}
