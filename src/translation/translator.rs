@@ -8,12 +8,27 @@ use crate::language::Document;
 
 use super::types::{Operation, Procedure, ProcedureId, Program};
 
-pub fn translate<'i>(document: &Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
+pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut program = Program::new();
     let mut errors = Vec::new();
     let mut known: HashMap<&'i str, ProcedureId> = HashMap::new();
 
     if let Some(body) = &document.body {
+        if let language::Technique::Steps(_) = body {
+            // Top-level Steps-only document is wrapped in a synthetic
+            // anonymous procedure at index 0, so downstream code can
+            // assume a uniform Vec<Procedure>.
+            program
+                .procedures
+                .push(Procedure {
+                    name: None,
+                    title: None,
+                    description: &[],
+                    parameters: None,
+                    signature: None,
+                    body: Operation::Sequence(Vec::new()),
+                });
+        }
         collect_technique(body, &mut program, &mut known, &mut errors);
     }
 
@@ -27,17 +42,24 @@ pub fn translate<'i>(document: &Document<'i>) -> Result<Program<'i>, Vec<Transla
 #[derive(Debug, Eq, PartialEq)]
 pub enum TranslationError<'i> {
     DuplicateProcedure(language::Identifier<'i>),
-    DuplicateTitle(language::Identifier<'i>),
-    InterleavedDescription(language::Identifier<'i>),
-    OrphanResponse,
+    DuplicateTitle {
+        procedure: language::Identifier<'i>,
+        at: Span,
+    },
+    InterleavedDescription {
+        procedure: language::Identifier<'i>,
+        at: Span,
+    },
+    OrphanResponse(Span),
 }
 
 // Walk a Technique node, registering any procedures it declares directly or
-// transitively through nested sections. Procedures are hoisted into the
-// flat Program.procedures list regardless of where in the section tree they
-// were declared.
+// transitively through nested sections. Procedures are hoisted into the flat
+// Program.procedures list regardless of where in the section tree they were
+// declared. The top-level synthetic anonymous wrapper (for a
+// Technique::Steps-only document) is added by translate(), not here.
 fn collect_technique<'i>(
-    technique: &language::Technique<'i>,
+    technique: &'i language::Technique<'i>,
     program: &mut Program<'i>,
     known: &mut HashMap<&'i str, ProcedureId>,
     errors: &mut Vec<TranslationError<'i>>,
@@ -45,8 +67,10 @@ fn collect_technique<'i>(
     match technique {
         language::Technique::Procedures(procedures) => {
             for procedure in procedures {
-                register_procedure(procedure, program, known, errors);
-
+                if let Some(id) = register_procedure(procedure, program, known, errors) {
+                    translate_procedure(id, procedure, program, errors);
+                }
+                
                 // Element::Steps scopes may contain Sections, whose bodies
                 // can in turn declare further procedures. Walk the
                 // procedure's scopes so those nested declarations are
@@ -70,12 +94,16 @@ fn collect_technique<'i>(
     }
 }
 
+// Pass 1: gather a procedure's name. Fails fast on duplicate, returning None
+// so the caller can skip the shell-translation step. On first occurrence,
+// reserves a slot in Program.procedures with a stub Procedure that subsequent
+// passes fill in.
 fn register_procedure<'i>(
-    procedure: &language::Procedure<'i>,
+    procedure: &'i language::Procedure<'i>,
     program: &mut Program<'i>,
     known: &mut HashMap<&'i str, ProcedureId>,
     errors: &mut Vec<TranslationError<'i>>,
-) {
+) -> Option<ProcedureId> {
     let name = procedure
         .name
         .value;
@@ -84,10 +112,11 @@ fn register_procedure<'i>(
         .span;
 
     if known.contains_key(name) {
-        errors.push(TranslationError::DuplicateProcedure(
-            language::Identifier { value: name, span },
-        ));
-        return;
+        errors.push(TranslationError::DuplicateProcedure(language::Identifier {
+            value: name,
+            span,
+        }));
+        return None;
     }
 
     let id = ProcedureId(
@@ -106,10 +135,93 @@ fn register_procedure<'i>(
             signature: None,
             body: Operation::Sequence(Vec::new()),
         });
+    Some(id)
+}
+
+// Pass 2 (step 4): fill the shell of a previously-registered procedure with
+// its title, description, parameters, and signature. The body Operation is
+// left empty; subsequent translation steps fill it.
+fn translate_procedure<'i>(
+    id: ProcedureId,
+    procedure: &'i language::Procedure<'i>,
+    program: &mut Program<'i>,
+    errors: &mut Vec<TranslationError<'i>>,
+) {
+    let (title, description) = extract_title_and_description(procedure, errors);
+    let entry = &mut program.procedures[id.0];
+    entry.title = title;
+    entry.description = description;
+    entry.parameters = procedure
+        .parameters
+        .as_ref()
+        .map(|v| v.as_slice());
+    entry.signature = procedure
+        .signature
+        .as_ref();
+}
+
+// Walk a procedure's elements to extract the procedure-shell title and
+// description, surfacing the two structural errors:
+//   DuplicateTitle - a second Element::Title in this procedure.
+//   InterleavedDescription - an Element::Description after a Steps or
+//     CodeBlock element.
+// Multiple Element::Description occurrences before any Steps/CodeBlock are
+// not an error; the first wins.
+fn extract_title_and_description<'i>(
+    procedure: &'i language::Procedure<'i>,
+    errors: &mut Vec<TranslationError<'i>>,
+) -> (Option<&'i str>, &'i [language::Paragraph<'i>]) {
+    let mut title: Option<&'i str> = None;
+    let mut description: Option<&'i [language::Paragraph<'i>]> = None;
+    let mut blocked = false;
+
+    for element in &procedure.elements {
+        match element {
+            language::Element::Title(value, span) => {
+                if title.is_some() {
+                    errors.push(TranslationError::DuplicateTitle {
+                        procedure: language::Identifier {
+                            value: procedure
+                                .name
+                                .value,
+                            span: procedure
+                                .name
+                                .span,
+                        },
+                        at: *span,
+                    });
+                } else {
+                    title = Some(*value);
+                }
+            }
+            language::Element::Description(paragraphs, span) => {
+                if blocked {
+                    errors.push(TranslationError::InterleavedDescription {
+                        procedure: language::Identifier {
+                            value: procedure
+                                .name
+                                .value,
+                            span: procedure
+                                .name
+                                .span,
+                        },
+                        at: *span,
+                    });
+                } else if description.is_none() {
+                    description = Some(paragraphs.as_slice());
+                }
+            }
+            language::Element::Steps(_, _) | language::Element::CodeBlock(_, _) => {
+                blocked = true;
+            }
+        }
+    }
+
+    (title, description.unwrap_or(&[]))
 }
 
 fn collect_scope<'i>(
-    scope: &language::Scope<'i>,
+    scope: &'i language::Scope<'i>,
     program: &mut Program<'i>,
     known: &mut HashMap<&'i str, ProcedureId>,
     errors: &mut Vec<TranslationError<'i>>,

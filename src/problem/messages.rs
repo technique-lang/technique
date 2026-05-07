@@ -1028,15 +1028,21 @@ pub fn generate_translation_error<'i>(
             format!("Duplicate procedure name '{}'", name),
             "A procedure with this name has already been declared in this document.".to_string(),
         ),
-        TranslationError::DuplicateTitle(Identifier { value: name, .. }) => (
+        TranslationError::DuplicateTitle {
+            procedure: Identifier { value: name, .. },
+            ..
+        } => (
             format!("Duplicate title in procedure '{}'", name),
             "A procedure can have at most one title.".to_string(),
         ),
-        TranslationError::InterleavedDescription(Identifier { value: name, .. }) => (
+        TranslationError::InterleavedDescription {
+            procedure: Identifier { value: name, .. },
+            ..
+        } => (
             format!("Description out of place in procedure '{}'", name),
             "A procedure's free-text description must appear immediately after the title and before any steps or code blocks.".to_string(),
         ),
-        TranslationError::OrphanResponse => (
+        TranslationError::OrphanResponse(_) => (
             "Response block without a parent step".to_string(),
             "A response block ('Yes' | 'No') must follow a step it qualifies; it cannot stand alone.".to_string(),
         ),
