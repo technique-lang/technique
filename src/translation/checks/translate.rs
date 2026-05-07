@@ -435,3 +435,131 @@ fn top_level_steps_populate_anonymous_wrapper_body() {
     };
     assert_eq!(ops.len(), 2);
 }
+
+#[test]
+fn attribute_lifts_onto_enclosed_step() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+@chef
+    1.  Grind beans.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    // AttributeBlock disappears: only the Step appears at this level.
+    assert_eq!(ops.len(), 1);
+    let Operation::Step { attributes, .. } = &ops[0] else {
+        panic!("expected Step, got {:?}", ops[0]);
+    };
+    assert_eq!(attributes.len(), 1);
+    assert_eq!(attributes[0].len(), 1);
+    let language::Attribute::Role(id, _) = &attributes[0][0] else {
+        panic!("expected Role attribute");
+    };
+    assert_eq!(id.value, "chef");
+}
+
+#[test]
+fn composite_attributes_form_single_frame() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+@chef + ^kitchen
+    1.  Grind beans.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { attributes, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert_eq!(attributes.len(), 1, "one frame");
+    assert_eq!(attributes[0].len(), 2, "two attributes in the frame");
+}
+
+#[test]
+fn step_without_attribute_block_has_empty_attributes() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+1.  Plain step.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { attributes, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert!(attributes.is_empty());
+}
+
+#[test]
+fn substep_inherits_attribute_through_step_body() {
+    // The parser nests an AttributeBlock under a Step's body, so the
+    // attribute applies only to the enclosed substep, not the outer step.
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+1.  Outer step.
+
+    @chef
+        a.  Substep under chef.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step {
+        attributes: outer_attrs,
+        body: outer_body,
+        ..
+    } = &ops[0]
+    else {
+        panic!("expected outer Step");
+    };
+    assert!(outer_attrs.is_empty(), "outer step has no attributes");
+
+    let Operation::Sequence(inner) = outer_body.as_ref() else {
+        panic!("expected inner Sequence");
+    };
+    let Operation::Step {
+        attributes: substep_attrs,
+        ..
+    } = &inner[0]
+    else {
+        panic!("expected substep");
+    };
+    assert_eq!(substep_attrs.len(), 1);
+    let language::Attribute::Role(id, _) = &substep_attrs[0][0] else {
+        panic!("expected Role");
+    };
+    assert_eq!(id.value, "chef");
+}

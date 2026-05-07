@@ -18,7 +18,7 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
             // anonymous subroutine at index 0, so downstream code can
             // assume a uniform Vec<Subroutine>.
             let mut wrapper = Subroutine::anonymous();
-            wrapper.body = translate_subscopes(scopes);
+            wrapper.body = translate_subscopes(scopes, &[]);
             program
                 .subroutines
                 .push(wrapper);
@@ -138,7 +138,7 @@ fn translate_procedure<'i>(
     for element in &procedure.elements {
         if let language::Element::Steps(scopes, _) = element {
             for scope in scopes {
-                ops.push(translate_scope(scope));
+                append_attributes(&mut ops, scope, &[]);
             }
         }
     }
@@ -157,7 +157,10 @@ fn translate_procedure<'i>(
     entry.body = body;
 }
 
-fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
+fn translate_scope<'i>(
+    scope: &'i language::Scope<'i>,
+    attrs: &[&'i [language::Attribute<'i>]],
+) -> Operation<'i> {
     match scope {
         language::Scope::SectionChunk {
             numeral,
@@ -166,7 +169,7 @@ fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
             ..
         } => {
             let inner = match body {
-                language::Technique::Steps(scopes) => translate_subscopes(scopes),
+                language::Technique::Steps(scopes) => translate_subscopes(scopes, attrs),
                 // Procedures declared inside a section are hoisted into
                 // Program.subroutines by the collect pass; the section
                 // node carries no executable body for them.
@@ -186,9 +189,9 @@ fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
             ..
         } => Operation::Step {
             ordinal: Ordinal::Dependent(ordinal),
-            attributes: Vec::new(),
+            attributes: attrs.to_vec(),
             description: description.as_slice(),
-            body: Box::new(translate_subscopes(subscopes)),
+            body: Box::new(translate_subscopes(subscopes, attrs)),
             expects: None,
         },
         language::Scope::ParallelBlock {
@@ -197,22 +200,56 @@ fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
             ..
         } => Operation::Step {
             ordinal: Ordinal::Parallel,
-            attributes: Vec::new(),
+            attributes: attrs.to_vec(),
             description: description.as_slice(),
-            body: Box::new(translate_subscopes(subscopes)),
+            body: Box::new(translate_subscopes(subscopes, attrs)),
             expects: None,
         },
-        language::Scope::AttributeBlock { .. } => todo!("attribute block"),
+        // AttributeBlock is not represented as an Operation; it disappears
+        // from the output, contributing only its attribute list onto every
+        // enclosed Step. translate_subscopes / append_attributes intercept it
+        // before reaching here.
+        language::Scope::AttributeBlock { .. } => {
+            unreachable!("AttributeBlock handled by append_attributes")
+        }
         language::Scope::CodeBlock { .. } => todo!("code block"),
         language::Scope::ResponseBlock { .. } => todo!("response block"),
     }
 }
 
-fn translate_subscopes<'i>(scopes: &'i [language::Scope<'i>]) -> Operation<'i> {
-    let ops: Vec<_> = scopes
-        .iter()
-        .map(translate_scope)
-        .collect();
+// Translate a single scope into operations appended to `ops`. Most scopes
+// contribute exactly one Operation; AttributeBlock contributes no Operation
+// of its own and inlines its (recursively-translated) children with its
+// attribute list pushed onto the enclosing-attribute stack.
+fn append_attributes<'i>(
+    ops: &mut Vec<Operation<'i>>,
+    scope: &'i language::Scope<'i>,
+    attrs: &[&'i [language::Attribute<'i>]],
+) {
+    if let language::Scope::AttributeBlock {
+        attributes,
+        subscopes,
+        ..
+    } = scope
+    {
+        let mut nested: Vec<&'i [language::Attribute<'i>]> = attrs.to_vec();
+        nested.push(attributes.as_slice());
+        for sub in subscopes {
+            append_attributes(ops, sub, &nested);
+        }
+    } else {
+        ops.push(translate_scope(scope, attrs));
+    }
+}
+
+fn translate_subscopes<'i>(
+    scopes: &'i [language::Scope<'i>],
+    attrs: &[&'i [language::Attribute<'i>]],
+) -> Operation<'i> {
+    let mut ops = Vec::new();
+    for scope in scopes {
+        append_attributes(&mut ops, scope, attrs);
+    }
     Operation::Sequence(ops)
 }
 
