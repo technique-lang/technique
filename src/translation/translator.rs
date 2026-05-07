@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::language;
 use crate::language::{Document, Span};
 
-use super::types::{Operation, Program, Subroutine, SubroutineId};
+use super::types::{Operation, Ordinal, Program, Subroutine, SubroutineId};
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut program = Program::new();
@@ -13,13 +13,15 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
     let mut known: HashMap<&'i str, SubroutineId> = HashMap::new();
 
     if let Some(body) = &document.body {
-        if let language::Technique::Steps(_) = body {
+        if let language::Technique::Steps(scopes) = body {
             // Top-level Steps-only document is wrapped in a synthetic
             // anonymous subroutine at index 0, so downstream code can
             // assume a uniform Vec<Subroutine>.
+            let mut wrapper = Subroutine::anonymous();
+            wrapper.body = translate_subscopes(scopes);
             program
                 .subroutines
-                .push(Subroutine::anonymous());
+                .push(wrapper);
         }
         collect_technique(body, &mut program, &mut known, &mut errors);
     }
@@ -164,13 +166,7 @@ fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
             ..
         } => {
             let inner = match body {
-                language::Technique::Steps(scopes) => {
-                    let ops: Vec<_> = scopes
-                        .iter()
-                        .map(translate_scope)
-                        .collect();
-                    Operation::Sequence(ops)
-                }
+                language::Technique::Steps(scopes) => translate_subscopes(scopes),
                 // Procedures declared inside a section are hoisted into
                 // Program.subroutines by the collect pass; the section
                 // node carries no executable body for them.
@@ -183,12 +179,41 @@ fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
                 body: Box::new(inner),
             }
         }
-        language::Scope::DependentBlock { .. } => todo!("dependent block"),
-        language::Scope::ParallelBlock { .. } => todo!("parallel block"),
+        language::Scope::DependentBlock {
+            ordinal,
+            description,
+            subscopes,
+            ..
+        } => Operation::Step {
+            ordinal: Ordinal::Dependent(ordinal),
+            attributes: Vec::new(),
+            description: description.as_slice(),
+            body: Box::new(translate_subscopes(subscopes)),
+            expects: None,
+        },
+        language::Scope::ParallelBlock {
+            description,
+            subscopes,
+            ..
+        } => Operation::Step {
+            ordinal: Ordinal::Parallel,
+            attributes: Vec::new(),
+            description: description.as_slice(),
+            body: Box::new(translate_subscopes(subscopes)),
+            expects: None,
+        },
         language::Scope::AttributeBlock { .. } => todo!("attribute block"),
         language::Scope::CodeBlock { .. } => todo!("code block"),
         language::Scope::ResponseBlock { .. } => todo!("response block"),
     }
+}
+
+fn translate_subscopes<'i>(scopes: &'i [language::Scope<'i>]) -> Operation<'i> {
+    let ops: Vec<_> = scopes
+        .iter()
+        .map(translate_scope)
+        .collect();
+    Operation::Sequence(ops)
 }
 
 // Walk a procedure's elements to extract the procedure-shell title and

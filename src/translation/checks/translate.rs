@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::language;
 use crate::parsing;
-use crate::translation::{translate, Operation};
+use crate::translation::{translate, Operation, Ordinal};
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -303,4 +303,135 @@ II. Sibling
         })
         .collect();
     assert_eq!(numerals, vec!["I", "II"]);
+}
+
+#[test]
+fn dependent_step_translated() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+1.  Grind the beans.
+
+2.  Pour the water.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(ops.len(), 2);
+    let ordinals: Vec<&str> = ops
+        .iter()
+        .map(|op| match op {
+            Operation::Step {
+                ordinal: Ordinal::Dependent(n),
+                ..
+            } => *n,
+            _ => panic!("expected dependent step, got {:?}", op),
+        })
+        .collect();
+    assert_eq!(ordinals, vec!["1", "2"]);
+}
+
+#[test]
+fn parallel_step_translated() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+-   Order beans.
+
+-   Boil water.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(ops.len(), 2);
+    for op in ops {
+        let Operation::Step {
+            ordinal: Ordinal::Parallel,
+            ..
+        } = op
+        else {
+            panic!("expected parallel step, got {:?}", op);
+        };
+    }
+}
+
+#[test]
+fn substeps_recurse_into_step_body() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+1.  Outer step.
+
+    a.  First substep.
+
+    b.  Second substep.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(ops.len(), 1);
+    let Operation::Step {
+        ordinal: Ordinal::Dependent(outer),
+        body: outer_body,
+        ..
+    } = &ops[0]
+    else {
+        panic!("expected outer dependent step");
+    };
+    assert_eq!(*outer, "1");
+
+    let Operation::Sequence(inner) = outer_body.as_ref() else {
+        panic!("expected inner Sequence");
+    };
+    let inner_ordinals: Vec<&str> = inner
+        .iter()
+        .map(|op| match op {
+            Operation::Step {
+                ordinal: Ordinal::Dependent(n),
+                ..
+            } => *n,
+            _ => panic!("expected dependent substep"),
+        })
+        .collect();
+    assert_eq!(inner_ordinals, vec!["a", "b"]);
+}
+
+#[test]
+fn top_level_steps_populate_anonymous_wrapper_body() {
+    let source = r#"
+1.  First step.
+
+2.  Second step.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert_eq!(program.subroutines[0].name, None);
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    assert_eq!(ops.len(), 2);
 }
