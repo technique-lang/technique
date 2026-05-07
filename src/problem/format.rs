@@ -92,17 +92,31 @@ pub fn concise_parsing_error<'i>(
     )
 }
 
-/// Format a translation error with concise single-line output. Translation
-/// errors do not yet carry source positions, so file:line:column is omitted.
+/// Format a translation error with concise single-line output.
 pub fn concise_translation_error<'i>(
     error: &TranslationError<'i>,
     filename: &'i Path,
+    source: &'i str,
     renderer: &impl Render,
 ) -> String {
     let (problem, _) = generate_translation_error(error, renderer);
     let input = generate_filename(filename);
+    let offset = error
+        .span()
+        .offset;
+    let i = calculate_line_number(source, offset);
+    let j = calculate_column_number(source, offset);
+    let line = i + 1;
+    let column = j + 1;
 
-    format!("{}: {}: {}", "error".bright_red(), input, problem.bold(),)
+    format!(
+        "{}: {}:{}:{} {}",
+        "error".bright_red(),
+        input,
+        line,
+        column,
+        problem.bold(),
+    )
 }
 
 /// Format a LoadingError with concise single-line output

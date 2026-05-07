@@ -61,6 +61,17 @@ pub enum TranslationError<'i> {
     UnresolvedProcedure(language::Identifier<'i>),
 }
 
+impl<'i> TranslationError<'i> {
+    pub fn span(&self) -> Span {
+        match self {
+            TranslationError::DuplicateProcedure(id) => id.span,
+            TranslationError::DuplicateTitle { at, .. } => *at,
+            TranslationError::InterleavedDescription { at, .. } => *at,
+            TranslationError::UnresolvedProcedure(id) => id.span,
+        }
+    }
+}
+
 struct Translator<'i> {
     program: Program<'i>,
     problems: Vec<TranslationError<'i>>,

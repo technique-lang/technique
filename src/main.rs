@@ -270,7 +270,9 @@ fn main() {
                         }
                         eprintln!(
                             "{}",
-                            problem::concise_translation_error(&error, &filename, &Terminal)
+                            problem::concise_translation_error(
+                                &error, &filename, &content, &Terminal
+                            )
                         );
                     }
                     std::process::exit(1);
