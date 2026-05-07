@@ -6,7 +6,8 @@ use crate::language;
 use crate::language::{Document, Span};
 
 use super::types::{
-    Entry, Fragment, Invoke, Operation, Ordinal, Program, Subroutine, SubroutineId, SubroutineRef,
+    Entry, Executable, Fragment, Invocable, Operation, Ordinal, Program, Subroutine, SubroutineId,
+    SubroutineRef,
 };
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
@@ -25,6 +26,7 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
                 .push(wrapper);
         }
         translator.collect_technique(body);
+        translator.resolve_references();
     }
 
     if translator
@@ -49,6 +51,9 @@ pub enum TranslationError<'i> {
         at: Span,
     },
     OrphanResponse(Span),
+    /// A local procedure invocation `<name>(...)` whose `name` doesn't
+    /// match any procedure declared in this document is an error.
+    UnresolvedProcedure(language::Identifier<'i>),
 }
 
 struct Translator<'i> {
@@ -390,6 +395,71 @@ impl<'i> Translator<'i> {
         }
     }
 
+    // Pass 3: walk the translated subroutines, resolving every Invoke
+    // target. Local procedure references that match a name registered by
+    // Pass 1 become Resolved(SubroutineId); unmatched local references
+    // are errors.
+    fn resolve_references(&mut self) {
+        for subroutine in &mut self
+            .program
+            .subroutines
+        {
+            Self::resolve_operation(&mut subroutine.body, &self.known, &mut self.problems);
+        }
+    }
+
+    fn resolve_operation(
+        op: &mut Operation<'i>,
+        known: &HashMap<&'i str, SubroutineId>,
+        problems: &mut Vec<TranslationError<'i>>,
+    ) {
+        match op {
+            Operation::Invoke(invocable) => {
+                if let SubroutineRef::Unresolved(id) = &invocable.target {
+                    match known.get(id.value) {
+                        Some(sub_id) => invocable.target = SubroutineRef::Resolved(*sub_id),
+                        None => problems.push(TranslationError::UnresolvedProcedure(*id)),
+                    }
+                }
+                for arg in &mut invocable.arguments {
+                    Self::resolve_operation(arg, known, problems);
+                }
+            }
+            Operation::Sequence(ops) => {
+                for op in ops {
+                    Self::resolve_operation(op, known, problems);
+                }
+            }
+            Operation::Section { body, .. } => Self::resolve_operation(body, known, problems),
+            Operation::Step { body, .. } => Self::resolve_operation(body, known, problems),
+            Operation::Loop { over, body, .. } => {
+                if let Some(over) = over {
+                    Self::resolve_operation(over, known, problems);
+                }
+                Self::resolve_operation(body, known, problems);
+            }
+            Operation::Bind { value, .. } => Self::resolve_operation(value, known, problems),
+            Operation::Execute(executable) => {
+                for arg in &mut executable.arguments {
+                    Self::resolve_operation(arg, known, problems);
+                }
+            }
+            Operation::String(fragments) => {
+                for fragment in fragments {
+                    if let Fragment::Interpolation(op) = fragment {
+                        Self::resolve_operation(op, known, problems);
+                    }
+                }
+            }
+            Operation::Tablet(entries) => {
+                for entry in entries {
+                    Self::resolve_operation(&mut entry.value, known, problems);
+                }
+            }
+            Operation::Variable(_) | Operation::Number(_) | Operation::Multiline(_, _) => {}
+        }
+    }
+
     fn translate_expression(&mut self, expression: &'i language::Expression<'i>) -> Operation<'i> {
         match expression {
             language::Expression::Variable(id, _) => Operation::Variable(*id),
@@ -422,14 +492,14 @@ impl<'i> Translator<'i> {
             language::Expression::Application(invocation, _) => {
                 Operation::Invoke(self.translate_invocation(invocation))
             }
-            language::Expression::Execution(function, _) => Operation::Execution {
+            language::Expression::Execution(function, _) => Operation::Execute(Executable {
                 target: function.target,
                 arguments: function
                     .parameters
                     .iter()
                     .map(|expr| self.translate_expression(expr))
                     .collect(),
-            },
+            }),
             language::Expression::Repeat(body, _) => Operation::Loop {
                 names: &[],
                 over: None,
@@ -452,7 +522,7 @@ impl<'i> Translator<'i> {
         }
     }
 
-    fn translate_invocation(&mut self, invocation: &'i language::Invocation<'i>) -> Invoke<'i> {
+    fn translate_invocation(&mut self, invocation: &'i language::Invocation<'i>) -> Invocable<'i> {
         let target = match &invocation.target {
             language::Target::Local(id) => SubroutineRef::Unresolved(*id),
             language::Target::Remote(_) => todo!("remote invocation target"),
@@ -464,6 +534,6 @@ impl<'i> Translator<'i> {
                 .collect(),
             None => Vec::new(),
         };
-        Invoke { target, arguments }
+        Invocable { target, arguments }
     }
 }

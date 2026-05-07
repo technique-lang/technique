@@ -118,3 +118,26 @@ check :
     assert_eq!(at.offset, expected);
     assert!(at.length >= "'Yes' | 'No'".len());
 }
+
+#[test]
+fn unresolved_procedure_invocation_is_error() {
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <does_not_exist>(x)
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::UnresolvedProcedure(id) = &errors[0] else {
+        panic!("expected UnresolvedProcedure, got {:?}", errors[0]);
+    };
+    assert_eq!(id.value, "does_not_exist");
+}

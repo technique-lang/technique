@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::language;
 use crate::parsing;
-use crate::translation::{translate, Fragment, Operation, Ordinal, SubroutineRef};
+use crate::translation::{translate, Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -687,10 +687,10 @@ run :
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execution { arguments, .. } = &ops[0] else {
-        panic!("expected Execution");
+    let Operation::Execute(executable) = &ops[0] else {
+        panic!("expected Execute");
     };
-    let Operation::String(fragments) = &arguments[0] else {
+    let Operation::String(fragments) = &executable.arguments[0] else {
         panic!("expected String");
     };
     assert_eq!(fragments.len(), 1);
@@ -719,15 +719,25 @@ run :
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execution { target, arguments } = &ops[0] else {
-        panic!("expected Execution, got {:?}", ops[0]);
+    let Operation::Execute(executable) = &ops[0] else {
+        panic!("expected Execute, got {:?}", ops[0]);
     };
-    assert_eq!(target.value, "sum");
-    assert_eq!(arguments.len(), 2);
+    assert_eq!(
+        executable
+            .target
+            .value,
+        "sum"
+    );
+    assert_eq!(
+        executable
+            .arguments
+            .len(),
+        2
+    );
 }
 
 #[test]
-fn expression_application_translates_as_unresolved_invoke() {
+fn expression_application_translates_as_invoke() {
     let source = r#"
 % technique v1
 
@@ -747,15 +757,11 @@ other : X -> Y
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invoke) = &ops[0] else {
+    let Operation::Invoke(invocable) = &ops[0] else {
         panic!("expected Invoke, got {:?}", ops[0]);
     };
-    let SubroutineRef::Unresolved(id) = &invoke.target else {
-        panic!("expected Unresolved (resolution is a later pass)");
-    };
-    assert_eq!(id.value, "other");
     assert_eq!(
-        invoke
+        invocable
             .arguments
             .len(),
         1
@@ -879,4 +885,122 @@ run :
     assert_eq!(names.len(), 2);
     assert_eq!(names[0].value, "design");
     assert_eq!(names[1].value, "component");
+}
+
+#[test]
+fn invoke_resolves_forward_reference() {
+    // helper is declared *after* main, but the resolve pass should still
+    // wire it up because Pass 1 registered all names before Pass 3 ran.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <helper>(x)
+}
+
+helper : X -> Y
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let helper_idx = program
+        .subroutines
+        .iter()
+        .position(|s| {
+            s.name
+                .as_ref()
+                .map(|n| n.value)
+                == Some("helper")
+        })
+        .expect("helper present");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Invoke(invocable) = &ops[0] else {
+        panic!("expected Invoke");
+    };
+    let SubroutineRef::Resolved(SubroutineId(idx)) = invocable.target else {
+        panic!("expected Resolved, got {:?}", invocable.target);
+    };
+    assert_eq!(idx, helper_idx);
+}
+
+#[test]
+fn invoke_resolves_backward_reference() {
+    // helper is declared *before* main; same expectation.
+    let source = r#"
+% technique v1
+
+helper : X -> Y
+
+main :
+
+{
+    <helper>(x)
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let main_idx = program
+        .subroutines
+        .iter()
+        .position(|s| {
+            s.name
+                .as_ref()
+                .map(|n| n.value)
+                == Some("main")
+        })
+        .expect("main present");
+
+    let Operation::Sequence(ops) = &program.subroutines[main_idx].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Invoke(invocable) = &ops[0] else {
+        panic!("expected Invoke");
+    };
+    let SubroutineRef::Resolved(_) = invocable.target else {
+        panic!("expected Resolved, got {:?}", invocable.target);
+    };
+}
+
+#[test]
+fn executable_target_left_alone_by_resolve() {
+    // Function calls (the `name(...)` form, no angle brackets) live in a
+    // separate namespace -- they're built-in or host-provided and are
+    // resolved at a later phase against the executing domain. The resolve
+    // pass must leave Operation::Execute targets untouched.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    journal("started")
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Execute(executable) = &ops[0] else {
+        panic!("expected Execute, got {:?}", ops[0]);
+    };
+    assert_eq!(
+        executable
+            .target
+            .value,
+        "journal"
+    );
 }
