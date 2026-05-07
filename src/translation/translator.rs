@@ -19,7 +19,13 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
             // anonymous subroutine at index 0, so downstream code can
             // assume a uniform Vec<Subroutine>.
             let mut wrapper = Subroutine::anonymous();
-            wrapper.body = translator.translate_subscopes(scopes, &[]);
+            let mut ops = Vec::new();
+            let mut responses = Vec::new();
+            for scope in scopes {
+                translator.append_attributes(&mut ops, &mut responses, scope, &[]);
+            }
+            wrapper.body = Operation::Sequence(ops);
+            wrapper.responses = responses;
             translator
                 .program
                 .subroutines
@@ -50,7 +56,6 @@ pub enum TranslationError<'i> {
         procedure: language::Identifier<'i>,
         at: Span,
     },
-    OrphanResponse(Span),
     /// A local procedure invocation `<name>(...)` whose `name` doesn't
     /// match any procedure declared in this document is an error.
     UnresolvedProcedure(language::Identifier<'i>),
@@ -145,16 +150,14 @@ impl<'i> Translator<'i> {
     fn translate_procedure(&mut self, id: SubroutineId, procedure: &'i language::Procedure<'i>) {
         let (title, description) = self.extract_procedure_elements(procedure);
 
-        // build body. Executable Descriptives in the procedure's
-        // description form an "anonymous step 0" prefix in source order
-        // ahead of the explicit Steps and CodeBlock elements.
         let mut ops = Vec::new();
+        let mut responses = Vec::new();
         self.translate_descriptions(&mut ops, description);
         for element in &procedure.elements {
             match element {
                 language::Element::Steps(scopes, _) => {
                     for scope in scopes {
-                        self.append_attributes(&mut ops, scope, &[]);
+                        self.append_attributes(&mut ops, &mut responses, scope, &[]);
                     }
                 }
                 language::Element::CodeBlock(expressions, _) => {
@@ -180,6 +183,7 @@ impl<'i> Translator<'i> {
             .signature
             .as_ref();
         entry.body = body;
+        entry.responses = responses;
     }
 
     fn translate_scope(
@@ -194,18 +198,18 @@ impl<'i> Translator<'i> {
                 body,
                 ..
             } => {
-                let inner = match body {
-                    language::Technique::Steps(scopes) => self.translate_subscopes(scopes, attrs),
-                    // Procedures declared inside a section are hoisted into
-                    // Program.subroutines by the collect pass; the section
-                    // node carries no executable body for them.
-                    language::Technique::Procedures(_) => Operation::Sequence(Vec::new()),
-                    language::Technique::Empty => Operation::Sequence(Vec::new()),
-                };
+                let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
+                if let language::Technique::Steps(scopes) = body {
+                    for sub in scopes {
+                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                    }
+                }
                 Operation::Section {
                     numeral,
                     title: title.as_ref(),
-                    body: Box::new(inner),
+                    body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
                 }
             }
             language::Scope::DependentBlock {
@@ -215,15 +219,17 @@ impl<'i> Translator<'i> {
                 ..
             } => {
                 let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
                 self.translate_descriptions(&mut body_ops, description);
                 for sub in subscopes {
-                    self.append_attributes(&mut body_ops, sub, attrs);
+                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
                     description: description.as_slice(),
                     body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
                 }
             }
             language::Scope::ParallelBlock {
@@ -232,22 +238,21 @@ impl<'i> Translator<'i> {
                 ..
             } => {
                 let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
                 self.translate_descriptions(&mut body_ops, description);
                 for sub in subscopes {
-                    self.append_attributes(&mut body_ops, sub, attrs);
+                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
                     description: description.as_slice(),
                     body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
                 }
             }
             // AttributeBlock and ResponseBlock are intercepted by
-            // append_attributes before reaching here: AttributeBlock
-            // contributes its attribute list to enclosed Steps, and
-            // ResponseBlock lifts to the nearest enclosing Scope's expects
-            // slot (or surfaces as OrphanResponse).
+            // append_attributes before reaching here.
             language::Scope::AttributeBlock { .. } | language::Scope::ResponseBlock { .. } => {
                 unreachable!()
             }
@@ -257,19 +262,29 @@ impl<'i> Translator<'i> {
                 ..
             } => match expressions.first() {
                 Some(language::Expression::Foreach(names, source, _)) => {
-                    let body = self.translate_subscopes(subscopes, attrs);
+                    let mut body_ops = Vec::new();
+                    let mut responses = Vec::new();
+                    for sub in subscopes {
+                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                    }
                     Operation::Loop {
                         names,
                         over: Some(Box::new(self.translate_expression(source))),
-                        body: Box::new(body),
+                        body: Box::new(Operation::Sequence(body_ops)),
+                        responses,
                     }
                 }
                 Some(language::Expression::Repeat(_, _)) => {
-                    let body = self.translate_subscopes(subscopes, attrs);
+                    let mut body_ops = Vec::new();
+                    let mut responses = Vec::new();
+                    for sub in subscopes {
+                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                    }
                     Operation::Loop {
                         names: &[],
                         over: None,
-                        body: Box::new(body),
+                        body: Box::new(Operation::Sequence(body_ops)),
+                        responses,
                     }
                 }
                 Some(other) => self.translate_expression(other),
@@ -325,15 +340,14 @@ impl<'i> Translator<'i> {
         }
     }
 
-    // Translate a single scope into operations appended to `ops`. Most
-    // scopes contribute exactly one Operation; AttributeBlock contributes
-    // no Operation of its own and inlines its (recursively-translated)
-    // children with its attribute list pushed onto the enclosing-attribute
-    // stack. ResponseBlock reaching here has no parent step and is reported
-    // as an orphan.
+    // Walk a single scope, pushing translated Operations to `ops` and
+    // accumulating peer responses (transparent through AttributeBlock) into
+    // `responses`. AttributeBlock vanishes by inlining its subscopes;
+    // ResponseBlock vanishes by extending `responses`.
     fn append_attributes(
         &mut self,
         ops: &mut Vec<Operation<'i>>,
+        responses: &mut Vec<&'i language::Response<'i>>,
         scope: &'i language::Scope<'i>,
         attrs: &[&'i [language::Attribute<'i>]],
     ) {
@@ -346,12 +360,11 @@ impl<'i> Translator<'i> {
                 let mut nested: Vec<&'i [language::Attribute<'i>]> = attrs.to_vec();
                 nested.push(attributes.as_slice());
                 for sub in subscopes {
-                    self.append_attributes(ops, sub, &nested);
+                    self.append_attributes(ops, responses, sub, &nested);
                 }
             }
-            language::Scope::ResponseBlock { span, .. } => {
-                self.problems
-                    .push(TranslationError::OrphanResponse(*span));
+            language::Scope::ResponseBlock { responses: r, .. } => {
+                responses.extend(r);
             }
             _ => ops.push(self.translate_scope(scope, attrs)),
         }
@@ -363,8 +376,9 @@ impl<'i> Translator<'i> {
         attrs: &[&'i [language::Attribute<'i>]],
     ) -> Operation<'i> {
         let mut ops = Vec::new();
+        let mut responses = Vec::new();
         for scope in scopes {
-            self.append_attributes(&mut ops, scope, attrs);
+            self.append_attributes(&mut ops, &mut responses, scope, attrs);
         }
         Operation::Sequence(ops)
     }
@@ -543,6 +557,7 @@ impl<'i> Translator<'i> {
                 names: &[],
                 over: None,
                 body: Box::new(self.translate_expression(body)),
+                responses: Vec::new(),
             },
             // Standalone Foreach has no body in the AST; the body is supplied
             // by the enclosing CodeBlock's subscopes when one is present (see
@@ -552,6 +567,7 @@ impl<'i> Translator<'i> {
                 names,
                 over: Some(Box::new(self.translate_expression(source))),
                 body: Box::new(Operation::Sequence(Vec::new())),
+                responses: Vec::new(),
             },
             language::Expression::Binding(value, names, _) => Operation::Bind {
                 names,

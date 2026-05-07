@@ -44,6 +44,7 @@ pub struct Subroutine<'i> {
     pub parameters: Option<&'i [language::Identifier<'i>]>,
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
+    pub responses: Vec<&'i language::Response<'i>>,
 }
 
 impl<'i> Subroutine<'i> {
@@ -58,6 +59,7 @@ impl<'i> Subroutine<'i> {
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
+            responses: Vec::new(),
         }
     }
 
@@ -71,6 +73,7 @@ impl<'i> Subroutine<'i> {
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
+            responses: Vec::new(),
         }
     }
 }
@@ -93,17 +96,20 @@ pub enum Operation<'i> {
         numeral: &'i str,
         title: Option<&'i language::Paragraph<'i>>,
         body: Box<Operation<'i>>,
+        responses: Vec<&'i language::Response<'i>>,
     },
     Step {
         ordinal: Ordinal<'i>,
         attributes: Vec<&'i [language::Attribute<'i>]>,
         description: &'i [language::Paragraph<'i>],
         body: Box<Operation<'i>>,
+        responses: Vec<&'i language::Response<'i>>,
     },
     Loop {
         names: &'i [language::Identifier<'i>],
         over: Option<Box<Operation<'i>>>,
         body: Box<Operation<'i>>,
+        responses: Vec<&'i language::Response<'i>>,
     },
     Bind {
         names: &'i [language::Identifier<'i>],

@@ -1042,10 +1042,6 @@ pub fn generate_translation_error<'i>(
             format!("Description out of place in procedure '{}'", name),
             "A procedure's free-text description must appear immediately after the title and before any steps or code blocks.".to_string(),
         ),
-        TranslationError::OrphanResponse(_) => (
-            "Response block without a parent step".to_string(),
-            "A response block ('Yes' | 'No') must follow a step it qualifies; it cannot stand alone.".to_string(),
-        ),
         TranslationError::UnresolvedProcedure(Identifier { value: name, .. }) => (
             format!("Unresolved procedure '{}'", name),
             "A `<name>` invocation must refer to a procedure declared in this document. Built-in functions use the `name(...)` form (without angle brackets).".to_string(),

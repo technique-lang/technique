@@ -4,14 +4,8 @@
 use std::path::Path;
 
 use crate::language;
-use crate::language::Span;
 use crate::parsing;
 use crate::translation::{translate, TranslationError};
-
-#[test]
-fn translation_error_variants_construct() {
-    let _ = TranslationError::OrphanResponse(Span::default());
-}
 
 #[test]
 fn duplicate_procedure_name_is_error() {
@@ -90,33 +84,6 @@ This text comes too late.
         .expect("description in source");
     assert_eq!(at.offset, expected);
     assert!(at.length >= "This text comes too late.".len());
-}
-
-#[test]
-fn orphan_response_is_error() {
-    // ResponseBlock under an AttributeBlock with no enclosing Step.
-    let source = r#"
-% technique v1
-
-check :
-
-@chef
-    'Yes' | 'No'
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let errors = translate(&document).expect_err("translate should fail");
-
-    assert_eq!(errors.len(), 1);
-    let TranslationError::OrphanResponse(at) = &errors[0] else {
-        panic!("expected OrphanResponse, got {:?}", errors[0]);
-    };
-    let expected = source
-        .find("'Yes' | 'No'")
-        .expect("response in source");
-    assert_eq!(at.offset, expected);
-    assert!(at.length >= "'Yes' | 'No'".len());
 }
 
 #[test]

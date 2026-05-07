@@ -222,6 +222,7 @@ I. First section
         numeral,
         title,
         body: section_body,
+        ..
     } = &ops[0]
     else {
         panic!("expected Section, got {:?}", ops[0]);
@@ -796,7 +797,10 @@ run :
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Loop { names, over, body } = &ops[0] else {
+    let Operation::Loop {
+        names, over, body, ..
+    } = &ops[0]
+    else {
         panic!("expected Loop, got {:?}", ops[0]);
     };
     assert_eq!(names.len(), 1);
@@ -1184,4 +1188,132 @@ init : () -> ()
     let Operation::Step { .. } = &ops[1] else {
         panic!("expected Step, got {:?}", ops[1]);
     };
+}
+
+#[test]
+fn response_block_attaches_to_parent_step() {
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Is everything ready?
+        'Yes' | 'No'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { responses, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0].value, "Yes");
+    assert_eq!(responses[1].value, "No");
+}
+
+#[test]
+fn step_without_response_block_has_empty_responses() {
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Plain step.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { responses, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert!(responses.is_empty());
+}
+
+#[test]
+fn response_under_attribute_block_attaches_to_enclosing_step() {
+    // AttributeBlock vanishes; its ResponseBlock subscope attaches to the
+    // enclosing Step's responses just as if it were a peer.
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Outer step.
+
+    @chef
+        'Yes' | 'No'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { responses, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0].value, "Yes");
+    assert_eq!(responses[1].value, "No");
+}
+
+#[test]
+fn response_under_foreach_attaches_to_loop() {
+    // 'Reachable' is a per-iteration response of the foreach Loop, not a
+    // response of the enclosing Step. NetworkProbe.tq pattern.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Probe global DNS responding.
+        { foreach nameserver in globals }
+                'Reachable' | 'Unreachable'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step {
+        responses: step_responses,
+        body,
+        ..
+    } = &ops[0]
+    else {
+        panic!("expected Step");
+    };
+    assert!(
+        step_responses.is_empty(),
+        "responses do not lift onto the enclosing Step"
+    );
+
+    let Operation::Sequence(step_body) = body.as_ref() else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop {
+        responses: loop_responses,
+        ..
+    } = &step_body[0]
+    else {
+        panic!("expected Loop");
+    };
+    assert_eq!(loop_responses.len(), 2);
+    assert_eq!(loop_responses[0].value, "Reachable");
+    assert_eq!(loop_responses[1].value, "Unreachable");
 }
