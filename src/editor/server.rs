@@ -499,7 +499,7 @@ impl TechniqueLanguageServer {
 
                         let name = procedure
                             .name
-                            .0;
+                            .value;
 
                         // Calculate the byte offset of the name using pointer arithmetic
                         let offset = calculate_slice_offset(content, name).unwrap_or(0);
@@ -701,123 +701,123 @@ impl TechniqueLanguageServer {
             };
 
             let (message, severity) = match &error {
-                ParsingError::IllegalParserState(_, _) => (
+                ParsingError::IllegalParserState(_) => (
                     "Internal parser error".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::Unimplemented(_, _) => (
+                ParsingError::Unimplemented(_) => (
                     "Unimplemented feature".to_string(),
                     DiagnosticSeverity::WARNING,
                 ),
-                ParsingError::Unrecognized(_, _) => {
+                ParsingError::Unrecognized(_) => {
                     ("Unrecognized syntax".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::UnexpectedEndOfInput(_, _) => (
+                ParsingError::UnexpectedEndOfInput(_) => (
                     "Unexpected end of input".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::Expected(_, _, expected) => {
+                ParsingError::Expected(_, expected) => {
                     (format!("Expected {}", expected), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::ExpectedMatchingChar(_, _, subject, start, end) => (
+                ParsingError::ExpectedMatchingChar(_, subject, start, end) => (
                     format!("Expected matching '{}' for '{}' in {}", end, start, subject),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::MissingParenthesis(_, _) => (
+                ParsingError::MissingParenthesis(_) => (
                     "Require parenthesis around multiple parameters in binding".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidCharacter(_, _, ch) => (
+                ParsingError::InvalidCharacter(_, ch) => (
                     format!("Invalid character '{}'", ch),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidHeader(_, _) => {
+                ParsingError::InvalidHeader(_) => {
                     ("Invalid header line".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidIdentifier(_, _, id) => (
+                ParsingError::InvalidIdentifier(_, id) => (
                     format!("Invalid identifier '{}'", id),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidForma(_, _) => (
+                ParsingError::InvalidForma(_) => (
                     "Invalid forma in signature".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidGenus(_, _) => (
+                ParsingError::InvalidGenus(_) => (
                     "Invalid genus in signature".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidSignature(_, _) => (
+                ParsingError::InvalidSignature(_) => (
                     "Invalid signature in procedure declaration".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidParameters(_, _) => (
+                ParsingError::InvalidParameters(_) => (
                     "Malformed parameters in procedure declaration".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidDeclaration(_, _) => (
+                ParsingError::InvalidDeclaration(_) => (
                     "Invalid procedure declaration".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidSection(_, _) => (
+                ParsingError::InvalidSection(_) => (
                     "Invalid section heading".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidInvocation(_, _) => (
+                ParsingError::InvalidInvocation(_) => (
                     "Invalid procedure Invocation".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidFunction(_, _) => (
+                ParsingError::InvalidFunction(_) => (
                     "Invalid function call".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidCodeBlock(_, _) => {
+                ParsingError::InvalidCodeBlock(_) => {
                     ("Invalid code block".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidStep(_, _) => {
+                ParsingError::InvalidStep(_) => {
                     ("Invalid step".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidSubstep(_, _) => {
+                ParsingError::InvalidSubstep(_) => {
                     ("Invalid substep".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidAttribute(_, _) => (
+                ParsingError::InvalidAttribute(_) => (
                     "Invalid attribute assignment".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidResponse(_, _) => {
+                ParsingError::InvalidResponse(_) => {
                     ("Invalid response".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidMultiline(_, _) => (
+                ParsingError::InvalidMultiline(_) => (
                     "Invalid multiline content".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidForeach(_, _) => (
+                ParsingError::InvalidForeach(_) => (
                     "Invalid foreach expression".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidIntegral(_, _) => (
+                ParsingError::InvalidIntegral(_) => (
                     "Invalid integral number".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidQuantity(_, _) => {
+                ParsingError::InvalidQuantity(_) => {
                     ("Invalid quantity".to_string(), DiagnosticSeverity::ERROR)
                 }
-                ParsingError::InvalidQuantityDecimal(_, _) => (
+                ParsingError::InvalidQuantityDecimal(_) => (
                     "Invalid quantity decimal".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidQuantityUncertainty(_, _) => (
+                ParsingError::InvalidQuantityUncertainty(_) => (
                     "Invalid quantity uncertainty".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidQuantityMagnitude(_, _) => (
+                ParsingError::InvalidQuantityMagnitude(_) => (
                     "Invalid quantity magnitude".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidQuantitySymbol(_, _) => (
+                ParsingError::InvalidQuantitySymbol(_) => (
                     "Invalid quantity symbol".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::UnclosedInterpolation(_, _) => (
+                ParsingError::UnclosedInterpolation(_) => (
                     "Unclosed interpolation".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
@@ -869,6 +869,7 @@ fn offset_to_position(text: &str, offset: usize) -> Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use technique::language::Span;
 
     #[test]
     fn test_calculate_str_offsets() {
@@ -936,17 +937,17 @@ mod tests {
     fn test_parsing_error_types() {
         // Test that all error types can be converted to messages without panicking
         let test_errors = vec![
-            ParsingError::IllegalParserState(0, 0),
-            ParsingError::Unimplemented(0, 0),
-            ParsingError::Unrecognized(0, 0),
-            ParsingError::UnexpectedEndOfInput(0, 0),
-            ParsingError::Expected(0, 0, "test"),
-            ParsingError::ExpectedMatchingChar(0, 0, "test", '(', ')'),
-            ParsingError::MissingParenthesis(0, 0),
-            ParsingError::InvalidCharacter(0, 0, 'x'),
-            ParsingError::InvalidHeader(0, 0),
-            ParsingError::InvalidIdentifier(0, 0, "test".to_string()),
-            ParsingError::InvalidDeclaration(0, 0),
+            ParsingError::IllegalParserState(Span::new(0, 0)),
+            ParsingError::Unimplemented(Span::new(0, 0)),
+            ParsingError::Unrecognized(Span::new(0, 0)),
+            ParsingError::UnexpectedEndOfInput(Span::new(0, 0)),
+            ParsingError::Expected(Span::new(0, 0), "test"),
+            ParsingError::ExpectedMatchingChar(Span::new(0, 0), "test", '(', ')'),
+            ParsingError::MissingParenthesis(Span::new(0, 0)),
+            ParsingError::InvalidCharacter(Span::new(0, 0), 'x'),
+            ParsingError::InvalidHeader(Span::new(0, 0)),
+            ParsingError::InvalidIdentifier(Span::new(0, 0), "test".to_string()),
+            ParsingError::InvalidDeclaration(Span::new(0, 0)),
         ];
 
         // This shouldn't panic - just test that all enum variants are handled
@@ -956,25 +957,25 @@ mod tests {
 
             // Test message generation (this was formerly in convert_parsing_errors)
             match &error {
-                ParsingError::IllegalParserState(_, _) => {
+                ParsingError::IllegalParserState(_) => {
                     assert_eq!("Internal parser error", "Internal parser error")
                 }
-                ParsingError::Unimplemented(_, _) => {
+                ParsingError::Unimplemented(_) => {
                     assert_eq!("Unimplemented feature", "Unimplemented feature")
                 }
-                ParsingError::Unrecognized(_, _) => {
+                ParsingError::Unrecognized(_) => {
                     assert_eq!("Unrecognized syntax", "Unrecognized syntax")
                 }
-                ParsingError::UnexpectedEndOfInput(_, _) => {
+                ParsingError::UnexpectedEndOfInput(_) => {
                     assert_eq!("Unexpected end of input", "Unexpected end of input")
                 }
-                ParsingError::Expected(_, _, expected) => assert_eq!(*expected, "test"),
-                ParsingError::ExpectedMatchingChar(_, _, subject, start, end) => {
+                ParsingError::Expected(_, expected) => assert_eq!(*expected, "test"),
+                ParsingError::ExpectedMatchingChar(_, subject, start, end) => {
                     assert_eq!(*subject, "test");
                     assert_eq!(*start, '(');
                     assert_eq!(*end, ')');
                 }
-                ParsingError::InvalidDeclaration(_, _) => {
+                ParsingError::InvalidDeclaration(_) => {
                     assert_eq!("Invalid declaration", "Invalid declaration")
                 }
                 _ => {} // Other variants tested implicitly

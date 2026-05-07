@@ -94,7 +94,7 @@ pub fn render_forma<'i>(forma: &'i Forma, renderer: &dyn Render) -> String {
 }
 
 pub fn render_identifier<'i>(identifier: &'i Identifier, renderer: &dyn Render) -> String {
-    renderer.style(Syntax::Declaration, identifier.0)
+    renderer.style(Syntax::Declaration, identifier.value)
 }
 
 pub fn render_response<'i>(response: &'i Response, renderer: &dyn Render) -> String {
@@ -151,7 +151,7 @@ pub fn render_procedure_declaration<'i>(procedure: &'i Procedure, renderer: &dyn
         Syntax::Declaration,
         procedure
             .name
-            .0,
+            .value,
     );
     if let Some(parameters) = &procedure.parameters {
         sub.append_parameters(parameters);
@@ -330,7 +330,7 @@ impl<'i> Formatter<'i> {
 
     fn render_inline_code(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
         match expr {
-            Expression::Tablet(_) | Expression::Multiline(_, _) => {
+            Expression::Tablet(_, _) | Expression::Multiline(_, _, _) => {
                 // These are not inline, caller should handle specially
                 Vec::new()
             }
@@ -478,7 +478,7 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::BlockBegin, "");
 
         let name = &procedure.name;
-        self.add_fragment_reference(Syntax::Declaration, name.0);
+        self.add_fragment_reference(Syntax::Declaration, name.value);
 
         if let Some(parameters) = &procedure.parameters {
             // note that append_arguments() is for general expression
@@ -503,7 +503,7 @@ impl<'i> Formatter<'i> {
         let mut elements = procedure
             .elements
             .iter();
-        if let Some(Element::Title(_)) = procedure
+        if let Some(Element::Title(_, _)) = procedure
             .elements
             .first()
         {
@@ -525,21 +525,21 @@ impl<'i> Formatter<'i> {
 
     fn append_element(&mut self, element: &'i Element) {
         match element {
-            Element::Title(title) => {
+            Element::Title(title, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.add_fragment_reference(Syntax::Header, "# ");
                 self.add_fragment_reference(Syntax::Title, title);
                 self.add_fragment_reference(Syntax::Newline, "\n");
             }
-            Element::Description(paragraphs) => {
+            Element::Description(paragraphs, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_paragraphs(paragraphs);
             }
-            Element::Steps(steps) => {
+            Element::Steps(steps, _) => {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_steps(steps);
             }
-            Element::CodeBlock(expressions) => {
+            Element::CodeBlock(expressions, _) => {
                 self.add_fragment_reference(Syntax::Structure, "{");
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
@@ -615,13 +615,13 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Structure, ",");
                 self.add_fragment_reference(Syntax::Neutral, " ");
             }
-            self.add_fragment_reference(Syntax::Variable, variable.0);
+            self.add_fragment_reference(Syntax::Variable, variable.value);
         }
         self.add_fragment_reference(Syntax::Structure, ")");
     }
 
     pub fn append_forma(&mut self, forma: &'i Forma) {
-        self.add_fragment_reference(Syntax::Forma, forma.0)
+        self.add_fragment_reference(Syntax::Forma, forma.value)
     }
 
     fn append_paragraphs(&mut self, paragraphs: &'i Vec<Paragraph>) {
@@ -657,7 +657,7 @@ impl<'i> Formatter<'i> {
                     line.add_breakable(syntax, text);
                 }
                 Descriptive::CodeInline(expr) => match expr {
-                    Expression::Tablet(_) => {
+                    Expression::Tablet(_, _) => {
                         line.flush();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.append_char('\n');
@@ -669,7 +669,7 @@ impl<'i> Formatter<'i> {
                         line = self.builder();
                         line.add_word(Syntax::Structure, "}");
                     }
-                    Expression::Multiline(_, _) => {
+                    Expression::Multiline(_, _, _) => {
                         line.flush();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.increase(4);
@@ -681,11 +681,11 @@ impl<'i> Formatter<'i> {
                         line.add_word(Syntax::Structure, "}");
                     }
                     _ => match expr {
-                        Expression::Execution(func)
+                        Expression::Execution(func, _)
                             if func
                                 .parameters
                                 .iter()
-                                .any(|p| matches!(p, Expression::Multiline(_, _))) =>
+                                .any(|p| matches!(p, Expression::Multiline(_, _, _))) =>
                         {
                             line.flush();
                             self.add_fragment_reference(Syntax::Neutral, " ");
@@ -747,6 +747,7 @@ impl<'i> Formatter<'i> {
                 ordinal,
                 description: content,
                 subscopes: scopes,
+                ..
             } => {
                 self.indent();
                 self.add_fragment_string(Syntax::StepItem, format!("{}.", ordinal));
@@ -771,6 +772,7 @@ impl<'i> Formatter<'i> {
                 bullet,
                 description,
                 subscopes,
+                ..
             } => {
                 self.indent();
                 self.add_fragment_string(Syntax::StepItem, bullet.to_string());
@@ -824,6 +826,7 @@ impl<'i> Formatter<'i> {
             Scope::AttributeBlock {
                 attributes,
                 subscopes,
+                ..
             } => {
                 if subscopes.len() == 0 {
                     self.indent();
@@ -861,6 +864,7 @@ impl<'i> Formatter<'i> {
             Scope::CodeBlock {
                 expressions,
                 subscopes: substeps,
+                ..
             } => {
                 let has_separator = expressions
                     .iter()
@@ -874,7 +878,7 @@ impl<'i> Formatter<'i> {
                 let inline = if has_separator {
                     true
                 } else if expressions.len() == 1 {
-                    if let Expression::Tablet(_) = &expressions[0] {
+                    if let Expression::Tablet(_, _) = &expressions[0] {
                         false
                     } else {
                         true
@@ -921,7 +925,7 @@ impl<'i> Formatter<'i> {
                 self.append_scopes(substeps);
                 self.decrease(4);
             }
-            Scope::ResponseBlock { responses } => {
+            Scope::ResponseBlock { responses, .. } => {
                 self.increase(4);
                 self.indent();
                 self.append_responses(responses);
@@ -931,6 +935,7 @@ impl<'i> Formatter<'i> {
                 numeral,
                 title,
                 body,
+                ..
             } => {
                 self.add_fragment_reference(Syntax::StepItem, numeral);
                 self.add_fragment_reference(Syntax::Structure, ".");
@@ -974,13 +979,13 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " + ");
             }
             match attribute {
-                Attribute::Role(name) => {
+                Attribute::Role(name, _) => {
                     self.add_fragment_reference(Syntax::Attribute, "@");
-                    self.add_fragment_reference(Syntax::Attribute, name.0);
+                    self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
-                Attribute::Place(name) => {
+                Attribute::Place(name, _) => {
                     self.add_fragment_reference(Syntax::Attribute, "^");
-                    self.add_fragment_reference(Syntax::Attribute, name.0);
+                    self.add_fragment_reference(Syntax::Attribute, name.value);
                 }
             }
         }
@@ -988,10 +993,10 @@ impl<'i> Formatter<'i> {
 
     pub fn append_expression(&mut self, expression: &'i Expression) {
         match expression {
-            Expression::Variable(identifier) => {
-                self.add_fragment_reference(Syntax::Variable, identifier.0);
+            Expression::Variable(identifier, _) => {
+                self.add_fragment_reference(Syntax::Variable, identifier.value);
             }
-            Expression::String(pieces) => {
+            Expression::String(pieces, _) => {
                 self.add_fragment_reference(Syntax::Quote, "\"");
                 for piece in pieces {
                     match piece {
@@ -1009,8 +1014,8 @@ impl<'i> Formatter<'i> {
                 }
                 self.add_fragment_reference(Syntax::Quote, "\"");
             }
-            Expression::Number(numeric) => self.append_numeric(numeric),
-            Expression::Multiline(lang, lines) => {
+            Expression::Number(numeric, _) => self.append_numeric(numeric),
+            Expression::Multiline(lang, lines, _) => {
                 self.append_char('\n');
 
                 self.indent();
@@ -1041,12 +1046,12 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Quote, "```");
                 self.append_char('\n');
             }
-            Expression::Repeat(expression) => {
+            Expression::Repeat(expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "repeat");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
-            Expression::Foreach(variables, expression) => {
+            Expression::Foreach(variables, expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "foreach");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_variables(variables);
@@ -1055,16 +1060,16 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
-            Expression::Application(invocation) => self.append_application(invocation),
-            Expression::Execution(function) => self.append_function(function),
-            Expression::Binding(expression, variables) => {
+            Expression::Application(invocation, _) => self.append_application(invocation),
+            Expression::Execution(function, _) => self.append_function(function),
+            Expression::Binding(expression, variables, _) => {
                 self.append_expression(expression);
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.add_fragment_reference(Syntax::Structure, "~");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_variables(variables);
             }
-            Expression::Tablet(pairs) => self.append_tablet(pairs),
+            Expression::Tablet(pairs, _) => self.append_tablet(pairs),
             Expression::Separator => {}
         }
     }
@@ -1083,7 +1088,7 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Structure, ",");
                 self.add_fragment_reference(Syntax::Neutral, " ");
             }
-            self.add_fragment_reference(Syntax::Variable, variable.0);
+            self.add_fragment_reference(Syntax::Variable, variable.value);
         }
         if variables.len() > 1 {
             self.add_fragment_reference(Syntax::Structure, ")");
@@ -1127,9 +1132,11 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Quote, "<");
         match &invocation.target {
             Target::Local(identifier) => {
-                self.add_fragment_reference(Syntax::Invocation, identifier.0)
+                self.add_fragment_reference(Syntax::Invocation, identifier.value)
             }
-            Target::Remote(external) => self.add_fragment_reference(Syntax::Invocation, external.0),
+            Target::Remote(external) => {
+                self.add_fragment_reference(Syntax::Invocation, external.value)
+            }
         }
         self.add_fragment_reference(Syntax::Quote, ">");
         if let Some(parameters) = &invocation.parameters {
@@ -1162,13 +1169,13 @@ impl<'i> Formatter<'i> {
             Syntax::Function,
             function
                 .target
-                .0,
+                .value,
         );
         self.add_fragment_reference(Syntax::Structure, "(");
 
         let mut has_multiline = false;
         for parameter in &function.parameters {
-            if let Expression::Multiline(_, _) = parameter {
+            if let Expression::Multiline(_, _, _) = parameter {
                 has_multiline = true;
                 break;
             }
@@ -1408,7 +1415,8 @@ mod check {
     fn genus() {
         let mut output = Formatter::new(78);
 
-        output.append_forma(&Forma("Jedi"));
+        let forma = Forma::new("Jedi");
+        output.append_forma(&forma);
         assert_eq!(output.to_string(), "Jedi");
 
         output.reset();
@@ -1416,19 +1424,21 @@ mod check {
         assert_eq!(output.to_string(), "()");
 
         output.reset();
-        output.append_genus(&Genus::Single(Forma("Stormtrooper")));
+        let single = Genus::Single(Forma::new("Stormtrooper"));
+        output.append_genus(&single);
         assert_eq!(output.to_string(), "Stormtrooper");
 
         output.reset();
-        output.append_genus(&Genus::List(Forma("Pilot")));
+        let list = Genus::List(Forma::new("Pilot"));
+        output.append_genus(&list);
         assert_eq!(output.to_string(), "[Pilot]");
 
         output.reset();
         let genus = Genus::Tuple(vec![
-            Forma("Kid"),
-            Forma("Pilot"),
-            Forma("Scoundrel"),
-            Forma("Princess"),
+            Forma::new("Kid"),
+            Forma::new("Pilot"),
+            Forma::new("Scoundrel"),
+            Forma::new("Princess"),
         ]);
         output.append_genus(&genus);
         assert_eq!(output.to_string(), "(Kid, Pilot, Scoundrel, Princess)");
@@ -1440,23 +1450,25 @@ mod check {
     fn signatures() {
         let mut output = Formatter::new(78);
 
-        output.append_signature(&Signature {
-            requires: Genus::Single(Forma("Alderaan")),
-            provides: Genus::Single(Forma("AsteroidField")),
-        });
+        let sig = Signature {
+            requires: Genus::Single(Forma::new("Alderaan")),
+            provides: Genus::Single(Forma::new("AsteroidField")),
+        };
+        output.append_signature(&sig);
         assert_eq!(output.to_string(), "Alderaan -> AsteroidField");
 
         output.reset();
-        output.append_signature(&Signature {
-            requires: Genus::List(Forma("Clone")),
-            provides: Genus::Single(Forma("Army")),
-        });
+        let sig = Signature {
+            requires: Genus::List(Forma::new("Clone")),
+            provides: Genus::Single(Forma::new("Army")),
+        };
+        output.append_signature(&sig);
         assert_eq!(output.to_string(), "[Clone] -> Army");
 
         output.reset();
         let signature = Signature {
-            requires: Genus::Single(Forma("TaxationOfTradeRoutes")),
-            provides: Genus::Tuple(vec![Forma("Rebels"), Forma("Empire")]),
+            requires: Genus::Single(Forma::new("TaxationOfTradeRoutes")),
+            provides: Genus::Tuple(vec![Forma::new("Rebels"), Forma::new("Empire")]),
         };
         output.append_signature(&signature);
         assert_eq!(

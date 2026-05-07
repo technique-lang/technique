@@ -1,5 +1,6 @@
 /.vscode
 /target
+/plans
 
 # rendering artifacts
 *.pdf

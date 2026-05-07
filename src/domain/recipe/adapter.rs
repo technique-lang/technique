@@ -254,8 +254,8 @@ fn strip_ordinals(steps: &mut Vec<Step>) {
 /// Format an expression value as a human-readable quantity string.
 fn format_value(expr: &language::Expression) -> String {
     match expr {
-        language::Expression::Number(language::Numeric::Scientific(q)) => q.to_string(),
-        language::Expression::Number(language::Numeric::Integral(n)) => n.to_string(),
+        language::Expression::Number(language::Numeric::Scientific(q), _) => q.to_string(),
+        language::Expression::Number(language::Numeric::Integral(n), _) => n.to_string(),
         _ => String::new(),
     }
 }
@@ -304,20 +304,20 @@ fn builtin_from_descriptive(d: &language::Descriptive) -> Option<String> {
 
 fn builtin_from_expression(expr: &language::Expression) -> Option<String> {
     match expr {
-        language::Expression::Application(inv) => builtin_from_invocation(inv),
-        language::Expression::Execution(func) => builtin_suffix(
+        language::Expression::Application(inv, _) => builtin_from_invocation(inv),
+        language::Expression::Execution(func, _) => builtin_suffix(
             func.target
-                .0,
+                .value,
             &func.parameters,
         ),
-        language::Expression::Binding(inner, _) => builtin_from_expression(inner),
+        language::Expression::Binding(inner, _, _) => builtin_from_expression(inner),
         _ => None,
     }
 }
 
 fn builtin_from_invocation(inv: &language::Invocation) -> Option<String> {
     let name = match &inv.target {
-        language::Target::Local(id) => id.0,
+        language::Target::Local(id) => id.value,
         _ => return None,
     };
     match &inv.parameters {

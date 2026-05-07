@@ -140,11 +140,11 @@ fn identifier_rules() {
     let mut input = Parser::new();
     input.initialize("p");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("p")));
+    assert_eq!(result, Ok(Identifier::new("p")));
 
     input.initialize("cook_pizza");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("cook_pizza")));
+    assert_eq!(result, Ok(Identifier::new("cook_pizza")));
 
     input.initialize("cook-pizza");
     let result = input.read_identifier();
@@ -159,8 +159,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("A")),
-            provides: Genus::Single(Forma("B"))
+            requires: Genus::Single(Forma::new("A")),
+            provides: Genus::Single(Forma::new("B"))
         })
     );
 
@@ -169,8 +169,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("Beans")),
-            provides: Genus::Single(Forma("Coffee"))
+            requires: Genus::Single(Forma::new("Beans")),
+            provides: Genus::Single(Forma::new("Coffee"))
         })
     );
 
@@ -179,8 +179,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::List(Forma("Bits")),
-            provides: Genus::Single(Forma("Bob"))
+            requires: Genus::List(Forma::new("Bits")),
+            provides: Genus::Single(Forma::new("Bob"))
         })
     );
 
@@ -189,8 +189,8 @@ fn signatures() {
     assert_eq!(
         result,
         Ok(Signature {
-            requires: Genus::Single(Forma("Complex")),
-            provides: Genus::Tuple(vec![Forma("Real"), Forma("Imaginary")])
+            requires: Genus::Single(Forma::new("Complex")),
+            provides: Genus::Tuple(vec![Forma::new("Real"), Forma::new("Imaginary")])
         })
     );
 }
@@ -203,7 +203,7 @@ fn declaration_simple() {
     assert!(is_procedure_declaration(input.source));
 
     let result = input.parse_procedure_declaration();
-    assert_eq!(result, Ok((Identifier("making_coffee"), None, None)));
+    assert_eq!(result, Ok((Identifier::new("making_coffee"), None, None)));
 }
 
 #[test]
@@ -216,11 +216,11 @@ fn declaration_full() {
     assert_eq!(
         result,
         Ok((
-            Identifier("f"),
+            Identifier::new("f"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma("A")),
-                provides: Genus::Single(Forma("B"))
+                requires: Genus::Single(Forma::new("A")),
+                provides: Genus::Single(Forma::new("B"))
             })
         ))
     );
@@ -232,11 +232,11 @@ fn declaration_full() {
     assert_eq!(
         result,
         Ok((
-            Identifier("making_coffee"),
+            Identifier::new("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                provides: Genus::List(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                provides: Genus::List(Forma::new("Coffee"))
             })
         ))
     );
@@ -289,11 +289,11 @@ making_coffee :
     assert_eq!(
         result,
         Ok((
-            Identifier("making_coffee"),
+            Identifier::new("making_coffee"),
             None,
             Some(Signature {
-                requires: Genus::Single(Forma("Ingredients")),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Single(Forma::new("Ingredients")),
+                provides: Genus::Single(Forma::new("Coffee"))
             })
         ))
     );
@@ -312,11 +312,11 @@ making_coffee(b, m) :
     assert_eq!(
         result,
         Ok((
-            Identifier("making_coffee"),
-            Some(vec![Identifier("b"), Identifier("m")]),
+            Identifier::new("making_coffee"),
+            Some(vec![Identifier::new("b"), Identifier::new("m")]),
             Some(Signature {
-                requires: Genus::Tuple(vec![Forma("Beans"), Forma("Milk")]),
-                provides: Genus::Single(Forma("Coffee"))
+                requires: Genus::Tuple(vec![Forma::new("Beans"), Forma::new("Milk")]),
+                provides: Genus::Single(Forma::new("Coffee"))
             })
         ))
     );
@@ -415,19 +415,19 @@ fn taking_until() {
     // Test take_until() with an identifier up to a limiting character
     input.initialize("hello,world");
     let result = input.take_until(&[','], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier("hello")));
+    assert_eq!(result, Ok(Identifier::new("hello")));
     assert_eq!(input.source, ",world");
 
     // Test take_until() with whitespace delimiters
     input.initialize("test \t\nmore");
     let result = input.take_until(&[' ', '\t', '\n'], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier("test")));
+    assert_eq!(result, Ok(Identifier::new("test")));
     assert_eq!(input.source, " \t\nmore");
 
     // Test take_until() when no delimiter found (it should take everything)
     input.initialize("onlytext");
     let result = input.take_until(&[',', ';'], |inner| inner.read_identifier());
-    assert_eq!(result, Ok(Identifier("onlytext")));
+    assert_eq!(result, Ok(Identifier::new("onlytext")));
     assert_eq!(input.source, "");
 }
 
@@ -441,7 +441,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier("hello")),
+            target: Target::Local(Identifier::new("hello")),
             parameters: None
         })
     );
@@ -452,7 +452,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier("hello_world")),
+            target: Target::Local(Identifier::new("hello_world")),
             parameters: Some(vec![])
         })
     );
@@ -463,11 +463,11 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Local(Identifier("greetings")),
+            target: Target::Local(Identifier::new("greetings")),
             parameters: Some(vec![
-                Expression::Variable(Identifier("name")),
-                Expression::Variable(Identifier("title")),
-                Expression::Variable(Identifier("occupation"))
+                Expression::Variable(Identifier::new("name"), Span::default()),
+                Expression::Variable(Identifier::new("title"), Span::default()),
+                Expression::Variable(Identifier::new("occupation"), Span::default())
             ])
         })
     );
@@ -480,7 +480,7 @@ fn reading_invocations() {
     assert_eq!(
         result,
         Ok(Invocation {
-            target: Target::Remote(External("https://example.com/proc")),
+            target: Target::Remote(External::new("https://example.com/proc")),
             parameters: None
         })
     );
@@ -557,8 +557,9 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("First step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("First step")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -574,10 +575,11 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "a top-level task to be one in parallel with"
             )]),],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
     let result = input.read_step_parallel();
@@ -585,8 +587,11 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text("another top-level task")]),],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "another top-level task"
+            )]),],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -601,17 +606,18 @@ fn read_toplevel_steps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Have you done the first thing in the first one?"
             )])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
     // Test invalid step
     input.initialize("Not a step");
     let result = input.read_step_dependent();
-    assert_eq!(result, Err(ParsingError::InvalidStep(0, 0)));
+    assert_eq!(result, Err(ParsingError::InvalidStep(Span::new(0, 0))));
 }
 
 #[test]
@@ -625,8 +631,11 @@ fn reading_substeps_basic() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "a",
-            description: vec![Paragraph(vec![Descriptive::Text("First subordinate task")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "First subordinate task"
+            )])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 
@@ -637,8 +646,9 @@ fn reading_substeps_basic() {
         result,
         Ok(Scope::ParallelBlock {
             bullet: '-',
-            description: vec![Paragraph(vec![Descriptive::Text("Parallel task")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Parallel task")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 }
@@ -660,19 +670,22 @@ fn single_step_with_dependent_substeps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
             subscopes: vec![
                 Scope::DependentBlock {
                     ordinal: "a",
-                    description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::DependentBlock {
                     ordinal: "b",
-                    description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ],
+            span: Span::default(),
         })
     );
 }
@@ -694,19 +707,22 @@ fn single_step_with_parallel_substeps() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Main step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Main step")])],
             subscopes: vec![
                 Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("First substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("First substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
                 Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("Second substep")])],
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Second substep")])],
                     subscopes: vec![],
+                    span: Span::default(),
                 },
             ],
+            span: Span::default(),
         })
     );
 }
@@ -729,12 +745,14 @@ fn multiple_steps_with_substeps() {
         first_result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("First step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("First step")])],
             subscopes: vec![Scope::DependentBlock {
                 ordinal: "a",
-                description: vec![Paragraph(vec![Descriptive::Text("Substep")])],
+                description: vec![Paragraph::new(vec![Descriptive::Text("Substep")])],
                 subscopes: vec![],
+                span: Span::default(),
             }],
+            span: Span::default(),
         })
     );
 
@@ -742,8 +760,9 @@ fn multiple_steps_with_substeps() {
         second_result,
         Ok(Scope::DependentBlock {
             ordinal: "2",
-            description: vec![Paragraph(vec![Descriptive::Text("Second step")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Second step")])],
             subscopes: vec![],
+            span: Span::default(),
         })
     );
 }
@@ -792,27 +811,32 @@ fn read_step_with_content() {
         result,
         Ok(Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Have you done the first thing in the first one?"
             )])],
             subscopes: vec![Scope::DependentBlock {
                 ordinal: "a",
-                description: vec![Paragraph(vec![Descriptive::Text(
+                description: vec![Paragraph::new(vec![Descriptive::Text(
                     "Do the first thing. Then ask yourself if you are done:"
                 )])],
                 subscopes: vec![Scope::ResponseBlock {
                     responses: vec![
                         Response {
                             value: "Yes",
-                            condition: None
+                            condition: None,
+                            span: Span::default()
                         },
                         Response {
                             value: "No",
-                            condition: Some("but I have an excuse")
+                            condition: Some("but I have an excuse"),
+                            span: Span::default()
                         }
-                    ]
-                }]
+                    ],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
             }],
+            span: Span::default(),
         })
     );
 
@@ -850,7 +874,7 @@ This is the first one.
                 .elements
                 .iter()
                 .find_map(|element| match element {
-                    Element::Steps(steps) => Some(steps),
+                    Element::Steps(steps, _) => Some(steps),
                     _ => None,
                 });
             assert_eq!(
@@ -1090,17 +1114,29 @@ fn code_blocks() {
     // Test simple identifier in code block
     input.initialize("{ count }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Variable(Identifier("count"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Variable(
+            Identifier::new("count"),
+            Span::default()
+        )])
+    );
 
     // Test function with simple parameter
     input.initialize("{ sum(count) }");
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("sum"),
-            parameters: vec![Expression::Variable(Identifier("count"))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("sum"),
+                parameters: vec![Expression::Variable(
+                    Identifier::new("count"),
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiple parameters
@@ -1108,14 +1144,17 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("consume"),
-            parameters: vec![
-                Expression::Variable(Identifier("apple")),
-                Expression::Variable(Identifier("banana")),
-                Expression::Variable(Identifier("chocolate"))
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("consume"),
+                parameters: vec![
+                    Expression::Variable(Identifier::new("apple"), Span::default()),
+                    Expression::Variable(Identifier::new("banana"), Span::default()),
+                    Expression::Variable(Identifier::new("chocolate"), Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with text parameter
@@ -1123,10 +1162,16 @@ fn code_blocks() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::String(vec![Piece::Text("Hello, World")])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::String(
+                    vec![Piece::Text("Hello, World")],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiline string parameter
@@ -1138,13 +1183,17 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("bash"),
-                vec!["ls -l", "echo \"Done\""]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec!["ls -l", "echo \"Done\""],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with quantity parameter (like timer with duration)
@@ -1152,18 +1201,24 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("timer"),
-            parameters: vec![Expression::Number(Numeric::Scientific(Quantity {
-                mantissa: Decimal {
-                    number: 3,
-                    precision: 0
-                },
-                uncertainty: None,
-                magnitude: None,
-                symbol: "hr"
-            }))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("timer"),
+                parameters: vec![Expression::Number(
+                    Numeric::Scientific(Quantity {
+                        mantissa: Decimal {
+                            number: 3,
+                            precision: 0
+                        },
+                        uncertainty: None,
+                        magnitude: None,
+                        symbol: "hr"
+                    }),
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with integer quantity parameter
@@ -1171,10 +1226,13 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("measure"),
-            parameters: vec![Expression::Number(Numeric::Integral(100))]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("measure"),
+                parameters: vec![Expression::Number(Numeric::Integral(100), Span::default())]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with multiple integer parameters
@@ -1182,13 +1240,16 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("seq"),
-            parameters: vec![
-                Expression::Number(Numeric::Integral(1)),
-                Expression::Number(Numeric::Integral(6))
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("seq"),
+                parameters: vec![
+                    Expression::Number(Numeric::Integral(1), Span::default()),
+                    Expression::Number(Numeric::Integral(6), Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 
     // Test function with decimal quantity parameter
@@ -1196,21 +1257,27 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("wait"),
-            parameters: vec![
-                Expression::Number(Numeric::Scientific(Quantity {
-                    mantissa: Decimal {
-                        number: 25,
-                        precision: 1
-                    },
-                    uncertainty: None,
-                    magnitude: None,
-                    symbol: "s"
-                })),
-                Expression::String(vec![Piece::Text("yes")])
-            ]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("wait"),
+                parameters: vec![
+                    Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 25,
+                                precision: 1
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "s"
+                        }),
+                        Span::default()
+                    ),
+                    Expression::String(vec![Piece::Text("yes")], Span::default())
+                ]
+            },
+            Span::default()
+        )])
     );
 }
 
@@ -1231,20 +1298,24 @@ fn multiline() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("bash"),
-                vec![
-                    "./stuff",
-                    "",
-                    "if [ true ]",
-                    "then",
-                    "    ./other args",
-                    "fi"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec![
+                        "./stuff",
+                        "",
+                        "if [ true ]",
+                        "then",
+                        "    ./other args",
+                        "fi"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test multiline without language tag
@@ -1256,10 +1327,17 @@ echo "Done"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(None, vec!["ls -l", "echo \"Done\""])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    None,
+                    vec!["ls -l", "echo \"Done\""],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test multiline with intentional empty lines in the middle
@@ -1275,20 +1353,24 @@ echo "Ending"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("shell"),
-                vec![
-                    "echo \"Starting\"",
-                    "",
-                    "echo \"Middle section\"",
-                    "",
-                    "",
-                    "echo \"Ending\""
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("shell"),
+                    vec![
+                        "echo \"Starting\"",
+                        "",
+                        "echo \"Middle section\"",
+                        "",
+                        "",
+                        "echo \"Ending\""
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test that internal indentation relative to the base is preserved,
@@ -1306,20 +1388,24 @@ echo "Ending"```) }"#,
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("python"),
-                vec![
-                    "def hello():",
-                    "    print(\"Hello\")",
-                    "    if True:",
-                    "        print(\"World\")",
-                    "",
-                    "hello()"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("python"),
+                    vec![
+                        "def hello():",
+                        "    print(\"Hello\")",
+                        "    if True:",
+                        "        print(\"World\")",
+                        "",
+                        "hello()"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test that a trailing empty line from the closing delimiter is removed
@@ -1331,10 +1417,17 @@ echo test
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(None, vec!["echo test"])]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    None,
+                    vec!["echo test"],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 
     // Test various indentation edge cases
@@ -1350,20 +1443,24 @@ echo test
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Execution(Function {
-            target: Identifier("exec"),
-            parameters: vec![Expression::Multiline(
-                Some("yaml"),
-                vec![
-                    "name: test",
-                    "items:",
-                    "  - item1",
-                    "  - item2",
-                    "config:",
-                    "  enabled: true"
-                ]
-            )]
-        })])
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("yaml"),
+                    vec![
+                        "name: test",
+                        "items:",
+                        "  - item1",
+                        "  - item2",
+                        "config:",
+                        "  enabled: true"
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
     );
 }
 
@@ -1376,10 +1473,13 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![Pair {
-            label: "name",
-            value: Expression::String(vec![Piece::Text("Johannes Grammerly")])
-        }])])
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: "name",
+                value: Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
+            }],
+            Span::default()
+        )])
     );
 
     // Test multiline tablet with string values
@@ -1392,16 +1492,22 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "name",
-                value: Expression::String(vec![Piece::Text("Alice of Chains")])
-            },
-            Pair {
-                label: "age",
-                value: Expression::String(vec![Piece::Text("29")])
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "name",
+                    value: Expression::String(
+                        vec![Piece::Text("Alice of Chains")],
+                        Span::default()
+                    )
+                },
+                Pair {
+                    label: "age",
+                    value: Expression::String(vec![Piece::Text("29")], Span::default())
+                }
+            ],
+            Span::default()
+        )])
     );
 
     // Test tablet with mixed value types
@@ -1415,29 +1521,38 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "answer",
-                value: Expression::Number(Numeric::Integral(42))
-            },
-            Pair {
-                label: "message",
-                value: Expression::Variable(Identifier("msg"))
-            },
-            Pair {
-                label: "timestamp",
-                value: Expression::Execution(Function {
-                    target: Identifier("now"),
-                    parameters: vec![]
-                })
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42), Span::default())
+                },
+                Pair {
+                    label: "message",
+                    value: Expression::Variable(Identifier::new("msg"), Span::default())
+                },
+                Pair {
+                    label: "timestamp",
+                    value: Expression::Execution(
+                        Function {
+                            target: Identifier::new("now"),
+                            parameters: vec![]
+                        },
+                        Span::default()
+                    )
+                }
+            ],
+            Span::default()
+        )])
     );
 
     // Test empty tablet
     input.initialize("{ [ ] }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Tablet(vec![])]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Tablet(vec![], Span::default())])
+    );
 
     // Test tablet with interpolated string values
     input.initialize(
@@ -1449,16 +1564,22 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Tablet(vec![
-            Pair {
-                label: "context",
-                value: Expression::String(vec![Piece::Text("Details about the thing")])
-            },
-            Pair {
-                label: "status",
-                value: Expression::Variable(Identifier("active"))
-            }
-        ])])
+        Ok(vec![Expression::Tablet(
+            vec![
+                Pair {
+                    label: "context",
+                    value: Expression::String(
+                        vec![Piece::Text("Details about the thing")],
+                        Span::default()
+                    )
+                },
+                Pair {
+                    label: "status",
+                    value: Expression::Variable(Identifier::new("active"), Span::default())
+                }
+            ],
+            Span::default()
+        )])
     );
 }
 
@@ -1469,20 +1590,35 @@ fn numeric_literals() {
     // Test simple integer
     input.initialize("{ 42 }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Number(Numeric::Integral(42))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Number(
+            Numeric::Integral(42),
+            Span::default()
+        )])
+    );
 
     // Test negative integer
     input.initialize("{ -123 }");
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Number(Numeric::Integral(-123))])
+        Ok(vec![Expression::Number(
+            Numeric::Integral(-123),
+            Span::default()
+        )])
     );
 
     // Test zero
     input.initialize("{ 0 }");
     let result = input.read_code_block();
-    assert_eq!(result, Ok(vec![Expression::Number(Numeric::Integral(0))]));
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Number(
+            Numeric::Integral(0),
+            Span::default()
+        )])
+    );
 }
 
 #[test]
@@ -1492,25 +1628,25 @@ fn reading_identifiers() {
     // Parse a basic identifier
     input.initialize("hello");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("hello")));
+    assert_eq!(result, Ok(Identifier::new("hello")));
     assert_eq!(input.source, "");
 
     // Parse an identifier with trailing content
     input.initialize("count more");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("count")));
+    assert_eq!(result, Ok(Identifier::new("count")));
     assert_eq!(input.source, " more");
 
     // Parse an identifier with leading whitespace and trailing content
     input.initialize("  \t  test_name  after");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("test_name")));
+    assert_eq!(result, Ok(Identifier::new("test_name")));
     assert_eq!(input.source, "  after");
 
     // Parse an identifier with various delimiters
     input.initialize("name(param)");
     let result = input.read_identifier();
-    assert_eq!(result, Ok(Identifier("name")));
+    assert_eq!(result, Ok(Identifier::new("name")));
     assert_eq!(input.source, "(param)");
 }
 
@@ -1523,8 +1659,12 @@ fn test_foreach_expression() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier("item")],
-            Box::new(Expression::Variable(Identifier("items")))
+            vec![Identifier::new("item")],
+            Box::new(Expression::Variable(
+                Identifier::new("items"),
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 }
@@ -1538,14 +1678,18 @@ fn foreach_tuple_pattern() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier("design"), Identifier("component")],
-            Box::new(Expression::Execution(Function {
-                target: Identifier("zip"),
-                parameters: vec![
-                    Expression::Variable(Identifier("designs")),
-                    Expression::Variable(Identifier("components"))
-                ]
-            }))
+            vec![Identifier::new("design"), Identifier::new("component")],
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::new("zip"),
+                    parameters: vec![
+                        Expression::Variable(Identifier::new("designs"), Span::default()),
+                        Expression::Variable(Identifier::new("components"), Span::default())
+                    ]
+                },
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 
@@ -1555,15 +1699,23 @@ fn foreach_tuple_pattern() {
     assert_eq!(
         result,
         Ok(vec![Expression::Foreach(
-            vec![Identifier("a"), Identifier("b"), Identifier("c")],
-            Box::new(Expression::Execution(Function {
-                target: Identifier("zip"),
-                parameters: vec![
-                    Expression::Variable(Identifier("list1")),
-                    Expression::Variable(Identifier("list2")),
-                    Expression::Variable(Identifier("list3"))
-                ]
-            }))
+            vec![
+                Identifier::new("a"),
+                Identifier::new("b"),
+                Identifier::new("c")
+            ],
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::new("zip"),
+                    parameters: vec![
+                        Expression::Variable(Identifier::new("list1"), Span::default()),
+                        Expression::Variable(Identifier::new("list2"), Span::default()),
+                        Expression::Variable(Identifier::new("list3"), Span::default())
+                    ]
+                },
+                Span::default()
+            )),
+            Span::default()
         )])
     );
 }
@@ -1577,11 +1729,15 @@ fn tuple_binding_expression() {
     assert_eq!(
         result,
         Ok(vec![Expression::Binding(
-            Box::new(Expression::Application(Invocation {
-                target: Target::Local(Identifier("get_coordinates")),
-                parameters: Some(vec![])
-            })),
-            vec![Identifier("x"), Identifier("y")]
+            Box::new(Expression::Application(
+                Invocation {
+                    target: Target::Local(Identifier::new("get_coordinates")),
+                    parameters: Some(vec![])
+                },
+                Span::default()
+            )),
+            vec![Identifier::new("x"), Identifier::new("y")],
+            Span::default()
         )])
     );
 }
@@ -1594,9 +1750,13 @@ fn test_repeat_expression() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::Repeat(Box::new(Expression::Variable(
-            Identifier("count")
-        )))])
+        Ok(vec![Expression::Repeat(
+            Box::new(Expression::Variable(
+                Identifier::new("count"),
+                Span::default()
+            )),
+            Span::default()
+        )])
     );
 }
 
@@ -1607,7 +1767,10 @@ fn test_foreach_keyword_boundary() {
     input.initialize("{ foreachitem in items }");
 
     let result = input.read_code_block();
-    assert_eq!(result, Err(ParsingError::InvalidCodeBlock(2, 12)));
+    assert_eq!(
+        result,
+        Err(ParsingError::InvalidCodeBlock(Span::new(2, 12)))
+    );
 }
 
 #[test]
@@ -1620,7 +1783,10 @@ fn test_repeat_keyword_boundary() {
     // Should parse as identifier, not repeat
     assert_eq!(
         result,
-        Ok(vec![Expression::Variable(Identifier("repeater"))])
+        Ok(vec![Expression::Variable(
+            Identifier::new("repeater"),
+            Span::default()
+        )])
     );
 }
 
@@ -1645,9 +1811,9 @@ fn splitting_by() {
     assert_eq!(
         result,
         Ok(vec![
-            Identifier("apple"),
-            Identifier("banana"),
-            Identifier("cherry")
+            Identifier::new("apple"),
+            Identifier::new("banana"),
+            Identifier::new("cherry")
         ])
     );
     assert_eq!(input.source, "");
@@ -1658,16 +1824,16 @@ fn splitting_by() {
     assert_eq!(
         result,
         Ok(vec![
-            Identifier("un"),
-            Identifier("deux"),
-            Identifier("trois")
+            Identifier::new("un"),
+            Identifier::new("deux"),
+            Identifier::new("trois")
         ])
     );
 
     // Ensure a single item (no delimiter present in input) works
     input.initialize("seulement");
     let result = input.take_split_by(',', |inner| inner.read_identifier());
-    assert_eq!(result, Ok(vec![Identifier("seulement")]));
+    assert_eq!(result, Ok(vec![Identifier::new("seulement")]));
 
     // an empty chunk causes an error
     input.initialize("un,,trois");
@@ -1682,22 +1848,26 @@ fn splitting_by() {
     // different split character
     input.initialize("'Yes'|'No'|'Maybe'");
     let result = input.take_split_by('|', |inner| {
-        validate_response(inner.source).ok_or(ParsingError::IllegalParserState(inner.offset, 0))
+        validate_response(inner.source)
+            .ok_or(ParsingError::IllegalParserState(Span::new(inner.offset, 0)))
     });
     assert_eq!(
         result,
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Maybe",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1714,7 +1884,8 @@ fn reading_responses() {
         result,
         Ok(vec![Response {
             value: "Yes",
-            condition: None
+            condition: None,
+            span: Span::default()
         }])
     );
 
@@ -1726,11 +1897,13 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1743,15 +1916,18 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Not Applicable",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1763,7 +1939,8 @@ fn reading_responses() {
         result,
         Ok(vec![Response {
             value: "Yes",
-            condition: Some("and equipment available")
+            condition: Some("and equipment available"),
+            span: Span::default()
         }])
     );
 
@@ -1775,11 +1952,13 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Option A",
-                condition: None
+                condition: None,
+                span: Span::default()
             },
             Response {
                 value: "Option B",
-                condition: None
+                condition: None,
+                span: Span::default()
             }
         ])
     );
@@ -1792,12 +1971,24 @@ fn reading_attributes() {
     // Test simple role
     input.initialize("@chef");
     let result = input.read_attributes();
-    assert_eq!(result, Ok(vec![Attribute::Role(Identifier("chef"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Attribute::Role(
+            Identifier::new("chef"),
+            Span::default()
+        )])
+    );
 
     // Test simple place
     input.initialize("^kitchen");
     let result = input.read_attributes();
-    assert_eq!(result, Ok(vec![Attribute::Place(Identifier("kitchen"))]));
+    assert_eq!(
+        result,
+        Ok(vec![Attribute::Place(
+            Identifier::new("kitchen"),
+            Span::default()
+        )])
+    );
 
     // Test multiple roles
     input.initialize("@master_chef + @barista");
@@ -1805,8 +1996,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier("master_chef")),
-            Attribute::Role(Identifier("barista"))
+            Attribute::Role(Identifier::new("master_chef"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default())
         ])
     );
 
@@ -1816,8 +2007,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier("kitchen")),
-            Attribute::Place(Identifier("bath_room"))
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Place(Identifier::new("bath_room"), Span::default())
         ])
     );
 
@@ -1827,8 +2018,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier("chef")),
-            Attribute::Place(Identifier("bathroom"))
+            Attribute::Role(Identifier::new("chef"), Span::default()),
+            Attribute::Place(Identifier::new("bathroom"), Span::default())
         ])
     );
 
@@ -1838,8 +2029,8 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Place(Identifier("kitchen")),
-            Attribute::Role(Identifier("barista"))
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default())
         ])
     );
 
@@ -1849,10 +2040,10 @@ fn reading_attributes() {
     assert_eq!(
         result,
         Ok(vec![
-            Attribute::Role(Identifier("chef")),
-            Attribute::Place(Identifier("kitchen")),
-            Attribute::Role(Identifier("barista")),
-            Attribute::Place(Identifier("dining_room"))
+            Attribute::Role(Identifier::new("chef"), Span::default()),
+            Attribute::Place(Identifier::new("kitchen"), Span::default()),
+            Attribute::Role(Identifier::new("barista"), Span::default()),
+            Attribute::Place(Identifier::new("dining_room"), Span::default())
         ])
     );
 
@@ -1865,6 +2056,46 @@ fn reading_attributes() {
     input.initialize("kitchen");
     let result = input.read_attributes();
     assert!(result.is_err());
+}
+
+#[test]
+fn attribute_spans_include_marker() {
+    let mut input = Parser::new();
+
+    input.initialize("@chef");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    assert_eq!(
+        result[0],
+        Attribute::Role(Identifier::new("chef"), Span::default())
+    );
+    if let Attribute::Role(id, span) = &result[0] {
+        assert_eq!(*span, Span::new(0, 5));
+        assert_eq!(id.span, Span::new(1, 4));
+    }
+
+    input.initialize("^kitchen");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    if let Attribute::Place(id, span) = &result[0] {
+        assert_eq!(*span, Span::new(0, 8));
+        assert_eq!(id.span, Span::new(1, 7));
+    }
+
+    input.initialize("@waiter + ^milliways");
+    let result = input
+        .read_attributes()
+        .unwrap();
+    if let Attribute::Role(id, span) = &result[0] {
+        assert_eq!(*span, Span::new(0, 7));
+        assert_eq!(id.span, Span::new(1, 6));
+    }
+    if let Attribute::Place(id, span) = &result[1] {
+        assert_eq!(*span, Span::new(10, 10));
+        assert_eq!(id.span, Span::new(11, 9));
+    }
 }
 
 #[test]
@@ -1887,13 +2118,15 @@ fn step_with_role_assignment() {
         Scope::DependentBlock {
             ordinal: "1",
 
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Check the patient's vital signs"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier("nurse"))],
+                attributes: vec![Attribute::Role(Identifier::new("nurse"), Span::default())],
                 subscopes: vec![],
-            }]
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1918,17 +2151,20 @@ fn substep_with_role_assignment() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text(
+            description: vec![Paragraph::new(vec![Descriptive::Text(
                 "Verify patient identity"
             )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                attributes: vec![Attribute::Role(Identifier::new("surgeon"), Span::default())],
                 subscopes: vec![Scope::DependentBlock {
                     ordinal: "a",
-                    description: vec![Paragraph(vec![Descriptive::Text("Check ID")])],
-                    subscopes: vec![]
-                }]
-            }]
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Check ID")])],
+                    subscopes: vec![],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1953,15 +2189,23 @@ fn parallel_step_with_role_assignment() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Monitor patient vitals")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text(
+                "Monitor patient vitals"
+            )])],
             subscopes: vec![Scope::AttributeBlock {
-                attributes: vec![Attribute::Role(Identifier("nursing_team"))],
+                attributes: vec![Attribute::Role(
+                    Identifier::new("nursing_team"),
+                    Span::default()
+                )],
                 subscopes: vec![Scope::ParallelBlock {
                     bullet: '-',
-                    description: vec![Paragraph(vec![Descriptive::Text("Check readings")])],
-                    subscopes: vec![]
-                }]
-            }]
+                    description: vec![Paragraph::new(vec![Descriptive::Text("Check readings")])],
+                    subscopes: vec![],
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            span: Span::default(),
         }
     );
 }
@@ -1989,29 +2233,34 @@ fn two_roles_with_substeps() {
         scope,
         Scope::DependentBlock {
             ordinal: "1",
-            description: vec![Paragraph(vec![Descriptive::Text("Review events.")])],
+            description: vec![Paragraph::new(vec![Descriptive::Text("Review events.")])],
             subscopes: vec![
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(Identifier("surgeon"))],
+                    attributes: vec![Attribute::Role(Identifier::new("surgeon"), Span::default())],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "a",
-                        description: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
                             "What are the steps?"
                         )])],
-                        subscopes: vec![]
-                    }]
+                        subscopes: vec![],
+                        span: Span::default(),
+                    }],
+                    span: Span::default(),
                 },
                 Scope::AttributeBlock {
-                    attributes: vec![Attribute::Role(Identifier("nurse"))],
+                    attributes: vec![Attribute::Role(Identifier::new("nurse"), Span::default())],
                     subscopes: vec![Scope::DependentBlock {
                         ordinal: "b",
-                        description: vec![Paragraph(vec![Descriptive::Text(
+                        description: vec![Paragraph::new(vec![Descriptive::Text(
                             "What are the concerns?"
                         )])],
-                        subscopes: vec![]
-                    }]
+                        subscopes: vec![],
+                        span: Span::default(),
+                    }],
+                    span: Span::default(),
                 }
-            ]
+            ],
+            span: Span::default(),
         }
     );
 }
@@ -2044,7 +2293,7 @@ fn parse_collecting_errors_basic() {
             assert!(errors.len() > 0);
             assert!(errors
                 .iter()
-                .any(|e| matches!(e, ParsingError::InvalidHeader(_, _))));
+                .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
         }
     }
 
@@ -2141,7 +2390,7 @@ fn test_redundant_error_removal_unclosed_interpolation() {
     // Should get the specific UnclosedInterpolation error, not a generic
     // one
     match result {
-        Err(ParsingError::UnclosedInterpolation(_, _)) => {
+        Err(ParsingError::UnclosedInterpolation(_)) => {
             // Good - we got the specific error
         }
         Err(other) => {
@@ -2190,10 +2439,10 @@ This is { exec(a,
 
     // Second element should be the multiline code inline
     match &descriptives[1] {
-        Descriptive::CodeInline(Expression::Execution(func)) => {
+        Descriptive::CodeInline(Expression::Execution(func, _)) => {
             assert_eq!(
                 func.target
-                    .0,
+                    .value,
                 "exec"
             );
             assert_eq!(
@@ -2202,7 +2451,7 @@ This is { exec(a,
                 3
             );
             // Check that all parameters were parsed correctly
-            if let Expression::Variable(Identifier(name)) = &func.parameters[0] {
+            if let Expression::Variable(Identifier { value: name, .. }, _) = &func.parameters[0] {
                 assert_eq!(*name, "a");
             } else {
                 panic!("First parameter should be variable 'a'");
