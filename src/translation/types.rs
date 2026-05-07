@@ -86,11 +86,8 @@ pub enum Operation<'i> {
     String(Vec<Fragment<'i>>),
     Multiline(Option<&'i str>, Vec<&'i str>),
     Tablet(Vec<Entry<'i>>),
-    Invoke(Invoke<'i>),
-    Execution {
-        target: language::Identifier<'i>,
-        arguments: Vec<Operation<'i>>,
-    },
+    Invoke(Invocable<'i>),
+    Execute(Executable<'i>),
     Sequence(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,
@@ -126,7 +123,7 @@ pub enum Ordinal<'i> {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Invoke<'i> {
+pub struct Invocable<'i> {
     pub target: SubroutineRef<'i>,
     pub arguments: Vec<Operation<'i>>,
 }
@@ -134,13 +131,23 @@ pub struct Invoke<'i> {
 /// Reference to a subroutine. The collect pass registers every declared
 /// subroutine into `Program.subroutines`; the resolve pass walks the
 /// translated tree replacing matching `Unresolved` references with
-/// `Resolved`. Names that don't match any declared subroutine remain
-/// `Unresolved` - they are typically builtin functions (`exec`, `now`,
-/// `zip`, ...) and are not translation errors.
+/// `Resolved`. Names that don't match any declared subroutine become a
+/// translation error.
 #[derive(Debug, Eq, PartialEq)]
 pub enum SubroutineRef<'i> {
     Unresolved(language::Identifier<'i>),
     Resolved(SubroutineId),
+}
+
+/// Lowered form of `language::Function`. Functions live in a separate
+/// namespace from procedures: they are built-in or host-provided. The target
+/// is kept as a plain Identifier here; resolution happens at a later
+/// domain-linking phase, against whatever functions the executing domain
+/// provides.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Executable<'i> {
+    pub target: language::Identifier<'i>,
+    pub arguments: Vec<Operation<'i>>,
 }
 
 /// A fragment of a string literal: either inline text or an interpolated
