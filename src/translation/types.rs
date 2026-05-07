@@ -132,11 +132,11 @@ pub struct Invoke<'i> {
 }
 
 /// Reference to a subroutine. The collect pass registers every declared
-/// subroutine into `Program.subroutines`; the resolve pass walks the IR
-/// replacing matching `Unresolved` references with `Resolved`. Names that
-/// don't match any declared subroutine remain `Unresolved` - they are
-/// typically builtin functions (`exec`, `now`, `zip`, ...) and are not
-/// translation errors.
+/// subroutine into `Program.subroutines`; the resolve pass walks the
+/// translated tree replacing matching `Unresolved` references with
+/// `Resolved`. Names that don't match any declared subroutine remain
+/// `Unresolved` - they are typically builtin functions (`exec`, `now`,
+/// `zip`, ...) and are not translation errors.
 #[derive(Debug, Eq, PartialEq)]
 pub enum SubroutineRef<'i> {
     Unresolved(language::Identifier<'i>),
@@ -144,8 +144,8 @@ pub enum SubroutineRef<'i> {
 }
 
 /// A fragment of a string literal: either inline text or an interpolated
-/// expression. Defined IR-side (rather than reusing `language::Piece`)
-/// because interpolations are themselves `Operation`s and may carry resolved
+/// expression. Defined here (rather than reusing `language::Piece`) because
+/// interpolations are themselves `Operation`s and may carry resolved
 /// subroutine references.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Fragment<'i> {

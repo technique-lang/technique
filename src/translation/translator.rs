@@ -1,12 +1,11 @@
-// Translation of the internal parser abstract syntax tree to an internal
-// intermediate representation.
+// Translation of the parser's abstract syntax tree into a runnable Program.
 
 use std::collections::HashMap;
 
 use crate::language;
 use crate::language::{Document, Span};
 
-use super::types::{Program, Subroutine, SubroutineId};
+use super::types::{Operation, Program, Subroutine, SubroutineId};
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut program = Program::new();
@@ -87,10 +86,8 @@ fn collect_technique<'i>(
     }
 }
 
-// Pass 1: gather a procedure's name. Fails fast on duplicate, returning None
-// so the caller can skip the shell-translation step. On first occurrence,
-// reserves a slot in Program.subroutines with a stub Subroutine that
-// subsequent passes fill in.
+// Pass 1: gather a procedure's name and reserve its slot in
+// Program.subroutines.
 fn register_procedure<'i>(
     procedure: &'i language::Procedure<'i>,
     program: &mut Program<'i>,
@@ -124,9 +121,8 @@ fn register_procedure<'i>(
     Some(id)
 }
 
-// Pass 2 (step 4): fill the shell of a previously-registered procedure with
-// its title, description, parameters, and signature. The body Operation is
-// left empty; subsequent translation steps fill it.
+// Pass 2: populate a registered subroutine with its title, description,
+// parameters, signature, and body.
 fn translate_procedure<'i>(
     id: SubroutineId,
     procedure: &'i language::Procedure<'i>,
@@ -134,16 +130,65 @@ fn translate_procedure<'i>(
     errors: &mut Vec<TranslationError<'i>>,
 ) {
     let (title, description) = extract_title_and_description(procedure, errors);
+
+    // build body
+    let mut ops = Vec::new();
+    for element in &procedure.elements {
+        if let language::Element::Steps(scopes, _) = element {
+            for scope in scopes {
+                ops.push(translate_scope(scope));
+            }
+        }
+    }
+    let body = Operation::Sequence(ops);
+
     let entry = &mut program.subroutines[id.0];
     entry.title = title;
     entry.description = description;
     entry.parameters = procedure
         .parameters
         .as_ref()
-        .map(|v| v.as_slice());
+        .map(Vec::as_slice);
     entry.signature = procedure
         .signature
         .as_ref();
+    entry.body = body;
+}
+
+fn translate_scope<'i>(scope: &'i language::Scope<'i>) -> Operation<'i> {
+    match scope {
+        language::Scope::SectionChunk {
+            numeral,
+            title,
+            body,
+            ..
+        } => {
+            let inner = match body {
+                language::Technique::Steps(scopes) => {
+                    let ops: Vec<_> = scopes
+                        .iter()
+                        .map(translate_scope)
+                        .collect();
+                    Operation::Sequence(ops)
+                }
+                // Procedures declared inside a section are hoisted into
+                // Program.subroutines by the collect pass; the section
+                // node carries no executable body for them.
+                language::Technique::Procedures(_) => Operation::Sequence(Vec::new()),
+                language::Technique::Empty => Operation::Sequence(Vec::new()),
+            };
+            Operation::Section {
+                numeral,
+                title: title.as_ref(),
+                body: Box::new(inner),
+            }
+        }
+        language::Scope::DependentBlock { .. } => todo!("dependent block"),
+        language::Scope::ParallelBlock { .. } => todo!("parallel block"),
+        language::Scope::AttributeBlock { .. } => todo!("attribute block"),
+        language::Scope::CodeBlock { .. } => todo!("code block"),
+        language::Scope::ResponseBlock { .. } => todo!("response block"),
+    }
 }
 
 // Walk a procedure's elements to extract the procedure-shell title and
