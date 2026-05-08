@@ -5,7 +5,7 @@ use technique::parsing;
 
 #[test]
 fn ensure_fail() {
-    let dir = Path::new("tests/broken/");
+    let dir = Path::new("tests/broken/parsing/");
 
     assert!(dir.exists(), "broken directory missing");
 

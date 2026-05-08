@@ -3,5 +3,7 @@ pub mod formatting;
 pub mod highlighting;
 pub mod language;
 pub mod parsing;
+pub mod program;
 pub(crate) mod regex;
 pub mod templating;
+pub mod translation;

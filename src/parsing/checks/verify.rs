@@ -1566,7 +1566,7 @@ III. Implementation
 
 #[test]
 fn spans_are_populated() {
-    let source = std::fs::read_to_string("tests/samples/KnownSpanLengths.tq").unwrap();
+    let source = std::fs::read_to_string("tests/samples/parsing/KnownSpanLengths.tq").unwrap();
 
     let mut input = Parser::new();
     input.initialize(&source);

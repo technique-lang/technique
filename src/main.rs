@@ -10,15 +10,24 @@ use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::parsing;
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
+use technique::translation;
 
 mod editor;
 mod output;
 mod problem;
 
 #[derive(Eq, Debug, PartialEq)]
+#[allow(dead_code)]
 enum Output {
+    Terminal,
     Native,
     Silent,
+}
+
+#[derive(Eq, Debug, PartialEq)]
+enum Phase {
+    Parsing,
+    Translation,
 }
 
 fn main() {
@@ -71,6 +80,18 @@ fn main() {
                         .default_value("none")
                         .action(ArgAction::Set)
                         .help("Which kind of diagnostic output to print when checking.")
+                )
+                .arg(
+                    Arg::new("until")
+                        .long("until")
+                        .value_name("phase")
+                        .value_parser(["parsing", "translation"])
+                        .default_value("parsing")
+                        .action(ArgAction::Set)
+                        .help("Stop compilation after the given phase is complete so that the result can be inspected. \
+                            Use this in conjunction with the --output option. The phases are: \
+                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree; then \
+                            translation, which resolves names, checks references, and ensures the input is valid Technique.")
                 )
                 .arg(
                     Arg::new("filename")
@@ -173,11 +194,22 @@ fn main() {
                 .unwrap();
             let output = match output.as_str() {
                 "native" => Output::Native,
-                "none" => Output::Silent,
+                "none" => Output::Terminal,
                 _ => panic!("Unrecognized --output value"),
             };
 
             debug!(?output);
+
+            let until = submatches
+                .get_one::<String>("until")
+                .unwrap();
+            let until = match until.as_str() {
+                "parsing" => Phase::Parsing,
+                "translation" => Phase::Translation,
+                _ => panic!("Unrecognized --until value"),
+            };
+
+            debug!(?until);
 
             let filename = submatches
                 .get_one::<String>("filename")
@@ -213,12 +245,51 @@ fn main() {
                 }
             };
 
-            // TODO continue with validation of the returned technique
+            if let Phase::Parsing = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", technique);
+                    }
+                    Output::Silent => {}
+                }
+                std::process::exit(0);
+            }
 
-            eprintln!("{}", "ok".bright_green());
+            let program = match translation::translate(&technique) {
+                Ok(program) => program,
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_translation_error(
+                                &error, &filename, &content, &Terminal
+                            )
+                        );
+                    }
+                    std::process::exit(1);
+                }
+            };
 
-            if let Output::Native = output {
-                println!("{:#?}", technique);
+            if let Phase::Translation = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", program);
+                    }
+                    Output::Silent => {}
+                }
+                std::process::exit(0);
             }
         }
         Some(("format", submatches)) => {
