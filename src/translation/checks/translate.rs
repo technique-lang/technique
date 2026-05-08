@@ -7,7 +7,8 @@ use std::path::Path;
 
 use crate::language;
 use crate::parsing;
-use crate::translation::{translate, Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
+use crate::program::{Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
+use crate::translation::translate;
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -1527,22 +1528,17 @@ delete_rds_instance :
     let names: Vec<&str> = block_ops
         .iter()
         .map(|op| match op {
-            Operation::Execute(executable) => executable
-                .target
-                .value,
+            Operation::Execute(executable) => {
+                executable
+                    .target
+                    .value
+            }
             other => panic!("expected Execute, got {:?}", other),
         })
         .collect();
     assert_eq!(
         names,
-        vec![
-            "click",
-            "navigate",
-            "deselect",
-            "click",
-            "select",
-            "click"
-        ]
+        vec!["click", "navigate", "deselect", "click", "select", "click"]
     );
 }
 

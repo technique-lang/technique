@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::language;
 use crate::language::{Document, Span};
 
-use super::types::{
+use crate::program::{
     Entry, Executable, Fragment, Invocable, Operation, Ordinal, Program, Subroutine, SubroutineId,
     SubroutineRef,
 };
