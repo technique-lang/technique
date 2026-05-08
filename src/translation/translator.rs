@@ -276,36 +276,50 @@ impl<'i> Translator<'i> {
                 expressions,
                 subscopes,
                 ..
-            } => match expressions.first() {
-                Some(language::Expression::Foreach(names, source, _)) => {
-                    let mut body_ops = Vec::new();
-                    let mut responses = Vec::new();
-                    for sub in subscopes {
-                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+            } => {
+                let single = expressions.len() == 1;
+                match expressions.first() {
+                    Some(language::Expression::Foreach(names, source, _)) if single => {
+                        let mut body_ops = Vec::new();
+                        let mut responses = Vec::new();
+                        for sub in subscopes {
+                            self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                        }
+                        Operation::Loop {
+                            names,
+                            over: Some(Box::new(self.translate_expression(source))),
+                            body: Box::new(Operation::Sequence(body_ops)),
+                            responses,
+                        }
                     }
-                    Operation::Loop {
-                        names,
-                        over: Some(Box::new(self.translate_expression(source))),
-                        body: Box::new(Operation::Sequence(body_ops)),
-                        responses,
+                    Some(language::Expression::Repeat(_, _)) if single => {
+                        let mut body_ops = Vec::new();
+                        let mut responses = Vec::new();
+                        for sub in subscopes {
+                            self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                        }
+                        Operation::Loop {
+                            names: &[],
+                            over: None,
+                            body: Box::new(Operation::Sequence(body_ops)),
+                            responses,
+                        }
+                    }
+                    _ => {
+                        let mut ops = Vec::new();
+                        for expression in expressions {
+                            ops.push(self.translate_expression(expression));
+                        }
+                        let mut responses = Vec::new();
+                        for sub in subscopes {
+                            self.append_attributes(&mut ops, &mut responses, sub, attrs);
+                        }
+
+                        let _ = responses;
+                        Operation::Sequence(ops)
                     }
                 }
-                Some(language::Expression::Repeat(_, _)) => {
-                    let mut body_ops = Vec::new();
-                    let mut responses = Vec::new();
-                    for sub in subscopes {
-                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
-                    }
-                    Operation::Loop {
-                        names: &[],
-                        over: None,
-                        body: Box::new(Operation::Sequence(body_ops)),
-                        responses,
-                    }
-                }
-                Some(other) => self.translate_expression(other),
-                None => self.translate_subscopes(subscopes, attrs),
-            },
+            }
         }
     }
 
@@ -384,19 +398,6 @@ impl<'i> Translator<'i> {
             }
             _ => ops.push(self.translate_scope(scope, attrs)),
         }
-    }
-
-    fn translate_subscopes(
-        &mut self,
-        scopes: &'i [language::Scope<'i>],
-        attrs: &[&'i [language::Attribute<'i>]],
-    ) -> Operation<'i> {
-        let mut ops = Vec::new();
-        let mut responses = Vec::new();
-        for scope in scopes {
-            self.append_attributes(&mut ops, &mut responses, scope, attrs);
-        }
-        Operation::Sequence(ops)
     }
 
     // Walk a procedure's elements to extract the procedure-shell title and

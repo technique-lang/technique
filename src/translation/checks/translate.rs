@@ -1489,6 +1489,64 @@ run :
 }
 
 #[test]
+fn codeblock_preserves_multi_expressions() {
+    // A code block can contain multiple expressions.
+    let source = r#"
+% technique v1
+
+delete_rds_instance :
+
+1.  Disable termination protection
+    {
+        click("Modify")
+        navigate("bottom")
+        deselect("Enable deletion protection")
+        click("Continue")
+        select("Apply Immediately")
+        click("Modify DB instance")
+    }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let Operation::Sequence(step_body) = body.as_ref() else {
+        panic!("expected Step body Sequence");
+    };
+    // The CodeBlock translates to a Sequence pushed into the Step body.
+    let Operation::Sequence(block_ops) = &step_body[0] else {
+        panic!("expected CodeBlock Sequence, got {:?}", step_body[0]);
+    };
+    let names: Vec<&str> = block_ops
+        .iter()
+        .map(|op| match op {
+            Operation::Execute(executable) => executable
+                .target
+                .value,
+            other => panic!("expected Execute, got {:?}", other),
+        })
+        .collect();
+    assert_eq!(
+        names,
+        vec![
+            "click",
+            "navigate",
+            "deselect",
+            "click",
+            "select",
+            "click"
+        ]
+    );
+}
+
+#[test]
 fn roman_subsubstep_ordinals_preserved() {
     // The IR keeps the verbatim ordinal string from the parser; the lexical
     // kind (Arabic / Alpha / Roman) is derivable by inspection.
