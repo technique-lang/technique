@@ -1,0 +1,15 @@
+% technique v1
+
+make_coffee :
+
+{
+    journal("started")
+}
+
+A procedure can have at most one free-text description, and it must appear
+before any steps or code blocks. The code block above counts as a body
+element, so this paragraph has nowhere coherent to render — the preamble
+is already past.
+
+1.  Grind beans
+2.  Steam milk

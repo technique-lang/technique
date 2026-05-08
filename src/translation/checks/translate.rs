@@ -173,9 +173,17 @@ make_coffee : Beans -> Coffee
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    assert!(program.subroutines[0]
+    let signature = program.subroutines[0]
         .signature
-        .is_some());
+        .expect("signature present");
+    let language::Genus::Single(input) = &signature.requires else {
+        panic!("expected single Forma input");
+    };
+    assert_eq!(input.value, "Beans");
+    let language::Genus::Single(output) = &signature.provides else {
+        panic!("expected single Forma output");
+    };
+    assert_eq!(output.value, "Coffee");
 }
 
 #[test]
@@ -277,15 +285,15 @@ inner : () -> ()
 }
 
 #[test]
-fn nested_sections_translate_recursively() {
+fn sibling_sections_translate_in_order() {
     let source = r#"
 % technique v1
 
 outer :
 
-I. Outer
+I. First
 
-II. Sibling
+II. Second
         "#
     .trim_ascii();
     let path = Path::new("Test.tq");
@@ -619,7 +627,8 @@ run :
 }
 
 #[test]
-fn expression_string_translates() {
+fn expression_string_text_fragment_translates() {
+    // A plain string literal becomes a single Text fragment.
     let source = r#"
 % technique v1
 
@@ -648,6 +657,52 @@ run :
         panic!("expected Text fragment");
     };
     assert_eq!(*text, "hello");
+}
+
+#[test]
+fn expression_string_with_interpolation_translates() {
+    // A string with `{ x }` interpolations produces alternating Text and
+    // Interpolation fragments. The interpolated expression is itself an
+    // Operation, recursively translated.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    journal("hello { name }!")
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Execute(executable) = &ops[0] else {
+        panic!("expected Execute");
+    };
+    let Operation::String(fragments) = &executable.arguments[0] else {
+        panic!("expected String");
+    };
+    assert_eq!(fragments.len(), 3);
+    let Fragment::Text(prefix) = &fragments[0] else {
+        panic!("expected Text fragment");
+    };
+    assert_eq!(*prefix, "hello ");
+    let Fragment::Interpolation(inner) = &fragments[1] else {
+        panic!("expected Interpolation fragment, got {:?}", fragments[1]);
+    };
+    let Operation::Variable(id) = inner else {
+        panic!("expected Variable inside interpolation");
+    };
+    assert_eq!(id.value, "name");
+    let Fragment::Text(suffix) = &fragments[2] else {
+        panic!("expected trailing Text fragment");
+    };
+    assert_eq!(*suffix, "!");
 }
 
 #[test]
@@ -1316,4 +1371,313 @@ run :
     assert_eq!(loop_responses.len(), 2);
     assert_eq!(loop_responses[0].value, "Reachable");
     assert_eq!(loop_responses[1].value, "Unreachable");
+}
+
+#[test]
+fn expression_multiline_translates() {
+    // exec(```bash ... ```) carries a Multiline through as the language tag
+    // and the lines of content. NetworkProbe.tq pattern.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    exec(```bash
+        ip addr
+    ```)
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Execute(executable) = &ops[0] else {
+        panic!("expected Execute");
+    };
+    let Operation::Multiline(lang, lines) = &executable.arguments[0] else {
+        panic!("expected Multiline, got {:?}", executable.arguments[0]);
+    };
+    assert_eq!(*lang, Some("bash"));
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0], "ip addr");
+}
+
+#[test]
+fn expression_repeat_translates() {
+    // `{ repeat 5 }` becomes Loop with names=[], over=None, body=Number(5).
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    repeat 5
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop {
+        names,
+        over,
+        body,
+        responses,
+    } = &ops[0]
+    else {
+        panic!("expected Loop, got {:?}", ops[0]);
+    };
+    assert!(names.is_empty());
+    assert!(over.is_none(), "repeat has no `over` source");
+    assert!(responses.is_empty());
+    let Operation::Number(_) = body.as_ref() else {
+        panic!("expected Number body");
+    };
+}
+
+#[test]
+fn expression_foreach_bare_has_empty_body() {
+    // A `foreach` Expression on its own (not as the head of a CodeBlock with
+    // subscopes supplying its body) translates to a Loop with an empty
+    // Sequence body. The CodeBlock-with-subscopes path provides the body
+    // separately; see `foreach_codeblock_becomes_loop_with_subscopes_as_body`.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    foreach x in xs
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop {
+        names, over, body, ..
+    } = &ops[0]
+    else {
+        panic!("expected Loop");
+    };
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0].value, "x");
+    let Some(over) = over else {
+        panic!("foreach has an `over` source");
+    };
+    let Operation::Variable(id) = over.as_ref() else {
+        panic!("expected Variable as `over`");
+    };
+    assert_eq!(id.value, "xs");
+    let Operation::Sequence(inner) = body.as_ref() else {
+        panic!("expected empty Sequence body");
+    };
+    assert!(inner.is_empty());
+}
+
+#[test]
+fn roman_subsubstep_ordinals_preserved() {
+    // The IR keeps the verbatim ordinal string from the parser; the lexical
+    // kind (Arabic / Alpha / Roman) is derivable by inspection.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Outer.
+    a.  Substep.
+        i.   First sub-substep.
+        ii.  Second sub-substep.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body: outer, .. } = &ops[0] else {
+        panic!("expected outer Step");
+    };
+    let Operation::Sequence(outer_ops) = outer.as_ref() else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { body: substep, .. } = &outer_ops[0] else {
+        panic!("expected substep");
+    };
+    let Operation::Sequence(sub_ops) = substep.as_ref() else {
+        panic!("expected Sequence");
+    };
+    let ordinals: Vec<&str> = sub_ops
+        .iter()
+        .map(|op| match op {
+            Operation::Step {
+                ordinal: Ordinal::Dependent(n),
+                ..
+            } => *n,
+            _ => panic!("expected sub-substep"),
+        })
+        .collect();
+    assert_eq!(ordinals, vec!["i", "ii"]);
+}
+
+#[test]
+fn response_with_condition_carries_condition() {
+    // 'No' but tired -> Response { value: "No", condition: Some("but tired") }
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Decision time?
+        'Yes' | 'No' but tired
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { responses, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0].value, "Yes");
+    assert!(responses[0]
+        .condition
+        .is_none());
+    assert_eq!(responses[1].value, "No");
+    assert_eq!(responses[1].condition, Some("but tired"));
+}
+
+#[test]
+fn multiple_peer_response_blocks_union_on_step() {
+    // Two distinct ResponseBlocks under different attribute scopes peer to
+    // the same Step. The Step's responses field accumulates all of them.
+    let source = r#"
+% technique v1
+
+run :
+
+1.  Choose
+        @cook
+            'A' | 'B'
+        @waiter
+            'C' | 'D'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Step { responses, .. } = &ops[0] else {
+        panic!("expected Step");
+    };
+    let values: Vec<&str> = responses
+        .iter()
+        .map(|r| r.value)
+        .collect();
+    assert_eq!(values, vec!["A", "B", "C", "D"]);
+}
+
+#[test]
+fn procedure_body_response_block_lands_on_subroutine() {
+    // A ResponseBlock that is a peer of the procedure body (here under a
+    // top-level @attribute frame) rolls up into Subroutine.responses, since
+    // there is no enclosing Step or Loop carrier for it.
+    let source = r#"
+% technique v1
+
+choose :
+
+@me
+    'A' | 'B'
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    assert_eq!(
+        program.subroutines[0]
+            .responses
+            .len(),
+        2
+    );
+    let values: Vec<&str> = program.subroutines[0]
+        .responses
+        .iter()
+        .map(|r| r.value)
+        .collect();
+    assert_eq!(values, vec!["A", "B"]);
+}
+
+#[test]
+fn section_title_invocation_hoists_into_body() {
+    // A `<call>` in a section title is an executable Descriptive: it must
+    // be evaluated to render the title. It hoists into Section.body in the
+    // same way a procedure description's executables hoist into the
+    // procedure body, and so passes through the resolve pass like any
+    // other Invoke.
+    let source = r#"
+% technique v1
+
+main :
+
+I. Begin <init>
+
+init : () -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let init_idx = program
+        .subroutines
+        .iter()
+        .position(|s| {
+            s.name
+                .as_ref()
+                .map(|n| n.value)
+                == Some("init")
+        })
+        .expect("init declared");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Section { body, .. } = &ops[0] else {
+        panic!("expected Section");
+    };
+    let Operation::Sequence(section_body) = body.as_ref() else {
+        panic!("expected Section body Sequence");
+    };
+    assert_eq!(section_body.len(), 1, "title's Application is hoisted");
+    let Operation::Invoke(invocable) = &section_body[0] else {
+        panic!("expected Invoke, got {:?}", section_body[0]);
+    };
+    let SubroutineRef::Resolved(SubroutineId(idx)) = invocable.target else {
+        panic!("expected Resolved");
+    };
+    assert_eq!(idx, init_idx);
 }

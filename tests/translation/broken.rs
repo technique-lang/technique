@@ -22,10 +22,7 @@ fn ensure_fail() {
         let document = match parsing::parse(&file, &content) {
             Ok(document) => document,
             Err(errors) => {
-                println!(
-                    "File {:?} unexpectedly failed to parse: {:?}",
-                    file, errors
-                );
+                println!("File {:?} unexpectedly failed to parse: {:?}", file, errors);
                 parse_failures.push(file.clone());
                 continue;
             }

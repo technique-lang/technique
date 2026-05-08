@@ -211,6 +211,11 @@ impl<'i> Translator<'i> {
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
+
+                if let Some(paragraph) = title {
+                    // scan for operations in section content
+                    self.translate_descriptions(&mut body_ops, std::slice::from_ref(paragraph));
+                }
                 if let language::Technique::Steps(scopes) = body {
                     for sub in scopes {
                         self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
@@ -396,11 +401,9 @@ impl<'i> Translator<'i> {
 
     // Walk a procedure's elements to extract the procedure-shell title and
     // description, surfacing the two structural errors:
-    //   DuplicateTitle - a second Element::Title in this procedure.
-    //   InterleavedDescription - an Element::Description after a Steps or
-    //     CodeBlock element.
-    // Multiple Element::Description occurrences before any Steps/CodeBlock
-    // are not an error; the first wins.
+    // - DuplicateTitle, if a second title appears in this procedure; and
+    // - InterleavedDescription, as a procedure allows at most one
+    //   description, and it must appear before any body element.
     fn extract_procedure_elements(
         &mut self,
         procedure: &'i language::Procedure<'i>,
@@ -423,13 +426,13 @@ impl<'i> Translator<'i> {
                     }
                 }
                 language::Element::Description(paragraphs, span) => {
-                    if blocked {
+                    if blocked || description.is_some() {
                         self.problems
                             .push(TranslationError::InterleavedDescription {
                                 procedure: procedure.name,
                                 at: *span,
                             });
-                    } else if description.is_none() {
+                    } else {
                         description = Some(paragraphs.as_slice());
                     }
                 }

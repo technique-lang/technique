@@ -3,12 +3,11 @@
 
 use std::path::Path;
 
-use crate::language;
 use crate::parsing;
 use crate::translation::{translate, TranslationError};
 
 #[test]
-fn duplicate_procedure_name_is_error() {
+fn duplicate_procedure_name() {
     let source = r#"
 % technique v1
 
@@ -22,14 +21,23 @@ make_coffee :
     let errors = translate(&document).expect_err("translate should fail");
 
     assert_eq!(errors.len(), 1);
+    let TranslationError::DuplicateProcedure(id) = &errors[0] else {
+        panic!("expected DuplicateProcedure, got {:?}", errors[0]);
+    };
+    assert_eq!(id.value, "make_coffee");
+    let expected = source
+        .rfind("make_coffee")
+        .expect("second declaration in source");
     assert_eq!(
-        errors[0],
-        TranslationError::DuplicateProcedure(language::Identifier::new("make_coffee"))
+        id.span
+            .offset,
+        expected,
+        "span points at the duplicate declaration"
     );
 }
 
 #[test]
-fn duplicate_title_is_error() {
+fn duplicate_title() {
     let source = r#"
 % technique v1
 
@@ -57,7 +65,7 @@ make_coffee :
 }
 
 #[test]
-fn description_after_code_block_is_error() {
+fn description_after_code_block() {
     let source = r#"
 % technique v1
 
@@ -87,7 +95,82 @@ This text comes too late.
 }
 
 #[test]
-fn unresolved_procedure_invocation_is_error() {
+fn second_description_split_by_title() {
+    // Two prose blocks separated by a `# Title` parse as
+    // [Description, Title, Description, Steps]. The procedure shell
+    // allows at most one description, and the second one fires
+    // InterleavedDescription regardless of whether body elements have
+    // appeared yet.
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+First paragraph of preamble.
+
+# Coffee Time
+
+Second paragraph would silently disappear.
+
+1.  Grind beans.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::InterleavedDescription { procedure, at } = &errors[0] else {
+        panic!("expected InterleavedDescription, got {:?}", errors[0]);
+    };
+    assert_eq!(procedure.value, "make_coffee");
+    let expected = source
+        .find("Second paragraph")
+        .expect("second description in source");
+    assert_eq!(at.offset, expected);
+}
+
+#[test]
+fn description_after_multiple_body_elements() {
+    // Pin down the rule "a description must come before any body element":
+    // once `blocked` is set by a body element, it stays set across further
+    // body elements, and a later Element::Description still trips the
+    // guard. (A Steps-then-Description case is unreachable today because
+    // the parser absorbs trailing prose into the previous step's
+    // description; see plans/PHASE-3.md.)
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+{
+    journal("a")
+}
+
+{
+    journal("b")
+}
+
+This text is past the body.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::InterleavedDescription { procedure, at } = &errors[0] else {
+        panic!("expected InterleavedDescription, got {:?}", errors[0]);
+    };
+    assert_eq!(procedure.value, "make_coffee");
+    let expected = source
+        .find("This text is past the body.")
+        .expect("description in source");
+    assert_eq!(at.offset, expected);
+}
+
+#[test]
+fn unresolved_procedure_invocation() {
     let source = r#"
 % technique v1
 
@@ -96,6 +179,39 @@ main :
 {
     <does_not_exist>(x)
 }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::UnresolvedProcedure(id) = &errors[0] else {
+        panic!("expected UnresolvedProcedure, got {:?}", errors[0]);
+    };
+    assert_eq!(id.value, "does_not_exist");
+    let expected = source
+        .find("does_not_exist")
+        .expect("identifier in source");
+    assert_eq!(
+        id.span
+            .offset,
+        expected,
+        "span points at the offending identifier"
+    );
+}
+
+#[test]
+fn unresolved_procedure_in_section_title() {
+    // After section title hoisting, an `<Application>` embedded in the
+    // title goes through the resolve pass. This ensures section titles
+    // can't silently reference nonexistent procedures.
+    let source = r#"
+% technique v1
+
+main :
+
+I. Lead with <does_not_exist>
         "#
     .trim_ascii();
     let path = Path::new("Test.tq");
