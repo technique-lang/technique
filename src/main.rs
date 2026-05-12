@@ -171,6 +171,35 @@ fn main() {
                 ),
         )
         .subcommand(
+            Command::new("run")
+                .about("Interactively work through a Technique procedure.")
+                .long_about("Walk through the steps of a Technique procedure interactively, \
+                    prompting you at each step and recording results locally. \
+                    When a Technique document is instantiated as a running procedure \
+                    it is allocated a unique identifier. That identifier can be used with \
+                    `technique resume` to continue an interrupted workflow.")
+                .arg(
+                    Arg::new("filename")
+                        .required(true)
+                        .help("The file containing the Technique document to run."),
+                )
+                .arg(
+                    Arg::new("arguments")
+                        .num_args(0..)
+                        .action(ArgAction::Append)
+                        .help("Values here, if any, will be bound as the entry procedure's parameters."),
+                ),
+        )
+        .subcommand(
+            Command::new("resume")
+                .about("Resume an interrupted procedure.")
+                .arg(
+                    Arg::new("id")
+                        .required(true)
+                        .help("The identifier of the run to continue. Can be written as `000007` or just `7`."),
+                ),
+        )
+        .subcommand(
             Command::new("language")
                 .about("Language Server Protocol integration for editors and IDEs.")
                 .hide(true)
@@ -469,6 +498,24 @@ fn main() {
                 }
                 _ => panic!("Unrecognized --output value"),
             }
+        }
+        Some(("run", submatches)) => {
+            let filename = submatches
+                .get_one::<String>("filename")
+                .unwrap();
+
+            debug!(filename);
+
+            todo!();
+        }
+        Some(("resume", submatches)) => {
+            let id = submatches
+                .get_one::<String>("id")
+                .unwrap();
+
+            debug!(id);
+
+            todo!();
         }
         Some(("language", _)) => {
             debug!("Starting Language Server");
