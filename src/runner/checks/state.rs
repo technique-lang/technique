@@ -1,5 +1,5 @@
 use crate::runner::runner::RunnerError;
-use crate::runner::state::RunId;
+use crate::runner::state::{RunId, Store};
 
 #[test]
 fn run_id_parse_padded() {
@@ -56,4 +56,37 @@ fn run_id_render_pads_to_six() {
 fn run_id_render_wider_than_six_unpadded() {
     // Six digits is the convention but larger values render naturally.
     assert_eq!(RunId(1_234_567).render(), "1234567");
+}
+
+#[test]
+fn store_allocate_assigns_monotonic_ids() {
+    let base = std::env::temp_dir().join("technique-allocate-monotonic");
+    let _ = std::fs::remove_dir_all(&base);
+
+    let store = Store::new(base.clone());
+    let (first, _) = store
+        .allocate()
+        .expect("first");
+    let (second, _) = store
+        .allocate()
+        .expect("second");
+    assert_eq!(first, RunId(1));
+    assert_eq!(second, RunId(2));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn store_allocate_resumes_from_existing_max() {
+    let base = std::env::temp_dir().join("technique-allocate-resume");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("000007")).unwrap();
+
+    let store = Store::new(base.clone());
+    let (id, _) = store
+        .allocate()
+        .expect("allocate");
+    assert_eq!(id, RunId(8));
+
+    let _ = std::fs::remove_dir_all(&base);
 }
