@@ -357,7 +357,7 @@ impl<'a> Entries<'a> {
 
 // Split a `[ k = v, k = v, ... ]` line into (key, value) pairs. Permissive on
 // whitespace; rejects anything without the bracketed envelope.
-// 
+//
 // TODO support nested tablets.
 fn parse_tablet(line: &str) -> Result<Vec<(&str, &str)>, RecordError> {
     let trimmed = line.trim();
