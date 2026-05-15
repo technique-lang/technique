@@ -1,5 +1,9 @@
+use std::path::{Path, PathBuf};
+
 use crate::runner::runner::RunnerError;
-use crate::runner::state::{RunId, Store};
+use crate::runner::state::{
+    format_record, parse_manifest, parse_record, Outcome, Record, RunId, Store,
+};
 
 #[test]
 fn run_id_parse_padded() {
@@ -89,4 +93,198 @@ fn store_allocate_resumes_from_existing_max() {
     assert_eq!(id, RunId(8));
 
     let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn manifest_round_trip_through_create_and_open() {
+    let base = std::env::temp_dir().join("technique-manifest-roundtrip");
+    let _ = std::fs::remove_dir_all(&base);
+
+    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
+    let started = "2026-05-14T12:34:56Z".to_string();
+
+    let store = Store::new(base.clone());
+    let (id, _, written) = store
+        .create(&document, started.clone())
+        .expect("create");
+    let (read, completed, _) = store
+        .open(id)
+        .expect("open");
+
+    assert_eq!(written, read);
+    assert_eq!(read.document, document);
+    assert_eq!(read.started, started);
+    assert!(completed.is_empty());
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn open_replays_three_result_paths() {
+    let base = std::env::temp_dir().join("technique-replay-three");
+    let _ = std::fs::remove_dir_all(&base);
+
+    let run_dir = base.join("000001");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    let mut file = String::new();
+    file.push_str("[ document = file:///foo/Test.tq, started = 2026-05-14T12:00:00Z ]\n");
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:01Z".to_string(),
+        path: "test:1".to_string(),
+        outcome: Outcome::Done(None),
+    }));
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:02Z".to_string(),
+        path: "test:2".to_string(),
+        outcome: Outcome::Skipped,
+    }));
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:03Z".to_string(),
+        path: "test:3".to_string(),
+        outcome: Outcome::Failed(None),
+    }));
+    std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
+
+    let store = Store::new(base.clone());
+    let (manifest, completed, _) = store
+        .open(RunId(1))
+        .expect("open");
+
+    assert_eq!(manifest.document, Path::new("/foo/Test.tq"));
+    assert_eq!(completed.len(), 3);
+    assert!(completed.contains("test:1"));
+    assert!(completed.contains("test:2"));
+    assert!(completed.contains("test:3"));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn open_missing_run_returns_no_such_run() {
+    let base = std::env::temp_dir().join("technique-no-such-run");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+
+    let store = Store::new(base.clone());
+    match store.open(RunId(42)) {
+        Err(RunnerError::NoSuchRun(id)) => assert_eq!(id, RunId(42)),
+        other => panic!("expected NoSuchRun, got {:?}", other),
+    }
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn create_writes_pfftt_file_with_expected_content() {
+    let base = std::env::temp_dir().join("technique-create-bytes");
+    let _ = std::fs::remove_dir_all(&base);
+
+    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
+    let started = "2026-05-14T12:34:56Z".to_string();
+
+    let store = Store::new(base.clone());
+    let (_, run_dir, _) = store
+        .create(&document, started)
+        .expect("create");
+
+    let pfftt = run_dir.join("NetworkProbe.pfftt");
+    let on_disk = std::fs::read_to_string(&pfftt).expect("read pfftt");
+    assert_eq!(
+        on_disk,
+        "[ document = file:///somewhere/NetworkProbe.tq, started = 2026-05-14T12:34:56Z ]\n"
+    );
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn format_record_produces_expected_text() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "make_coffee:2".to_string(),
+        outcome: Outcome::Done(None),
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done ]\n"
+    );
+}
+
+#[test]
+fn format_record_done_with_result_emits_sibling_field() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "lookup:1".to_string(),
+        outcome: Outcome::Done(Some("\"penguin\"".to_string())),
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = lookup:1, outcome = Done, result = \"penguin\" ]\n"
+    );
+}
+
+#[test]
+fn format_record_failed_with_reason_emits_sibling_field() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "ping:1".to_string(),
+        outcome: Outcome::Failed(Some("\"network unplugged\"".to_string())),
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed, reason = \"network unplugged\" ]\n"
+    );
+}
+
+#[test]
+fn parse_manifest_reads_expected_text() {
+    let line = "[ document = file:///foo/bar.tq, started = 2026-05-14T01:02:03Z ]";
+    let manifest = parse_manifest(line).expect("parse");
+    assert_eq!(manifest.document, Path::new("/foo/bar.tq"));
+    assert_eq!(manifest.started, "2026-05-14T01:02:03Z");
+}
+
+#[test]
+fn parse_record_yields_expected_fields() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done ]";
+    let record = parse_record(line).expect("parse");
+    assert_eq!(
+        record,
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            path: "make_coffee:2".to_string(),
+            outcome: Outcome::Done(None),
+        }
+    );
+}
+
+#[test]
+fn parse_record_done_with_result_folds_into_variant() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, path = lookup:1, outcome = Done, result = \"penguin\" ]";
+    let record = parse_record(line).expect("parse");
+    assert_eq!(
+        record.outcome,
+        Outcome::Done(Some("\"penguin\"".to_string()))
+    );
+}
+
+#[test]
+fn parse_record_failed_with_reason_folds_into_variant() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed, reason = \"network unplugged\" ]";
+    let record = parse_record(line).expect("parse");
+    assert_eq!(
+        record.outcome,
+        Outcome::Failed(Some("\"network unplugged\"".to_string()))
+    );
+}
+
+#[test]
+fn parse_record_rejects_unknown_outcome() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, path = x:1, outcome = Maybe ]";
+    match parse_record(line) {
+        Err(crate::runner::state::RecordError::UnknownOutcome(text)) => {
+            assert_eq!(text, "Maybe");
+        }
+        other => panic!("expected UnknownOutcome, got {:?}", other),
+    }
 }
