@@ -219,9 +219,9 @@ impl Store {
     }
 }
 
-// Compute the on-disk PFFTT file path for a run, named after the source
+// Compute the on-disk PFFTT file path for a run, named using the source
 // document's stem.
-fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
+pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
     let stem = document
         .file_stem()
         .map(|s| s.to_os_string())
@@ -229,6 +229,45 @@ fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
     let mut name = PathBuf::from(stem);
     name.set_extension("pfftt");
     run_dir.join(name)
+}
+
+/// Append-only writer for a PFFTT file. This is used by the runner to record
+/// a Result tablet for each completed Step.
+#[allow(dead_code)]
+pub struct Appender {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+#[allow(dead_code)]
+impl Appender {
+    /// Open the PFFTT file for append. The file must already exist (the
+    /// runner writes the manifest first via `Store::create`).
+    pub fn open(path: PathBuf) -> Result<Self, RunnerError> {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .map_err(|error| RunnerError::StoreError {
+                path: path.clone(),
+                error,
+            })?;
+        Ok(Appender { file, path })
+    }
+
+    /// Append one Result tablet line. Flushes are left to the OS; on Quit
+    /// the runner drops the Appender, which closes the file.
+    pub fn append(&mut self, record: &Record) -> Result<(), RunnerError> {
+        use std::io::Write;
+        let text = format_record(record);
+        self.file
+            .write_all(text.as_bytes())
+            .map_err(|error| RunnerError::StoreError {
+                path: self
+                    .path
+                    .clone(),
+                error,
+            })
+    }
 }
 
 // Locate the single `*.pfftt` file in a run directory.
