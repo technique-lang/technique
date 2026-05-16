@@ -18,5 +18,6 @@ pub enum RunnerError {
     InvalidRunId(String),
     MissingEntryProcedure,
     UnboundVariable(String),
+    BindArityMismatch { expected: usize, actual: usize },
     UserQuit,
 }

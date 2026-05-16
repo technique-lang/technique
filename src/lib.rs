@@ -8,3 +8,4 @@ pub(crate) mod regex;
 pub mod runner;
 pub mod templating;
 pub mod translation;
+pub mod value;

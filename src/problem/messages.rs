@@ -1083,6 +1083,13 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
             format!("Unbound variable '{}'", name),
             "The procedure has not yet supplied a value for this variable!".to_string(),
         ),
+        RunnerError::BindArityMismatch { expected, actual } => (
+            format!(
+                "Binding arity mismatch: {} names but {} values",
+                expected, actual
+            ),
+            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
