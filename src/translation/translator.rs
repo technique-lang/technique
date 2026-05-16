@@ -180,12 +180,13 @@ impl<'i> Translator<'i> {
             }
         }
         let body = Operation::Sequence(ops);
+        let description_ops = self.translate_paragraphs(description);
 
         let entry = &mut self
             .program
             .subroutines[id.0];
         entry.title = title;
-        entry.description = description;
+        entry.description = description_ops;
         entry.parameters = procedure
             .parameters
             .as_ref()
@@ -221,9 +222,12 @@ impl<'i> Translator<'i> {
                         self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                     }
                 }
+                let title_op = title
+                    .as_ref()
+                    .map(|p| Box::new(self.translate_paragraph(p)));
                 Operation::Section {
                     numeral,
-                    title: title.as_ref(),
+                    title: title_op,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 }
@@ -240,10 +244,11 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
+                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
-                    description: description.as_slice(),
+                    description: description_ops,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 }
@@ -259,10 +264,11 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
+                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
-                    description: description.as_slice(),
+                    description: description_ops,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 }
@@ -337,6 +343,41 @@ impl<'i> Translator<'i> {
                     ops.push(op);
                 }
             }
+        }
+    }
+
+    fn translate_paragraphs(
+        &mut self,
+        paragraphs: &'i [language::Paragraph<'i>],
+    ) -> Vec<Operation<'i>> {
+        paragraphs
+            .iter()
+            .map(|p| self.translate_paragraph(p))
+            .collect()
+    }
+
+    fn translate_paragraph(&mut self, paragraph: &'i language::Paragraph<'i>) -> Operation<'i> {
+        let language::Paragraph(descriptives, _) = paragraph;
+        let fragments = descriptives
+            .iter()
+            .map(|d| self.fragment_from_descriptive(d))
+            .collect();
+        Operation::String(fragments)
+    }
+
+    fn fragment_from_descriptive(
+        &mut self,
+        descriptive: &'i language::Descriptive<'i>,
+    ) -> Fragment<'i> {
+        match descriptive {
+            language::Descriptive::Text(text) => Fragment::Text(text),
+            language::Descriptive::CodeInline(expr) => {
+                Fragment::Interpolation(self.translate_expression(expr))
+            }
+            language::Descriptive::Application(invocation) => {
+                Fragment::Interpolation(Operation::Invoke(self.translate_invocation(invocation)))
+            }
+            language::Descriptive::Binding(inner, _) => self.fragment_from_descriptive(inner),
         }
     }
 

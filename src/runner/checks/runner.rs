@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::language;
 use crate::program::{Operation, Ordinal, Program, Subroutine};
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{Outcome, Runner};
@@ -66,15 +65,11 @@ impl Drop for StoreFixture {
     }
 }
 
-fn empty_paragraphs() -> &'static [language::Paragraph<'static>] {
-    &[]
-}
-
 fn step(ordinal: Ordinal<'static>, body: Operation<'static>) -> Operation<'static> {
     Operation::Step {
         ordinal,
         attributes: Vec::new(),
-        description: empty_paragraphs(),
+        description: Vec::new(),
         body: Box::new(body),
         responses: Vec::new(),
     }
@@ -278,15 +273,14 @@ fn section_renders_path_segment() {
 
 #[test]
 fn section_title_renders_from_paragraph() {
+    use crate::program::Fragment;
+
     let mut fixture = StoreFixture::new("section-title");
-    let title: &'static language::Paragraph<'static> =
-        Box::leak(Box::new(language::Paragraph::new(vec![
-            language::Descriptive::Text("Setup"),
-        ])));
+    let title = Operation::String(vec![Fragment::Text("Setup")]);
     let inner = step(Ordinal::Dependent("1"), Operation::Sequence(vec![]));
     let body = Operation::Sequence(vec![Operation::Section {
         numeral: "I",
-        title: Some(title),
+        title: Some(Box::new(title)),
         body: Box::new(Operation::Sequence(vec![inner])),
         responses: Vec::new(),
     }]);
@@ -344,4 +338,54 @@ fn parallel_step_index_starts_at_one() {
         })
         .collect();
     assert_eq!(step_fqns, vec!["-1", "-2"]);
+}
+
+#[test]
+fn bind_in_body_interpolates_into_description() {
+    use crate::language::{Identifier as LangIdentifier, Numeric as LangNumeric};
+    use crate::program::Fragment;
+
+    let mut fixture = StoreFixture::new("bind-then-interpolate");
+
+    // Body: bind `answer` to 42. The description references `{answer}`,
+    // so when the prompt fires the operator should see "the answer is 42".
+    let names: &'static [LangIdentifier<'static>] =
+        Box::leak(Box::new([LangIdentifier::new("answer")]));
+    let bind = Operation::Bind {
+        names,
+        value: Box::new(Operation::Number(LangNumeric::Integral(42))),
+    };
+    let description = vec![Operation::String(vec![
+        Fragment::Text("the answer is "),
+        Fragment::Interpolation(Operation::Variable(LangIdentifier::new("answer"))),
+    ])];
+    let the_step = Operation::Step {
+        ordinal: Ordinal::Dependent("1"),
+        attributes: Vec::new(),
+        description,
+        body: Box::new(bind),
+        responses: Vec::new(),
+    };
+    let body = Operation::Sequence(vec![the_step]);
+    let program = anonymous_with_body(body);
+
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let description_text = prompt
+        .events()
+        .iter()
+        .find_map(|e| {
+            if let Event::Step { description, .. } = e {
+                Some(description.as_str())
+            } else {
+                None
+            }
+        })
+        .expect("step event");
+    assert_eq!(description_text, "the answer is 42");
 }

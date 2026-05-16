@@ -109,12 +109,12 @@ impl<'i, P: Prompt> Runner<'i, P> {
             self.path
                 .push(PathSegment::Procedure(name));
         }
-        let outcome = self.walk(&entry.body)?;
+        let result = self.walk(&entry.body);
         if name.is_some() {
             self.path
                 .pop();
         }
-        Ok(outcome)
+        result
     }
 
     fn walk(&mut self, op: &'i Operation<'i>) -> Result<Outcome, RunnerError> {
@@ -125,7 +125,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 title,
                 body,
                 ..
-            } => self.walk_section(numeral, *title, body),
+            } => self.walk_section(numeral, title.as_deref(), body),
             Operation::Step { .. } => {
                 // Dependent vs Parallel ordinal index needs the
                 // surrounding Sequence's parallel counter; a Step
@@ -141,7 +141,10 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Number(_)
             | Operation::String(_)
             | Operation::Multiline(_, _)
-            | Operation::Tablet(_) => Ok(Outcome::Done(Value::Unitus)),
+            | Operation::Tablet(_) => {
+                let value = super::evaluator::evaluate(&mut self.env, op)?;
+                Ok(Outcome::Done(value))
+            }
         }
     }
 
@@ -171,23 +174,35 @@ impl<'i, P: Prompt> Runner<'i, P> {
     fn walk_section(
         &mut self,
         numeral: &'i str,
-        title: Option<&'i crate::language::Paragraph<'i>>,
+        title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
+        let result = self.execute_section(title, body);
+        self.path
+            .pop();
+        result
+    }
+
+    fn execute_section(
+        &mut self,
+        title: Option<&'i Operation<'i>>,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
         let qualified = self
             .path
             .render();
-        let title_text = title
-            .map(render_paragraph)
-            .unwrap_or_default();
+        let title_text = match title {
+            Some(op) => match super::evaluator::evaluate(&mut self.env, op)? {
+                Value::Literali(s) => s,
+                other => other.to_string(),
+            },
+            None => String::new(),
+        };
         self.prompt
             .section(&qualified, &title_text);
-        let outcome = self.walk(body)?;
-        self.path
-            .pop();
-        Ok(outcome)
+        self.walk(body)
     }
 
     fn walk_step(
@@ -198,7 +213,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         let Operation::Step {
             ordinal,
             attributes,
-            description: _description,
+            description,
             body,
             ..
         } = op
@@ -220,42 +235,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let outcome = if self
-            .completed
-            .contains(&qualified)
-        {
-            // Resume short-circuit: don't descend into the body, don't
-            // re-prompt. The step's outcome was already recorded.
-            Outcome::Done(Value::Unitus)
-        } else {
-            let inner = self.walk(body)?;
-            if let Outcome::Quit = inner {
-                Outcome::Quit
-            } else {
-                self.prompt
-                    .step(&qualified, "");
-                let input = self
-                    .prompt
-                    .ask();
-                let outcome = outcome_from(input);
-                if let Outcome::Quit = outcome {
-                    // Quit: don't record this step; the run resumes
-                    // at this step next time.
-                    Outcome::Quit
-                } else {
-                    let record = Record {
-                        recorded: now_iso8601(),
-                        path: qualified.clone(),
-                        outcome: record_outcome(&outcome),
-                    };
-                    self.appender
-                        .append(&record)?;
-                    self.completed
-                        .insert(qualified.clone());
-                    outcome
-                }
-            }
-        };
+        let result = self.execute_step(&qualified, body, description);
 
         self.path
             .pop();
@@ -263,6 +243,56 @@ impl<'i, P: Prompt> Runner<'i, P> {
             self.path
                 .pop();
         }
+
+        result
+    }
+
+    fn execute_step(
+        &mut self,
+        qualified: &str,
+        body: &'i Operation<'i>,
+        description: &'i [Operation<'i>],
+    ) -> Result<Outcome, RunnerError> {
+        if self
+            .completed
+            .contains(qualified)
+        {
+            return Ok(Outcome::Done(Value::Unitus));
+        }
+        if let Outcome::Quit = self.walk(body)? {
+            return Ok(Outcome::Quit);
+        }
+
+        let mut description_text = String::new();
+        for op in description {
+            if !description_text.is_empty() {
+                description_text.push('\n');
+            }
+            match super::evaluator::evaluate(&mut self.env, op)? {
+                Value::Literali(s) => description_text.push_str(&s),
+                other => description_text.push_str(&other.to_string()),
+            }
+        }
+
+        self.prompt
+            .step(qualified, &description_text);
+        let outcome = outcome_from(
+            self.prompt
+                .ask(),
+        );
+        if let Outcome::Quit = outcome {
+            return Ok(Outcome::Quit);
+        }
+
+        let record = Record {
+            recorded: now_iso8601(),
+            path: qualified.to_string(),
+            outcome: record_outcome(&outcome),
+        };
+        self.appender
+            .append(&record)?;
+        self.completed
+            .insert(qualified.to_string());
         Ok(outcome)
     }
 }
@@ -275,21 +305,6 @@ fn outcome_from(input: UserInput) -> Outcome {
         UserInput::Fail => Outcome::Failed(Failure::Aborted("Failed".to_string())),
         UserInput::Quit => Outcome::Quit,
     }
-}
-
-/// Render a `Paragraph` to plain text by concatenating each
-/// `Descriptive`. Plain text comes through verbatim; code inlines
-/// and invocations come through in their `{ ... }` / `<name>(...)`
-/// source forms.
-fn render_paragraph(p: &crate::language::Paragraph<'_>) -> String {
-    let mut text = String::new();
-    for descriptive in &p.0 {
-        text.push_str(&crate::formatting::render_descriptive(
-            descriptive,
-            &crate::formatting::Identity,
-        ));
-    }
-    text
 }
 
 /// Project the runner's in-memory `Outcome` into the on-disk shape
