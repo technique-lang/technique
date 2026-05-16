@@ -389,3 +389,92 @@ fn bind_in_body_interpolates_into_description() {
         .expect("step event");
     assert_eq!(description_text, "the answer is 42");
 }
+
+#[test]
+fn resolved_invoke_descends_into_subroutine() {
+    use crate::language::Identifier as LangIdentifier;
+    use crate::program::{Invocable, SubroutineId, SubroutineRef};
+
+    let mut fixture = StoreFixture::new("invoke-descent");
+
+    // Build a Program with two subroutines:
+    //   index 0: anonymous wrapper whose body invokes index 1
+    //   index 1: `helper`, body contains a single Step "1"
+    let mut program = Program::new();
+    let mut wrapper = Subroutine::anonymous();
+    wrapper.body = Operation::Sequence(vec![Operation::Invoke(Invocable {
+        target: SubroutineRef::Resolved(SubroutineId(1)),
+        arguments: Vec::new(),
+    })]);
+    program
+        .subroutines
+        .push(wrapper);
+
+    let mut helper = Subroutine::new(LangIdentifier::new("helper"));
+    helper.body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    program
+        .subroutines
+        .push(helper);
+
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let step_fqns: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { qualified, .. } = e {
+                Some(qualified.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    // The Step inside `helper` was reached and prompted, with the
+    // procedure prefix on the FQN.
+    assert_eq!(step_fqns, vec!["helper:1"]);
+}
+
+#[test]
+fn loop_inside_step_produces_one_result() {
+    let mut fixture = StoreFixture::new("loop-in-step");
+
+    // A Step whose body contains a Loop. The Loop announces but does
+    // not record a Result; the enclosing Step records exactly one.
+    let loop_op = Operation::Loop {
+        names: &[],
+        over: None,
+        body: Box::new(Operation::Sequence(vec![])),
+        responses: Vec::new(),
+    };
+    let the_step = Operation::Step {
+        ordinal: Ordinal::Dependent("1"),
+        attributes: Vec::new(),
+        description: Vec::new(),
+        body: Box::new(loop_op),
+        responses: Vec::new(),
+    };
+    let body = Operation::Sequence(vec![the_step]);
+    let program = anonymous_with_body(body);
+
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    runner
+        .run()
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    assert_eq!(
+        pfftt
+            .matches("outcome =")
+            .count(),
+        1
+    );
+}

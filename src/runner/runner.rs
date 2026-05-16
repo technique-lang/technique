@@ -8,7 +8,7 @@ use super::evaluator::Environment;
 use super::path::{PathSegment, QualifiedPath};
 use super::prompt::{Prompt, UserInput};
 use super::state::{Appender, Outcome as RecordOutcome, Record, RecordError, RunId};
-use crate::program::{Operation, Ordinal, Program};
+use crate::program::{Executable, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
 /// What executing an Operation (or evaluating a Step at any scale)
@@ -133,9 +133,19 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 // body of a procedure) is treated as Dependent.
                 self.walk_step(op, 0)
             }
-            // TODO
-            Operation::Loop { body, .. } => self.walk(body),
-            Operation::Invoke(_) | Operation::Execute(_) => Ok(Outcome::Done(Value::Unitus)),
+            Operation::Loop {
+                names, over, body, ..
+            } => {
+                self.prompt
+                    .announce(&describe_loop(names, over.as_deref()));
+                self.walk(body)
+            }
+            Operation::Invoke(invocable) => self.walk_invoke(invocable),
+            Operation::Execute(executable) => {
+                self.prompt
+                    .announce(&describe_execute(executable));
+                Ok(Outcome::Done(Value::Unitus))
+            }
             Operation::Bind { .. }
             | Operation::Variable(_)
             | Operation::Number(_)
@@ -144,6 +154,35 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Tablet(_) => {
                 let value = super::evaluator::evaluate(&mut self.env, op)?;
                 Ok(Outcome::Done(value))
+            }
+        }
+    }
+
+    fn walk_invoke(&mut self, invocable: &'i Invocable<'i>) -> Result<Outcome, RunnerError> {
+        match &invocable.target {
+            SubroutineRef::Resolved(id) => {
+                let subroutine = &self
+                    .program
+                    .subroutines[id.0];
+                let name = subroutine
+                    .name
+                    .as_ref()
+                    .map(|n| n.value);
+                if let Some(name) = name {
+                    self.path
+                        .push(PathSegment::Procedure(name));
+                }
+                let result = self.walk(&subroutine.body);
+                if name.is_some() {
+                    self.path
+                        .pop();
+                }
+                result
+            }
+            SubroutineRef::Unresolved(id) => {
+                self.prompt
+                    .announce(&format!("<{}>", id.value));
+                Ok(Outcome::Done(Value::Unitus))
             }
         }
     }
@@ -179,13 +218,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
-        let result = self.execute_section(title, body);
+        let result = self.perform_section(title, body);
         self.path
             .pop();
         result
     }
 
-    fn execute_section(
+    fn perform_section(
         &mut self,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
@@ -235,7 +274,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let result = self.execute_step(&qualified, body, description);
+        let result = self.perform_step(&qualified, body, description);
 
         self.path
             .pop();
@@ -247,7 +286,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         result
     }
 
-    fn execute_step(
+    fn perform_step(
         &mut self,
         qualified: &str,
         body: &'i Operation<'i>,
@@ -295,6 +334,30 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .insert(qualified.to_string());
         Ok(outcome)
     }
+}
+
+fn describe_loop(
+    names: &[crate::language::Identifier<'_>],
+    over: Option<&Operation<'_>>,
+) -> String {
+    let joined: Vec<&str> = names
+        .iter()
+        .map(|n| n.value)
+        .collect();
+    match over {
+        None => "repeat".to_string(),
+        Some(_) if joined.is_empty() => "foreach".to_string(),
+        Some(_) => format!("foreach {}", joined.join(", ")),
+    }
+}
+
+fn describe_execute(executable: &Executable<'_>) -> String {
+    format!(
+        "{}(...)",
+        executable
+            .target
+            .value
+    )
 }
 
 /// Lift a `UserInput` from the prompt into the runner's `Outcome`.
