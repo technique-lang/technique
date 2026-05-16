@@ -1,5 +1,6 @@
 //! Interactive walker over a translated Program.
 
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
 
@@ -50,3 +51,273 @@ pub enum RunnerError {
     BindArityMismatch { expected: usize, actual: usize },
     UserQuit,
 }
+
+/// Execute a Technique interactively by walking the `Program` tree. Tracks
+/// the position in the document via a `QaulifiedPath` stack, carries an
+/// `Environment` with known result values. Maintains a set of
+/// already-completed step FQNs, an append handle to write results, and the
+/// prompt the operator interacts through.
+#[allow(dead_code)]
+pub struct Runner<'i, P: Prompt> {
+    program: &'i Program<'i>,
+    appender: Appender,
+    completed: HashSet<String>,
+    prompt: P,
+    env: Environment,
+    path: QualifiedPath<'i>,
+}
+
+#[allow(dead_code)]
+impl<'i, P: Prompt> Runner<'i, P> {
+    pub fn with_pieces(
+        program: &'i Program<'i>,
+        appender: Appender,
+        completed: HashSet<String>,
+        prompt: P,
+    ) -> Self {
+        Runner {
+            program,
+            appender,
+            completed,
+            prompt,
+            env: Environment::new(),
+            path: QualifiedPath::new(),
+        }
+    }
+
+    /// Consume the runner and return the inner prompt. Tests use this
+    /// to assert on the Mock's event log after a run completes.
+    pub fn into_prompt(self) -> P {
+        self.prompt
+    }
+
+    /// Walk the entry procedure top to bottom. Entry-procedure
+    /// selection here is `program.subroutines[0]` — the synthetic
+    /// anonymous wrapper if the document is top-level Steps, otherwise
+    /// the first declared procedure.
+    pub fn run(&mut self) -> Result<Outcome, RunnerError> {
+        let entry = self
+            .program
+            .subroutines
+            .first()
+            .ok_or(RunnerError::MissingEntryProcedure)?;
+        let name = entry
+            .name
+            .as_ref()
+            .map(|n| n.value);
+        if let Some(name) = name {
+            self.path
+                .push(PathSegment::Procedure(name));
+        }
+        let outcome = self.walk(&entry.body)?;
+        if name.is_some() {
+            self.path
+                .pop();
+        }
+        Ok(outcome)
+    }
+
+    fn walk(&mut self, op: &'i Operation<'i>) -> Result<Outcome, RunnerError> {
+        match op {
+            Operation::Sequence(ops) => self.walk_sequence(ops),
+            Operation::Section {
+                numeral,
+                title,
+                body,
+                ..
+            } => self.walk_section(numeral, *title, body),
+            Operation::Step { .. } => {
+                // Dependent vs Parallel ordinal index needs the
+                // surrounding Sequence's parallel counter; a Step
+                // encountered outside a Sequence (i.e. as the entire
+                // body of a procedure) is treated as Dependent.
+                self.walk_step(op, 0)
+            }
+            // TODO
+            Operation::Loop { body, .. } => self.walk(body),
+            Operation::Invoke(_) | Operation::Execute(_) => Ok(Outcome::Done(Value::Unitus)),
+            Operation::Bind { .. }
+            | Operation::Variable(_)
+            | Operation::Number(_)
+            | Operation::String(_)
+            | Operation::Multiline(_, _)
+            | Operation::Tablet(_) => Ok(Outcome::Done(Value::Unitus)),
+        }
+    }
+
+    fn walk_sequence(&mut self, ops: &'i [Operation<'i>]) -> Result<Outcome, RunnerError> {
+        let mut parallel_idx: usize = 0;
+        for op in ops {
+            let outcome = match op {
+                Operation::Step { ordinal, .. } => {
+                    let index = match ordinal {
+                        Ordinal::Parallel => {
+                            parallel_idx += 1;
+                            parallel_idx
+                        }
+                        Ordinal::Dependent(_) => 0,
+                    };
+                    self.walk_step(op, index)?
+                }
+                _ => self.walk(op)?,
+            };
+            if let Outcome::Quit = outcome {
+                return Ok(Outcome::Quit);
+            }
+        }
+        Ok(Outcome::Done(Value::Unitus))
+    }
+
+    fn walk_section(
+        &mut self,
+        numeral: &'i str,
+        title: Option<&'i crate::language::Paragraph<'i>>,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        self.path
+            .push(PathSegment::Section(numeral));
+        let qualified = self
+            .path
+            .render();
+        let title_text = title
+            .map(render_paragraph)
+            .unwrap_or_default();
+        self.prompt
+            .section(&qualified, &title_text);
+        let outcome = self.walk(body)?;
+        self.path
+            .pop();
+        Ok(outcome)
+    }
+
+    fn walk_step(
+        &mut self,
+        op: &'i Operation<'i>,
+        parallel_index: usize,
+    ) -> Result<Outcome, RunnerError> {
+        let Operation::Step {
+            ordinal,
+            attributes,
+            description: _description,
+            body,
+            ..
+        } = op
+        else {
+            unreachable!("walk_step called with non-Step operation");
+        };
+
+        for frame in attributes {
+            self.path
+                .push(PathSegment::Attributes(frame));
+        }
+        let segment = match ordinal {
+            Ordinal::Dependent(s) => PathSegment::DependentStep(s),
+            Ordinal::Parallel => PathSegment::ParallelStep(parallel_index),
+        };
+        self.path
+            .push(segment);
+        let qualified = self
+            .path
+            .render();
+
+        let outcome = if self
+            .completed
+            .contains(&qualified)
+        {
+            // Resume short-circuit: don't descend into the body, don't
+            // re-prompt. The step's outcome was already recorded.
+            Outcome::Done(Value::Unitus)
+        } else {
+            let inner = self.walk(body)?;
+            if let Outcome::Quit = inner {
+                Outcome::Quit
+            } else {
+                self.prompt
+                    .step(&qualified, "");
+                let input = self
+                    .prompt
+                    .ask();
+                let outcome = outcome_from(input);
+                if let Outcome::Quit = outcome {
+                    // Quit: don't record this step; the run resumes
+                    // at this step next time.
+                    Outcome::Quit
+                } else {
+                    let record = Record {
+                        recorded: now_iso8601(),
+                        path: qualified.clone(),
+                        outcome: record_outcome(&outcome),
+                    };
+                    self.appender
+                        .append(&record)?;
+                    self.completed
+                        .insert(qualified.clone());
+                    outcome
+                }
+            }
+        };
+
+        self.path
+            .pop();
+        for _ in attributes {
+            self.path
+                .pop();
+        }
+        Ok(outcome)
+    }
+}
+
+/// Lift a `UserInput` from the prompt into the runner's `Outcome`.
+fn outcome_from(input: UserInput) -> Outcome {
+    match input {
+        UserInput::Done(value) => Outcome::Done(value),
+        UserInput::Skip => Outcome::Skipped,
+        UserInput::Fail => Outcome::Failed(Failure::Aborted("Failed".to_string())),
+        UserInput::Quit => Outcome::Quit,
+    }
+}
+
+/// Render a `Paragraph` to plain text by concatenating each
+/// `Descriptive`. Plain text comes through verbatim; code inlines
+/// and invocations come through in their `{ ... }` / `<name>(...)`
+/// source forms.
+fn render_paragraph(p: &crate::language::Paragraph<'_>) -> String {
+    let mut text = String::new();
+    for descriptive in &p.0 {
+        text.push_str(&crate::formatting::render_descriptive(
+            descriptive,
+            &crate::formatting::Identity,
+        ));
+    }
+    text
+}
+
+/// Project the runner's in-memory `Outcome` into the on-disk shape
+/// the PFFTT writer expects. Done always serializes as `result = ()`
+/// for now — rendered-value persistence is future work. Quit is
+/// unreachable here: the caller filters it out before recording.
+fn record_outcome(outcome: &Outcome) -> RecordOutcome {
+    match outcome {
+        Outcome::Done(_) => RecordOutcome::Done(Some("()".to_string())),
+        Outcome::Skipped => RecordOutcome::Skipped,
+        Outcome::Failed(Failure::Aborted(reason)) => {
+            RecordOutcome::Failed(Some(format!("\"{}\"", reason)))
+        }
+        Outcome::Quit => unreachable!("Quit is not recorded"),
+    }
+}
+
+/// Current UTC time as an RFC3339 second-precision string, used for
+/// the `recorded` field of every Result tablet.
+fn now_iso8601() -> String {
+    use time::format_description::well_known::Rfc3339;
+    time::OffsetDateTime::now_utc()
+        .replace_nanosecond(0)
+        .unwrap() // Zero nanoseconds is always valid
+        .format(&Rfc3339)
+        .unwrap() // Rfc3339 formatting is infallible for a valid OffsetDateTime
+}
+
+#[cfg(test)]
+#[path = "checks/runner.rs"]
+mod check;

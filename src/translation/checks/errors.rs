@@ -137,7 +137,7 @@ fn description_after_multiple_body_elements() {
     // body elements, and a later Element::Description still trips the
     // guard. (A Steps-then-Description case is unreachable today because
     // the parser absorbs trailing prose into the previous step's
-    // description; see plans/PHASE-3.md.)
+    // description)
     let source = r#"
 % technique v1
 
