@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use crate::program::{Operation, Ordinal, Program, Subroutine};
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{Outcome, Runner};
-use crate::runner::state::{Appender, Store};
+use crate::runner::state::{parse_record, Appender, Outcome as RecordOutcome, Store};
 use crate::value::Value;
 
 // A small fixture builder. The Program borrows from its inputs, so the
@@ -102,19 +102,34 @@ fn single_step_prompts_and_records() {
     assert_eq!(outcome, Outcome::Done(Value::Unitus));
 
     let prompt = runner.into_prompt();
-    let events = prompt.events();
-    // Exactly one Step event and one Ask event.
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, Event::Step { .. })));
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, Event::Ask)));
+    assert_eq!(
+        prompt.events(),
+        &[
+            Event::Step {
+                qualified: "1".to_string(),
+                description: String::new(),
+            },
+            Event::Ask,
+        ]
+    );
 
     let pfftt = fixture.pfftt_contents();
-    assert!(pfftt.contains("path = 1"));
-    assert!(pfftt.contains("outcome = Done"));
-    assert!(pfftt.contains("result = ()"));
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines[0],
+        "[ document = file:///tmp/Test.tq, started = 2026-05-16T00:00:00Z ]"
+    );
+    let record = parse_record(lines[1]).expect("parse record");
+    assert_eq!(record.path, "1");
+    assert_eq!(record.outcome, RecordOutcome::Done(Some("()".to_string())));
 }
 
 #[test]

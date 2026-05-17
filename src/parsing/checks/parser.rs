@@ -2293,7 +2293,11 @@ fn parse_collecting_errors_basic() {
             assert!(errors.len() > 0);
             assert!(errors
                 .iter()
-                .any(|e| matches!(e, ParsingError::InvalidHeader(_))));
+                .any(|e| if let ParsingError::InvalidHeader(_) = e {
+                    true
+                } else {
+                    false
+                }));
         }
     }
 

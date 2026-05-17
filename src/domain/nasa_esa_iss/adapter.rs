@@ -51,9 +51,19 @@ fn inline_procedures(doc: &mut Document) {
         }
     }
 
-    doc.body.retain(|node| {
-        !matches!(node, Node::Sequential { title: None, invocations, .. } if !invocations.is_empty())
-    });
+    doc.body
+        .retain(|node| {
+            if let Node::Sequential {
+                title: None,
+                invocations,
+                ..
+            } = node
+            {
+                invocations.is_empty()
+            } else {
+                true
+            }
+        });
 }
 
 /// Collect ordinals from invocation-only steps: procedure_name -> ordinal.

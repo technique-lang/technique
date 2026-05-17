@@ -1044,7 +1044,11 @@ fn multiple_roles_with_dependent_substeps() {
                         ..
                     } => {
                         for substep in substeps {
-                            assert!(matches!(substep, Scope::DependentBlock { .. }));
+                            if let Scope::DependentBlock { .. } = substep {
+                                // ok
+                            } else {
+                                panic!("Expected DependentBlock substep");
+                            }
                         }
                     }
                     _ => panic!("Expected AttributedBlock scopes"),

@@ -135,11 +135,10 @@ impl Store {
         document: &Path,
         started: String,
     ) -> Result<(RunId, PathBuf, Manifest), RunnerError> {
-        let absolute =
-            std::path::absolute(document).map_err(|error| RunnerError::StoreError {
-                path: document.to_path_buf(),
-                error,
-            })?;
+        let absolute = std::path::absolute(document).map_err(|error| RunnerError::StoreError {
+            path: document.to_path_buf(),
+            error,
+        })?;
         let (id, run_dir) = self.allocate()?;
         let manifest = Manifest {
             document: absolute,

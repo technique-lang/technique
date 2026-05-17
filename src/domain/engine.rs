@@ -79,12 +79,7 @@ impl<'i> Scope<'i> {
     /// Filters out ResponseBlock, CodeBlock, AttributeBlock, etc.
     pub fn substeps(&self) -> impl Iterator<Item = &Scope<'i>> {
         self.children()
-            .filter(|s| {
-                matches!(
-                    s,
-                    Scope::DependentBlock { .. } | Scope::ParallelBlock { .. }
-                )
-            })
+            .filter(|s| s.is_step())
     }
 
     /// Returns the text content of this step (first paragraph).
@@ -168,10 +163,10 @@ impl<'i> Scope<'i> {
 
     /// Returns true if this scope represents a step (dependent or parallel).
     pub fn is_step(&self) -> bool {
-        matches!(
-            self,
-            Scope::DependentBlock { .. } | Scope::ParallelBlock { .. }
-        )
+        match self {
+            Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => true,
+            _ => false,
+        }
     }
 
     /// Returns section info (numeral, title) if this is a SectionChunk.

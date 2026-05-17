@@ -685,7 +685,13 @@ impl<'i> Formatter<'i> {
                             if func
                                 .parameters
                                 .iter()
-                                .any(|p| matches!(p, Expression::Multiline(_, _, _))) =>
+                                .any(|p| {
+                                    if let Expression::Multiline(_, _, _) = p {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }) =>
                         {
                             line.flush();
                             self.add_fragment_reference(Syntax::Neutral, " ");
