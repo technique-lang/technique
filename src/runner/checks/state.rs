@@ -6,59 +6,33 @@ use crate::runner::state::{
 };
 
 #[test]
-fn run_id_parse_padded() {
-    let id = RunId::parse("000007").expect("parse padded");
+fn run_id_parse() {
+    let id = RunId::parse("7").expect("parse");
     assert_eq!(id, RunId(7));
-}
 
-#[test]
-fn run_id_parse_unpadded() {
-    let id = RunId::parse("7").expect("parse unpadded");
+    let id = RunId::parse("000007").expect("parse");
     assert_eq!(id, RunId(7));
-}
 
-#[test]
-fn run_id_parse_large() {
-    let id = RunId::parse("123456").expect("parse large");
+    let id = RunId::parse("123456").expect("parse");
     assert_eq!(id, RunId(123456));
 }
 
 #[test]
-fn run_id_parse_rejects_empty() {
-    match RunId::parse("") {
-        Err(RunnerError::InvalidRunId(text)) => assert_eq!(text, ""),
-        other => panic!("expected InvalidRunId, got {:?}", other),
+fn run_id_parse_rejects_non_decimal() {
+    for text in ["", "abc", "-1"] {
+        match RunId::parse(text) {
+            Err(RunnerError::InvalidRunId(got)) => assert_eq!(got, text),
+            other => panic!("expected InvalidRunId for {:?}, got {:?}", text, other),
+        }
     }
 }
 
 #[test]
-fn run_id_parse_rejects_alphabetic() {
-    match RunId::parse("abc") {
-        Err(RunnerError::InvalidRunId(text)) => assert_eq!(text, "abc"),
-        other => panic!("expected InvalidRunId, got {:?}", other),
-    }
-}
-
-#[test]
-fn run_id_parse_rejects_negative() {
-    match RunId::parse("-1") {
-        Err(RunnerError::InvalidRunId(text)) => assert_eq!(text, "-1"),
-        other => panic!("expected InvalidRunId, got {:?}", other),
-    }
-}
-
-#[test]
-fn run_id_render_pads_to_six() {
-    assert_eq!(RunId(7).render(), "000007");
+fn run_id_render_six_digit_padding() {
     assert_eq!(RunId(0).render(), "000000");
-    assert_eq!(RunId(142).render(), "000142");
+    assert_eq!(RunId(7).render(), "000007");
     assert_eq!(RunId(15003).render(), "015003");
-    assert_eq!(RunId(123456).render(), "123456");
-}
-
-#[test]
-fn run_id_render_wider_than_six_unpadded() {
-    // Six digits is the convention but larger values render naturally.
+    // Six digits is the convention, but larger values render unpadded.
     assert_eq!(RunId(1_234_567).render(), "1234567");
 }
 
@@ -198,7 +172,10 @@ fn create_writes_pfftt_file_with_expected_content() {
 }
 
 #[test]
-fn format_record_produces_expected_text() {
+fn format_record_pins_on_disk_text() {
+    // Each variant produces a distinct line shape — sibling fields appear only
+    // when the corresponding Outcome carries a payload. The round-trip test
+    // below covers parse compatibility; this one pins exact bytes.
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         path: "make_coffee:2".to_string(),
@@ -208,97 +185,104 @@ fn format_record_produces_expected_text() {
         format_record(&record),
         "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done ]\n"
     );
-}
 
-#[test]
-fn format_record_done_with_result_emits_sibling_field() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "lookup:1".to_string(),
+        path: "make_coffee:2".to_string(),
         outcome: Outcome::Done(Some("\"penguin\"".to_string())),
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = lookup:1, outcome = Done, result = \"penguin\" ]\n"
+        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done, result = \"penguin\" ]\n"
     );
-}
 
-#[test]
-fn format_record_failed_with_reason_emits_sibling_field() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "ping:1".to_string(),
-        outcome: Outcome::Failed(Some("\"network unplugged\"".to_string())),
-    };
-    assert_eq!(
-        format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed, reason = \"network unplugged\" ]\n"
-    );
-}
-
-#[test]
-fn format_record_skipped_emits_no_sibling() {
-    let record = Record {
-        recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "wait:3".to_string(),
+        path: "make_coffee:2".to_string(),
         outcome: Outcome::Skipped,
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = wait:3, outcome = Skipped ]\n"
+        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Skipped ]\n"
     );
-}
 
-#[test]
-fn format_record_failed_without_reason_emits_no_sibling() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "ping:1".to_string(),
+        path: "make_coffee:2".to_string(),
         outcome: Outcome::Failed(None),
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed ]\n"
+        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Failed ]\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "make_coffee:2".to_string(),
+        outcome: Outcome::Failed(Some("\"network unplugged\"".to_string())),
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Failed, reason = \"network unplugged\" ]\n"
     );
 }
 
 #[test]
 fn record_round_trips_through_format_and_parse() {
-    let cases = [
-        Record {
-            recorded: "2026-05-14T12:00:00Z".to_string(),
-            path: "a:1".to_string(),
-            outcome: Outcome::Done(None),
-        },
-        Record {
-            recorded: "2026-05-14T12:00:01Z".to_string(),
-            path: "a:2".to_string(),
-            outcome: Outcome::Done(Some("\"penguin\"".to_string())),
-        },
-        Record {
-            recorded: "2026-05-14T12:00:02Z".to_string(),
-            path: "a:3".to_string(),
-            outcome: Outcome::Skipped,
-        },
-        Record {
-            recorded: "2026-05-14T12:00:03Z".to_string(),
-            path: "a:4".to_string(),
-            outcome: Outcome::Failed(None),
-        },
-        Record {
-            recorded: "2026-05-14T12:00:04Z".to_string(),
-            path: "a:5".to_string(),
-            outcome: Outcome::Failed(Some("\"unreachable\"".to_string())),
-        },
-    ];
-    for original in &cases {
-        let text = format_record(original);
-        let line = text
-            .strip_suffix('\n')
-            .expect("trailing newline");
-        let parsed = parse_record(line).expect("parse");
-        assert_eq!(&parsed, original);
-    }
+    let original = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "a:1".to_string(),
+        outcome: Outcome::Done(None),
+    };
+    let text = format_record(&original);
+    let line = text
+        .strip_suffix('\n')
+        .expect("trailing newline");
+    assert_eq!(parse_record(line).expect("parse"), original);
+
+    let original = Record {
+        recorded: "2026-05-14T12:00:01Z".to_string(),
+        path: "a:2".to_string(),
+        outcome: Outcome::Done(Some("\"penguin\"".to_string())),
+    };
+    let text = format_record(&original);
+    let line = text
+        .strip_suffix('\n')
+        .expect("trailing newline");
+    assert_eq!(parse_record(line).expect("parse"), original);
+
+    let original = Record {
+        recorded: "2026-05-14T12:00:02Z".to_string(),
+        path: "a:3".to_string(),
+        outcome: Outcome::Skipped,
+    };
+    let text = format_record(&original);
+    let line = text
+        .strip_suffix('\n')
+        .expect("trailing newline");
+    assert_eq!(parse_record(line).expect("parse"), original);
+
+    let original = Record {
+        recorded: "2026-05-14T12:00:03Z".to_string(),
+        path: "a:4".to_string(),
+        outcome: Outcome::Failed(None),
+    };
+    let text = format_record(&original);
+    let line = text
+        .strip_suffix('\n')
+        .expect("trailing newline");
+    assert_eq!(parse_record(line).expect("parse"), original);
+
+    let original = Record {
+        recorded: "2026-05-14T12:00:04Z".to_string(),
+        path: "a:5".to_string(),
+        outcome: Outcome::Failed(Some("\"unreachable\"".to_string())),
+    };
+    let text = format_record(&original);
+    let line = text
+        .strip_suffix('\n')
+        .expect("trailing newline");
+    assert_eq!(parse_record(line).expect("parse"), original);
 }
 
 #[test]
@@ -307,40 +291,6 @@ fn parse_manifest_reads_expected_text() {
     let manifest = parse_manifest(line).expect("parse");
     assert_eq!(manifest.document, Path::new("/foo/bar.tq"));
     assert_eq!(manifest.started, "2026-05-14T01:02:03Z");
-}
-
-#[test]
-fn parse_record_yields_expected_fields() {
-    let line = "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done ]";
-    let record = parse_record(line).expect("parse");
-    assert_eq!(
-        record,
-        Record {
-            recorded: "2026-05-14T12:00:00Z".to_string(),
-            path: "make_coffee:2".to_string(),
-            outcome: Outcome::Done(None),
-        }
-    );
-}
-
-#[test]
-fn parse_record_done_with_result_folds_into_variant() {
-    let line = "[ recorded = 2026-05-14T12:00:00Z, path = lookup:1, outcome = Done, result = \"penguin\" ]";
-    let record = parse_record(line).expect("parse");
-    assert_eq!(
-        record.outcome,
-        Outcome::Done(Some("\"penguin\"".to_string()))
-    );
-}
-
-#[test]
-fn parse_record_failed_with_reason_folds_into_variant() {
-    let line = "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed, reason = \"network unplugged\" ]";
-    let record = parse_record(line).expect("parse");
-    assert_eq!(
-        record.outcome,
-        Outcome::Failed(Some("\"network unplugged\"".to_string()))
-    );
 }
 
 #[test]
@@ -355,7 +305,7 @@ fn parse_record_rejects_unknown_outcome() {
 }
 
 #[test]
-fn parse_manifest_missing_document_errors() {
+fn parse_manifest_rejects_missing_required_field() {
     let line = "[ started = 2026-05-14T01:02:03Z ]";
     match parse_manifest(line) {
         Err(crate::runner::state::RecordError::MissingField(name)) => {
@@ -363,10 +313,7 @@ fn parse_manifest_missing_document_errors() {
         }
         other => panic!("expected MissingField, got {:?}", other),
     }
-}
 
-#[test]
-fn parse_manifest_missing_started_errors() {
     let line = "[ document = file:///x.tq ]";
     match parse_manifest(line) {
         Err(crate::runner::state::RecordError::MissingField(name)) => {
@@ -377,7 +324,7 @@ fn parse_manifest_missing_started_errors() {
 }
 
 #[test]
-fn parse_record_missing_path_errors() {
+fn parse_record_rejects_missing_required_field() {
     let line = "[ recorded = 2026-05-14T12:00:00Z, outcome = Done ]";
     match parse_record(line) {
         Err(crate::runner::state::RecordError::MissingField(name)) => {
@@ -385,10 +332,7 @@ fn parse_record_missing_path_errors() {
         }
         other => panic!("expected MissingField, got {:?}", other),
     }
-}
 
-#[test]
-fn parse_record_missing_outcome_errors() {
     let line = "[ recorded = 2026-05-14T12:00:00Z, path = a:1 ]";
     match parse_record(line) {
         Err(crate::runner::state::RecordError::MissingField(name)) => {

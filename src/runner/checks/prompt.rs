@@ -57,50 +57,31 @@ fn mock_ask_without_answers_panics() {
 }
 
 #[test]
-fn console_done_input() {
-    let input = Cursor::new(b"d\n");
+fn console_input() {
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"d\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Done(Value::Unitus));
-}
 
-#[test]
-fn console_skip_input() {
-    let input = Cursor::new(b"s\n");
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"s\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Skip);
-}
 
-#[test]
-fn console_fail_input() {
-    let input = Cursor::new(b"f\n");
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"f\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Fail);
-}
 
-#[test]
-fn console_quit_input() {
-    let input = Cursor::new(b"q\n");
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"q\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Quit);
-}
 
-#[test]
-fn console_uppercase_done_accepted() {
-    let input = Cursor::new(b"DONE\n");
+    // Case-insensitive on the first character.
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"DONE\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Done(Value::Unitus));
-}
 
-#[test]
-fn console_leading_whitespace_tolerated() {
-    let input = Cursor::new(b"   q\n");
+    // Leading whitespace is tolerated.
     let mut output: Vec<u8> = Vec::new();
-    let mut p = Console::with_handles(input, &mut output);
+    let mut p = Console::with_handles(Cursor::new(b"   q\n"), &mut output);
     assert_eq!(p.ask(), UserInput::Quit);
 }
 
