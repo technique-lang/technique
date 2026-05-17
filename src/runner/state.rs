@@ -135,12 +135,17 @@ impl Store {
         document: &Path,
         started: String,
     ) -> Result<(RunId, PathBuf, Manifest), RunnerError> {
+        let absolute =
+            std::path::absolute(document).map_err(|error| RunnerError::StoreError {
+                path: document.to_path_buf(),
+                error,
+            })?;
         let (id, run_dir) = self.allocate()?;
         let manifest = Manifest {
-            document: document.to_path_buf(),
+            document: absolute,
             started,
         };
-        let pfftt = construct_state_path(&run_dir, document);
+        let pfftt = construct_state_path(&run_dir, &manifest.document);
         let text = format_manifest(&manifest);
         std::fs::write(&pfftt, text)
             .map_err(|error| RunnerError::StoreError { path: pfftt, error })?;

@@ -49,13 +49,12 @@ pub fn locate(id: RunId) -> Result<PathBuf, RunnerError> {
 /// Open an existing run and walk the given program, short-circuiting
 /// any step whose FQN has already been recorded.
 pub fn resume<'i>(
-    document: &Path,
-    program: &'i Program<'i>,
     id: RunId,
+    program: &'i Program<'i>,
 ) -> Result<Outcome, RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (_manifest, completed, run_dir) = store.open(id)?;
-    let pfftt = construct_state_path(&run_dir, document);
+    let (manifest, completed, run_dir) = store.open(id)?;
+    let pfftt = construct_state_path(&run_dir, &manifest.document);
     let appender = Appender::open(pfftt)?;
     let mut runner = Runner::with_pieces(program, appender, completed, Console::new());
     runner.run()
