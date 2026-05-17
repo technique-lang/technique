@@ -65,17 +65,16 @@ fn nested_attribute_frames_each_contribute_a_segment() {
 }
 
 #[test]
-fn reset_role_alone_suppresses_frame() {
+fn reset_role() {
+    // `@*` alone suppresses the whole attribute frame's contribution.
     let frame = vec![Attribute::Role(Identifier::new("*"), Span::default())];
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::DependentStep("1"));
     stack.push(PathSegment::Attributes(&frame));
     stack.push(PathSegment::DependentStep("a"));
     assert_eq!(stack.render(), "1/a");
-}
 
-#[test]
-fn reset_role_preserves_sibling_place() {
+    // A sibling Place attribute in the same frame still renders.
     let frame = vec![
         Attribute::Role(Identifier::new("*"), Span::default()),
         Attribute::Place(Identifier::new("kitchen"), Span::default()),
@@ -88,15 +87,14 @@ fn reset_role_preserves_sibling_place() {
 }
 
 #[test]
-fn procedure_uses_colon_separator() {
+fn procedure_segment() {
+    // Single procedure: name becomes the prefix, joined to the rest with `:`.
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::Procedure("make_coffee"));
     stack.push(PathSegment::DependentStep("2"));
     assert_eq!(stack.render(), "make_coffee:2");
-}
 
-#[test]
-fn procedure_descent_replaces_outer_prefix() {
+    // Nested procedure: the inner frame replaces the outer prefix entirely.
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::Procedure("outer"));
     stack.push(PathSegment::DependentStep("1"));

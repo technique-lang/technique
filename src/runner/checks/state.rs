@@ -171,11 +171,11 @@ fn create_writes_pfftt_file_with_expected_content() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+// Each variant produces a distinct line shape — sibling fields appear only
+// when the corresponding Outcome carries a payload. The round-trip test
+// below covers parse compatibility; this one pins exact bytes.
 #[test]
 fn format_record_pins_on_disk_text() {
-    // Each variant produces a distinct line shape — sibling fields appear only
-    // when the corresponding Outcome carries a payload. The round-trip test
-    // below covers parse compatibility; this one pins exact bytes.
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         path: "make_coffee:2".to_string(),
@@ -351,8 +351,11 @@ fn parse_record_without_brackets_errors() {
     }
 }
 
+// `ManifestMissing` covers two setups: a run directory containing an empty
+// PFFTT file (file present, no manifest tablet inside), and a run directory
+// with no PFFTT file at all.
 #[test]
-fn open_empty_pfftt_file_reports_manifest_missing() {
+fn open_missing_manifest() {
     let base = std::env::temp_dir().join("technique-empty-pfftt");
     let _ = std::fs::remove_dir_all(&base);
     let run_dir = base.join("000001");
@@ -366,10 +369,7 @@ fn open_empty_pfftt_file_reports_manifest_missing() {
     }
 
     let _ = std::fs::remove_dir_all(&base);
-}
 
-#[test]
-fn open_run_directory_without_pfftt_reports_manifest_missing() {
     let base = std::env::temp_dir().join("technique-no-pfftt");
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("000001")).unwrap();

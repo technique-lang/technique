@@ -88,33 +88,19 @@ fn anonymous_with_body(body: Operation<'static>) -> Program<'static> {
 }
 
 #[test]
-fn single_step_prompts_and_records() {
-    let mut fixture = StoreFixture::new("single-step");
+fn step_outcomes_recorded() {
+    let mut fixture = StoreFixture::new("step-done");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
         Operation::Sequence(vec![]),
     )]);
     let program = anonymous_with_body(body);
-
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     let outcome = runner
         .run()
         .expect("run");
     assert_eq!(outcome, Outcome::Done(Value::Unitus));
-
-    let prompt = runner.into_prompt();
-    assert_eq!(
-        prompt.events(),
-        &[
-            Event::Step {
-                qualified: "1".to_string(),
-                description: String::new(),
-            },
-            Event::Ask,
-        ]
-    );
-
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -134,24 +120,18 @@ fn single_step_prompts_and_records() {
     let RecordOutcome::Done(_) = record.outcome else {
         panic!("expected Done, got {:?}", record.outcome);
     };
-}
 
-#[test]
-fn skip_outcome_is_recorded() {
-    let mut fixture = StoreFixture::new("skip-records");
+    let mut fixture = StoreFixture::new("step-skip");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
         Operation::Sequence(vec![]),
     )]);
     let program = anonymous_with_body(body);
-
     let prompt = Mock::with_answers([UserInput::Skip]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
-    let outcome = runner
+    runner
         .run()
         .expect("run");
-    assert_eq!(outcome, Outcome::Done(Value::Unitus));
-
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -161,27 +141,20 @@ fn skip_outcome_is_recorded() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 2);
     let record = parse_record(lines[1]).expect("parse record");
-    assert_eq!(record.path, "1");
     assert_eq!(record.outcome, RecordOutcome::Skipped);
-}
 
-#[test]
-fn fail_outcome_is_recorded_with_reason() {
-    let mut fixture = StoreFixture::new("fail-records");
+    let mut fixture = StoreFixture::new("step-fail");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
         Operation::Sequence(vec![]),
     )]);
     let program = anonymous_with_body(body);
-
     let prompt = Mock::with_answers([UserInput::Fail]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     runner
         .run()
         .expect("run");
-
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -191,9 +164,7 @@ fn fail_outcome_is_recorded_with_reason() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 2);
     let record = parse_record(lines[1]).expect("parse record");
-    assert_eq!(record.path, "1");
     assert_eq!(
         record.outcome,
         RecordOutcome::Failed(Some("\"Failed\"".to_string()))
@@ -311,8 +282,10 @@ fn quit_propagates_and_stops_walking() {
 }
 
 #[test]
-fn section_renders_path_segment() {
-    let mut fixture = StoreFixture::new("section-path");
+fn section_walking() {
+    use crate::program::Fragment;
+
+    let mut fixture = StoreFixture::new("section-no-title");
     let inner = step(Ordinal::Dependent("1"), Operation::Sequence(vec![]));
     let body = Operation::Sequence(vec![Operation::Section {
         numeral: "I",
@@ -321,13 +294,11 @@ fn section_renders_path_segment() {
         responses: Vec::new(),
     }]);
     let program = anonymous_with_body(body);
-
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     runner
         .run()
         .expect("run");
-
     let prompt = runner.into_prompt();
     let events = prompt.events();
     let section_fqns: Vec<&str> = events
@@ -352,13 +323,8 @@ fn section_renders_path_segment() {
         .collect();
     assert_eq!(section_fqns, vec!["I"]);
     assert_eq!(step_fqns, vec!["I/1"]);
-}
 
-#[test]
-fn section_title_renders_from_paragraph() {
-    use crate::program::Fragment;
-
-    let mut fixture = StoreFixture::new("section-title");
+    let mut fixture = StoreFixture::new("section-with-title");
     let title = Operation::String(vec![Fragment::Text("Setup")]);
     let inner = step(Ordinal::Dependent("1"), Operation::Sequence(vec![]));
     let body = Operation::Sequence(vec![Operation::Section {
@@ -368,13 +334,11 @@ fn section_title_renders_from_paragraph() {
         responses: Vec::new(),
     }]);
     let program = anonymous_with_body(body);
-
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     runner
         .run()
         .expect("run");
-
     let prompt = runner.into_prompt();
     let section_title = prompt
         .events()

@@ -5,17 +5,14 @@ use crate::runner::runner::RunnerError;
 use crate::value;
 
 #[test]
-fn unbound_variable_errors() {
+fn variable_lookup() {
     let op = Operation::Variable(Identifier::new("missing"));
     let mut env = Environment::new();
     match evaluate(&mut env, &op) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "missing"),
         other => panic!("expected UnboundVariable, got {:?}", other),
     }
-}
 
-#[test]
-fn bound_variable_looks_up() {
     let mut env = Environment::new();
     env.extend(
         "name".to_string(),
@@ -35,7 +32,7 @@ fn number_evaluates_to_quanticle() {
 }
 
 #[test]
-fn string_fragments_interpolate_bound_variable() {
+fn string_interpolation() {
     let mut env = Environment::new();
     env.extend(
         "name".to_string(),
@@ -48,10 +45,7 @@ fn string_fragments_interpolate_bound_variable() {
     ]);
     let v = evaluate(&mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("Hello, World!".to_string()));
-}
 
-#[test]
-fn string_interpolation_propagates_unbound_error() {
     let op = Operation::String(vec![
         Fragment::Text("hi "),
         Fragment::Interpolation(Operation::Variable(Identifier::new("nope"))),
@@ -115,7 +109,7 @@ fn bind_extends_env_for_subsequent_lookup() {
 }
 
 #[test]
-fn sequence_returns_last_value() {
+fn sequence_evaluation() {
     let seq = Operation::Sequence(vec![
         Operation::Number(LangNumeric::Integral(1)),
         Operation::Number(LangNumeric::Integral(2)),
@@ -124,10 +118,7 @@ fn sequence_returns_last_value() {
     let mut env = Environment::new();
     let v = evaluate(&mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Quanticle(value::Numeric::Integral(3)));
-}
 
-#[test]
-fn empty_sequence_returns_unitus() {
     let seq = Operation::Sequence(vec![]);
     let mut env = Environment::new();
     let v = evaluate(&mut env, &seq).expect("evaluated");
