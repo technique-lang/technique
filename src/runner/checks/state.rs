@@ -353,3 +353,88 @@ fn parse_record_rejects_unknown_outcome() {
         other => panic!("expected UnknownOutcome, got {:?}", other),
     }
 }
+
+#[test]
+fn parse_manifest_missing_document_errors() {
+    let line = "[ started = 2026-05-14T01:02:03Z ]";
+    match parse_manifest(line) {
+        Err(crate::runner::state::RecordError::MissingField(name)) => {
+            assert_eq!(name, "document");
+        }
+        other => panic!("expected MissingField, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_manifest_missing_started_errors() {
+    let line = "[ document = file:///x.tq ]";
+    match parse_manifest(line) {
+        Err(crate::runner::state::RecordError::MissingField(name)) => {
+            assert_eq!(name, "started");
+        }
+        other => panic!("expected MissingField, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_record_missing_path_errors() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, outcome = Done ]";
+    match parse_record(line) {
+        Err(crate::runner::state::RecordError::MissingField(name)) => {
+            assert_eq!(name, "path");
+        }
+        other => panic!("expected MissingField, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_record_missing_outcome_errors() {
+    let line = "[ recorded = 2026-05-14T12:00:00Z, path = a:1 ]";
+    match parse_record(line) {
+        Err(crate::runner::state::RecordError::MissingField(name)) => {
+            assert_eq!(name, "outcome");
+        }
+        other => panic!("expected MissingField, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_record_without_brackets_errors() {
+    let line = "recorded = 2026-05-14T12:00:00Z, path = a:1, outcome = Done";
+    match parse_record(line) {
+        Err(crate::runner::state::RecordError::MalformedTablet) => {}
+        other => panic!("expected MalformedTablet, got {:?}", other),
+    }
+}
+
+#[test]
+fn open_empty_pfftt_file_reports_manifest_missing() {
+    let base = std::env::temp_dir().join("technique-empty-pfftt");
+    let _ = std::fs::remove_dir_all(&base);
+    let run_dir = base.join("000001");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(run_dir.join("Test.pfftt"), "").unwrap();
+
+    let store = Store::new(base.clone());
+    match store.open(RunId(1)) {
+        Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
+        other => panic!("expected ManifestMissing, got {:?}", other),
+    }
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn open_run_directory_without_pfftt_reports_manifest_missing() {
+    let base = std::env::temp_dir().join("technique-no-pfftt");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("000001")).unwrap();
+
+    let store = Store::new(base.clone());
+    match store.open(RunId(1)) {
+        Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
+        other => panic!("expected ManifestMissing, got {:?}", other),
+    }
+
+    let _ = std::fs::remove_dir_all(&base);
+}

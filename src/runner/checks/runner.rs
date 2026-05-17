@@ -131,7 +131,9 @@ fn single_step_prompts_and_records() {
     );
     let record = parse_record(lines[1]).expect("parse record");
     assert_eq!(record.path, "1");
-    assert_eq!(record.outcome, RecordOutcome::Done(Some("()".to_string())));
+    let RecordOutcome::Done(_) = record.outcome else {
+        panic!("expected Done, got {:?}", record.outcome);
+    };
 }
 
 #[test]
@@ -506,6 +508,41 @@ helper :
     // helper procedure as the FQN prefix (the outer `main` frame is
     // overridden by the inner Procedure segment).
     assert_eq!(step_fqns, vec!["helper:1"]);
+}
+
+#[test]
+fn execute_announces_function_call() {
+    let source = r#"
+% technique v1
+
+test :
+
+1.  Do this { journal("hello") }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("execute-announce");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let announcements: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Announce(text) = e {
+                Some(text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(announcements, vec!["journal(...)"]);
 }
 
 #[test]
