@@ -356,12 +356,29 @@ impl<'i> Translator<'i> {
             .collect()
     }
 
+    // Descriptive paragraphs are whitespace-agnostic and re-wrappable: the
+    // parser strips edge whitespace from each Text fragment, so the original
+    // single-space joins between adjacent tokens are lost. Reinsert one
+    // separator space between each pair of fragments here so the runtime
+    // renderer sees the canonical form the formatter would emit. Expression
+    // string literals translated elsewhere preserve whitespace verbatim and
+    // are not affected by this rule.
     fn translate_paragraph(&mut self, paragraph: &'i language::Paragraph<'i>) -> Operation<'i> {
         let language::Paragraph(descriptives, _) = paragraph;
-        let fragments = descriptives
+        let mut fragments = Vec::with_capacity(
+            descriptives
+                .len()
+                .saturating_mul(2),
+        );
+        for (i, descriptive) in descriptives
             .iter()
-            .map(|d| self.fragment_from_descriptive(d))
-            .collect();
+            .enumerate()
+        {
+            if i > 0 {
+                fragments.push(Fragment::Text(" "));
+            }
+            fragments.push(self.fragment_from_descriptive(descriptive));
+        }
         Operation::String(fragments)
     }
 

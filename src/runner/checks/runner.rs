@@ -461,9 +461,7 @@ test :
         .collect();
     // Step 1 only binds, so its description renders to empty. Step 2
     // sees the binding established by step 1 and interpolates it.
-    // The parser strips whitespace adjacent to inline `{ ... }` fragments,
-    // hence "Result:42" rather than "Result: 42".
-    assert_eq!(descriptions, vec!["", "Result:42"]);
+    assert_eq!(descriptions, vec!["", "Result: 42"]);
 }
 
 #[test]
