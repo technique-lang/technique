@@ -124,6 +124,20 @@ fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, pla
         return;
     }
 
+    // Bare tablet (CodeBlock containing a Tablet expression)
+    if let Some(pairs) = scope.tablet() {
+        for pair in pairs {
+            items.push(Ingredient {
+                label: pair
+                    .label
+                    .to_string(),
+                quantity: format_value(&pair.value),
+                source: place.map(String::from),
+            });
+        }
+        return;
+    }
+
     // Steps may contain tablet children
     if scope.is_step() {
         for child in scope.children() {
@@ -408,6 +422,42 @@ turkey : () -> Ingredients
         assert_eq!(doc.ingredients[0].items[0].source, Some("butcher".into()));
         assert_eq!(doc.ingredients[0].items[1].label, "Bacon");
         assert_eq!(doc.ingredients[0].items[1].quantity, "2 pieces");
+    }
+
+    #[test]
+    fn ingredients_from_bare_tablet_under_place() {
+        let doc = extract(trim(
+            r#"
+dinner :
+
+# Dinner
+
+    1. Get ingredients
+
+shopping :
+
+    ^grocer
+    {
+        [
+            "Pasta" = 500 g
+        ]
+    }
+            "#,
+        ));
+        assert_eq!(
+            doc.ingredients
+                .len(),
+            1
+        );
+        assert_eq!(
+            doc.ingredients[0]
+                .items
+                .len(),
+            1
+        );
+        assert_eq!(doc.ingredients[0].items[0].label, "Pasta");
+        assert_eq!(doc.ingredients[0].items[0].quantity, "500 g");
+        assert_eq!(doc.ingredients[0].items[0].source, Some("grocer".into()));
     }
 
     #[test]
