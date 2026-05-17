@@ -5,6 +5,26 @@ use crate::runner::state::{
     format_record, parse_manifest, parse_record, Outcome, Record, RunId, Store,
 };
 
+// A scratch directory under the system temp dir, cleaned up on drop so panics
+// in a test do not leak it. Tests construct one per fixture they need.
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn new(name: &str) -> Self {
+        let path = std::env::temp_dir().join(format!("technique-{}", name));
+        let _ = std::fs::remove_dir_all(&path);
+        TempDir { path }
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 #[test]
 fn run_id_parse() {
     let id = RunId::parse("7").expect("parse");
@@ -38,10 +58,12 @@ fn run_id_render_six_digit_padding() {
 
 #[test]
 fn store_allocate_assigns_monotonic_ids() {
-    let base = std::env::temp_dir().join("technique-allocate-monotonic");
-    let _ = std::fs::remove_dir_all(&base);
+    let dir = TempDir::new("allocate-monotonic");
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     let (first, _) = store
         .allocate()
         .expect("first");
@@ -50,34 +72,38 @@ fn store_allocate_assigns_monotonic_ids() {
         .expect("second");
     assert_eq!(first, RunId(1));
     assert_eq!(second, RunId(2));
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn store_allocate_resumes_from_existing_max() {
-    let base = std::env::temp_dir().join("technique-allocate-resume");
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(base.join("000007")).unwrap();
+    let dir = TempDir::new("allocate-resume");
+    std::fs::create_dir_all(
+        dir.path
+            .join("000007"),
+    )
+    .unwrap();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     let (id, _) = store
         .allocate()
         .expect("allocate");
     assert_eq!(id, RunId(8));
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn manifest_round_trip_through_create_and_open() {
-    let base = std::env::temp_dir().join("technique-manifest-roundtrip");
-    let _ = std::fs::remove_dir_all(&base);
+    let dir = TempDir::new("manifest-roundtrip");
 
     let document = PathBuf::from("/somewhere/NetworkProbe.tq");
     let started = "2026-05-14T12:34:56Z".to_string();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     let (id, _, written) = store
         .create(&document, started.clone())
         .expect("create");
@@ -89,16 +115,15 @@ fn manifest_round_trip_through_create_and_open() {
     assert_eq!(read.document, document);
     assert_eq!(read.started, started);
     assert!(completed.is_empty());
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn open_replays_three_result_paths() {
-    let base = std::env::temp_dir().join("technique-replay-three");
-    let _ = std::fs::remove_dir_all(&base);
+    let dir = TempDir::new("replay-three");
 
-    let run_dir = base.join("000001");
+    let run_dir = dir
+        .path
+        .join("000001");
     std::fs::create_dir_all(&run_dir).unwrap();
     let mut file = String::new();
     file.push_str("[ document = file:///foo/Test.tq, started = 2026-05-14T12:00:00Z ]\n");
@@ -119,7 +144,10 @@ fn open_replays_three_result_paths() {
     }));
     std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     let (manifest, completed, _) = store
         .open(RunId(1))
         .expect("open");
@@ -129,34 +157,34 @@ fn open_replays_three_result_paths() {
     assert!(completed.contains("test:1"));
     assert!(completed.contains("test:2"));
     assert!(completed.contains("test:3"));
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn open_missing_run_returns_no_such_run() {
-    let base = std::env::temp_dir().join("technique-no-such-run");
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&base).unwrap();
+    let dir = TempDir::new("no-such-run");
+    std::fs::create_dir_all(&dir.path).unwrap();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     match store.open(RunId(42)) {
         Err(RunnerError::NoSuchRun(id)) => assert_eq!(id, RunId(42)),
         other => panic!("expected NoSuchRun, got {:?}", other),
     }
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn create_writes_pfftt_file_with_expected_content() {
-    let base = std::env::temp_dir().join("technique-create-bytes");
-    let _ = std::fs::remove_dir_all(&base);
+    let dir = TempDir::new("create-bytes");
 
     let document = PathBuf::from("/somewhere/NetworkProbe.tq");
     let started = "2026-05-14T12:34:56Z".to_string();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     let (_, run_dir, _) = store
         .create(&document, started)
         .expect("create");
@@ -167,8 +195,6 @@ fn create_writes_pfftt_file_with_expected_content() {
         on_disk,
         "[ document = file:///somewhere/NetworkProbe.tq, started = 2026-05-14T12:34:56Z ]\n"
     );
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 // Each variant produces a distinct line shape — sibling fields appear only
@@ -356,29 +382,35 @@ fn parse_record_without_brackets_errors() {
 // with no PFFTT file at all.
 #[test]
 fn open_missing_manifest() {
-    let base = std::env::temp_dir().join("technique-empty-pfftt");
-    let _ = std::fs::remove_dir_all(&base);
-    let run_dir = base.join("000001");
+    let dir = TempDir::new("empty-pfftt");
+    let run_dir = dir
+        .path
+        .join("000001");
     std::fs::create_dir_all(&run_dir).unwrap();
     std::fs::write(run_dir.join("Test.pfftt"), "").unwrap();
 
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     match store.open(RunId(1)) {
         Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
         other => panic!("expected ManifestMissing, got {:?}", other),
     }
 
-    let _ = std::fs::remove_dir_all(&base);
+    let dir = TempDir::new("no-pfftt");
+    std::fs::create_dir_all(
+        dir.path
+            .join("000001"),
+    )
+    .unwrap();
 
-    let base = std::env::temp_dir().join("technique-no-pfftt");
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(base.join("000001")).unwrap();
-
-    let store = Store::new(base.clone());
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
     match store.open(RunId(1)) {
         Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
         other => panic!("expected ManifestMissing, got {:?}", other),
     }
-
-    let _ = std::fs::remove_dir_all(&base);
 }
