@@ -1,8 +1,8 @@
-use super::messages::{generate_error_message, generate_translation_error};
+use super::messages::{generate_error_message, generate_runner_error, generate_translation_error};
 use owo_colors::OwoColorize;
 use std::path::Path;
 use technique::{
-    formatting::Render, language::LoadingError, parsing::ParsingError,
+    formatting::Render, language::LoadingError, parsing::ParsingError, runner::RunnerError,
     translation::TranslationError,
 };
 
@@ -117,6 +117,12 @@ pub fn concise_translation_error<'i>(
         column,
         problem.bold(),
     )
+}
+
+/// Format a runner error with concise single-line output.
+pub fn concise_runner_error(error: &RunnerError, renderer: &impl Render) -> String {
+    let (problem, _) = generate_runner_error(error, renderer);
+    format!("{}: {}", "error".bright_red(), problem.bold())
 }
 
 /// Format a LoadingError with concise single-line output

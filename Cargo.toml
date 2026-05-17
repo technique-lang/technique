@@ -16,6 +16,7 @@ owo-colors = "4"
 regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }
 serde_json = "1.0"
+time = { version = "0.3", features = [ "formatting" ] }
 tinytemplate = "1.2.1"
 
 tracing = "0.1.40"

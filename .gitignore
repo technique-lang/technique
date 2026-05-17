@@ -5,6 +5,7 @@
 # rendering artifacts
 *.pdf
 .*.typ
+/.store
 
 # documentation symlinks
 /doc/references

@@ -74,7 +74,11 @@ mod check {
         let result = escape_typst(input);
 
         // Should return borrowed reference when no quotes to escape
-        assert!(matches!(result, Cow::Borrowed(_)));
+        if let Cow::Borrowed(_) = result {
+            // ok
+        } else {
+            panic!("expected Cow::Borrowed");
+        }
         assert_eq!(result, "hello world");
     }
 
@@ -84,7 +88,11 @@ mod check {
         let result = escape_typst(input);
 
         // Should return owned string when quotes need escaping
-        assert!(matches!(result, Cow::Owned(_)));
+        if let Cow::Owned(_) = result {
+            // ok
+        } else {
+            panic!("expected Cow::Owned");
+        }
         assert_eq!(result, "hello \\\"world\\\"");
     }
 

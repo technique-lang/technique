@@ -1,6 +1,7 @@
 use crate::problem::Present;
 use technique::{
-    formatting::Render, language::*, parsing::ParsingError, translation::TranslationError,
+    formatting::Render, language::*, parsing::ParsingError, runner::RunnerError,
+    translation::TranslationError,
 };
 
 /// Generate problem and detail messages for parsing errors using AST construction
@@ -1018,7 +1019,8 @@ Hyphens, underscores, spaces, or subscripts are not valid in unit symbols.
     }
 }
 
-/// Generate problem and detail messages for translation errors.
+/// Generate problem and detail messages for errors occuring during the
+/// translation phase.
 pub fn generate_translation_error<'i>(
     error: &TranslationError<'i>,
     _renderer: &dyn Render,
@@ -1045,6 +1047,59 @@ pub fn generate_translation_error<'i>(
         TranslationError::UnresolvedProcedure(Identifier { value: name, .. }) => (
             format!("Unresolved procedure '{}'", name),
             "A `<name>` invocation must refer to a procedure declared in this document. Built-in functions use the `name(...)` form (without angle brackets).".to_string(),
+        ),
+    }
+}
+
+/// Generate problem and detail messages for errors occuring when a proceure
+/// is being evaluated by the runner.
+pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (String, String) {
+    match error {
+        RunnerError::NoSuchRun(id) => (
+            format!("No such run '{:06}'", id.0),
+            "The directory for this run identifier was not found in the local state store.".to_string(),
+        ),
+        RunnerError::StoreError { path, error } => (
+            format!("I/O error with local state store at {}", path.display()),
+            format!("{}", error),
+        ),
+        RunnerError::MalformedRecord { run, .. } => (
+            format!("Malformed record for run '{:06}'", run.0),
+            "The PFFTT state file for this run could not be parsed.".to_string(),
+        ),
+        RunnerError::ManifestMissing(id) => (
+            format!("Manifest missing in run '{:06}'", id.0),
+            "The state file is present but its first tablet (the manifest) is missing or malformed.".to_string(),
+        ),
+        RunnerError::InvalidRunId(text) => (
+            format!("Invalid run identifier '{}'", text),
+            "Run identifiers are integer values, conventionally rendered as six zero-padded digits.".to_string(),
+        ),
+        RunnerError::MissingEntryProcedure => (
+            "No entry procedure".to_string(),
+            "The document has neither procedure declarations nor top-level steps so the runner can't start its walk.".to_string(),
+        ),
+        RunnerError::UnboundVariable(name) => (
+            format!("Unbound variable '{}'", name),
+            "The procedure has not yet supplied a value for this variable!".to_string(),
+        ),
+        RunnerError::BindArityMismatch { expected, actual } => (
+            format!(
+                "Binding arity mismatch: {} names but {} values",
+                expected, actual
+            ),
+            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+        ),
+        RunnerError::BindNotTuple { expected } => (
+            format!(
+                "Binding requires a tuple: {} names but the value is not a tuple",
+                expected
+            ),
+            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+        ),
+        RunnerError::UserQuit => (
+            "Interrupted".to_string(),
+            "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
         ),
     }
 }
