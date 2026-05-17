@@ -94,10 +94,7 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
                 ),
                 n => {
                     let Value::Parametriq(values) = v else {
-                        return Err(RunnerError::BindArityMismatch {
-                            expected: n,
-                            actual: 1,
-                        });
+                        return Err(RunnerError::BindNotTuple { expected: n });
                     };
                     if values.len() != n {
                         return Err(RunnerError::BindArityMismatch {

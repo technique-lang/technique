@@ -49,6 +49,7 @@ pub enum RunnerError {
     MissingEntryProcedure,
     UnboundVariable(String),
     BindArityMismatch { expected: usize, actual: usize },
+    BindNotTuple { expected: usize },
     UserQuit,
 }
 

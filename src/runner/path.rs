@@ -88,20 +88,13 @@ fn render_segment(segment: &PathSegment) -> Option<String> {
 }
 
 fn render_attributes(frame: &[language::Attribute]) -> Option<String> {
-    // The @* reset role makes the entire frame contribute nothing.
-    for attr in frame {
-        if let language::Attribute::Role(id, _) = attr {
-            if id.value == "*" {
-                return None;
-            }
-        }
-    }
-    if frame.is_empty() {
-        return None;
-    }
     let mut text = String::new();
     for attr in frame {
         match attr {
+            // `@*` resets the inherited role; it contributes no segment of
+            // its own. A sibling Place attribute in the same frame is
+            // unaffected and still renders.
+            language::Attribute::Role(id, _) if id.value == "*" => {}
             language::Attribute::Role(id, _) => {
                 text.push('@');
                 text.push_str(id.value);
@@ -111,6 +104,9 @@ fn render_attributes(frame: &[language::Attribute]) -> Option<String> {
                 text.push_str(id.value);
             }
         }
+    }
+    if text.is_empty() {
+        return None;
     }
     Some(text)
 }

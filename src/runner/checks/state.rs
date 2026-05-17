@@ -237,6 +237,71 @@ fn format_record_failed_with_reason_emits_sibling_field() {
 }
 
 #[test]
+fn format_record_skipped_emits_no_sibling() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "wait:3".to_string(),
+        outcome: Outcome::Skipped,
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = wait:3, outcome = Skipped ]\n"
+    );
+}
+
+#[test]
+fn format_record_failed_without_reason_emits_no_sibling() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        path: "ping:1".to_string(),
+        outcome: Outcome::Failed(None),
+    };
+    assert_eq!(
+        format_record(&record),
+        "[ recorded = 2026-05-14T12:00:00Z, path = ping:1, outcome = Failed ]\n"
+    );
+}
+
+#[test]
+fn record_round_trips_through_format_and_parse() {
+    let cases = [
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            path: "a:1".to_string(),
+            outcome: Outcome::Done(None),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:01Z".to_string(),
+            path: "a:2".to_string(),
+            outcome: Outcome::Done(Some("\"penguin\"".to_string())),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:02Z".to_string(),
+            path: "a:3".to_string(),
+            outcome: Outcome::Skipped,
+        },
+        Record {
+            recorded: "2026-05-14T12:00:03Z".to_string(),
+            path: "a:4".to_string(),
+            outcome: Outcome::Failed(None),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:04Z".to_string(),
+            path: "a:5".to_string(),
+            outcome: Outcome::Failed(Some("\"unreachable\"".to_string())),
+        },
+    ];
+    for original in &cases {
+        let text = format_record(original);
+        let line = text
+            .strip_suffix('\n')
+            .expect("trailing newline");
+        let parsed = parse_record(line).expect("parse");
+        assert_eq!(&parsed, original);
+    }
+}
+
+#[test]
 fn parse_manifest_reads_expected_text() {
     let line = "[ document = file:///foo/bar.tq, started = 2026-05-14T01:02:03Z ]";
     let manifest = parse_manifest(line).expect("parse");

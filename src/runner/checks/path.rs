@@ -65,13 +65,26 @@ fn nested_attribute_frames_each_contribute_a_segment() {
 }
 
 #[test]
-fn reset_attribute_suppresses_frame() {
+fn reset_role_alone_suppresses_frame() {
     let frame = vec![Attribute::Role(Identifier::new("*"), Span::default())];
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::DependentStep("1"));
     stack.push(PathSegment::Attributes(&frame));
     stack.push(PathSegment::DependentStep("a"));
     assert_eq!(stack.render(), "1/a");
+}
+
+#[test]
+fn reset_role_preserves_sibling_place() {
+    let frame = vec![
+        Attribute::Role(Identifier::new("*"), Span::default()),
+        Attribute::Place(Identifier::new("kitchen"), Span::default()),
+    ];
+    let mut stack = QualifiedPath::new();
+    stack.push(PathSegment::DependentStep("1"));
+    stack.push(PathSegment::Attributes(&frame));
+    stack.push(PathSegment::DependentStep("a"));
+    assert_eq!(stack.render(), "1/^kitchen/a");
 }
 
 #[test]

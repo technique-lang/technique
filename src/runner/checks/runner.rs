@@ -1,10 +1,12 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::parsing;
 use crate::program::{Operation, Ordinal, Program, Subroutine};
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{Outcome, Runner};
 use crate::runner::state::{parse_record, Appender, Outcome as RecordOutcome, Store};
+use crate::translation::translate;
 use crate::value::Value;
 
 // A small fixture builder. The Program borrows from its inputs, so the
@@ -130,6 +132,70 @@ fn single_step_prompts_and_records() {
     let record = parse_record(lines[1]).expect("parse record");
     assert_eq!(record.path, "1");
     assert_eq!(record.outcome, RecordOutcome::Done(Some("()".to_string())));
+}
+
+#[test]
+fn skip_outcome_is_recorded() {
+    let mut fixture = StoreFixture::new("skip-records");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    let program = anonymous_with_body(body);
+
+    let prompt = Mock::with_answers([UserInput::Skip]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let outcome = runner
+        .run()
+        .expect("run");
+    assert_eq!(outcome, Outcome::Done(Value::Unitus));
+
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    assert_eq!(lines.len(), 2);
+    let record = parse_record(lines[1]).expect("parse record");
+    assert_eq!(record.path, "1");
+    assert_eq!(record.outcome, RecordOutcome::Skipped);
+}
+
+#[test]
+fn fail_outcome_is_recorded_with_reason() {
+    let mut fixture = StoreFixture::new("fail-records");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    let program = anonymous_with_body(body);
+
+    let prompt = Mock::with_answers([UserInput::Fail]);
+    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    runner
+        .run()
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    assert_eq!(lines.len(), 2);
+    let record = parse_record(lines[1]).expect("parse record");
+    assert_eq!(record.path, "1");
+    assert_eq!(
+        record.outcome,
+        RecordOutcome::Failed(Some("\"Failed\"".to_string()))
+    );
 }
 
 #[test]
@@ -357,83 +423,67 @@ fn parallel_step_index_starts_at_one() {
 
 #[test]
 fn bind_in_body_interpolates_into_description() {
-    use crate::language::{Identifier as LangIdentifier, Numeric as LangNumeric};
-    use crate::program::Fragment;
+    let source = r#"
+% technique v1
+
+test :
+
+1.  { 42 ~ answer }
+2.  Result: { answer }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
 
     let mut fixture = StoreFixture::new("bind-then-interpolate");
-
-    // Body: bind `answer` to 42. The description references `{answer}`,
-    // so when the prompt fires the operator should see "the answer is 42".
-    let names: &'static [LangIdentifier<'static>] =
-        Box::leak(Box::new([LangIdentifier::new("answer")]));
-    let bind = Operation::Bind {
-        names,
-        value: Box::new(Operation::Number(LangNumeric::Integral(42))),
-    };
-    let description = vec![Operation::String(vec![
-        Fragment::Text("the answer is "),
-        Fragment::Interpolation(Operation::Variable(LangIdentifier::new("answer"))),
-    ])];
-    let the_step = Operation::Step {
-        ordinal: Ordinal::Dependent("1"),
-        attributes: Vec::new(),
-        description,
-        body: Box::new(bind),
-        responses: Vec::new(),
-    };
-    let body = Operation::Sequence(vec![the_step]);
-    let program = anonymous_with_body(body);
-
-    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     runner
         .run()
         .expect("run");
 
     let prompt = runner.into_prompt();
-    let description_text = prompt
+    let descriptions: Vec<&str> = prompt
         .events()
         .iter()
-        .find_map(|e| {
+        .filter_map(|e| {
             if let Event::Step { description, .. } = e {
                 Some(description.as_str())
             } else {
                 None
             }
         })
-        .expect("step event");
-    assert_eq!(description_text, "the answer is 42");
+        .collect();
+    // Step 1 only binds, so its description renders to empty. Step 2
+    // sees the binding established by step 1 and interpolates it.
+    // The parser strips whitespace adjacent to inline `{ ... }` fragments,
+    // hence "Result:42" rather than "Result: 42".
+    assert_eq!(descriptions, vec!["", "Result:42"]);
 }
 
 #[test]
 fn resolved_invoke_descends_into_subroutine() {
-    use crate::language::Identifier as LangIdentifier;
-    use crate::program::{Invocable, SubroutineId, SubroutineRef};
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <helper>()
+}
+
+helper :
+
+1.  helper step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
 
     let mut fixture = StoreFixture::new("invoke-descent");
-
-    // Build a Program with two subroutines:
-    //   index 0: anonymous wrapper whose body invokes index 1
-    //   index 1: `helper`, body contains a single Step "1"
-    let mut program = Program::new();
-    let mut wrapper = Subroutine::anonymous();
-    wrapper.body = Operation::Sequence(vec![Operation::Invoke(Invocable {
-        target: SubroutineRef::Resolved(SubroutineId(1)),
-        arguments: Vec::new(),
-    })]);
-    program
-        .subroutines
-        .push(wrapper);
-
-    let mut helper = Subroutine::new(LangIdentifier::new("helper"));
-    helper.body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
-    program
-        .subroutines
-        .push(helper);
-
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
     runner
@@ -453,7 +503,8 @@ fn resolved_invoke_descends_into_subroutine() {
         })
         .collect();
     // The Step inside `helper` was reached and prompted, with the
-    // procedure prefix on the FQN.
+    // helper procedure as the FQN prefix (the outer `main` frame is
+    // overridden by the inner Procedure segment).
     assert_eq!(step_fqns, vec!["helper:1"]);
 }
 

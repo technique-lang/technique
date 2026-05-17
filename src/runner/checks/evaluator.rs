@@ -202,7 +202,7 @@ fn multi_name_bind_wrong_arity_errors() {
 }
 
 #[test]
-fn multi_name_bind_non_parametriq_errors() {
+fn multi_name_bind_against_scalar_errors_as_not_tuple() {
     let mut env = Environment::new();
     env.extend(
         "scalar".to_string(),
@@ -214,10 +214,9 @@ fn multi_name_bind_non_parametriq_errors() {
         value: Box::new(Operation::Variable(Identifier::new("scalar"))),
     };
     match evaluate(&mut env, &bind) {
-        Err(RunnerError::BindArityMismatch { expected, actual }) => {
+        Err(RunnerError::BindNotTuple { expected }) => {
             assert_eq!(expected, 2);
-            assert_eq!(actual, 1);
         }
-        other => panic!("expected BindArityMismatch, got {:?}", other),
+        other => panic!("expected BindNotTuple, got {:?}", other),
     }
 }

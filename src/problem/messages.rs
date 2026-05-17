@@ -1090,6 +1090,13 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
             ),
             "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
         ),
+        RunnerError::BindNotTuple { expected } => (
+            format!(
+                "Binding requires a tuple: {} names but the value is not a tuple",
+                expected
+            ),
+            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
