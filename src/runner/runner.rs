@@ -67,7 +67,6 @@ pub struct Runner<'i, P: Prompt> {
     path: QualifiedPath<'i>,
 }
 
-#[allow(dead_code)]
 impl<'i, P: Prompt> Runner<'i, P> {
     pub fn with_pieces(
         program: &'i Program<'i>,
@@ -87,6 +86,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
     /// Consume the runner and return the inner prompt. Tests use this
     /// to assert on the Mock's event log after a run completes.
+    #[allow(dead_code)]
     pub fn into_prompt(self) -> P {
         self.prompt
     }
@@ -387,7 +387,7 @@ fn record_outcome(outcome: &Outcome) -> RecordOutcome {
 
 /// Current UTC time as an RFC3339 second-precision string, used for
 /// the `recorded` field of every Result tablet.
-fn now_iso8601() -> String {
+pub(super) fn now_iso8601() -> String {
     use time::format_description::well_known::Rfc3339;
     time::OffsetDateTime::now_utc()
         .replace_nanosecond(0)

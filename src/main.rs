@@ -9,6 +9,7 @@ use tracing_subscriber::{self, EnvFilter};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::parsing;
+use technique::runner::{self, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -506,7 +507,71 @@ fn main() {
 
             debug!(filename);
 
-            todo!();
+            let filename = Path::new(filename);
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_loading_error(&error));
+                    std::process::exit(1);
+                }
+            };
+
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_parsing_error(&error, &filename, &content, &Terminal)
+                        );
+                    }
+
+                    eprintln!(
+                        "\nUnable to parse input file. Try `technique check {}` for details.",
+                        &filename.to_string_lossy()
+                    );
+                    std::process::exit(1);
+                }
+            };
+
+            let program = match translation::translate(&technique) {
+                Ok(program) => program,
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_translation_error(
+                                &error, &filename, &content, &Terminal
+                            )
+                        );
+                    }
+                    std::process::exit(1);
+                }
+            };
+
+            match runner::start(filename, &program) {
+                Ok((id, Outcome::Quit)) => {
+                    eprintln!("paused; resume with `technique resume {}`", id.render());
+                    std::process::exit(0);
+                }
+                Ok((_, _)) => std::process::exit(0),
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            }
         }
         Some(("resume", submatches)) => {
             let id = submatches
@@ -515,7 +580,81 @@ fn main() {
 
             debug!(id);
 
-            todo!();
+            let id = match RunId::parse(id) {
+                Ok(id) => id,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            };
+
+            let filename = match runner::locate(id) {
+                Ok(path) => path,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            };
+
+            let content = match parsing::load(&filename) {
+                Ok(data) => data,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_loading_error(&error));
+                    std::process::exit(1);
+                }
+            };
+
+            let technique = match parsing::parse(&filename, &content) {
+                Ok(document) => document,
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::full_parsing_error(&error, &filename, &content, &Terminal)
+                        );
+                    }
+                    std::process::exit(1);
+                }
+            };
+
+            let program = match translation::translate(&technique) {
+                Ok(program) => program,
+                Err(errors) => {
+                    for (i, error) in errors
+                        .iter()
+                        .enumerate()
+                    {
+                        if i > 0 {
+                            eprintln!();
+                        }
+                        eprintln!(
+                            "{}",
+                            problem::concise_translation_error(
+                                &error, &filename, &content, &Terminal
+                            )
+                        );
+                    }
+                    std::process::exit(1);
+                }
+            };
+
+            match runner::resume(id, &program) {
+                Ok(Outcome::Quit) => {
+                    eprintln!("paused; continue with `technique resume {}`", id.render());
+                    std::process::exit(0);
+                }
+                Ok(_) => std::process::exit(0),
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            }
         }
         Some(("language", _)) => {
             debug!("Starting Language Server");
