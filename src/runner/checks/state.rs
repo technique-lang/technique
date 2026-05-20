@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::runner::runner::RunnerError;
 use crate::runner::state::{
-    format_record, parse_manifest, parse_record, Outcome, Record, RunId, Store,
+    format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State, Store, Value,
 };
 
 // A scratch directory under the system temp dir, cleaned up on drop so panics
@@ -87,15 +87,15 @@ fn store_allocate_resumes_from_existing_max() {
         dir.path
             .clone(),
     );
-    let (id, _) = store
+    let (run_id, _) = store
         .allocate()
         .expect("allocate");
-    assert_eq!(id, RunId(8));
+    assert_eq!(run_id, RunId(8));
 }
 
 #[test]
-fn manifest_round_trip_through_create_and_open() {
-    let dir = TempDir::new("manifest-roundtrip");
+fn create_writes_start_record_at_head() {
+    let dir = TempDir::new("create-start");
 
     let document = PathBuf::from("/somewhere/NetworkProbe.tq");
     let started = "2026-05-14T12:34:56Z".to_string();
@@ -104,21 +104,45 @@ fn manifest_round_trip_through_create_and_open() {
         dir.path
             .clone(),
     );
-    let (id, _, written) = store
-        .create(&document, started.clone())
+    let (run_id, run_dir) = store
+        .create(&document, started)
         .expect("create");
-    let (read, completed, _) = store
-        .open(id)
+
+    let pfftt = run_dir.join("NetworkProbe.pfftt");
+    let on_disk = std::fs::read_to_string(&pfftt).expect("read pfftt");
+    assert_eq!(
+        on_disk,
+        format!(
+            "2026-05-14T12:34:56Z {} / Start file:///somewhere/NetworkProbe.tq\n",
+            run_id.render()
+        )
+    );
+}
+
+#[test]
+fn create_and_open_round_trips_document_path() {
+    let dir = TempDir::new("create-open-roundtrip");
+
+    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
+    let started = "2026-05-14T12:34:56Z".to_string();
+
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let (run_id, _) = store
+        .create(&document, started)
+        .expect("create");
+    let (read_document, completed, _) = store
+        .open(run_id)
         .expect("open");
 
-    assert_eq!(written, read);
-    assert_eq!(read.document, document);
-    assert_eq!(read.started, started);
+    assert_eq!(read_document, document);
     assert!(completed.is_empty());
 }
 
 #[test]
-fn open_replays_three_result_paths() {
+fn open_replays_done_skip_fail_into_completed() {
     let dir = TempDir::new("replay-three");
 
     let run_dir = dir
@@ -126,21 +150,31 @@ fn open_replays_three_result_paths() {
         .join("000001");
     std::fs::create_dir_all(&run_dir).unwrap();
     let mut file = String::new();
-    file.push_str("[ document = file:///foo/Test.tq, started = 2026-05-14T12:00:00Z ]\n");
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        path: "/".to_string(),
+        state: State::Start {
+            uri: "file:///foo/Test.tq".to_string(),
+        },
+    }));
     file.push_str(&format_record(&Record {
         recorded: "2026-05-14T12:00:01Z".to_string(),
-        path: "test:1".to_string(),
-        outcome: Outcome::Done(None),
+        run_id: RunId(1),
+        path: "/test:1".to_string(),
+        state: State::Done(None),
     }));
     file.push_str(&format_record(&Record {
         recorded: "2026-05-14T12:00:02Z".to_string(),
-        path: "test:2".to_string(),
-        outcome: Outcome::Skipped,
+        run_id: RunId(1),
+        path: "/test:2".to_string(),
+        state: State::Skip,
     }));
     file.push_str(&format_record(&Record {
         recorded: "2026-05-14T12:00:03Z".to_string(),
-        path: "test:3".to_string(),
-        outcome: Outcome::Failed(None),
+        run_id: RunId(1),
+        path: "/test:3".to_string(),
+        state: State::Fail(None),
     }));
     std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
 
@@ -148,15 +182,67 @@ fn open_replays_three_result_paths() {
         dir.path
             .clone(),
     );
-    let (manifest, completed, _) = store
+    let (document, completed, _) = store
         .open(RunId(1))
         .expect("open");
 
-    assert_eq!(manifest.document, Path::new("/foo/Test.tq"));
+    assert_eq!(document, Path::new("/foo/Test.tq"));
     assert_eq!(completed.len(), 3);
-    assert!(completed.contains("test:1"));
-    assert!(completed.contains("test:2"));
-    assert!(completed.contains("test:3"));
+    assert!(completed.contains("/test:1"));
+    assert!(completed.contains("/test:2"));
+    assert!(completed.contains("/test:3"));
+}
+
+// Resume and Begin records in the middle of the file are lifecycle
+// events, not step completions — they must not show up in the replayed
+// `completed` set.
+#[test]
+fn open_skips_resume_and_begin_during_replay() {
+    let dir = TempDir::new("replay-skip-lifecycle");
+
+    let run_dir = dir
+        .path
+        .join("000001");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    let mut file = String::new();
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        path: "/".to_string(),
+        state: State::Start {
+            uri: "file:///foo/Test.tq".to_string(),
+        },
+    }));
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:01Z".to_string(),
+        run_id: RunId(1),
+        path: "/test:1".to_string(),
+        state: State::Begin,
+    }));
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:02Z".to_string(),
+        run_id: RunId(1),
+        path: "/test:1".to_string(),
+        state: State::Done(Some(Value::Unit)),
+    }));
+    file.push_str(&format_record(&Record {
+        recorded: "2026-05-14T12:00:03Z".to_string(),
+        run_id: RunId(1),
+        path: "/".to_string(),
+        state: State::Resume,
+    }));
+    std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
+
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let (_, completed, _) = store
+        .open(RunId(1))
+        .expect("open");
+
+    assert_eq!(completed.len(), 1);
+    assert!(completed.contains("/test:1"));
 }
 
 #[test]
@@ -169,219 +255,307 @@ fn open_missing_run_returns_no_such_run() {
             .clone(),
     );
     match store.open(RunId(42)) {
-        Err(RunnerError::NoSuchRun(id)) => assert_eq!(id, RunId(42)),
+        Err(RunnerError::NoSuchRun(run_id)) => assert_eq!(run_id, RunId(42)),
         other => panic!("expected NoSuchRun, got {:?}", other),
     }
 }
 
-#[test]
-fn create_writes_pfftt_file_with_expected_content() {
-    let dir = TempDir::new("create-bytes");
-
-    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
-    let started = "2026-05-14T12:34:56Z".to_string();
-
-    let store = Store::new(
-        dir.path
-            .clone(),
-    );
-    let (_, run_dir, _) = store
-        .create(&document, started)
-        .expect("create");
-
-    let pfftt = run_dir.join("NetworkProbe.pfftt");
-    let on_disk = std::fs::read_to_string(&pfftt).expect("read pfftt");
-    assert_eq!(
-        on_disk,
-        "[ document = file:///somewhere/NetworkProbe.tq, started = 2026-05-14T12:34:56Z ]\n"
-    );
-}
-
-// Each variant produces a distinct line shape — sibling fields appear only
-// when the corresponding Outcome carries a payload. The round-trip test
-// below covers parse compatibility; this one pins exact bytes.
+// Each variant of `State` produces a distinct line shape. This pins exact
+// bytes; the round-trip test below confirms parse compatibility.
 #[test]
 fn format_record_pins_on_disk_text() {
     let record = Record {
-        recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "make_coffee:2".to_string(),
-        outcome: Outcome::Done(None),
+        recorded: "2026-05-16T12:50:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/".to_string(),
+        state: State::Start {
+            uri: "file:///home/user/NetworkProbe.tq".to_string(),
+        },
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done ]\n"
+        "2026-05-16T12:50:30Z 015003 / Start file:///home/user/NetworkProbe.tq\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:28:25Z".to_string(),
+        run_id: RunId(15003),
+        path: "/".to_string(),
+        state: State::Resume,
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:28:25Z 015003 / Resume\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:28:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/".to_string(),
+        state: State::Pause,
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:28:30Z 015003 / Pause\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:28:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/local_network:2".to_string(),
+        state: State::Begin,
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:28:30Z 015003 /local_network:2 Begin\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-16T12:50:42Z".to_string(),
+        run_id: RunId(15003),
+        path: "/local_network:1".to_string(),
+        state: State::Execute {
+            function: "exec".to_string(),
+        },
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-16T12:50:42Z 015003 /local_network:1 Execute exec()\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:31:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/local_network:5".to_string(),
+        state: State::Invoke(InvokeTarget::Procedure("probe_border_router".to_string())),
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:31:30Z 015003 /local_network:5 Invoke probe_border_router:\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:31:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/local_network:5".to_string(),
+        state: State::Invoke(InvokeTarget::Uri("file:///tmp/Other.tq".to_string())),
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:31:30Z 015003 /local_network:5 Invoke file:///tmp/Other.tq\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "make_coffee:2".to_string(),
-        outcome: Outcome::Done(Some("\"penguin\"".to_string())),
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Done(None),
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Done, result = \"penguin\" ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Done\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "make_coffee:2".to_string(),
-        outcome: Outcome::Skipped,
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Done(Some(Value::Unit)),
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Skipped ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Done ()\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:29:15Z".to_string(),
+        run_id: RunId(15003),
+        path: "/local_network:3".to_string(),
+        state: State::Done(Some(Value::Tablet(
+            "[ address = \"192.168.1.1\" ]".to_string(),
+        ))),
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:29:15Z 015003 /local_network:3 Done [ address = \"192.168.1.1\" ]\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "make_coffee:2".to_string(),
-        outcome: Outcome::Failed(None),
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Skip,
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Failed ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Skip\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "make_coffee:2".to_string(),
-        outcome: Outcome::Failed(Some("\"network unplugged\"".to_string())),
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Fail(None),
     };
     assert_eq!(
         format_record(&record),
-        "[ recorded = 2026-05-14T12:00:00Z, path = make_coffee:2, outcome = Failed, reason = \"network unplugged\" ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Fail(Some(Value::Tablet(
+            "[ reason = \"network unplugged\" ]".to_string(),
+        ))),
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ reason = \"network unplugged\" ]\n"
     );
 }
 
 #[test]
 fn record_round_trips_through_format_and_parse() {
-    let original = Record {
-        recorded: "2026-05-14T12:00:00Z".to_string(),
-        path: "a:1".to_string(),
-        outcome: Outcome::Done(None),
-    };
-    let text = format_record(&original);
-    let line = text
-        .strip_suffix('\n')
-        .expect("trailing newline");
-    assert_eq!(parse_record(line).expect("parse"), original);
+    let cases = vec![
+        Record {
+            recorded: "2026-05-16T12:50:30Z".to_string(),
+            run_id: RunId(1),
+            path: "/".to_string(),
+            state: State::Start {
+                uri: "file:///foo/Bar.tq".to_string(),
+            },
+        },
+        Record {
+            recorded: "2026-05-17T00:28:25Z".to_string(),
+            run_id: RunId(1),
+            path: "/".to_string(),
+            state: State::Pause,
+        },
+        Record {
+            recorded: "2026-05-17T00:28:25Z".to_string(),
+            run_id: RunId(15003),
+            path: "/".to_string(),
+            state: State::Resume,
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
+            state: State::Begin,
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
+            state: State::Execute {
+                function: "exec".to_string(),
+            },
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
+            state: State::Invoke(InvokeTarget::Procedure("helper".to_string())),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
+            state: State::Invoke(InvokeTarget::Uri("https://proc.ac/foo/Bar.tq".to_string())),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
+            state: State::Done(None),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:01Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:2".to_string(),
+            state: State::Done(Some(Value::Unit)),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:02Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:3".to_string(),
+            state: State::Done(Some(Value::Tablet(
+                "[ address = \"10.0.0.1\" ]".to_string(),
+            ))),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:03Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:4".to_string(),
+            state: State::Skip,
+        },
+        Record {
+            recorded: "2026-05-14T12:00:04Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:5".to_string(),
+            state: State::Fail(None),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:05Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:6".to_string(),
+            state: State::Fail(Some(Value::Tablet(
+                "[ reason = \"unreachable\" ]".to_string(),
+            ))),
+        },
+    ];
 
-    let original = Record {
-        recorded: "2026-05-14T12:00:01Z".to_string(),
-        path: "a:2".to_string(),
-        outcome: Outcome::Done(Some("\"penguin\"".to_string())),
-    };
-    let text = format_record(&original);
-    let line = text
-        .strip_suffix('\n')
-        .expect("trailing newline");
-    assert_eq!(parse_record(line).expect("parse"), original);
-
-    let original = Record {
-        recorded: "2026-05-14T12:00:02Z".to_string(),
-        path: "a:3".to_string(),
-        outcome: Outcome::Skipped,
-    };
-    let text = format_record(&original);
-    let line = text
-        .strip_suffix('\n')
-        .expect("trailing newline");
-    assert_eq!(parse_record(line).expect("parse"), original);
-
-    let original = Record {
-        recorded: "2026-05-14T12:00:03Z".to_string(),
-        path: "a:4".to_string(),
-        outcome: Outcome::Failed(None),
-    };
-    let text = format_record(&original);
-    let line = text
-        .strip_suffix('\n')
-        .expect("trailing newline");
-    assert_eq!(parse_record(line).expect("parse"), original);
-
-    let original = Record {
-        recorded: "2026-05-14T12:00:04Z".to_string(),
-        path: "a:5".to_string(),
-        outcome: Outcome::Failed(Some("\"unreachable\"".to_string())),
-    };
-    let text = format_record(&original);
-    let line = text
-        .strip_suffix('\n')
-        .expect("trailing newline");
-    assert_eq!(parse_record(line).expect("parse"), original);
+    for original in cases {
+        let text = format_record(&original);
+        let line = text
+            .strip_suffix('\n')
+            .expect("trailing newline");
+        assert_eq!(parse_record(line).expect("parse"), original);
+    }
 }
 
 #[test]
-fn parse_manifest_reads_expected_text() {
-    let line = "[ document = file:///foo/bar.tq, started = 2026-05-14T01:02:03Z ]";
-    let manifest = parse_manifest(line).expect("parse");
-    assert_eq!(manifest.document, Path::new("/foo/bar.tq"));
-    assert_eq!(manifest.started, "2026-05-14T01:02:03Z");
-}
-
-#[test]
-fn parse_record_rejects_unknown_outcome() {
-    let line = "[ recorded = 2026-05-14T12:00:00Z, path = x:1, outcome = Maybe ]";
+fn parse_record_rejects_unknown_state() {
+    let line = "2026-05-14T12:00:00Z 000001 /x:1 Maybe";
     match parse_record(line) {
-        Err(crate::runner::state::RecordError::UnknownOutcome(text)) => {
-            assert_eq!(text, "Maybe");
-        }
-        other => panic!("expected UnknownOutcome, got {:?}", other),
+        Err(RecordError::UnknownState(text)) => assert_eq!(text, "Maybe"),
+        other => panic!("expected UnknownState, got {:?}", other),
     }
 }
 
 #[test]
-fn parse_manifest_rejects_missing_required_field() {
-    let line = "[ started = 2026-05-14T01:02:03Z ]";
-    match parse_manifest(line) {
-        Err(crate::runner::state::RecordError::MissingField(name)) => {
-            assert_eq!(name, "document");
-        }
-        other => panic!("expected MissingField, got {:?}", other),
+fn parse_record_rejects_too_few_fields() {
+    // Missing state keyword.
+    let line = "2026-05-14T12:00:00Z 000001 /x:1";
+    match parse_record(line) {
+        Err(RecordError::MalformedRecord) => {}
+        other => panic!("expected MalformedRecord, got {:?}", other),
     }
 
-    let line = "[ document = file:///x.tq ]";
-    match parse_manifest(line) {
-        Err(crate::runner::state::RecordError::MissingField(name)) => {
-            assert_eq!(name, "started");
-        }
-        other => panic!("expected MissingField, got {:?}", other),
+    // Empty line.
+    let line = "";
+    match parse_record(line) {
+        Err(RecordError::MalformedRecord) => {}
+        other => panic!("expected MalformedRecord, got {:?}", other),
     }
 }
 
 #[test]
-fn parse_record_rejects_missing_required_field() {
-    let line = "[ recorded = 2026-05-14T12:00:00Z, outcome = Done ]";
+fn parse_record_rejects_non_decimal_run() {
+    let line = "2026-05-14T12:00:00Z abc /x:1 Done";
     match parse_record(line) {
-        Err(crate::runner::state::RecordError::MissingField(name)) => {
-            assert_eq!(name, "path");
-        }
-        other => panic!("expected MissingField, got {:?}", other),
-    }
-
-    let line = "[ recorded = 2026-05-14T12:00:00Z, path = a:1 ]";
-    match parse_record(line) {
-        Err(crate::runner::state::RecordError::MissingField(name)) => {
-            assert_eq!(name, "outcome");
-        }
-        other => panic!("expected MissingField, got {:?}", other),
+        Err(RecordError::MalformedRecord) => {}
+        other => panic!("expected MalformedRecord, got {:?}", other),
     }
 }
 
-#[test]
-fn parse_record_without_brackets_errors() {
-    let line = "recorded = 2026-05-14T12:00:00Z, path = a:1, outcome = Done";
-    match parse_record(line) {
-        Err(crate::runner::state::RecordError::MalformedTablet) => {}
-        other => panic!("expected MalformedTablet, got {:?}", other),
-    }
-}
-
-// `ManifestMissing` covers two setups: a run directory containing an empty
-// PFFTT file (file present, no manifest tablet inside), and a run directory
+// `StartMissing` covers two setups: a run directory containing an empty
+// PFFTT file (file present, no Start record inside), and a run directory
 // with no PFFTT file at all.
 #[test]
-fn open_missing_manifest() {
+fn open_missing_start_record() {
     let dir = TempDir::new("empty-pfftt");
     let run_dir = dir
         .path
@@ -394,8 +568,8 @@ fn open_missing_manifest() {
             .clone(),
     );
     match store.open(RunId(1)) {
-        Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
-        other => panic!("expected ManifestMissing, got {:?}", other),
+        Err(RunnerError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
+        other => panic!("expected StartMissing, got {:?}", other),
     }
 
     let dir = TempDir::new("no-pfftt");
@@ -410,7 +584,7 @@ fn open_missing_manifest() {
             .clone(),
     );
     match store.open(RunId(1)) {
-        Err(RunnerError::ManifestMissing(id)) => assert_eq!(id, RunId(1)),
-        other => panic!("expected ManifestMissing, got {:?}", other),
+        Err(RunnerError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
+        other => panic!("expected StartMissing, got {:?}", other),
     }
 }

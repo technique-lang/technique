@@ -3,7 +3,7 @@ use std::path::Path;
 
 /// Helper function to check if parsing produces the expected error
 fn expect_error(content: &str, expected: ParsingError) {
-    let result = parse_with_recovery(Path::new("test.tq"), content);
+    let result = parse_with_recovery(Path::new("Test.tq"), content);
     match result {
         Ok(_) => panic!(
             "Expected parsing to fail, but it succeeded for input: {}",

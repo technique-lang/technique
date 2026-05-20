@@ -1055,21 +1055,21 @@ pub fn generate_translation_error<'i>(
 /// is being evaluated by the runner.
 pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (String, String) {
     match error {
-        RunnerError::NoSuchRun(id) => (
-            format!("No such run '{:06}'", id.0),
+        RunnerError::NoSuchRun(run_id) => (
+            format!("No such run '{:06}'", run_id.0),
             "The directory for this run identifier was not found in the local state store.".to_string(),
         ),
         RunnerError::StoreError { path, error } => (
             format!("I/O error with local state store at {}", path.display()),
             format!("{}", error),
         ),
-        RunnerError::MalformedRecord { run, .. } => (
-            format!("Malformed record for run '{:06}'", run.0),
+        RunnerError::MalformedRecord { run_id, .. } => (
+            format!("Malformed record for run '{:06}'", run_id.0),
             "The PFFTT state file for this run could not be parsed.".to_string(),
         ),
-        RunnerError::ManifestMissing(id) => (
-            format!("Manifest missing in run '{:06}'", id.0),
-            "The state file is present but its first tablet (the manifest) is missing or malformed.".to_string(),
+        RunnerError::StartMissing(run_id) => (
+            format!("Start record missing in run '{:06}'", run_id.0),
+            "The state file is present but its first record (the Start event) is missing or malformed.".to_string(),
         ),
         RunnerError::InvalidRunId(text) => (
             format!("Invalid run identifier '{}'", text),

@@ -266,7 +266,7 @@ mod check {
     }
 
     fn extract(source: &str) -> super::Document {
-        let path = Path::new("test.tq");
+        let path = Path::new("Test.tq");
         let doc = parsing::parse(path, source).unwrap();
         ProcedureAdapter.extract(&doc)
     }

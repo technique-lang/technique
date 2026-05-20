@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::manifest::Manifest;
 use super::runner::RunnerError;
 
 /// Monotonic identifier for a run. Conventionally rendered and stored as a
@@ -30,44 +29,59 @@ impl RunId {
 /// Errors raised if a PFFTT file is malformed or invalid.
 #[derive(Debug, Eq, PartialEq)]
 pub enum RecordError {
-    MalformedTablet,
-    MissingField(&'static str),
-    UnknownOutcome(String),
+    MalformedRecord,
+    MalformedState,
+    UnknownState(String),
 }
 
-/// One Result, recorded on disk in the form of a tablet.
+/// One record line on disk.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Record {
     pub recorded: String,
+    pub run_id: RunId,
     pub path: String,
-    pub outcome: Outcome,
+    pub state: State,
 }
 
-/// Outcome of executing a step.
-
-/// The on-disk PFFTT format keeps `result` and `reason` as sibling fields of
-/// `outcome` so these can be grepped for directly without needing to
-/// destructure this type's constructors.
-///
-/// It also facilitates future combinations (e.g. partial result accompanying
-/// a failure) that we currently don't need, but can accomodate in the future
-/// without changing the on disk format.
+/// A lifecycle or step-outcome event, mirroring the PFFTT BNF's `State`
+/// production. `Start`, `Pause`, and `Resume` are run-lifecycle events
+/// emitted at the root path `/`; `Begin` marks the moment work starts
+/// on a step (paired with the eventual `Done`, `Skip`, or `Fail`).
+/// `Invoke` records dispatch into another procedure (the return is
+/// implicit — the next event's path reveals the resumed procedure).
+/// `Execute` records a host-function call from inside a step body.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Outcome {
-    Done(Option<String>),
-    Skipped,
-    Failed(Option<String>),
+pub enum State {
+    Start { uri: String },
+    Pause,
+    Resume,
+    Invoke(InvokeTarget),
+    Execute { function: String },
+    Begin,
+    Done(Option<Value>),
+    Skip,
+    Fail(Option<Value>),
 }
 
-impl Outcome {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Outcome::Done(_) => "Done",
-            Outcome::Skipped => "Skipped",
-            Outcome::Failed(_) => "Failed",
-        }
-    }
+/// The target of an `Invoke`: either a named procedure (rendered as
+/// `name:`) or a URI to an external technique.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum InvokeTarget {
+    Procedure(String),
+    Uri(String),
+}
+
+/// A `Value` carried by a Done or Fail state. The BNF admits `unit` or
+/// `tablet`; tablets currently round-trip as opaque text until tablet
+/// typing in the runner lands.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Value {
+    Unit,
+    Tablet(String),
 }
 
 /// On-disk store of runs, rooted at some base directory (conventionally
@@ -127,46 +141,51 @@ impl Store {
         })
     }
 
-    /// Allocate a new run, write its manifest, and return the resulting run
-    /// identifier and start state. The PFFTT file is named after the source
-    /// document's basename (e.g. `NetworkProbe.pfftt`).
+    /// Allocate a new run and write its opening `Start` record. The PFFTT
+    /// file is named after the source document's basename (e.g.
+    /// `NetworkProbe.pfftt`).
     pub fn create(
         &self,
         document: &Path,
         started: String,
-    ) -> Result<(RunId, PathBuf, Manifest), RunnerError> {
+    ) -> Result<(RunId, PathBuf), RunnerError> {
         let absolute = std::path::absolute(document).map_err(|error| RunnerError::StoreError {
             path: document.to_path_buf(),
             error,
         })?;
-        let (id, run_dir) = self.allocate()?;
-        let manifest = Manifest {
-            document: absolute,
-            started,
+        let (run_id, run_dir) = self.allocate()?;
+        let pfftt = construct_state_path(&run_dir, &absolute);
+        let record = Record {
+            recorded: started,
+            run_id,
+            path: "/".to_string(),
+            state: State::Start {
+                uri: format!("file://{}", absolute.display()),
+            },
         };
-        let pfftt = construct_state_path(&run_dir, &manifest.document);
-        let text = format_manifest(&manifest);
-        std::fs::write(&pfftt, text)
+        std::fs::write(&pfftt, format_record(&record))
             .map_err(|error| RunnerError::StoreError { path: pfftt, error })?;
-        Ok((id, run_dir, manifest))
+        Ok((run_id, run_dir))
     }
 
-    /// Open an existing run. Parses the manifest and replays Result tablets
-    /// into a set of completed step paths.
-    pub fn open(&self, id: RunId) -> Result<(Manifest, HashSet<String>, PathBuf), RunnerError> {
+    /// Open an existing run. Parses the leading `Start` record to recover
+    /// the source document, then replays `Done` / `Skip` / `Fail` records
+    /// into a set of completed step paths. `Pause` and `Resume` records
+    /// are passed over.
+    pub fn open(&self, run_id: RunId) -> Result<(PathBuf, HashSet<String>, PathBuf), RunnerError> {
         let run_dir = self
             .base
-            .join(id.render());
+            .join(run_id.render());
         if !run_dir.is_dir() {
-            return Err(RunnerError::NoSuchRun(id));
+            return Err(RunnerError::NoSuchRun(run_id));
         }
-        let pfftt = find_pfftt_file(&run_dir, id)?;
+        let pfftt = find_pfftt_file(&run_dir, run_id)?;
         let content = std::fs::read_to_string(&pfftt).map_err(|error| RunnerError::StoreError {
             path: pfftt.clone(),
             error,
         })?;
 
-        let mut tablets = content
+        let mut lines = content
             .lines()
             .filter(|line| {
                 !line
@@ -174,19 +193,38 @@ impl Store {
                     .is_empty()
             });
 
-        let manifest = match tablets.next() {
-            Some(line) => parse_manifest(line)
-                .map_err(|error| RunnerError::MalformedRecord { run: id, error })?,
-            None => return Err(RunnerError::ManifestMissing(id)),
+        let first = lines
+            .next()
+            .ok_or(RunnerError::StartMissing(run_id))?;
+        let head =
+            parse_record(first).map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
+        let document = match head.state {
+            State::Start { uri, .. } => {
+                let stripped = uri
+                    .strip_prefix("file://")
+                    .unwrap_or(&uri);
+                PathBuf::from(stripped)
+            }
+            _ => return Err(RunnerError::StartMissing(run_id)),
         };
 
         let mut completed = HashSet::new();
-        for line in tablets {
+        for line in lines {
             let record = parse_record(line)
-                .map_err(|error| RunnerError::MalformedRecord { run: id, error })?;
-            completed.insert(record.path);
+                .map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
+            match record.state {
+                State::Done(_) | State::Skip | State::Fail(_) => {
+                    completed.insert(record.path);
+                }
+                State::Start { .. }
+                | State::Pause
+                | State::Resume
+                | State::Invoke(_)
+                | State::Execute { .. }
+                | State::Begin => {}
+            }
         }
-        Ok((manifest, completed, run_dir))
+        Ok((document, completed, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return
@@ -235,19 +273,22 @@ pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
     run_dir.join(name)
 }
 
-/// Append-only writer for a PFFTT file. This is used by the runner to record
-/// a Result tablet for each completed Step.
+/// Append-only writer for a PFFTT file. Used by the runner to append a
+/// record for each step boundary and lifecycle event. Carries the
+/// `RunId` so callers can stamp it onto records without plumbing it
+/// through every layer.
 #[allow(dead_code)]
 pub struct Appender {
     file: std::fs::File,
     path: PathBuf,
+    run_id: RunId,
 }
 
 #[allow(dead_code)]
 impl Appender {
     /// Open the PFFTT file for append. The file must already exist (the
-    /// runner writes the manifest first via `Store::create`).
-    pub fn open(path: PathBuf) -> Result<Self, RunnerError> {
+    /// runner writes the opening `Start` record first via `Store::create`).
+    pub fn open(path: PathBuf, run_id: RunId) -> Result<Self, RunnerError> {
         let file = std::fs::OpenOptions::new()
             .append(true)
             .open(&path)
@@ -255,11 +296,16 @@ impl Appender {
                 path: path.clone(),
                 error,
             })?;
-        Ok(Appender { file, path })
+        Ok(Appender { file, path, run_id })
     }
 
-    /// Append one Result tablet line. Flushes are left to the OS; on Quit
-    /// the runner drops the Appender, which closes the file.
+    /// The `RunId` this Appender is writing records for.
+    pub fn run_id(&self) -> RunId {
+        self.run_id
+    }
+
+    /// Append one record line. Flushes are left to the OS; on Quit the
+    /// runner drops the Appender, which closes the file.
     pub fn append(&mut self, record: &Record) -> Result<(), RunnerError> {
         use std::io::Write;
         let text = format_record(record);
@@ -275,7 +321,7 @@ impl Appender {
 }
 
 // Locate the single `*.pfftt` file in a run directory.
-fn find_pfftt_file(run_dir: &Path, id: RunId) -> Result<PathBuf, RunnerError> {
+fn find_pfftt_file(run_dir: &Path, run_id: RunId) -> Result<PathBuf, RunnerError> {
     let entries = std::fs::read_dir(run_dir).map_err(|error| RunnerError::StoreError {
         path: run_dir.to_path_buf(),
         error,
@@ -294,133 +340,198 @@ fn find_pfftt_file(run_dir: &Path, id: RunId) -> Result<PathBuf, RunnerError> {
             return Ok(path);
         }
     }
-    Err(RunnerError::ManifestMissing(id))
+    Err(RunnerError::StartMissing(run_id))
 }
 
-// Serialize a manifest as a single PFFTT tablet line. The trailing
-// newline is part of the on-disk shape — every tablet occupies its own
-// line.
-pub(crate) fn format_manifest(m: &Manifest) -> String {
-    format!(
-        "[ document = file://{}, started = {} ]\n",
-        m.document
-            .display(),
-        m.started,
-    )
-}
-
-// Parse a manifest line into a Manifest. The `document` field is stored
-// as a `file://` URL; the prefix is stripped on read.
-pub(crate) fn parse_manifest(line: &str) -> Result<Manifest, RecordError> {
-    let entries = parse_tablet(line)?;
-    let document = entries
-        .iter()
-        .find(|(k, _)| *k == "document")
-        .map(|(_, v)| *v)
-        .ok_or(RecordError::MissingField("document"))?;
-    let started = entries
-        .iter()
-        .find(|(k, _)| *k == "started")
-        .map(|(_, v)| *v)
-        .ok_or(RecordError::MissingField("started"))?;
-    let document = document
-        .strip_prefix("file://")
-        .unwrap_or(document);
-    Ok(Manifest {
-        document: PathBuf::from(document),
-        started: started.to_string(),
-    })
-}
-
-// Serialize a Result tablet from a Record. The `outcome` field carries
-// the bare discriminator; `result` and `reason` are sibling fields
-// emitted only when the corresponding Outcome variant carries a payload.
+// Serialize a Record in PFFTT line form. The format is:
+// Timestamp RunId Path (State Value) followed by a newline.
 #[allow(dead_code)]
 pub(crate) fn format_record(record: &Record) -> String {
-    let mut text = format!(
-        "[ recorded = {}, path = {}, outcome = {}",
-        record.recorded,
-        record.path,
-        record
-            .outcome
-            .as_str(),
+    let mut text = String::new();
+    text.push_str(&record.recorded);
+    text.push(' ');
+    text.push_str(
+        &record
+            .run_id
+            .render(),
     );
-    match &record.outcome {
-        Outcome::Done(Some(result)) => {
-            text.push_str(", result = ");
-            text.push_str(result);
-        }
-        Outcome::Failed(Some(reason)) => {
-            text.push_str(", reason = ");
-            text.push_str(reason);
-        }
-        _ => {}
-    }
-    text.push_str(" ]\n");
+    text.push(' ');
+    text.push_str(&record.path);
+    text.push(' ');
+    format_state(&mut text, &record.state);
+    text.push('\n');
     text
 }
 
-// Parse a Result tablet line into a Record. Sibling fields `result` and
-// `reason` are folded into the Outcome variant they belong to.
+fn format_state(out: &mut String, state: &State) {
+    match state {
+        State::Start { uri } => {
+            out.push_str("Start ");
+            out.push_str(uri);
+        }
+        State::Pause => out.push_str("Pause"),
+        State::Resume => out.push_str("Resume"),
+        State::Invoke(target) => {
+            out.push_str("Invoke ");
+            match target {
+                InvokeTarget::Procedure(name) => {
+                    out.push_str(name);
+                    out.push(':');
+                }
+                InvokeTarget::Uri(uri) => out.push_str(uri),
+            }
+        }
+        State::Execute { function } => {
+            out.push_str("Execute ");
+            out.push_str(function);
+            out.push_str("()");
+        }
+        State::Begin => out.push_str("Begin"),
+        State::Done(value) => {
+            out.push_str("Done");
+            if let Some(v) = value {
+                out.push(' ');
+                format_value(out, v);
+            }
+        }
+        State::Skip => out.push_str("Skip"),
+        State::Fail(value) => {
+            out.push_str("Fail");
+            if let Some(v) = value {
+                out.push(' ');
+                format_value(out, v);
+            }
+        }
+    }
+}
+
+fn format_value(out: &mut String, value: &Value) {
+    match value {
+        Value::Unit => out.push_str("()"),
+        Value::Tablet(text) => out.push_str(text),
+    }
+}
+
+// Parse a single PFFTT record line into a Record.
 pub(crate) fn parse_record(line: &str) -> Result<Record, RecordError> {
-    let entries = Entries(parse_tablet(line)?);
-    let recorded = entries.required("recorded")?;
-    let path = entries.required("path")?;
-    let keyword = entries.required("outcome")?;
-    let result = entries.optional("result");
-    let reason = entries.optional("reason");
-    let outcome = match keyword {
-        "Done" => Outcome::Done(result.map(str::to_string)),
-        "Skipped" => Outcome::Skipped,
-        "Failed" => Outcome::Failed(reason.map(str::to_string)),
-        other => return Err(RecordError::UnknownOutcome(other.to_string())),
-    };
+    let line = line.trim_end_matches(['\r', '\n']);
+    let mut parts = line.splitn(4, ' ');
+    let recorded = parts
+        .next()
+        .ok_or(RecordError::MalformedRecord)?;
+    let run_text = parts
+        .next()
+        .ok_or(RecordError::MalformedRecord)?;
+    let path = parts
+        .next()
+        .ok_or(RecordError::MalformedRecord)?;
+    let rest = parts
+        .next()
+        .ok_or(RecordError::MalformedRecord)?;
+    if recorded.is_empty() || run_text.is_empty() || path.is_empty() || rest.is_empty() {
+        return Err(RecordError::MalformedRecord);
+    }
+    let run_id = run_text
+        .parse::<u32>()
+        .map(RunId)
+        .map_err(|_| RecordError::MalformedRecord)?;
+    let state = parse_state(rest)?;
     Ok(Record {
         recorded: recorded.to_string(),
+        run_id,
         path: path.to_string(),
-        outcome,
+        state,
     })
 }
 
-struct Entries<'a>(Vec<(&'a str, &'a str)>);
-
-impl<'a> Entries<'a> {
-    fn required(&self, name: &'static str) -> Result<&'a str, RecordError> {
-        self.optional(name)
-            .ok_or(RecordError::MissingField(name))
-    }
-
-    fn optional(&self, name: &'static str) -> Option<&'a str> {
-        self.0
-            .iter()
-            .find(|(k, _)| *k == name)
-            .map(|(_, v)| *v)
+fn parse_state(text: &str) -> Result<State, RecordError> {
+    let (keyword, rest) = match text.split_once(' ') {
+        Some((k, r)) => (k, Some(r)),
+        None => (text, None),
+    };
+    match keyword {
+        "Start" => {
+            let uri = rest.ok_or(RecordError::MalformedState)?;
+            if uri.is_empty() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Start {
+                uri: uri.to_string(),
+            })
+        }
+        "Pause" => {
+            if rest.is_some() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Pause)
+        }
+        "Resume" => {
+            if rest.is_some() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Resume)
+        }
+        "Invoke" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            if payload.is_empty() {
+                return Err(RecordError::MalformedState);
+            }
+            if payload.starts_with("https://") || payload.starts_with("file:///") {
+                Ok(State::Invoke(InvokeTarget::Uri(payload.to_string())))
+            } else if let Some(name) = payload.strip_suffix(':') {
+                if name.is_empty() {
+                    return Err(RecordError::MalformedState);
+                }
+                Ok(State::Invoke(InvokeTarget::Procedure(name.to_string())))
+            } else {
+                Err(RecordError::MalformedState)
+            }
+        }
+        "Execute" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            let name = payload
+                .strip_suffix("()")
+                .ok_or(RecordError::MalformedState)?;
+            if name.is_empty() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Execute {
+                function: name.to_string(),
+            })
+        }
+        "Begin" => {
+            if rest.is_some() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Begin)
+        }
+        "Done" => Ok(State::Done(parse_optional_value(rest)?)),
+        "Skip" => {
+            if rest.is_some() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Skip)
+        }
+        "Fail" => Ok(State::Fail(parse_optional_value(rest)?)),
+        other => Err(RecordError::UnknownState(other.to_string())),
     }
 }
 
-// Split a `[ k = v, k = v, ... ]` line into (key, value) pairs. Permissive on
-// whitespace; rejects anything without the bracketed envelope.
-//
-// TODO support nested tablets.
-fn parse_tablet(line: &str) -> Result<Vec<(&str, &str)>, RecordError> {
-    let trimmed = line.trim();
-    let inner = trimmed
-        .strip_prefix('[')
-        .and_then(|s| s.strip_suffix(']'))
-        .ok_or(RecordError::MalformedTablet)?
-        .trim();
-    let mut entries = Vec::new();
-    for entry in inner.split(',') {
-        let entry = entry.trim();
-        if entry.is_empty() {
-            continue;
-        }
-        let (k, v) = entry
-            .split_once('=')
-            .ok_or(RecordError::MalformedTablet)?;
-        entries.push((k.trim(), v.trim()));
+fn parse_optional_value(rest: Option<&str>) -> Result<Option<Value>, RecordError> {
+    match rest {
+        None => Ok(None),
+        Some(text) => Ok(Some(parse_value(text)?)),
     }
-    Ok(entries)
+}
+
+fn parse_value(text: &str) -> Result<Value, RecordError> {
+    if text == "()" {
+        Ok(Value::Unit)
+    } else if text.starts_with('[') && text.ends_with(']') {
+        Ok(Value::Tablet(text.to_string()))
+    } else {
+        Err(RecordError::MalformedState)
+    }
 }
 
 #[cfg(test)]

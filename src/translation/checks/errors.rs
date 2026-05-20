@@ -16,7 +16,7 @@ make_coffee :
 make_coffee :
         "#
     .trim_ascii();
-    let path = Path::new("test.tq");
+    let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let errors = translate(&document).expect_err("translate should fail");
 
