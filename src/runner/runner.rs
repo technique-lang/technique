@@ -407,7 +407,7 @@ fn describe_loop(
 
 fn describe_execute(executable: &Executable<'_>) -> String {
     format!(
-        "{}(...)",
+        "{}()",
         executable
             .target
             .value
@@ -440,15 +440,23 @@ fn record_state(outcome: &Outcome) -> State {
     }
 }
 
-/// Current UTC time as an RFC3339 second-precision string, used for
-/// the `recorded` field of every Result tablet.
+/// Current UTC time as an RFC3339 millisecond-precision string, used
+/// for the `recorded` field of every Result tablet. The fraction is
+/// truncated (not rounded) — sub-millisecond resolution is dropped —
+/// and the millisecond field is always rendered as three digits, even
+/// when trailing zeros would otherwise be elided.
 pub(super) fn now_iso8601() -> String {
-    use time::format_description::well_known::Rfc3339;
-    time::OffsetDateTime::now_utc()
-        .replace_nanosecond(0)
-        .unwrap() // Zero nanoseconds is always valid
-        .format(&Rfc3339)
-        .unwrap() // Rfc3339 formatting is infallible for a valid OffsetDateTime
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
+        now.millisecond(),
+    )
 }
 
 #[cfg(test)]

@@ -518,7 +518,7 @@ test :
             }
         })
         .collect();
-    assert_eq!(announcements, vec!["journal(...)"]);
+    assert_eq!(announcements, vec!["journal()"]);
 }
 
 #[test]
