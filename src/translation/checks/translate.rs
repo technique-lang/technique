@@ -13,7 +13,7 @@ use crate::translation::translate;
 #[test]
 fn empty_input_yields_empty_program() {
     let source = "";
-    let path = Path::new("test.tq");
+    let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
     assert!(program
@@ -29,7 +29,7 @@ fn single_procedure_registered() {
 make_coffee :
         "#
     .trim_ascii();
-    let path = Path::new("test.tq");
+    let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
@@ -57,7 +57,7 @@ second :
 third :
         "#
     .trim_ascii();
-    let path = Path::new("test.tq");
+    let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
@@ -85,7 +85,7 @@ I. Section One
 inner : () -> ()
         "#
     .trim_ascii();
-    let path = Path::new("test.tq");
+    let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 

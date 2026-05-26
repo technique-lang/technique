@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use super::evaluator::Environment;
 use super::path::{PathSegment, QualifiedPath};
 use super::prompt::{Prompt, UserInput};
-use super::state::{Appender, Outcome as RecordOutcome, Record, RecordError, RunId};
+use super::state::{
+    Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
+};
 use crate::program::{Executable, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
@@ -43,8 +45,8 @@ pub enum Failure {
 pub enum RunnerError {
     NoSuchRun(RunId),
     StoreError { path: PathBuf, error: io::Error },
-    MalformedRecord { run: RunId, error: RecordError },
-    ManifestMissing(RunId),
+    MalformedRecord { run_id: RunId, error: RecordError },
+    StartMissing(RunId),
     InvalidRunId(String),
     MissingEntryProcedure,
     UnboundVariable(String),
@@ -143,6 +145,25 @@ impl<'i, P: Prompt> Runner<'i, P> {
             }
             Operation::Invoke(invocable) => self.walk_invoke(invocable),
             Operation::Execute(executable) => {
+                let qualified = self
+                    .path
+                    .render();
+                let run_id = self
+                    .appender
+                    .run_id();
+                let record = Record {
+                    recorded: now_iso8601(),
+                    run_id,
+                    path: qualified,
+                    state: State::Execute {
+                        function: executable
+                            .target
+                            .value
+                            .to_string(),
+                    },
+                };
+                self.appender
+                    .append(&record)?;
                 self.prompt
                     .announce(&describe_execute(executable));
                 Ok(Outcome::Done(Value::Unitus))
@@ -170,6 +191,20 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .as_ref()
                     .map(|n| n.value);
                 if let Some(name) = name {
+                    let qualified = self
+                        .path
+                        .render();
+                    let run_id = self
+                        .appender
+                        .run_id();
+                    let record = Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified,
+                        state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
+                    };
+                    self.appender
+                        .append(&record)?;
                     self.path
                         .push(PathSegment::Procedure(name));
                 }
@@ -299,6 +334,22 @@ impl<'i, P: Prompt> Runner<'i, P> {
         {
             return Ok(Outcome::Done(Value::Unitus));
         }
+
+        // Mark the start of work on this step before walking its body,
+        // so any Invoke/Execute records emitted by the body land between
+        // this Begin and the eventual outcome record.
+        let run_id = self
+            .appender
+            .run_id();
+        let begin = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: qualified.to_string(),
+            state: State::Begin,
+        };
+        self.appender
+            .append(&begin)?;
+
         if let Outcome::Quit = self.walk(body)? {
             return Ok(Outcome::Quit);
         }
@@ -316,6 +367,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
         self.prompt
             .step(qualified, &description_text);
+
         let outcome = outcome_from(
             self.prompt
                 .ask(),
@@ -326,8 +378,9 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
         let record = Record {
             recorded: now_iso8601(),
+            run_id,
             path: qualified.to_string(),
-            outcome: record_outcome(&outcome),
+            state: record_state(&outcome),
         };
         self.appender
             .append(&record)?;
@@ -354,7 +407,7 @@ fn describe_loop(
 
 fn describe_execute(executable: &Executable<'_>) -> String {
     format!(
-        "{}(...)",
+        "{}()",
         executable
             .target
             .value
@@ -371,30 +424,39 @@ fn outcome_from(input: UserInput) -> Outcome {
     }
 }
 
-/// Project the runner's in-memory `Outcome` into the on-disk shape
-/// the PFFTT writer expects. Done always serializes as `result = ()`
-/// for now — rendered-value persistence is future work. Quit is
-/// unreachable here: the caller filters it out before recording.
-fn record_outcome(outcome: &Outcome) -> RecordOutcome {
+/// Project the runner's in-memory `Outcome` into the on-disk `State`
+/// the PFFTT writer expects. Done renders with an explicit unit
+/// placeholder for now — capturing the operator's actual value into a
+/// tablet is future work. Quit is unreachable here: the caller filters
+/// it out before recording.
+fn record_state(outcome: &Outcome) -> State {
     match outcome {
-        Outcome::Done(_) => RecordOutcome::Done(Some("()".to_string())),
-        Outcome::Skipped => RecordOutcome::Skipped,
-        Outcome::Failed(Failure::Aborted(reason)) => {
-            RecordOutcome::Failed(Some(format!("\"{}\"", reason)))
-        }
+        Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
+        Outcome::Skipped => State::Skip,
+        Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
+            format!("[ reason = \"{}\" ]", reason),
+        ))),
         Outcome::Quit => unreachable!("Quit is not recorded"),
     }
 }
 
-/// Current UTC time as an RFC3339 second-precision string, used for
-/// the `recorded` field of every Result tablet.
+/// Current UTC time as an RFC3339 millisecond-precision string, used
+/// for the `recorded` field of every Result tablet. The fraction is
+/// truncated (not rounded) — sub-millisecond resolution is dropped —
+/// and the millisecond field is always rendered as three digits, even
+/// when trailing zeros would otherwise be elided.
 pub(super) fn now_iso8601() -> String {
-    use time::format_description::well_known::Rfc3339;
-    time::OffsetDateTime::now_utc()
-        .replace_nanosecond(0)
-        .unwrap() // Zero nanoseconds is always valid
-        .format(&Rfc3339)
-        .unwrap() // Rfc3339 formatting is infallible for a valid OffsetDateTime
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
+        now.millisecond(),
+    )
 }
 
 #[cfg(test)]

@@ -2356,7 +2356,7 @@ broken :
     1. Step one
         "#;
 
-    let result = parse_with_recovery(Path::new("test.tq"), content);
+    let result = parse_with_recovery(Path::new("Test.tq"), content);
 
     // Check that we get an error about the invalid signature
     match result {

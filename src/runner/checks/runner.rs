@@ -5,7 +5,7 @@ use crate::parsing;
 use crate::program::{Operation, Ordinal, Program, Subroutine};
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{Outcome, Runner};
-use crate::runner::state::{parse_record, Appender, Outcome as RecordOutcome, Store};
+use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -24,11 +24,11 @@ impl StoreFixture {
         let _ = std::fs::remove_dir_all(&base);
         let store = Store::new(base.clone());
         let document = PathBuf::from("/tmp/Test.tq");
-        let (_, run_dir, _) = store
+        let (run_id, run_dir) = store
             .create(&document, "2026-05-16T00:00:00Z".to_string())
             .expect("create");
         let pfftt = crate::runner::state::construct_state_path(&run_dir, &document);
-        let appender = Appender::open(pfftt).expect("open appender");
+        let appender = Appender::open(pfftt, run_id).expect("open appender");
         StoreFixture {
             base,
             appender: Some(appender),
@@ -110,15 +110,19 @@ fn step_outcomes_recorded() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 2);
+    // Start + Begin + Done — three lines.
+    assert_eq!(lines.len(), 3);
     assert_eq!(
         lines[0],
-        "[ document = file:///tmp/Test.tq, started = 2026-05-16T00:00:00Z ]"
+        "2026-05-16T00:00:00Z 000001 / Start file:///tmp/Test.tq"
     );
-    let record = parse_record(lines[1]).expect("parse record");
-    assert_eq!(record.path, "1");
-    let RecordOutcome::Done(_) = record.outcome else {
-        panic!("expected Done, got {:?}", record.outcome);
+    let begin = parse_record(lines[1]).expect("parse begin");
+    assert_eq!(begin.path, "/1");
+    assert_eq!(begin.state, State::Begin);
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.path, "/1");
+    let State::Done(_) = record.state else {
+        panic!("expected Done, got {:?}", record.state);
     };
 
     let mut fixture = StoreFixture::new("step-skip");
@@ -141,8 +145,9 @@ fn step_outcomes_recorded() {
                 .is_empty()
         })
         .collect();
-    let record = parse_record(lines[1]).expect("parse record");
-    assert_eq!(record.outcome, RecordOutcome::Skipped);
+    // lines[1] is the Begin; lines[2] is the Skip outcome.
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Skip);
 
     let mut fixture = StoreFixture::new("step-fail");
     let body = Operation::Sequence(vec![step(
@@ -164,10 +169,13 @@ fn step_outcomes_recorded() {
                 .is_empty()
         })
         .collect();
-    let record = parse_record(lines[1]).expect("parse record");
+    // lines[1] is the Begin; lines[2] is the Fail outcome.
+    let record = parse_record(lines[2]).expect("parse record");
     assert_eq!(
-        record.outcome,
-        RecordOutcome::Failed(Some("\"Failed\"".to_string()))
+        record.state,
+        State::Fail(Some(RecordValue::Tablet(
+            "[ reason = \"Failed\" ]".to_string()
+        )))
     );
 }
 
@@ -201,7 +209,7 @@ fn two_steps_prompted_in_source_order() {
             }
         })
         .collect();
-    assert_eq!(step_fqns, vec!["1", "2"]);
+    assert_eq!(step_fqns, vec!["/1", "/2"]);
 }
 
 #[test]
@@ -216,7 +224,7 @@ fn pre_completed_step_short_circuits() {
     // Pre-mark step 1 completed; the walker should skip its prompt
     // and only ask about step 2.
     let mut completed = HashSet::new();
-    completed.insert("1".to_string());
+    completed.insert("/1".to_string());
 
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::with_pieces(&program, fixture.take_appender(), completed, prompt);
@@ -236,7 +244,7 @@ fn pre_completed_step_short_circuits() {
             }
         })
         .collect();
-    assert_eq!(step_fqns, vec!["2"]);
+    assert_eq!(step_fqns, vec!["/2"]);
 }
 
 #[test]
@@ -268,17 +276,23 @@ fn quit_propagates_and_stops_walking() {
         })
         .collect();
     // Only the first Step was prompted; the second never fired.
-    assert_eq!(step_fqns, vec!["1"]);
+    assert_eq!(step_fqns, vec!["/1"]);
 
-    // Quit doesn't record an outcome — the PFFTT file contains the
-    // manifest tablet and nothing else.
+    // Quit records the step's Begin (the operator started looking at it)
+    // but no Done/Skip/Fail — so the file is exactly the opening Start
+    // plus that single Begin.
     let pfftt = fixture.pfftt_contents();
-    assert_eq!(
-        pfftt
-            .matches("outcome =")
-            .count(),
-        0
-    );
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert!(lines[0].contains(" Start "));
+    assert!(lines[1].ends_with(" Begin"));
 }
 
 #[test]
@@ -321,8 +335,8 @@ fn section_walking() {
             }
         })
         .collect();
-    assert_eq!(section_fqns, vec!["I"]);
-    assert_eq!(step_fqns, vec!["I/1"]);
+    assert_eq!(section_fqns, vec!["/I"]);
+    assert_eq!(step_fqns, vec!["/I/1"]);
 
     let mut fixture = StoreFixture::new("section-with-title");
     let title = Operation::String(vec![Fragment::Text("Setup")]);
@@ -384,7 +398,7 @@ fn parallel_step_index_starts_at_one() {
             }
         })
         .collect();
-    assert_eq!(step_fqns, vec!["-1", "-2"]);
+    assert_eq!(step_fqns, vec!["/-1", "/-2"]);
 }
 
 #[test]
@@ -398,7 +412,7 @@ test :
 2.  Result: { answer }
         "#
     .trim_ascii();
-    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
     let program = translate(&document).expect("translate");
 
     let mut fixture = StoreFixture::new("bind-then-interpolate");
@@ -444,7 +458,7 @@ helper :
 1.  helper step
         "#
     .trim_ascii();
-    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
     let program = translate(&document).expect("translate");
 
     let mut fixture = StoreFixture::new("invoke-descent");
@@ -469,7 +483,7 @@ helper :
     // The Step inside `helper` was reached and prompted, with the
     // helper procedure as the FQN prefix (the outer `main` frame is
     // overridden by the inner Procedure segment).
-    assert_eq!(step_fqns, vec!["helper:1"]);
+    assert_eq!(step_fqns, vec!["/helper:1"]);
 }
 
 #[test]
@@ -482,7 +496,7 @@ test :
 1.  Do this { journal("hello") }
         "#
     .trim_ascii();
-    let document = parsing::parse(Path::new("test.tq"), source).expect("parse");
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
     let program = translate(&document).expect("translate");
 
     let mut fixture = StoreFixture::new("execute-announce");
@@ -504,7 +518,7 @@ test :
             }
         })
         .collect();
-    assert_eq!(announcements, vec!["journal(...)"]);
+    assert_eq!(announcements, vec!["journal()"]);
 }
 
 #[test]
@@ -535,11 +549,18 @@ fn loop_inside_step_produces_one_result() {
         .run()
         .expect("run");
 
+    // One Start record, then the enclosing step's Begin and Done — the
+    // Loop inside the step body does not record events of its own.
     let pfftt = fixture.pfftt_contents();
-    assert_eq!(
-        pfftt
-            .matches("outcome =")
-            .count(),
-        1
-    );
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert!(lines[1].ends_with(" Begin"));
+    assert!(lines[2].contains(" Done"));
 }

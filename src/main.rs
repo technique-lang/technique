@@ -562,8 +562,8 @@ fn main() {
             };
 
             match runner::start(filename, &program) {
-                Ok((id, Outcome::Quit)) => {
-                    eprintln!("paused; resume with `technique resume {}`", id.render());
+                Ok((run_id, Outcome::Quit)) => {
+                    eprintln!("paused; resume with `technique resume {}`", run_id.render());
                     std::process::exit(0);
                 }
                 Ok((_, _)) => std::process::exit(0),
@@ -580,15 +580,15 @@ fn main() {
 
             debug!(id);
 
-            let id = match RunId::parse(id) {
-                Ok(id) => id,
+            let run_id = match RunId::parse(id) {
+                Ok(run_id) => run_id,
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
                 }
             };
 
-            let filename = match runner::locate(id) {
+            let filename = match runner::locate(run_id) {
                 Ok(path) => path,
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
@@ -644,9 +644,12 @@ fn main() {
                 }
             };
 
-            match runner::resume(id, &program) {
+            match runner::resume(run_id, &program) {
                 Ok(Outcome::Quit) => {
-                    eprintln!("paused; continue with `technique resume {}`", id.render());
+                    eprintln!(
+                        "paused; continue with `technique resume {}`",
+                        run_id.render()
+                    );
                     std::process::exit(0);
                 }
                 Ok(_) => std::process::exit(0),

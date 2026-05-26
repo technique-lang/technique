@@ -45,11 +45,13 @@ impl<'i> QualifiedPath<'i> {
             .pop()
     }
 
-    /// Render the current path as a string. A `Procedure` segment opens
-    /// a fresh scope, so only segments after the last `Procedure` are
-    /// shown; the procedure's name becomes the prefix, joined to the
-    /// rest with `:`. Other segments are `/`-joined. An attribute frame
-    /// containing the `@*` reset role contributes nothing.
+    /// Render the current path as a PFFTT absolute path string,
+    /// always rooted at `/`. A `Procedure` segment opens a fresh scope,
+    /// so only segments after the last `Procedure` are shown; the
+    /// procedure's name (with trailing `:`) joins immediately to the
+    /// root. Other segments are `/`-joined after the procedure prefix.
+    /// An attribute frame containing the `@*` reset role contributes
+    /// nothing.
     pub fn render(&self) -> String {
         let mut prefix: Option<&str> = None;
         let mut start: usize = 0;
@@ -69,11 +71,13 @@ impl<'i> QualifiedPath<'i> {
             .filter_map(render_segment)
             .collect();
 
-        match prefix {
-            Some(name) if pieces.is_empty() => name.to_string(),
-            Some(name) => format!("{}:{}", name, pieces.join("/")),
-            None => pieces.join("/"),
+        let mut text = String::from("/");
+        if let Some(name) = prefix {
+            text.push_str(name);
+            text.push(':');
         }
+        text.push_str(&pieces.join("/"));
+        text
     }
 }
 
