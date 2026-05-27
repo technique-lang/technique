@@ -27,4 +27,8 @@ impl Template for NasaEsaIss {
     fn domain(&self) -> &str {
         "nasa-esa-iss"
     }
+
+    fn default_paper(&self) -> Option<(f64, f64)> {
+        Some((148.0, 210.0))
+    }
 }

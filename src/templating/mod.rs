@@ -28,12 +28,24 @@ pub use template::Template;
 /// customize the output template. Because the import is * any functions that
 /// the user redefines in their template will override the names from the
 /// default.
-pub fn assemble(domain: &str, markup: &str, custom: Option<&str>) -> String {
+///
+/// `width` and `height` are the page dimensions in millimetres, supplied via
+/// the `--paper` CLI option.
+pub fn assemble(
+    domain: &str,
+    markup: &str,
+    custom: Option<&str>,
+    width: f64,
+    height: f64,
+) -> String {
     let mut doc = format!("#import \".{}.typ\": *\n", domain);
     if let Some(path) = custom {
         doc.push_str(&format!("#import \"/{}\": *\n", path));
     }
-    doc.push_str("\n#show: template\n\n");
+    doc.push_str(&format!(
+        "\n#set page(width: {}mm, height: {}mm)\n\n#show: template\n\n",
+        width, height
+    ));
     doc.push_str(markup);
     doc
 }
