@@ -1,37 +1,46 @@
 //! Domain types for checklists
 //!
-//! A checklist is moderately structured and relatively flat: sections with
-//! headings, steps with checkboxes, response options, and limited nesting.
+//! A checklist is a sequence of items, where an item is a step, a named
+//! procedure with optional description and its own steps, or a section
+//! grouping further items under an ordinal heading.
 
 pub use crate::domain::engine::{Inline, Prose};
 
-/// A checklist is a document of sections containing steps.
+/// A checklist: a sequence of top-level items.
 pub struct Document {
-    pub name: Option<String>,
-    pub title: Option<String>,
-    pub sections: Vec<Section>,
+    pub items: Vec<Item>,
 }
 
 impl Document {
     pub fn new() -> Self {
-        Document {
-            name: None,
-            title: None,
-            sections: Vec::new(),
-        }
+        Document { items: Vec::new() }
     }
 }
 
-/// A section within a checklist.
-pub struct Section {
-    pub ordinal: Option<String>,
-    pub heading: Option<String>,
+/// A top-level entry in a checklist.
+pub enum Item {
+    Step(Step),
+    Procedure(Procedure),
+    Section(Section),
+}
+
+/// A named subroutine: name, optional title, optional description, and steps.
+pub struct Procedure {
+    pub name: String,
+    pub title: Option<String>,
+    pub description: Vec<Prose>,
     pub steps: Vec<Step>,
 }
 
-/// A step within a checklist section.
+/// A grouping with an ordinal heading; contains procedures or steps.
+pub struct Section {
+    pub ordinal: Option<String>,
+    pub heading: Option<String>,
+    pub items: Vec<Item>,
+}
+
+/// A checkbox action.
 pub struct Step {
-    pub name: Option<String>,
     pub ordinal: Option<String>,
     pub title: Option<String>,
     pub body: Vec<Prose>,
