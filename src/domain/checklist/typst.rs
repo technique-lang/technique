@@ -2,33 +2,41 @@
 
 use crate::domain::serialize::{render_prose_list, Markup, Render};
 
-use super::types::{Document, Response, Section, Step};
+use super::types::{Document, Item, Procedure, Response, Section, Step};
 
 impl Render for Document {
     fn render(&self, out: &mut Markup) {
-        if self
-            .name
-            .is_some()
-            || self
-                .title
-                .is_some()
+        out.call("render-document");
+        if !self
+            .items
+            .is_empty()
         {
-            out.call("render-document");
-            out.param_opt("name", &self.name);
-            out.param_opt("title", &self.title);
-            out.close();
+            out.content_open("children");
+            for item in &self.items {
+                item.render(out);
+            }
+            out.content_close();
         }
-        for section in &self.sections {
-            section.render(out);
+        out.close();
+    }
+}
+
+impl Render for Item {
+    fn render(&self, out: &mut Markup) {
+        match self {
+            Item::Step(s) => s.render(out),
+            Item::Procedure(p) => p.render(out),
+            Item::Section(s) => s.render(out),
         }
     }
 }
 
-impl Render for Section {
+impl Render for Procedure {
     fn render(&self, out: &mut Markup) {
-        out.call("render-section");
-        out.param_opt("ordinal", &self.ordinal);
-        out.param_opt("heading", &self.heading);
+        out.call("render-procedure");
+        out.param("name", &self.name);
+        out.param_opt("title", &self.title);
+        render_prose_list(out, "description", &self.description);
         if !self
             .steps
             .is_empty()
@@ -43,20 +51,30 @@ impl Render for Section {
     }
 }
 
+impl Render for Section {
+    fn render(&self, out: &mut Markup) {
+        out.call("render-section");
+        out.param_opt("ordinal", &self.ordinal);
+        out.param_opt("heading", &self.heading);
+        if !self
+            .items
+            .is_empty()
+        {
+            out.content_open("children");
+            for item in &self.items {
+                item.render(out);
+            }
+            out.content_close();
+        }
+        out.close();
+    }
+}
+
 impl Render for Step {
     fn render(&self, out: &mut Markup) {
-        if self
-            .name
-            .is_some()
-        {
-            out.call("render-procedure");
-            out.param_opt("name", &self.name);
-            out.param_opt("title", &self.title);
-        } else {
-            out.call("render-step");
-            out.param_opt("ordinal", &self.ordinal);
-            out.param_opt("title", &self.title);
-        }
+        out.call("render-step");
+        out.param_opt("ordinal", &self.ordinal);
+        out.param_opt("title", &self.title);
         render_prose_list(out, "body", &self.body);
         out.param_opt("role", &self.role);
         if !self

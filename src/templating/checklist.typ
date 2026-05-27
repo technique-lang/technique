@@ -7,34 +7,40 @@
 
 #let check = box(stroke: 0.5pt, width: 0.8em, height: 0.8em, baseline: 0.05em)
 
-#let render-document(name: none, title: none) = {
-    if title != none {
-        std.heading(level: 1, numbering: none, title)
-    } else if name != none {
-        std.heading(level: 1, numbering: none, raw(name))
+#let render-description(description: ()) = {
+    for para in description {
+        para
+        parbreak()
     }
+}
+
+#let render-document(children: none) = {
+    if children != none { children }
 }
 
 #let render-section(ordinal: none, heading: none, children: none) = {
     if ordinal != none and heading != none {
-        std.heading(level: 2, numbering: none, [#ordinal. #heading])
+        std.heading(level: 1, numbering: none, [#ordinal. #heading])
     } else if ordinal != none {
-        std.heading(level: 2, numbering: none, [#ordinal.])
+        std.heading(level: 1, numbering: none, [#ordinal.])
     } else if heading != none {
-        std.heading(level: 2, numbering: none, heading)
+        std.heading(level: 1, numbering: none, heading)
     }
     if children != none { children }
 }
 
-#let render-procedure(name: none, title: none, body: (), role: none, responses: none, children: none) = {
-    block(above: 0.8em, below: 0.6em, {
-        if title != none {
-            std.heading(level: 3, numbering: none, title)
-        } else if name != none {
-            std.heading(level: 3, numbering: none, raw(name))
-        }
-    })
-    if children != none { children }
+#let render-procedure(name: none, title: none, description: (), children: none) = {
+    if title != none {
+        std.heading(level: 2, numbering: none, title)
+    } else if name != none {
+        std.heading(level: 2, numbering: none, raw(name))
+    }
+    if description.len() > 0 {
+        block(above: 1.2em, below: 1.2em, render-description(description: description))
+    }
+    if children != none {
+        block(above: 1.2em, children)
+    }
 }
 
 #let render-response(value: none, condition: none) = {
