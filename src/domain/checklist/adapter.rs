@@ -1,13 +1,15 @@
 //! Projects the AST into the checklist domain model.
 //!
-//! This flattens the parser type hierarchy. Each procedure becomes a section,
-//! role assignments are inherited by sub steps, and SectionChunks are
-//! rendered as headings with their sub-procedures' steps as children.
+//! Each top-level procedure becomes an `Item::Procedure` carrying its own
+//! direct steps. Section chunks found within a procedure's body float up as
+//! sibling `Item::Section`s alongside the procedure. Sections contain either
+//! sub-procedures or steps. If the document has no procedures at all, its
+//! top-level scopes (sections or bare steps) become items directly.
 
 use crate::domain::Adapter;
 use crate::language;
 
-use super::types::{Document, Prose, Response, Section, Step};
+use super::types::{Document, Item, Procedure, Prose, Response, Section, Step};
 
 pub struct ChecklistAdapter;
 
@@ -20,139 +22,107 @@ impl Adapter for ChecklistAdapter {
 }
 
 fn extract(document: &language::Document) -> Document {
-    let mut extracted = Document::new();
+    let mut items = Vec::new();
+    let mut had_procedures = false;
 
-    let mut procedures = document.procedures();
-
-    if let Some(first) = procedures.next() {
-        extracted.name = Some(
-            first
+    for procedure in document.procedures() {
+        had_procedures = true;
+        let (steps, sections) = split_procedure_body(procedure);
+        items.push(Item::Procedure(Procedure {
+            name: procedure
                 .name()
                 .to_string(),
-        );
-        extracted.title = first
-            .title()
-            .map(String::from);
-        extract_procedure(&mut extracted, first);
+            title: procedure
+                .title()
+                .map(String::from),
+            description: procedure
+                .description()
+                .map(|p| Prose::parse(&p.content()))
+                .collect(),
+            steps,
+        }));
+        for section in sections {
+            items.push(Item::Section(section));
+        }
     }
 
-    for procedure in procedures {
-        extract_procedure(&mut extracted, procedure);
-    }
-
-    if extracted
-        .sections
-        .is_empty()
-    {
-        // Handle top-level SectionChunks (no procedures)
+    if !had_procedures {
         for scope in document.steps() {
-            if let Some((numeral, title)) = scope.section_info() {
-                let heading = title.map(|para| para.text());
-                let steps: Vec<Step> = match scope.body() {
-                    Some(body) => body
-                        .steps()
-                        .filter(|s| s.is_step())
-                        .map(|s| step_from_scope(s, None))
-                        .collect(),
-                    None => Vec::new(),
-                };
-
-                if !steps.is_empty() {
-                    extracted
-                        .sections
-                        .push(Section {
-                            ordinal: Some(numeral.to_string()),
-                            heading,
-                            steps,
-                        });
-                }
-            }
-        }
-
-        // Handle bare top-level steps (no sections, no procedures)
-        if extracted
-            .sections
-            .is_empty()
-        {
-            let steps: Vec<Step> = document
-                .steps()
-                .filter(|s| s.is_step())
-                .map(|s| step_from_scope(s, None))
-                .collect();
-
-            if !steps.is_empty() {
-                extracted
-                    .sections
-                    .push(Section {
-                        ordinal: None,
-                        heading: None,
-                        steps,
-                    });
+            if scope
+                .section_info()
+                .is_some()
+            {
+                items.push(Item::Section(section_from_scope(scope)));
+            } else {
+                items.extend(
+                    steps_from_scope(scope, None)
+                        .into_iter()
+                        .map(Item::Step),
+                );
             }
         }
     }
 
-    extracted
+    Document { items }
 }
 
-fn extract_procedure(content: &mut Document, procedure: &language::Procedure) {
+fn split_procedure_body(procedure: &language::Procedure) -> (Vec<Step>, Vec<Section>) {
+    let mut steps = Vec::new();
+    let mut sections = Vec::new();
     for scope in procedure.steps() {
-        if let Some((numeral, title)) = scope.section_info() {
-            let mut steps = Vec::new();
-            if let Some(body) = scope.body() {
-                for p in body.procedures() {
-                    let title = p
-                        .title()
-                        .map(String::from)
-                        .unwrap_or_else(|| {
-                            p.name()
-                                .to_string()
-                        });
-                    let children: Vec<Step> = p
-                        .steps()
-                        .flat_map(|s| steps_from_scope(s, None))
-                        .collect();
-                    steps.push(Step {
-                        name: Some(
-                            p.name()
-                                .to_string(),
-                        ),
-                        ordinal: None,
-                        title: Some(title),
-                        body: Vec::new(),
-                        role: None,
-                        responses: Vec::new(),
-                        children,
-                    });
-                }
-            }
-            content
-                .sections
-                .push(Section {
-                    ordinal: Some(numeral.to_string()),
-                    heading: title.map(|para| para.text()),
-                    steps,
-                });
+        if scope
+            .section_info()
+            .is_some()
+        {
+            sections.push(section_from_scope(scope));
         } else {
-            if content
-                .sections
-                .is_empty()
-            {
-                content
-                    .sections
-                    .push(Section {
-                        ordinal: None,
-                        heading: None,
-                        steps: Vec::new(),
-                    });
-            }
-            content
-                .sections
-                .last_mut()
-                .unwrap()
-                .steps
-                .extend(steps_from_scope(&scope, None));
+            steps.extend(steps_from_scope(scope, None));
         }
+    }
+    (steps, sections)
+}
+
+fn section_from_scope(scope: &language::Scope) -> Section {
+    let (numeral, title) = scope
+        .section_info()
+        .expect("scope is a section");
+    let mut items = Vec::new();
+    if let Some(body) = scope.body() {
+        for p in body.procedures() {
+            items.push(Item::Procedure(extract_subprocedure(p)));
+        }
+        for s in body.steps() {
+            items.extend(
+                steps_from_scope(s, None)
+                    .into_iter()
+                    .map(Item::Step),
+            );
+        }
+    }
+    Section {
+        ordinal: Some(numeral.to_string()),
+        heading: title.map(|para| para.text()),
+        items,
+    }
+}
+
+fn extract_subprocedure(procedure: &language::Procedure) -> Procedure {
+    let mut steps = Vec::new();
+    for scope in procedure.steps() {
+        steps.extend(steps_from_scope(scope, None));
+    }
+    Procedure {
+        name: procedure
+            .name()
+            .to_string(),
+        title: procedure
+            .title()
+            .map(String::from),
+        description: procedure
+            .description()
+            .map(|p| Prose::parse(&p.content()))
+            .collect(),
+        steps,
     }
 }
 
@@ -161,7 +131,6 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
         return vec![step_from_scope(scope, inherited_role)];
     }
 
-    // AttributeBlock — extract role and process children
     let roles: Vec<_> = scope
         .roles()
         .collect();
@@ -175,52 +144,9 @@ fn steps_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ve
             .collect();
     }
 
-    // SectionChunk
-    if let Some((numeral, title)) = scope.section_info() {
-        let heading = title.map(|para| para.text());
-
-        let mut steps = vec![Step {
-            name: None,
-            ordinal: Some(numeral.to_string()),
-            title: heading,
-            body: Vec::new(),
-            role: None,
-            responses: Vec::new(),
-            children: Vec::new(),
-        }];
-
-        if let Some(body) = scope.body() {
-            for procedure in body.procedures() {
-                if let Some(title) = procedure.title() {
-                    let children: Vec<Step> = procedure
-                        .steps()
-                        .flat_map(|s| steps_from_scope(s, None))
-                        .collect();
-
-                    steps.push(Step {
-                        name: Some(
-                            procedure
-                                .name()
-                                .to_string(),
-                        ),
-                        ordinal: None,
-                        title: Some(title.to_string()),
-                        body: Vec::new(),
-                        role: None,
-                        responses: Vec::new(),
-                        children,
-                    });
-                }
-            }
-        }
-
-        return steps;
-    }
-
     Vec::new()
 }
 
-/// Convert a step-like scope into a Step.
 fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Step {
     let mut responses = Vec::new();
     let mut children = Vec::new();
@@ -254,7 +180,6 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
     };
 
     Step {
-        name: None,
         ordinal: scope
             .ordinal()
             .map(String::from),
@@ -270,6 +195,7 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
 mod check {
     use std::path::Path;
 
+    use crate::domain::checklist::types::Item;
     use crate::domain::Adapter;
     use crate::parsing;
 
@@ -286,8 +212,29 @@ mod check {
         ChecklistAdapter.extract(&doc)
     }
 
+    fn as_procedure(item: &Item) -> &super::Procedure {
+        match item {
+            Item::Procedure(p) => p,
+            _ => panic!("expected procedure"),
+        }
+    }
+
+    fn as_section(item: &Item) -> &super::Section {
+        match item {
+            Item::Section(s) => s,
+            _ => panic!("expected section"),
+        }
+    }
+
+    fn as_step(item: &Item) -> &super::Step {
+        match item {
+            Item::Step(s) => s,
+            _ => panic!("expected step"),
+        }
+    }
+
     #[test]
-    fn procedure_title_becomes_document_title() {
+    fn single_procedure_with_steps() {
         let doc = extract(trim(
             r#"
 preflight :
@@ -297,18 +244,23 @@ preflight :
     1. Fasten seatbelt
             "#,
         ));
-        assert_eq!(doc.name, Some("preflight".into()));
-        assert_eq!(doc.title, Some("Pre-flight Checks".into()));
         assert_eq!(
-            doc.sections
+            doc.items
                 .len(),
             1
         );
-        assert_eq!(doc.sections[0].heading, None);
+        let proc = as_procedure(&doc.items[0]);
+        assert_eq!(proc.name, "preflight");
+        assert_eq!(proc.title, Some("Pre-flight Checks".into()));
+        assert_eq!(
+            proc.steps
+                .len(),
+            1
+        );
     }
 
     #[test]
-    fn role_flattened_onto_children() {
+    fn role_flattened_onto_steps() {
         let doc = extract(trim(
             r#"
 checks :
@@ -318,7 +270,8 @@ checks :
         2. Mark surgical site
             "#,
         ));
-        let steps = &doc.sections[0].steps;
+        let proc = as_procedure(&doc.items[0]);
+        let steps = &proc.steps;
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].role, Some("surgeon".into()));
         assert_eq!(steps[1].role, Some("surgeon".into()));
@@ -334,7 +287,8 @@ checks :
             'Yes' | 'No' if complications
             "#,
         ));
-        let step = &doc.sections[0].steps[0];
+        let proc = as_procedure(&doc.items[0]);
+        let step = &proc.steps[0];
         assert_eq!(
             step.responses
                 .len(),
@@ -347,7 +301,7 @@ checks :
     }
 
     #[test]
-    fn invocation_only_step_has_content() {
+    fn sibling_procedures_are_peers() {
         let doc = extract(trim(
             r#"
 main :
@@ -361,7 +315,88 @@ ensure_safety :
     - Check exits
             "#,
         ));
-        let steps = &doc.sections[0].steps;
-        assert_eq!(steps[0].title, Some("ensure_safety".into()));
+        assert_eq!(
+            doc.items
+                .len(),
+            2
+        );
+        let first = as_procedure(&doc.items[0]);
+        assert_eq!(first.name, "main");
+        let second = as_procedure(&doc.items[1]);
+        assert_eq!(second.name, "ensure_safety");
+        assert_eq!(second.title, Some("Safety First".into()));
+        assert_eq!(
+            second
+                .steps
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn no_procedure_sections_of_steps() {
+        let doc = extract(trim(
+            r#"
+% technique v1
+& checklist
+
+I. Morning
+
+    1. Eat breakfast
+    2. Brush teeth
+
+II. Evening
+
+    1. Dinner
+    2. Sleep
+            "#,
+        ));
+        assert_eq!(
+            doc.items
+                .len(),
+            2
+        );
+        let s1 = as_section(&doc.items[0]);
+        assert_eq!(s1.ordinal, Some("I".into()));
+        assert_eq!(s1.heading, Some("Morning".into()));
+        assert_eq!(
+            s1.items
+                .len(),
+            2
+        );
+        let _ = as_step(&s1.items[0]);
+    }
+
+    #[test]
+    fn procedure_with_sections_of_subprocedures() {
+        let doc = extract(trim(
+            r#"
+outer :
+
+I. Setup
+
+setup_machine :
+# Setup Machine
+    1. Plug in
+            "#,
+        ));
+        assert_eq!(
+            doc.items
+                .len(),
+            2
+        );
+        let outer = as_procedure(&doc.items[0]);
+        assert_eq!(outer.name, "outer");
+        assert_eq!(
+            outer
+                .steps
+                .len(),
+            0
+        );
+        let section = as_section(&doc.items[1]);
+        assert_eq!(section.ordinal, Some("I".into()));
+        let sub = as_procedure(&section.items[0]);
+        assert_eq!(sub.name, "setup_machine");
+        assert_eq!(sub.title, Some("Setup Machine".into()));
     }
 }
