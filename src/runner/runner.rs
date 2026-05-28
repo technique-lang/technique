@@ -10,6 +10,7 @@ use super::prompt::{Prompt, UserInput};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
+use crate::language;
 use crate::program::{Executable, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
@@ -293,7 +294,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             attributes,
             description,
             body,
-            ..
+            responses,
         } = op
         else {
             unreachable!("walk_step called with non-Step operation");
@@ -313,7 +314,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let result = self.perform_step(&qualified, body, description);
+        let result = self.perform_step(&qualified, body, description, responses);
 
         self.path
             .pop();
@@ -330,6 +331,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         qualified: &str,
         body: &'i Operation<'i>,
         description: &'i [Operation<'i>],
+        responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
         if self
             .completed
@@ -371,9 +373,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
         self.prompt
             .step(qualified, &description_text);
 
+        let choices: Vec<&str> = responses
+            .iter()
+            .map(|r| r.value)
+            .collect();
         let outcome = outcome_from(
             self.prompt
-                .ask(),
+                .ask(&choices),
         );
         if let Outcome::Quit = outcome {
             return Ok(Outcome::Quit);
@@ -428,12 +434,14 @@ fn outcome_from(input: UserInput) -> Outcome {
 }
 
 /// Project the runner's in-memory `Outcome` into the on-disk `State`
-/// the PFFTT writer expects. Done renders with an explicit unit
-/// placeholder for now — capturing the operator's actual value into a
-/// tablet is future work. Quit is unreachable here: the caller filters
-/// it out before recording.
+/// the PFFTT writer expects. A chosen response records as a quoted
+/// literal; any other Done (the plain confirmation) records as unit.
+/// Quit is unreachable here: the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
+        Outcome::Done(Value::Literali(text)) => {
+            State::Done(Some(RecordValue::Literal(text.clone())))
+        }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(

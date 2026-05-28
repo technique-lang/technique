@@ -383,6 +383,17 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        path: "/before_anesthesia:2".to_string(),
+        state: State::Done(Some(Value::Literal("Not Applicable".to_string()))),
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-14T12:00:00Z 000001 /before_anesthesia:2 Done \"Not Applicable\"\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
         path: "/make_coffee:2".to_string(),
         state: State::Skip,
     };
@@ -484,6 +495,12 @@ fn record_round_trips_through_format_and_parse() {
             state: State::Done(Some(Value::Tablet(
                 "[ address = \"10.0.0.1\" ]".to_string(),
             ))),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:02Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:7".to_string(),
+            state: State::Done(Some(Value::Literal("Not Applicable".to_string()))),
         },
         Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),

@@ -756,3 +756,62 @@ greet(name) :
         .collect();
     assert_eq!(descriptions, vec!["Hello world"]);
 }
+
+#[test]
+fn step_with_responses_prompts_choices_and_records() {
+    let source = r#"
+% technique v1
+
+test :
+
+1.  Is the site marked?
+        'Yes' | 'No'
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("step-responses");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
+    runner
+        .run()
+        .expect("run");
+
+    // The prompt offered the two declared responses as choices.
+    let prompt = runner.into_prompt();
+    let asked: Vec<&Vec<String>> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Ask { choices } = e {
+                Some(choices)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(asked, vec![&vec!["Yes".to_string(), "No".to_string()]]);
+
+    // The chosen response is recorded as a quoted literal in the PFFTT.
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(
+        record.state,
+        State::Done(Some(RecordValue::Literal("Yes".to_string())))
+    );
+}
