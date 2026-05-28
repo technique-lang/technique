@@ -1097,6 +1097,26 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
             ),
             "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
         ),
+        RunnerError::ParameterArityMismatch { expected, actual } => (
+            format!(
+                "Wrong number of arguments: procedure expects {} but {} given",
+                expected, actual
+            ),
+            r#"
+Arguments after the filename are passed as the parameters for the entry
+procedure at the top of the Technique document.
+            "#.trim_ascii().to_string(),
+        ),
+        RunnerError::ParameterUnexpected { actual } => (
+            format!(
+                "Unexpected arguments: procedure takes no parameters but {} given",
+                actual
+            ),
+            r#"
+Arguments were supplied on the command-line but the entry procedure at the top
+of the document doesn't take ant parameters.
+            "#.trim_ascii().to_string(),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),

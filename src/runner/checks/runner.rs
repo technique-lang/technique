@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::parsing;
 use crate::program::{Operation, Ordinal, Program, Subroutine};
+use crate::runner::evaluator::Environment;
 use crate::runner::prompt::{Event, Mock, UserInput};
-use crate::runner::runner::{Outcome, Runner};
+use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
 use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
 use crate::translation::translate;
 use crate::value::Value;
@@ -96,7 +97,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     let outcome = runner
         .run()
         .expect("run");
@@ -132,7 +139,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Skip]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -156,7 +169,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Fail]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -192,7 +211,13 @@ fn two_steps_prompted_in_source_order() {
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -227,7 +252,13 @@ fn pre_completed_step_short_circuits() {
     completed.insert("/1".to_string());
 
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), completed, prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        completed,
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -257,7 +288,13 @@ fn quit_propagates_and_stops_walking() {
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([UserInput::Quit]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     let outcome = runner
         .run()
         .expect("run");
@@ -309,7 +346,13 @@ fn section_walking() {
     }]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -349,7 +392,13 @@ fn section_walking() {
     }]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -381,7 +430,13 @@ fn parallel_step_index_starts_at_one() {
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -420,7 +475,13 @@ test :
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -463,7 +524,13 @@ helper :
 
     let mut fixture = StoreFixture::new("invoke-descent");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -501,7 +568,13 @@ test :
 
     let mut fixture = StoreFixture::new("execute-announce");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -544,7 +617,13 @@ fn loop_inside_step_produces_one_result() {
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -563,4 +642,117 @@ fn loop_inside_step_produces_one_result() {
     assert_eq!(lines.len(), 3);
     assert!(lines[1].ends_with(" Begin"));
     assert!(lines[2].contains(" Done"));
+}
+
+#[test]
+fn bind_parameters_arity_and_errors() {
+    // Procedure with two parameters and matching arity: the returned
+    // Environment contains both parameter bindings in `Value::Literali`
+    // form.
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["foo".to_string(), "192.168.1.5".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    assert_eq!(env.lookup("e"), Some(&Value::Literali("foo".to_string())));
+    assert_eq!(
+        env.lookup("s"),
+        Some(&Value::Literali("192.168.1.5".to_string()))
+    );
+
+    // Too few arguments: ParameterArityMismatch.
+    let args = ["foo".to_string()];
+    let error = bind_parameters(&program, &args).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 1);
+
+    // Too many arguments: also ParameterArityMismatch.
+    let args = [
+        "foo".to_string(),
+        "192.168.1.5".to_string(),
+        "extra".to_string(),
+    ];
+    let error = bind_parameters(&program, &args).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 3);
+
+    // Procedure declares no parameters but args supplied: ParameterUnexpected.
+    let source = r#"
+% technique v1
+
+test :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["unwanted".to_string()];
+    let error = bind_parameters(&program, &args).expect_err("expected unexpected error");
+    let RunnerError::ParameterUnexpected { actual } = error else {
+        panic!("expected ParameterUnexpected, got {:?}", error);
+    };
+    assert_eq!(actual, 1);
+
+    // No parameters and no args: empty environment, no error.
+    let env = bind_parameters(&program, &[]).expect("bind");
+    assert!(env
+        .lookup("anything")
+        .is_none());
+}
+
+#[test]
+fn entry_procedure_parameters_visible_in_descriptions() {
+    let source = r#"
+% technique v1
+
+greet(name) :
+
+1.  Hello { name }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("entry-param-interpolate");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut env = Environment::new();
+    env.extend("name".to_string(), Value::Literali("world".to_string()));
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let descriptions: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { description, .. } = e {
+                Some(description.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(descriptions, vec!["Hello world"]);
 }

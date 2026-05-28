@@ -52,6 +52,8 @@ pub enum RunnerError {
     UnboundVariable(String),
     BindArityMismatch { expected: usize, actual: usize },
     BindNotTuple { expected: usize },
+    ParameterArityMismatch { expected: usize, actual: usize },
+    ParameterUnexpected { actual: usize },
     UserQuit,
 }
 
@@ -71,18 +73,19 @@ pub struct Runner<'i, P: Prompt> {
 }
 
 impl<'i, P: Prompt> Runner<'i, P> {
-    pub fn with_pieces(
+    pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
         completed: HashSet<String>,
         prompt: P,
+        env: Environment,
     ) -> Self {
         Runner {
             program,
             appender,
             completed,
             prompt,
-            env: Environment::new(),
+            env,
             path: QualifiedPath::new(),
         }
     }
@@ -438,6 +441,44 @@ fn record_state(outcome: &Outcome) -> State {
         ))),
         Outcome::Quit => unreachable!("Quit is not recorded"),
     }
+}
+
+/// Build an `Environment` seeded with the entry procedure's parameters
+/// bound to the supplied CLI arguments. Each argument is bound as
+/// `Value::Literali` for now; when the value-literal grammar settles,
+/// parse the strings into the typed Value the parameter declares.
+pub(super) fn bind_parameters(
+    program: &Program<'_>,
+    arguments: &[String],
+) -> Result<Environment, RunnerError> {
+    let entry = program
+        .subroutines
+        .first()
+        .ok_or(RunnerError::MissingEntryProcedure)?;
+    let params = entry
+        .parameters
+        .unwrap_or(&[]);
+    let expected = params.len();
+    let actual = arguments.len();
+    if expected == 0 && actual > 0 {
+        return Err(RunnerError::ParameterUnexpected { actual });
+    }
+    if expected != actual {
+        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+    }
+    let mut env = Environment::new();
+    for (param, argument) in params
+        .iter()
+        .zip(arguments)
+    {
+        env.extend(
+            param
+                .value
+                .to_string(),
+            Value::Literali(argument.clone()),
+        );
+    }
+    Ok(env)
 }
 
 /// Current UTC time as an RFC3339 millisecond-precision string, used
