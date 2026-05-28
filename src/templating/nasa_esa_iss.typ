@@ -199,7 +199,6 @@
 
 #let template(body) = {
     set page(
-        paper: "a5",
         margin: (top: 1.5cm, bottom: 1.5cm, left: 1.5cm, right: 1.5cm),
         numbering: "1",
         number-align: center + bottom,
