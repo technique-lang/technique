@@ -250,7 +250,7 @@ fn main() {
                         .value_name("SIZE")
                         .value_parser(PaperSizeParser)
                         .action(ArgAction::Set)
-                        .help("Paper size for the rendered output. You can use one of the predefined well-known sizes, or specify explicit dimensions in millimetres (for example \"140x210\"). If a paper size is not specified, the template's default is used."),
+                        .help("Paper size for the rendered output. You can use the name of one of the well-known standard sizes, or give explicit dimensions for the width and height in millimetres (\"140x210\", for example). If a paper size is not specified, the template's default will be used."),
                 )
                 .arg(
                     Arg::new("keep")
