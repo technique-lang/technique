@@ -1,8 +1,10 @@
+use clap::builder::{PossibleValue, TypedValueParser};
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 use std::path::Path;
+use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
@@ -29,6 +31,89 @@ enum Output {
 enum Phase {
     Parsing,
     Translation,
+}
+
+// Page dimensions in millimetres
+#[derive(Clone, Debug)]
+struct PaperSize {
+    width: f64,
+    height: f64,
+}
+
+impl FromStr for PaperSize {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (width, height) = match s {
+            "a4" => (210.0, 297.0),
+            "a5" => (148.0, 210.0),
+            "letter" => (215.9, 279.4),
+            _ => {
+                let (w, h) = s
+                    .split_once(|c: char| c == 'x' || c == '×')
+                    .ok_or_else(|| format!("invalid paper size '{}'", s))?;
+                let w: f64 = w
+                    .trim()
+                    .parse()
+                    .map_err(|e| format!("invalid width '{}': {}", w, e))?;
+                let h: f64 = h
+                    .trim()
+                    .parse()
+                    .map_err(|e| format!("invalid height '{}': {}", h, e))?;
+                (w, h)
+            }
+        };
+        Ok(PaperSize { width, height })
+    }
+}
+
+// Custom clap parser so the named presets show up under "possible values" in
+// help output, while still allowing the parser to accept free-form width x
+// height dimensions.
+#[derive(Clone)]
+struct PaperSizeParser;
+
+impl TypedValueParser for PaperSizeParser {
+    type Value = PaperSize;
+
+    fn parse_ref(
+        &self,
+        cmd: &Command,
+        arg: Option<&Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let s = value
+            .to_str()
+            .ok_or_else(|| clap::Error::new(clap::error::ErrorKind::InvalidUtf8).with_cmd(cmd))?;
+        s.parse::<PaperSize>()
+            .map_err(|e| {
+                let mut err =
+                    clap::Error::new(clap::error::ErrorKind::ValueValidation).with_cmd(cmd);
+                if let Some(arg) = arg {
+                    err.insert(
+                        clap::error::ContextKind::InvalidArg,
+                        clap::error::ContextValue::String(arg.to_string()),
+                    );
+                }
+                err.insert(
+                    clap::error::ContextKind::InvalidValue,
+                    clap::error::ContextValue::String(s.to_string()),
+                );
+                err.insert(
+                    clap::error::ContextKind::Custom,
+                    clap::error::ContextValue::String(e),
+                );
+                err
+            })
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(
+            ["a4", "a5", "letter", "WxH"]
+                .into_iter()
+                .map(PossibleValue::new),
+        ))
+    }
 }
 
 fn main() {
@@ -157,6 +242,15 @@ fn main() {
                         .value_name("filename")
                         .action(ArgAction::Set)
                         .help("Path to a Typst template file for rendering."),
+                )
+                .arg(
+                    Arg::new("paper")
+                        .short('p')
+                        .long("paper")
+                        .value_name("SIZE")
+                        .value_parser(PaperSizeParser)
+                        .action(ArgAction::Set)
+                        .help("Paper size for the rendered output. You can use the name of one of the well-known standard sizes, or give explicit dimensions for the width and height in millimetres (\"140x210\", for example). If a paper size is not specified, the template's default will be used."),
                 )
                 .arg(
                     Arg::new("keep")
@@ -477,8 +571,23 @@ fn main() {
                 None => None,
             };
 
+            let (paper_width, paper_height) = match submatches.get_one::<PaperSize>("paper") {
+                Some(p) => (p.width, p.height),
+                None => template
+                    .default_paper()
+                    .unwrap_or((210.0, 297.0)),
+            };
+
+            debug!(paper_width, paper_height);
+
             let markup = template.markup(&technique);
-            let document = templating::assemble(template.domain(), &markup, custom);
+            let document = templating::assemble(
+                template.domain(),
+                &markup,
+                custom,
+                paper_width,
+                paper_height,
+            );
 
             let keep = *submatches
                 .get_one::<bool>("keep")
