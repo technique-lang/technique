@@ -12,6 +12,7 @@ pub enum PathSegment<'i> {
     Section(&'i str),
     DependentStep(&'i str),
     ParallelStep(usize),
+    Iteration(usize),
     Attributes(&'i [language::Attribute<'i>]),
     Procedure(&'i str),
 }
@@ -52,6 +53,11 @@ impl<'i> QualifiedPath<'i> {
     /// root. Other segments are `/`-joined after the procedure prefix.
     /// An attribute frame containing the `@*` reset role contributes
     /// nothing.
+    ///
+    /// A `foreach` or `repeat` keyword creates a scope as well. When
+    /// iterating it is recorded using a path segment of the form `[n]`,
+    /// one-origin. Thus `/5/[2]/a` would be the first substep within the
+    /// second iteration of a scope within the 5th step of a Technique.
     pub fn render(&self) -> String {
         let mut prefix: Option<&str> = None;
         let mut start: usize = 0;
@@ -85,7 +91,8 @@ fn render_segment(segment: &PathSegment) -> Option<String> {
     match segment {
         PathSegment::Section(numeral) => Some(numeral.to_string()),
         PathSegment::DependentStep(ordinal) => Some(ordinal.to_string()),
-        PathSegment::ParallelStep(idx) => Some(format!("-{}", idx)),
+        PathSegment::ParallelStep(index) => Some(format!("-{}", index)),
+        PathSegment::Iteration(number) => Some(format!("[{}]", number)), // you can't "index" into it!
         PathSegment::Attributes(frame) => render_attributes(frame),
         PathSegment::Procedure(_) => None,
     }

@@ -1117,6 +1117,10 @@ Arguments were supplied on the command-line but the entry procedure at the top
 of the document doesn't take ant parameters.
             "#.trim_ascii().to_string(),
         ),
+        RunnerError::NotIterable => (
+            "Value is not a list".to_string(),
+            "The foreach keyword requires a list to iterate over, but the value suppliedisn't one.".to_string(),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),

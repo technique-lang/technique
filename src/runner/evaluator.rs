@@ -85,35 +85,7 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
         }
         Operation::Bind { names, value } => {
             let v = evaluate(env, value)?;
-            match names.len() {
-                1 => env.extend(
-                    names[0]
-                        .value
-                        .to_string(),
-                    v,
-                ),
-                n => {
-                    let Value::Parametriq(values) = v else {
-                        return Err(RunnerError::BindNotTuple { expected: n });
-                    };
-                    if values.len() != n {
-                        return Err(RunnerError::BindArityMismatch {
-                            expected: n,
-                            actual: values.len(),
-                        });
-                    }
-                    for (name, value) in names
-                        .iter()
-                        .zip(values)
-                    {
-                        env.extend(
-                            name.value
-                                .to_string(),
-                            value,
-                        );
-                    }
-                }
-            }
+            bind_names(env, names, v)?;
             Ok(Value::Unitus)
         }
         Operation::Sequence(ops) => {
@@ -129,6 +101,47 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
         | Operation::Invoke(_)
         | Operation::Execute(_) => Ok(Value::Unitus),
     }
+}
+
+/// Bind names to a value, shared by `Bind` evaluation and `foreach`
+/// iteration. One name takes the whole value; multiple names destructure a
+/// `Parametriq` of matching arity.
+pub(super) fn bind_names(
+    env: &mut Environment,
+    names: &[crate::language::Identifier<'_>],
+    value: Value,
+) -> Result<(), RunnerError> {
+    match names.len() {
+        0 => unreachable!(), // bind_names requires at least one name
+        1 => env.extend(
+            names[0]
+                .value
+                .to_string(),
+            value,
+        ),
+        n => {
+            let Value::Parametriq(values) = value else {
+                return Err(RunnerError::BindNotTuple { expected: n });
+            };
+            if values.len() != n {
+                return Err(RunnerError::BindArityMismatch {
+                    expected: n,
+                    actual: values.len(),
+                });
+            }
+            for (name, value) in names
+                .iter()
+                .zip(values)
+            {
+                env.extend(
+                    name.value
+                        .to_string(),
+                    value,
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

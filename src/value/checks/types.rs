@@ -21,7 +21,13 @@ fn value_display() {
         Value::Literali("b".to_string()),
         Value::Quanticle(Numeric::Integral(3)),
     ]);
-    assert_eq!(v.to_string(), "[\"a\", \"b\", 3]");
+    assert_eq!(v.to_string(), "(\"a\", \"b\", 3)");
+
+    let v = Value::Arraeum(vec![
+        Value::Quanticle(Numeric::Integral(1)),
+        Value::Quanticle(Numeric::Integral(2)),
+    ]);
+    assert_eq!(v.to_string(), "[1, 2]");
 
     assert_eq!(Value::Futurae("name".to_string()).to_string(), "{name}");
 }

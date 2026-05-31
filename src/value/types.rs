@@ -21,6 +21,7 @@ pub enum Value {
     Literali(String),
     Quanticle(Numeric),
     Tabularum(Vec<(String, Value)>),
+    Arraeum(Vec<Value>),
     Parametriq(Vec<Value>),
     Futurae(String),
 }
@@ -90,6 +91,19 @@ impl Display for Value {
                 f.write_str("]")
             }
             Value::Parametriq(values) => {
+                f.write_str("(")?;
+                for (i, value) in values
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{}", value)?;
+                }
+                f.write_str(")")
+            }
+            Value::Arraeum(values) => {
                 f.write_str("[")?;
                 for (i, value) in values
                     .iter()

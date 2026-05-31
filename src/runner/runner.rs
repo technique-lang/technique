@@ -53,6 +53,7 @@ pub enum RunnerError {
     UnboundVariable(String),
     BindArityMismatch { expected: usize, actual: usize },
     BindNotTuple { expected: usize },
+    NotIterable,
     ParameterArityMismatch { expected: usize, actual: usize },
     ParameterUnexpected { actual: usize },
     UserQuit,
@@ -142,11 +143,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             }
             Operation::Loop {
                 names, over, body, ..
-            } => {
-                self.prompt
-                    .announce(&describe_loop(names, over.as_deref()));
-                self.walk(body)
-            }
+            } => self.walk_loop(names, over.as_deref(), body),
             Operation::Invoke(invocable) => self.walk_invoke(invocable),
             Operation::Execute(executable) => {
                 let qualified = self
@@ -225,6 +222,44 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 Ok(Outcome::Done(Value::Unitus))
             }
         }
+    }
+
+    /// Evaluate a control structure. A `foreach` evalutates its body once for
+    /// each element of the input collection, binding the loop name(s) to each
+    /// element in turn and pushing an `Iteration` scope segment. The
+    /// collection must evaluate to a list otherwise it's a runtime error. A
+    /// `repeat` keyword (an iterable with `over: None`) has no collection and
+    /// walks its body once.
+    fn walk_loop(
+        &mut self,
+        names: &'i [language::Identifier<'i>],
+        over: Option<&'i Operation<'i>>,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        self.prompt
+            .announce(&describe_loop(names, over));
+        let items = match over {
+            None => return self.walk(body),
+            Some(expr) => match super::evaluator::evaluate(&mut self.env, expr)? {
+                Value::Arraeum(items) => items,
+                _ => return Err(RunnerError::NotIterable),
+            },
+        };
+        for (i, item) in items
+            .into_iter()
+            .enumerate()
+        {
+            super::evaluator::bind_names(&mut self.env, names, item)?;
+            self.path
+                .push(PathSegment::Iteration(i + 1));
+            let result = self.walk(body);
+            self.path
+                .pop();
+            if let Outcome::Quit = result? {
+                return Ok(Outcome::Quit);
+            }
+        }
+        Ok(Outcome::Done(Value::Unitus))
     }
 
     fn walk_sequence(&mut self, ops: &'i [Operation<'i>]) -> Result<Outcome, RunnerError> {
@@ -452,9 +487,7 @@ fn record_state(outcome: &Outcome) -> State {
 }
 
 /// Build an `Environment` seeded with the entry procedure's parameters
-/// bound to the supplied CLI arguments. Each argument is bound as
-/// `Value::Literali` for now; when the value-literal grammar settles,
-/// parse the strings into the typed Value the parameter declares.
+/// bound to the supplied CLI arguments.
 pub(super) fn bind_parameters(
     program: &Program<'_>,
     arguments: &[String],

@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::language::Identifier;
 use crate::parsing;
-use crate::program::{Operation, Ordinal, Program, Subroutine};
+use crate::program::{Fragment, Operation, Ordinal, Program, Subroutine};
 use crate::runner::evaluator::Environment;
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
@@ -642,6 +643,207 @@ fn loop_inside_step_produces_one_result() {
     assert_eq!(lines.len(), 3);
     assert!(lines[1].ends_with(" Begin"));
     assert!(lines[2].contains(" Done"));
+}
+
+#[test]
+fn foreach_walks_body_once_per_list_element() {
+    let mut fixture = StoreFixture::new("foreach-list");
+
+    // foreach item in items: a substep whose description interpolates the
+    // iteration variable, so each walk reveals which element it saw.
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("item"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    // `names` borrows from the IR, so the array must outlive the program.
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("items")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend(
+        "items".to_string(),
+        Value::Arraeum(vec![
+            Value::Literali("first".to_string()),
+            Value::Literali("second".to_string()),
+        ]),
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    // The body is walked once per element. Each Step event carries an
+    // `[n]` iteration segment in its path and the description it saw,
+    // confirming the iteration variable was bound to that element.
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec![("/[1]/a", "first"), ("/[2]/a", "second")]);
+}
+
+#[test]
+fn foreach_destructures_tuple_elements() {
+    let mut fixture = StoreFixture::new("foreach-destructure");
+
+    // foreach (first, second) in pairs: two names destructure each
+    // tuple-shaped element positionally.
+    let description = Operation::String(vec![
+        Fragment::Interpolation(Operation::Variable(Identifier::new("first"))),
+        Fragment::Text("/"),
+        Fragment::Interpolation(Operation::Variable(Identifier::new("second"))),
+    ]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    // `names` borrows from the IR, so the array must outlive the program.
+    let names = [Identifier::new("first"), Identifier::new("second")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("pairs")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend(
+        "pairs".to_string(),
+        Value::Arraeum(vec![
+            Value::Parametriq(vec![
+                Value::Literali("a".to_string()),
+                Value::Literali("b".to_string()),
+            ]),
+            Value::Parametriq(vec![
+                Value::Literali("c".to_string()),
+                Value::Literali("d".to_string()),
+            ]),
+        ]),
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step { description, .. } => Some(description.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec!["a/b", "c/d"]);
+}
+
+#[test]
+fn foreach_over_non_list_or_unbound_errors() {
+    // foreach item in source, where `source` is supplied by the caller's
+    // environment. A scalar source is `NotIterable`; an unbound source
+    // propagates `UnboundVariable` rather than being swallowed.
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    // A scalar bound to `source` is not a list.
+    let mut scalar_fixture = StoreFixture::new("foreach-scalar");
+    let mut env = Environment::new();
+    env.extend(
+        "source".to_string(),
+        Value::Literali("not a list".to_string()),
+    );
+    let mut runner = Runner::new(
+        &program,
+        scalar_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        env,
+    );
+    match runner.run() {
+        Err(RunnerError::NotIterable) => {}
+        other => panic!("expected NotIterable, got {:?}", other),
+    }
+
+    // An unbound `source` propagates the evaluation error.
+    let mut unbound_fixture = StoreFixture::new("foreach-unbound");
+    let mut runner = Runner::new(
+        &program,
+        unbound_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        Environment::new(),
+    );
+    match runner.run() {
+        Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
+        other => panic!("expected UnboundVariable, got {:?}", other),
+    }
 }
 
 #[test]
