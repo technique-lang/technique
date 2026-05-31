@@ -59,6 +59,13 @@ pub enum TranslationError<'i> {
     /// A local procedure invocation `<name>(...)` whose `name` doesn't
     /// match any procedure declared in this document is an error.
     UnresolvedProcedure(language::Identifier<'i>),
+    /// Binding the result of a `repeat` to a variable is an error; the
+    /// `repeat` keyword does not terminate naturally and does not produces a
+    /// value so cannot be bound. Note: we could reconsider this in the fugure
+    /// if we implement a `break` or `return` keyword.
+    BoundRepeat {
+        at: Span,
+    },
 }
 
 impl<'i> TranslationError<'i> {
@@ -68,6 +75,7 @@ impl<'i> TranslationError<'i> {
             TranslationError::DuplicateTitle { at, .. } => *at,
             TranslationError::InterleavedDescription { at, .. } => *at,
             TranslationError::UnresolvedProcedure(id) => id.span,
+            TranslationError::BoundRepeat { at } => *at,
         }
     }
 }
@@ -370,30 +378,44 @@ impl<'i> Translator<'i> {
                 .len()
                 .saturating_mul(2),
         );
-        for (i, descriptive) in descriptives
-            .iter()
-            .enumerate()
-        {
-            if i > 0 {
-                fragments.push(Fragment::Text(" "));
+        for descriptive in descriptives {
+            if let Some(fragment) = self.fragment_from_descriptive(descriptive) {
+                if !fragments.is_empty() {
+                    fragments.push(Fragment::Text(" "));
+                }
+                fragments.push(fragment);
             }
-            fragments.push(self.fragment_from_descriptive(descriptive));
         }
         Operation::String(fragments)
     }
 
+    // The display fragment for a descriptive, or `None` when it renders no
+    // text. Only a value read or literal shows inline; everything executable
+    // (a bare invocation, inline `exec`/`repeat`/`foreach`, a binding) is
+    // hoisted into the enclosing body (a step's body, or the procedure's
+    // step-0 prefix) and contributes no fragment here.
     fn fragment_from_descriptive(
         &mut self,
         descriptive: &'i language::Descriptive<'i>,
-    ) -> Fragment<'i> {
+    ) -> Option<Fragment<'i>> {
         match descriptive {
-            language::Descriptive::Text(text) => Fragment::Text(text),
-            language::Descriptive::CodeInline(expr) => {
-                Fragment::Interpolation(self.translate_expression(expr))
-            }
-            language::Descriptive::Application(invocation) => {
-                Fragment::Interpolation(Operation::Invoke(self.translate_invocation(invocation)))
-            }
+            language::Descriptive::Text(text) => Some(Fragment::Text(text)),
+            language::Descriptive::CodeInline(expr) => match expr {
+                language::Expression::Variable(..)
+                | language::Expression::Number(..)
+                | language::Expression::String(..)
+                | language::Expression::Multiline(..)
+                | language::Expression::Tablet(..) => {
+                    Some(Fragment::Interpolation(self.translate_expression(expr)))
+                }
+                language::Expression::Repeat(..)
+                | language::Expression::Foreach(..)
+                | language::Expression::Application(..)
+                | language::Expression::Execution(..)
+                | language::Expression::Binding(..)
+                | language::Expression::Separator => None,
+            },
+            language::Descriptive::Application(_) => None,
             language::Descriptive::Binding(inner, _) => self.fragment_from_descriptive(inner),
         }
     }
@@ -642,10 +664,16 @@ impl<'i> Translator<'i> {
                 body: Box::new(Operation::Sequence(Vec::new())),
                 responses: Vec::new(),
             },
-            language::Expression::Binding(value, names, _) => Operation::Bind {
-                names,
-                value: Box::new(self.translate_expression(value)),
-            },
+            language::Expression::Binding(value, names, span) => {
+                if let language::Expression::Repeat(_, _) = value.as_ref() {
+                    self.problems
+                        .push(TranslationError::BoundRepeat { at: *span });
+                }
+                Operation::Bind {
+                    names,
+                    value: Box::new(self.translate_expression(value)),
+                }
+            }
             language::Expression::Separator => Operation::Sequence(Vec::new()),
         }
     }
