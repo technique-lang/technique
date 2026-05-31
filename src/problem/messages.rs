@@ -1048,6 +1048,10 @@ pub fn generate_translation_error<'i>(
             format!("Unresolved procedure '{}'", name),
             "A `<name>` invocation must refer to a procedure declared in this document. Built-in functions use the `name(...)` form (without angle brackets).".to_string(),
         ),
+        TranslationError::BoundRepeat { .. } => (
+            "Cannot use the result of `repeat`".to_string(),
+            "A `repeat` runs indefinitely and produces no value, so its result cannot be bound to a variable.".to_string(),
+        ),
     }
 }
 

@@ -10,7 +10,7 @@ Ask these questions: are you really sure you want a coffee?
 
 Assuming you do, then:
 
-    1.  { repeat <making_coffee>(e) ~ cups }
+    1.  { repeat <making_coffee>(e) }
         a.  First task
         b.  Second another task
                 'Yes' | 'No'
@@ -19,6 +19,7 @@ Assuming you do, then:
             ./stuff
         ```
         ) }
+    3.  Write everything down ~ paper
 
 another_example(e) : Input -> Output
 {

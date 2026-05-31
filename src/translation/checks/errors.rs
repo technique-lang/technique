@@ -37,6 +37,35 @@ make_coffee :
 }
 
 #[test]
+fn bound_repeat() {
+    let source = r#"
+% technique v1
+
+making :
+
+    1.  { repeat <coffee>(e) ~ cups }
+
+coffee : E -> C
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::BoundRepeat { at } = &errors[0] else {
+        panic!("expected BoundRepeat, got {:?}", errors[0]);
+    };
+    assert_eq!(
+        at.offset,
+        source
+            .find("repeat")
+            .expect("repeat in source"),
+        "span points at the bound repeat expression"
+    );
+}
+
+#[test]
 fn duplicate_title() {
     let source = r#"
 % technique v1

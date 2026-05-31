@@ -599,11 +599,12 @@ test :
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 
-    // A Step whose body contains a Loop. The Loop announces but does
-    // not record a Result; the enclosing Step records exactly one.
+    // A Step whose body contains a Loop over an empty list. The Loop
+    // announces and walks its body zero times, recording nothing; the
+    // enclosing Step records exactly one Result.
     let loop_op = Operation::Loop {
         names: &[],
-        over: None,
+        over: Some(Box::new(Operation::Variable(Identifier::new("empty")))),
         body: Box::new(Operation::Sequence(vec![])),
         responses: Vec::new(),
     };
@@ -617,13 +618,15 @@ fn loop_inside_step_produces_one_result() {
     let body = Operation::Sequence(vec![the_step]);
     let program = anonymous_with_body(body);
 
+    let mut env = Environment::new();
+    env.extend("empty".to_string(), Value::Arraeum(Vec::new()));
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
+        env,
     );
     runner
         .run()
@@ -643,6 +646,56 @@ fn loop_inside_step_produces_one_result() {
     assert_eq!(lines.len(), 3);
     assert!(lines[1].ends_with(" Begin"));
     assert!(lines[2].contains(" Done"));
+}
+
+#[test]
+fn repeat_loops_until_quit() {
+    let mut fixture = StoreFixture::new("repeat-until-quit");
+
+    // A `repeat` whose body is a single step. Each pass walks the step with
+    // a distinct `[n]` iteration segment; the operator quits on the third
+    // pass, ending the loop.
+    let inner = Operation::Step {
+        ordinal: Ordinal::Dependent("1"),
+        attributes: Vec::new(),
+        description: Vec::new(),
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let loop_op = Operation::Loop {
+        names: &[],
+        over: None,
+        body: Box::new(Operation::Sequence(vec![inner])),
+        responses: Vec::new(),
+    };
+    let program = anonymous_with_body(loop_op);
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Quit,
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step { qualified, .. } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec!["/[1]/1", "/[2]/1", "/[3]/1"]);
 }
 
 #[test]
