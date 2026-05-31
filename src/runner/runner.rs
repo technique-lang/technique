@@ -228,8 +228,10 @@ impl<'i, P: Prompt> Runner<'i, P> {
     /// each element of the input collection, binding the loop name(s) to each
     /// element in turn and pushing an `Iteration` scope segment. The
     /// collection must evaluate to a list otherwise it's a runtime error. A
-    /// `repeat` keyword (an iterable with `over: None`) has no collection and
-    /// walks its body once.
+    /// `repeat` keyword (an iterable with `over: None`) is unbounded: it
+    /// evaluates its body over and over, each pass an iteration scope, and in
+    /// theory never returns though in practice, stops if a Quit or Abort is
+    /// registered.
     fn walk_loop(
         &mut self,
         names: &'i [language::Identifier<'i>],
@@ -238,28 +240,47 @@ impl<'i, P: Prompt> Runner<'i, P> {
     ) -> Result<Outcome, RunnerError> {
         self.prompt
             .announce(&describe_loop(names, over));
-        let items = match over {
-            None => return self.walk(body),
-            Some(expr) => match super::evaluator::evaluate(&mut self.env, expr)? {
-                Value::Arraeum(items) => items,
-                _ => return Err(RunnerError::NotIterable),
-            },
-        };
-        for (i, item) in items
-            .into_iter()
-            .enumerate()
-        {
-            super::evaluator::bind_names(&mut self.env, names, item)?;
-            self.path
-                .push(PathSegment::Iteration(i + 1));
-            let result = self.walk(body);
-            self.path
-                .pop();
-            if let Outcome::Quit = result? {
-                return Ok(Outcome::Quit);
+        match over {
+            None => {
+                let mut number = 1;
+                loop {
+                    self.path
+                        .push(PathSegment::Iteration(number));
+                    let result = self.walk(body);
+                    self.path
+                        .pop();
+
+                    if let Outcome::Quit = result? {
+                        return Ok(Outcome::Quit);
+                    }
+                    number += 1;
+                }
+            }
+            Some(expr) => {
+                let items = match super::evaluator::evaluate(&mut self.env, expr)? {
+                    Value::Arraeum(items) => items,
+                    _ => return Err(RunnerError::NotIterable),
+                };
+                for (i, item) in items
+                    .into_iter()
+                    .enumerate()
+                {
+                    super::evaluator::bind_names(&mut self.env, names, item)?;
+
+                    let number = i + 1;
+                    self.path
+                        .push(PathSegment::Iteration(number));
+                    let result = self.walk(body);
+                    self.path
+                        .pop();
+
+                    if let Outcome::Quit = result? {
+                        return Ok(Outcome::Quit);
+                    }
+                }
+                Ok(Outcome::Done(Value::Unitus))
             }
         }
-        Ok(Outcome::Done(Value::Unitus))
     }
 
     fn walk_sequence(&mut self, ops: &'i [Operation<'i>]) -> Result<Outcome, RunnerError> {
