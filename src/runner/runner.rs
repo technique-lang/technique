@@ -227,7 +227,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
     /// Evaluate a control structure. A `foreach` evalutates its body once for
     /// each element of the input collection, binding the loop name(s) to each
     /// element in turn and pushing an `Iteration` scope segment. The
-    /// collection must evaluate to a list otherwise it's a runtime error. A
+    /// collection must evaluate to a list; a bare primitive widens to a
+    /// one-element list, but a tuple or tablet is a runtime error. A
     /// `repeat` keyword (an iterable with `over: None`) is unbounded: it
     /// evaluates its body over and over, each pass an iteration scope, and in
     /// theory never returns though in practice, stops if a Quit or Abort is
@@ -259,6 +260,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
             Some(expr) => {
                 let items = match super::evaluator::evaluate(&mut self.env, expr)? {
                     Value::Arraeum(items) => items,
+                    // A scalar in list context is a singleton list.
+                    value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
                     _ => return Err(RunnerError::NotIterable),
                 };
                 for (i, item) in items

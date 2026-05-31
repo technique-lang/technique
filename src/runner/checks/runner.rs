@@ -847,10 +847,71 @@ fn foreach_destructures_tuple_elements() {
 }
 
 #[test]
+fn foreach_widens_primitive_to_singleton() {
+    let mut fixture = StoreFixture::new("foreach-widen");
+
+    // foreach item in source, where `source` is a bare scalar: it widens
+    // to a one-element list and the body walks exactly once.
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("item"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend("source".to_string(), Value::Literali("lonely".to_string()));
+
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec![("/[1]/a", "lonely")]);
+}
+
+#[test]
 fn foreach_over_non_list_or_unbound_errors() {
     // foreach item in source, where `source` is supplied by the caller's
-    // environment. A scalar source is `NotIterable`; an unbound source
-    // propagates `UnboundVariable` rather than being swallowed.
+    // environment. A tuple or tablet source is `NotIterable` (only lists
+    // iterate and only scalars widen); an unbound source propagates
+    // `UnboundVariable` rather than being swallowed.
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
@@ -865,16 +926,41 @@ fn foreach_over_non_list_or_unbound_errors() {
         .subroutines
         .push(sub);
 
-    // A scalar bound to `source` is not a list.
-    let mut scalar_fixture = StoreFixture::new("foreach-scalar");
+    // A tuple bound to `source` is not a list and does not widen.
+    let mut tuple_fixture = StoreFixture::new("foreach-tuple");
     let mut env = Environment::new();
     env.extend(
         "source".to_string(),
-        Value::Literali("not a list".to_string()),
+        Value::Parametriq(vec![
+            Value::Literali("a".to_string()),
+            Value::Literali("b".to_string()),
+        ]),
     );
     let mut runner = Runner::new(
         &program,
-        scalar_fixture.take_appender(),
+        tuple_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        env,
+    );
+    match runner.run() {
+        Err(RunnerError::NotIterable) => {}
+        other => panic!("expected NotIterable, got {:?}", other),
+    }
+
+    // A tablet bound to `source` is not a list either.
+    let mut tablet_fixture = StoreFixture::new("foreach-tablet");
+    let mut env = Environment::new();
+    env.extend(
+        "source".to_string(),
+        Value::Tabularum(vec![(
+            "label".to_string(),
+            Value::Literali("v".to_string()),
+        )]),
+    );
+    let mut runner = Runner::new(
+        &program,
+        tablet_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
         env,
