@@ -335,25 +335,31 @@ We must take action!
                                     Span::default(),
                                 )],
                                 subscopes: vec![Scope::CodeBlock {
-                                    expressions: vec![Expression::Tablet(
+                                    expressions: vec![Expression::List(
                                         vec![
-                                            Pair {
-                                                label: "timestamp",
-                                                value: Expression::Execution(
-                                                    Function {
-                                                        target: Identifier::new("now"),
-                                                        parameters: vec![],
-                                                    },
-                                                    Span::default(),
-                                                ),
-                                            },
-                                            Pair {
-                                                label: "message",
-                                                value: Expression::Variable(
-                                                    Identifier::new("msg"),
-                                                    Span::default(),
-                                                ),
-                                            },
+                                            Expression::Pair(
+                                                Box::new(Pair {
+                                                    label: "timestamp",
+                                                    value: Expression::Execution(
+                                                        Function {
+                                                            target: Identifier::new("now"),
+                                                            parameters: vec![],
+                                                        },
+                                                        Span::default(),
+                                                    ),
+                                                }),
+                                                Span::default(),
+                                            ),
+                                            Expression::Pair(
+                                                Box::new(Pair {
+                                                    label: "message",
+                                                    value: Expression::Variable(
+                                                        Identifier::new("msg"),
+                                                        Span::default(),
+                                                    ),
+                                                }),
+                                                Span::default(),
+                                            ),
                                         ],
                                         Span::default(),
                                     )],

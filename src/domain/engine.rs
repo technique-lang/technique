@@ -146,13 +146,26 @@ impl<'i> Scope<'i> {
         }
     }
 
-    /// Returns the tablet pairs if this is a CodeBlock containing a Tablet.
-    pub fn tablet(&self) -> Option<&[Pair<'i>]> {
+    /// Returns the tablet pairs if this is a CodeBlock containing a single
+    /// list whose elements are all labelled values.
+    pub fn tablet(&self) -> Option<Vec<&Pair<'i>>> {
         match self {
             Scope::CodeBlock { expressions, .. } => {
                 if expressions.len() == 1 {
-                    if let Expression::Tablet(pairs, _) = &expressions[0] {
-                        return Some(pairs);
+                    if let Expression::List(elements, _) = &expressions[0] {
+                        let pairs: Vec<&Pair<'i>> = elements
+                            .iter()
+                            .filter_map(|element| {
+                                if let Expression::Pair(pair, _) = element {
+                                    Some(pair.as_ref())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        if !pairs.is_empty() && pairs.len() == elements.len() {
+                            return Some(pairs);
+                        }
                     }
                 }
                 None
@@ -338,7 +351,16 @@ fn render_expression(expr: &Expression) -> String {
         }
         Expression::Number(Numeric::Scientific(q), _) => q.to_string(),
         Expression::Number(Numeric::Integral(n), _) => n.to_string(),
-        Expression::Tablet(_, _) => String::new(),
+        Expression::Pair(pair, _) => {
+            format!("\"{}\" = {}", pair.label, render_expression(&pair.value))
+        }
+        Expression::List(elements, _) => {
+            let items: Vec<_> = elements
+                .iter()
+                .map(render_expression)
+                .collect();
+            format!("[{}]", items.join(", "))
+        }
         Expression::Separator => String::new(),
     }
 }

@@ -642,6 +642,57 @@ impl<'i> Parser<'i> {
         Ok(results)
     }
 
+    /// Split the current content (assumed to be inside bracket delimiters
+    /// representing a list) interior into elements, breaking on each
+    /// top-level comma or newline. Separators nested within parentheses,
+    /// brackets, or string literals do not split. Empty chunks (a trailing
+    /// comma, a blank line) are skipped.
+    fn take_elements<A, F>(&mut self, function: F) -> Result<Vec<A>, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let content = self.source;
+        let base = content.as_ptr() as usize;
+        let mut results = Vec::new();
+
+        let mut start = 0;
+        let mut depth = 0i32;
+        let mut in_string = false;
+
+        let mut cut = |outer: &mut Parser<'i>, chunk: &'i str| -> Result<(), ParsingError> {
+            let trimmed = chunk.trim_ascii();
+            if trimmed.is_empty() {
+                return Ok(());
+            }
+            let indent = trimmed.as_ptr() as usize - base;
+            let mut parser = outer.subparser(indent, trimmed);
+            results.push(function(&mut parser)?);
+            outer
+                .problems
+                .extend(parser.problems);
+            Ok(())
+        };
+
+        for (i, c) in content.char_indices() {
+            match c {
+                '"' => in_string = !in_string,
+                _ if in_string => {}
+                '(' | '[' => depth += 1,
+                ')' | ']' => depth -= 1,
+                ',' | '\n' if depth == 0 => {
+                    cut(self, &content[start..i])?;
+                    start = i + c.len_utf8();
+                }
+                _ => {}
+            }
+        }
+        cut(self, &content[start..])?;
+
+        self.advance(content.len());
+
+        Ok(results)
+    }
+
     fn take_paragraph<A, F>(&mut self, function: F) -> Result<A, ParsingError>
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
@@ -1491,7 +1542,7 @@ impl<'i> Parser<'i> {
             // Malformed foreach expression
             return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
         } else if content.starts_with('[') {
-            self.read_tablet_expression()
+            self.read_bracket_expression()
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
@@ -1685,74 +1736,31 @@ impl<'i> Parser<'i> {
         Ok(Expression::Binding(Box::new(expression), identifiers, span))
     }
 
-    fn read_tablet_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+    /// Read a list. Elements are comma or newline-separated expressions. An
+    /// element is of the form `"label" = value` for a labelled tablet value
+    /// (an `Expression::Pair`) or without a label as an indexed list element
+    /// (an `Expression:List`).
+    fn read_bracket_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         let start = self.offset;
-        let pairs = self.take_block_chars("a tablet", '[', ']', true, |outer| {
-            let mut pairs = Vec::new();
-
-            loop {
-                outer.trim_whitespace();
-
-                if outer
-                    .source
-                    .is_empty()
-                {
-                    break;
-                }
-
-                // Parse quoted key
-                if !outer
-                    .source
-                    .starts_with('"')
-                {
-                    return Err(ParsingError::Expected(
-                        Span::new(outer.offset, 0),
-                        "a string label for the field, in double-quotes",
-                    ));
-                }
-
-                let label =
-                    outer.take_block_chars("a label", '"', '"', false, |inner| Ok(inner.source))?;
-
-                // Skip whitespace and expect '='
-                outer.trim_whitespace();
-                if !outer
-                    .source
-                    .starts_with('=')
-                {
-                    return Err(ParsingError::Expected(
-                        Span::new(outer.offset, 0),
-                        "a '=' after the field name to indicate what value is to be assigned to it",
-                    ));
-                }
-                outer.advance(1); // consume '='
-                outer.trim_whitespace();
-
-                // Parse value - take everything up to newline or end
-                let value = outer.take_line(|inner| {
+        let elements = self.take_block_chars("a list", '[', ']', true, |outer| {
+            outer.take_elements(|inner| {
+                if is_pair(inner.source) {
+                    let pair_start = inner.offset;
+                    let label = inner
+                        .take_block_chars("a label", '"', '"', false, |label| Ok(label.source))?;
                     inner.trim_whitespace();
-
-                    let content = inner.source;
-                    if content.is_empty() {
-                        return Err(ParsingError::Expected(
-                            Span::new(inner.offset, 0),
-                            "value expression",
-                        ));
-                    };
-
+                    inner.advance(1); // consume '=' (is_pair guarantees it)
+                    inner.trim_whitespace();
+                    let value = inner.read_expression()?;
+                    let span = inner.span_since(pair_start);
+                    Ok(Expression::Pair(Box::new(Pair { label, value }), span))
+                } else {
                     inner.read_expression()
-                })?;
-
-                pairs.push(Pair { label, value });
-
-                // Skip any remaining whitespace/newlines
-                outer.trim_whitespace();
-            }
-
-            Ok(pairs)
+                }
+            })
         })?;
         let span = self.span_since(start);
-        Ok(Expression::Tablet(pairs, span))
+        Ok(Expression::List(elements, span))
     }
 
     fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError> {
@@ -3268,6 +3276,21 @@ fn is_numeric_quantity(content: &str) -> bool {
 fn is_string_literal(content: &str) -> bool {
     let re = regex!(r#"^\s*".*"\s*$"#);
     re.is_match(content)
+}
+
+/// Detect a tablet pair being a quoted label followed by `=` (which would
+/// then be followed by an expression).
+fn is_pair(content: &str) -> bool {
+    let content = content.trim_ascii_start();
+    let Some(rest) = content.strip_prefix('"') else {
+        return false;
+    };
+    match rest.split_once('"') {
+        Some((_label, after)) => after
+            .trim_ascii_start()
+            .starts_with('='),
+        None => false,
+    }
 }
 
 fn is_attribute_assignment(input: &str) -> bool {

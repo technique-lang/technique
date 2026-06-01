@@ -253,3 +253,27 @@ I. Lead with <does_not_exist>
     };
     assert_eq!(id.value, "does_not_exist");
 }
+
+#[test]
+fn mixed_bracket_entries() {
+    // A bracket mixing a labelled value with a bare value is neither a
+    // tablet nor a list; the parser accepts it but translation rejects it.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    [ "answer" = 42, 99 ]
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::HeterogenousList { .. } = &errors[0] else {
+        panic!("expected MixedBracket, got {:?}", errors[0]);
+    };
+}

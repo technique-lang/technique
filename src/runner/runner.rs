@@ -174,7 +174,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Number(_)
             | Operation::String(_)
             | Operation::Multiline(_, _)
-            | Operation::Tablet(_) => {
+            | Operation::Tablet(_)
+            | Operation::List(_) => {
                 let value = super::evaluator::evaluate(&mut self.env, op)?;
                 Ok(Outcome::Done(value))
             }

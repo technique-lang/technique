@@ -1052,6 +1052,10 @@ pub fn generate_translation_error<'i>(
             "Cannot use the result of `repeat`".to_string(),
             "A `repeat` runs indefinitely and produces no value, so its result cannot be bound to a variable.".to_string(),
         ),
+        TranslationError::HeterogenousList { .. } => (
+            "Mixed List and Tablet syntax".to_string(),
+            "A `[...]` literal must be either a Tablet (every entry in the list a `\"label\" = value` pair) or a lLst (entries are actual values in sequence), not a mix of the two.".to_string(),
+        ),
     }
 }
 
