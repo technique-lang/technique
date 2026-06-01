@@ -909,9 +909,10 @@ fn foreach_widens_primitive_to_singleton() {
 #[test]
 fn foreach_over_non_list_or_unbound_errors() {
     // foreach item in source, where `source` is supplied by the caller's
-    // environment. A tuple or tablet source is `NotIterable` (only lists
-    // iterate and only scalars widen); an unbound source propagates
-    // `UnboundVariable` rather than being swallowed.
+    // environment. A tuple or tablet source is `NotIterable` (lists iterate
+    // and scalars widen, but a tablet is a record that must be projected via
+    // values()/labels()/pairs() first, and a tuple does neither); an unbound
+    // source propagates `UnboundVariable` rather than being swallowed.
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
@@ -948,7 +949,8 @@ fn foreach_over_non_list_or_unbound_errors() {
         other => panic!("expected NotIterable, got {:?}", other),
     }
 
-    // A tablet bound to `source` is not a list either.
+    // A tablet bound to `source` is a record, not a sequence: it must be
+    // projected with values()/labels()/pairs() rather than iterated directly.
     let mut tablet_fixture = StoreFixture::new("foreach-tablet");
     let mut env = Environment::new();
     env.extend(

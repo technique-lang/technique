@@ -263,6 +263,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     Value::Arraeum(items) => items,
                     // A scalar in list context is a singleton list.
                     value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
+                    // A tablet is a record, not a sequence, so it does not
+                    // iterate directly.
                     _ => return Err(RunnerError::NotIterable),
                 };
                 for (i, item) in items
