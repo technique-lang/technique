@@ -44,8 +44,8 @@ pub struct Record {
     pub state: State,
 }
 
-/// A lifecycle or step-outcome event, mirroring the PFFTT BNF's `State`
-/// production. `Start`, `Pause`, and `Resume` are run-lifecycle events
+/// A lifecycle or step-outcome event; the keyword written into each PFFTT
+/// record line. `Start`, `Pause`, and `Resume` are run-lifecycle events
 /// emitted at the root path `/`; `Begin` marks the moment work starts
 /// on a step (paired with the eventual `Done`, `Skip`, or `Fail`).
 /// `Invoke` records dispatch into another procedure (the return is
@@ -74,13 +74,16 @@ pub enum InvokeTarget {
     Uri(String),
 }
 
-/// A `Value` carried by a Done or Fail state. The BNF admits `unit` or
+/// A `Value` carried by a Done or Fail state. Three on-disk forms,
+/// handled by `format_value` / `parse_value` below: `unit` (`()`), a
+/// double-quoted `literal` (the form a chosen response records as), and a
 /// `tablet`; tablets currently round-trip as opaque text until tablet
 /// typing in the runner lands.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Value {
     Unit,
+    Literal(String),
     Tablet(String),
 }
 
@@ -408,6 +411,11 @@ fn format_state(out: &mut String, state: &State) {
 fn format_value(out: &mut String, value: &Value) {
     match value {
         Value::Unit => out.push_str("()"),
+        Value::Literal(text) => {
+            out.push('"');
+            out.push_str(text);
+            out.push('"');
+        }
         Value::Tablet(text) => out.push_str(text),
     }
 }
@@ -527,6 +535,8 @@ fn parse_optional_value(rest: Option<&str>) -> Result<Option<Value>, RecordError
 fn parse_value(text: &str) -> Result<Value, RecordError> {
     if text == "()" {
         Ok(Value::Unit)
+    } else if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') {
+        Ok(Value::Literal(text[1..text.len() - 1].to_string()))
     } else if text.starts_with('[') && text.ends_with(']') {
         Ok(Value::Tablet(text.to_string()))
     } else {

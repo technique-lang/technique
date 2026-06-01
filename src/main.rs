@@ -616,6 +616,17 @@ fn main() {
 
             debug!(filename);
 
+            let arguments: Vec<String> = submatches
+                .get_many::<String>("arguments")
+                .map(|values| {
+                    values
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            debug!(?arguments);
+
             let filename = Path::new(filename);
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
@@ -670,7 +681,7 @@ fn main() {
                 }
             };
 
-            match runner::start(filename, &program) {
+            match runner::start(filename, &program, &arguments) {
                 Ok((run_id, Outcome::Quit)) => {
                     eprintln!("paused; resume with `technique resume {}`", run_id.render());
                     std::process::exit(0);

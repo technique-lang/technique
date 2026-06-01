@@ -416,7 +416,8 @@ pub enum Expression<'i> {
     Application(Invocation<'i>, Span),
     Execution(Function<'i>, Span),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
-    Tablet(Vec<Pair<'i>>, Span),
+    Pair(Box<Pair<'i>>, Span),
+    List(Vec<Expression<'i>>, Span),
     Separator,
 }
 
@@ -438,7 +439,8 @@ impl PartialEq for Expression<'_> {
             (Expression::Binding(a1, a2, _), Expression::Binding(b1, b2, _)) => {
                 a1 == b1 && a2 == b2
             }
-            (Expression::Tablet(a, _), Expression::Tablet(b, _)) => a == b,
+            (Expression::Pair(a, _), Expression::Pair(b, _)) => a == b,
+            (Expression::List(a, _), Expression::List(b, _)) => a == b,
             (Expression::Separator, Expression::Separator) => true,
             _ => false,
         }

@@ -10,6 +10,7 @@ use super::prompt::{Prompt, UserInput};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
+use crate::language;
 use crate::program::{Executable, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
@@ -52,6 +53,9 @@ pub enum RunnerError {
     UnboundVariable(String),
     BindArityMismatch { expected: usize, actual: usize },
     BindNotTuple { expected: usize },
+    NotIterable,
+    ParameterArityMismatch { expected: usize, actual: usize },
+    ParameterUnexpected { actual: usize },
     UserQuit,
 }
 
@@ -71,18 +75,19 @@ pub struct Runner<'i, P: Prompt> {
 }
 
 impl<'i, P: Prompt> Runner<'i, P> {
-    pub fn with_pieces(
+    pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
         completed: HashSet<String>,
         prompt: P,
+        env: Environment,
     ) -> Self {
         Runner {
             program,
             appender,
             completed,
             prompt,
-            env: Environment::new(),
+            env,
             path: QualifiedPath::new(),
         }
     }
@@ -138,11 +143,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             }
             Operation::Loop {
                 names, over, body, ..
-            } => {
-                self.prompt
-                    .announce(&describe_loop(names, over.as_deref()));
-                self.walk(body)
-            }
+            } => self.walk_loop(names, over.as_deref(), body),
             Operation::Invoke(invocable) => self.walk_invoke(invocable),
             Operation::Execute(executable) => {
                 let qualified = self
@@ -173,7 +174,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Number(_)
             | Operation::String(_)
             | Operation::Multiline(_, _)
-            | Operation::Tablet(_) => {
+            | Operation::Tablet(_)
+            | Operation::List(_) => {
                 let value = super::evaluator::evaluate(&mut self.env, op)?;
                 Ok(Outcome::Done(value))
             }
@@ -218,6 +220,70 @@ impl<'i, P: Prompt> Runner<'i, P> {
             SubroutineRef::Unresolved(id) => {
                 self.prompt
                     .announce(&format!("<{}>", id.value));
+                Ok(Outcome::Done(Value::Unitus))
+            }
+        }
+    }
+
+    /// Evaluate a control structure. A `foreach` evalutates its body once for
+    /// each element of the input collection, binding the loop name(s) to each
+    /// element in turn and pushing an `Iteration` scope segment. The
+    /// collection must evaluate to a list; a bare primitive widens to a
+    /// one-element list, but a tuple or tablet is a runtime error. A
+    /// `repeat` keyword (an iterable with `over: None`) is unbounded: it
+    /// evaluates its body over and over, each pass an iteration scope, and in
+    /// theory never returns though in practice, stops if a Quit or Abort is
+    /// registered.
+    fn walk_loop(
+        &mut self,
+        names: &'i [language::Identifier<'i>],
+        over: Option<&'i Operation<'i>>,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        self.prompt
+            .announce(&describe_loop(names, over));
+        match over {
+            None => {
+                let mut number = 1;
+                loop {
+                    self.path
+                        .push(PathSegment::Iteration(number));
+                    let result = self.walk(body);
+                    self.path
+                        .pop();
+
+                    if let Outcome::Quit = result? {
+                        return Ok(Outcome::Quit);
+                    }
+                    number += 1;
+                }
+            }
+            Some(expr) => {
+                let items = match super::evaluator::evaluate(&mut self.env, expr)? {
+                    Value::Arraeum(items) => items,
+                    // A scalar in list context is a singleton list.
+                    value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
+                    // A tablet is a record, not a sequence, so it does not
+                    // iterate directly.
+                    _ => return Err(RunnerError::NotIterable),
+                };
+                for (i, item) in items
+                    .into_iter()
+                    .enumerate()
+                {
+                    super::evaluator::bind_names(&mut self.env, names, item)?;
+
+                    let number = i + 1;
+                    self.path
+                        .push(PathSegment::Iteration(number));
+                    let result = self.walk(body);
+                    self.path
+                        .pop();
+
+                    if let Outcome::Quit = result? {
+                        return Ok(Outcome::Quit);
+                    }
+                }
                 Ok(Outcome::Done(Value::Unitus))
             }
         }
@@ -290,7 +356,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             attributes,
             description,
             body,
-            ..
+            responses,
         } = op
         else {
             unreachable!("walk_step called with non-Step operation");
@@ -310,7 +376,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let result = self.perform_step(&qualified, body, description);
+        let result = self.perform_step(&qualified, body, description, responses);
 
         self.path
             .pop();
@@ -327,6 +393,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         qualified: &str,
         body: &'i Operation<'i>,
         description: &'i [Operation<'i>],
+        responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
         if self
             .completed
@@ -368,9 +435,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
         self.prompt
             .step(qualified, &description_text);
 
+        let choices: Vec<&str> = responses
+            .iter()
+            .map(|r| r.value)
+            .collect();
         let outcome = outcome_from(
             self.prompt
-                .ask(),
+                .ask(&choices),
         );
         if let Outcome::Quit = outcome {
             return Ok(Outcome::Quit);
@@ -425,12 +496,14 @@ fn outcome_from(input: UserInput) -> Outcome {
 }
 
 /// Project the runner's in-memory `Outcome` into the on-disk `State`
-/// the PFFTT writer expects. Done renders with an explicit unit
-/// placeholder for now — capturing the operator's actual value into a
-/// tablet is future work. Quit is unreachable here: the caller filters
-/// it out before recording.
+/// the PFFTT writer expects. A chosen response records as a quoted
+/// literal; any other Done (the plain confirmation) records as unit.
+/// Quit is unreachable here: the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
+        Outcome::Done(Value::Literali(text)) => {
+            State::Done(Some(RecordValue::Literal(text.clone())))
+        }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
@@ -438,6 +511,42 @@ fn record_state(outcome: &Outcome) -> State {
         ))),
         Outcome::Quit => unreachable!("Quit is not recorded"),
     }
+}
+
+/// Build an `Environment` seeded with the entry procedure's parameters
+/// bound to the supplied CLI arguments.
+pub(super) fn bind_parameters(
+    program: &Program<'_>,
+    arguments: &[String],
+) -> Result<Environment, RunnerError> {
+    let entry = program
+        .subroutines
+        .first()
+        .ok_or(RunnerError::MissingEntryProcedure)?;
+    let params = entry
+        .parameters
+        .unwrap_or(&[]);
+    let expected = params.len();
+    let actual = arguments.len();
+    if expected == 0 && actual > 0 {
+        return Err(RunnerError::ParameterUnexpected { actual });
+    }
+    if expected != actual {
+        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+    }
+    let mut env = Environment::new();
+    for (param, argument) in params
+        .iter()
+        .zip(arguments)
+    {
+        env.extend(
+            param
+                .value
+                .to_string(),
+            Value::Literali(argument.clone()),
+        );
+    }
+    Ok(env)
 }
 
 /// Current UTC time as an RFC3339 millisecond-precision string, used

@@ -95,6 +95,25 @@ fn tablet_entries_evaluate() {
 }
 
 #[test]
+fn list_elements_evaluate() {
+    let op = Operation::List(vec![
+        Operation::Number(LangNumeric::Integral(1)),
+        Operation::Number(LangNumeric::Integral(4)),
+        Operation::Number(LangNumeric::Integral(9)),
+    ]);
+    let mut env = Environment::new();
+    let v = evaluate(&mut env, &op).expect("evaluated");
+    assert_eq!(
+        v,
+        value::Value::Arraeum(vec![
+            value::Value::Quanticle(value::Numeric::Integral(1)),
+            value::Value::Quanticle(value::Numeric::Integral(4)),
+            value::Value::Quanticle(value::Numeric::Integral(9)),
+        ])
+    );
+}
+
+#[test]
 fn bind_extends_env_for_subsequent_lookup() {
     let names = [Identifier::new("greeting")];
     let bind = Operation::Bind {

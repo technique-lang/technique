@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::language::Identifier;
 use crate::parsing;
-use crate::program::{Operation, Ordinal, Program, Subroutine};
+use crate::program::{Fragment, Operation, Ordinal, Program, Subroutine};
+use crate::runner::evaluator::Environment;
 use crate::runner::prompt::{Event, Mock, UserInput};
-use crate::runner::runner::{Outcome, Runner};
+use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
 use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
 use crate::translation::translate;
 use crate::value::Value;
@@ -96,7 +98,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     let outcome = runner
         .run()
         .expect("run");
@@ -132,7 +140,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Skip]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -156,7 +170,13 @@ fn step_outcomes_recorded() {
     )]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Fail]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -192,7 +212,13 @@ fn two_steps_prompted_in_source_order() {
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -227,7 +253,13 @@ fn pre_completed_step_short_circuits() {
     completed.insert("/1".to_string());
 
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), completed, prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        completed,
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -257,7 +289,13 @@ fn quit_propagates_and_stops_walking() {
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([UserInput::Quit]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     let outcome = runner
         .run()
         .expect("run");
@@ -309,7 +347,13 @@ fn section_walking() {
     }]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -349,7 +393,13 @@ fn section_walking() {
     }]);
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -381,7 +431,13 @@ fn parallel_step_index_starts_at_one() {
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -420,7 +476,13 @@ test :
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -463,7 +525,13 @@ helper :
 
     let mut fixture = StoreFixture::new("invoke-descent");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -501,7 +569,13 @@ test :
 
     let mut fixture = StoreFixture::new("execute-announce");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
     runner
         .run()
         .expect("run");
@@ -525,11 +599,12 @@ test :
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 
-    // A Step whose body contains a Loop. The Loop announces but does
-    // not record a Result; the enclosing Step records exactly one.
+    // A Step whose body contains a Loop over an empty list. The Loop
+    // announces and walks its body zero times, recording nothing; the
+    // enclosing Step records exactly one Result.
     let loop_op = Operation::Loop {
         names: &[],
-        over: None,
+        over: Some(Box::new(Operation::Variable(Identifier::new("empty")))),
         body: Box::new(Operation::Sequence(vec![])),
         responses: Vec::new(),
     };
@@ -543,8 +618,16 @@ fn loop_inside_step_produces_one_result() {
     let body = Operation::Sequence(vec![the_step]);
     let program = anonymous_with_body(body);
 
+    let mut env = Environment::new();
+    env.extend("empty".to_string(), Value::Arraeum(Vec::new()));
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::with_pieces(&program, fixture.take_appender(), HashSet::new(), prompt);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
     runner
         .run()
         .expect("run");
@@ -563,4 +646,515 @@ fn loop_inside_step_produces_one_result() {
     assert_eq!(lines.len(), 3);
     assert!(lines[1].ends_with(" Begin"));
     assert!(lines[2].contains(" Done"));
+}
+
+#[test]
+fn repeat_loops_until_quit() {
+    let mut fixture = StoreFixture::new("repeat-until-quit");
+
+    // A `repeat` whose body is a single step. Each pass walks the step with
+    // a distinct `[n]` iteration segment; the operator quits on the third
+    // pass, ending the loop.
+    let inner = Operation::Step {
+        ordinal: Ordinal::Dependent("1"),
+        attributes: Vec::new(),
+        description: Vec::new(),
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let loop_op = Operation::Loop {
+        names: &[],
+        over: None,
+        body: Box::new(Operation::Sequence(vec![inner])),
+        responses: Vec::new(),
+    };
+    let program = anonymous_with_body(loop_op);
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Quit,
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step { qualified, .. } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec!["/[1]/1", "/[2]/1", "/[3]/1"]);
+}
+
+#[test]
+fn foreach_walks_body_once_per_list_element() {
+    let mut fixture = StoreFixture::new("foreach-list");
+
+    // foreach item in items: a substep whose description interpolates the
+    // iteration variable, so each walk reveals which element it saw.
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("item"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    // `names` borrows from the IR, so the array must outlive the program.
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("items")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend(
+        "items".to_string(),
+        Value::Arraeum(vec![
+            Value::Literali("first".to_string()),
+            Value::Literali("second".to_string()),
+        ]),
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    // The body is walked once per element. Each Step event carries an
+    // `[n]` iteration segment in its path and the description it saw,
+    // confirming the iteration variable was bound to that element.
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec![("/[1]/a", "first"), ("/[2]/a", "second")]);
+}
+
+#[test]
+fn foreach_destructures_tuple_elements() {
+    let mut fixture = StoreFixture::new("foreach-destructure");
+
+    // foreach (first, second) in pairs: two names destructure each
+    // tuple-shaped element positionally.
+    let description = Operation::String(vec![
+        Fragment::Interpolation(Operation::Variable(Identifier::new("first"))),
+        Fragment::Text("/"),
+        Fragment::Interpolation(Operation::Variable(Identifier::new("second"))),
+    ]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    // `names` borrows from the IR, so the array must outlive the program.
+    let names = [Identifier::new("first"), Identifier::new("second")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("pairs")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend(
+        "pairs".to_string(),
+        Value::Arraeum(vec![
+            Value::Parametriq(vec![
+                Value::Literali("a".to_string()),
+                Value::Literali("b".to_string()),
+            ]),
+            Value::Parametriq(vec![
+                Value::Literali("c".to_string()),
+                Value::Literali("d".to_string()),
+            ]),
+        ]),
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step { description, .. } => Some(description.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec!["a/b", "c/d"]);
+}
+
+#[test]
+fn foreach_widens_primitive_to_singleton() {
+    let mut fixture = StoreFixture::new("foreach-widen");
+
+    // foreach item in source, where `source` is a bare scalar: it widens
+    // to a one-element list and the body walks exactly once.
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("item"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut env = Environment::new();
+    env.extend("source".to_string(), Value::Literali("lonely".to_string()));
+
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, vec![("/[1]/a", "lonely")]);
+}
+
+#[test]
+fn foreach_over_non_list_or_unbound_errors() {
+    // foreach item in source, where `source` is supplied by the caller's
+    // environment. A tuple or tablet source is `NotIterable` (lists iterate
+    // and scalars widen, but a tablet is a record that must be projected via
+    // values()/labels()/pairs() first, and a tuple does neither); an unbound
+    // source propagates `UnboundVariable` rather than being swallowed.
+    let names = [Identifier::new("item")];
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    // A tuple bound to `source` is not a list and does not widen.
+    let mut tuple_fixture = StoreFixture::new("foreach-tuple");
+    let mut env = Environment::new();
+    env.extend(
+        "source".to_string(),
+        Value::Parametriq(vec![
+            Value::Literali("a".to_string()),
+            Value::Literali("b".to_string()),
+        ]),
+    );
+    let mut runner = Runner::new(
+        &program,
+        tuple_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        env,
+    );
+    match runner.run() {
+        Err(RunnerError::NotIterable) => {}
+        other => panic!("expected NotIterable, got {:?}", other),
+    }
+
+    // A tablet bound to `source` is a record, not a sequence: it must be
+    // projected with values()/labels()/pairs() rather than iterated directly.
+    let mut tablet_fixture = StoreFixture::new("foreach-tablet");
+    let mut env = Environment::new();
+    env.extend(
+        "source".to_string(),
+        Value::Tabularum(vec![(
+            "label".to_string(),
+            Value::Literali("v".to_string()),
+        )]),
+    );
+    let mut runner = Runner::new(
+        &program,
+        tablet_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        env,
+    );
+    match runner.run() {
+        Err(RunnerError::NotIterable) => {}
+        other => panic!("expected NotIterable, got {:?}", other),
+    }
+
+    // An unbound `source` propagates the evaluation error.
+    let mut unbound_fixture = StoreFixture::new("foreach-unbound");
+    let mut runner = Runner::new(
+        &program,
+        unbound_fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        Environment::new(),
+    );
+    match runner.run() {
+        Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
+        other => panic!("expected UnboundVariable, got {:?}", other),
+    }
+}
+
+#[test]
+fn bind_parameters_arity_and_errors() {
+    // Procedure with two parameters and matching arity: the returned
+    // Environment contains both parameter bindings in `Value::Literali`
+    // form.
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["foo".to_string(), "192.168.1.5".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    assert_eq!(env.lookup("e"), Some(&Value::Literali("foo".to_string())));
+    assert_eq!(
+        env.lookup("s"),
+        Some(&Value::Literali("192.168.1.5".to_string()))
+    );
+
+    // Too few arguments: ParameterArityMismatch.
+    let args = ["foo".to_string()];
+    let error = bind_parameters(&program, &args).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 1);
+
+    // Too many arguments: also ParameterArityMismatch.
+    let args = [
+        "foo".to_string(),
+        "192.168.1.5".to_string(),
+        "extra".to_string(),
+    ];
+    let error = bind_parameters(&program, &args).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 3);
+
+    // Procedure declares no parameters but args supplied: ParameterUnexpected.
+    let source = r#"
+% technique v1
+
+test :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["unwanted".to_string()];
+    let error = bind_parameters(&program, &args).expect_err("expected unexpected error");
+    let RunnerError::ParameterUnexpected { actual } = error else {
+        panic!("expected ParameterUnexpected, got {:?}", error);
+    };
+    assert_eq!(actual, 1);
+
+    // No parameters and no args: empty environment, no error.
+    let env = bind_parameters(&program, &[]).expect("bind");
+    assert!(env
+        .lookup("anything")
+        .is_none());
+}
+
+#[test]
+fn entry_procedure_parameters_visible_in_descriptions() {
+    let source = r#"
+% technique v1
+
+greet(name) :
+
+1.  Hello { name }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("entry-param-interpolate");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut env = Environment::new();
+    env.extend("name".to_string(), Value::Literali("world".to_string()));
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let descriptions: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { description, .. } = e {
+                Some(description.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(descriptions, vec!["Hello world"]);
+}
+
+#[test]
+fn step_with_responses_prompts_choices_and_records() {
+    let source = r#"
+% technique v1
+
+test :
+
+1.  Is the site marked?
+        'Yes' | 'No'
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("step-responses");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+    );
+    runner
+        .run()
+        .expect("run");
+
+    // The prompt offered the two declared responses as choices.
+    let prompt = runner.into_prompt();
+    let asked: Vec<&Vec<String>> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Ask { choices } = e {
+                Some(choices)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(asked, vec![&vec!["Yes".to_string(), "No".to_string()]]);
+
+    // The chosen response is recorded as a quoted literal in the PFFTT.
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(
+        record.state,
+        State::Done(Some(RecordValue::Literal("Yes".to_string())))
+    );
 }

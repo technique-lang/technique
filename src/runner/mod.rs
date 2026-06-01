@@ -16,24 +16,28 @@ mod state;
 pub use runner::{Outcome, RunnerError};
 pub use state::{RecordError, RunId};
 
+use evaluator::Environment;
 use prompt::Console;
-use runner::{now_iso8601, Runner};
+use runner::{bind_parameters, now_iso8601, Runner};
 use state::{construct_state_path, Appender, Record, State, Store};
 
 const STORE_ROOT: &str = ".store";
 
 /// Allocate a new run, write the opening `Start` record, and walk the program
 /// to completion or until the user interrupts by signalling they are pausing
-/// or quitting.
+/// or quitting. Command-line arguments are bound to the entry procedure's
+/// parameters before the beginning the walk.
 pub fn start<'i>(
     document: &Path,
     program: &'i Program<'i>,
+    arguments: &[String],
 ) -> Result<(RunId, Outcome), RunnerError> {
+    let env = bind_parameters(program, arguments)?;
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (run_id, run_dir) = store.create(document, now_iso8601())?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
-    let mut runner = Runner::with_pieces(program, appender, HashSet::new(), Console::new());
+    let mut runner = Runner::new(program, appender, HashSet::new(), Console::new(), env);
     let outcome = runner.run()?;
     Ok((run_id, outcome))
 }
@@ -62,6 +66,12 @@ pub fn resume<'i>(run_id: RunId, program: &'i Program<'i>) -> Result<Outcome, Ru
         state: State::Resume,
     };
     appender.append(&record)?;
-    let mut runner = Runner::with_pieces(program, appender, completed, Console::new());
+    let mut runner = Runner::new(
+        program,
+        appender,
+        completed,
+        Console::new(),
+        Environment::new(),
+    );
     runner.run()
 }

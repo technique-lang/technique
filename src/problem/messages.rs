@@ -1048,6 +1048,14 @@ pub fn generate_translation_error<'i>(
             format!("Unresolved procedure '{}'", name),
             "A `<name>` invocation must refer to a procedure declared in this document. Built-in functions use the `name(...)` form (without angle brackets).".to_string(),
         ),
+        TranslationError::BoundRepeat { .. } => (
+            "Cannot use the result of `repeat`".to_string(),
+            "A `repeat` runs indefinitely and produces no value, so its result cannot be bound to a variable.".to_string(),
+        ),
+        TranslationError::HeterogenousList { .. } => (
+            "Mixed List and Tablet syntax".to_string(),
+            "A `[...]` literal must be either a Tablet (every entry in the list a `\"label\" = value` pair) or a lLst (entries are actual values in sequence), not a mix of the two.".to_string(),
+        ),
     }
 }
 
@@ -1096,6 +1104,37 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
                 expected
             ),
             "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+        ),
+        RunnerError::ParameterArityMismatch { expected, actual } => (
+            format!(
+                "Wrong number of arguments: procedure expects {} but {} given",
+                expected, actual
+            ),
+            r#"
+Arguments after the filename are passed as the parameters for the entry
+procedure at the top of the Technique document.
+            "#.trim_ascii().to_string(),
+        ),
+        RunnerError::ParameterUnexpected { actual } => (
+            format!(
+                "Unexpected arguments: procedure takes no parameters but {} given",
+                actual
+            ),
+            r#"
+Arguments were supplied on the command-line but the entry procedure at the top
+of the document doesn't take ant parameters.
+            "#.trim_ascii().to_string(),
+        ),
+        RunnerError::NotIterable => (
+            "Iteration requires a list".to_string(),
+            r#"
+The foreach loop control structure requires a list to iterate over, but the
+value supplied isn't one. A tablet is a dictonary, not a sequence. If you want
+to use the values from a tablet convert them into a list first with the
+values() function. There is also a labels() function to get each of the
+tablet's labels, and pairs() to get a sequence of tuples of labels and values
+you can iterate over.
+            "#.trim_ascii().to_string(),
         ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),

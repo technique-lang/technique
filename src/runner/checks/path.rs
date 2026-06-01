@@ -37,6 +37,17 @@ fn parallel_step_uses_dash_prefix() {
     assert_eq!(stack.render(), "/-3");
 }
 
+// Walk a step with a foreach scope as its second element which in turn has a
+// single nested substep.
+#[test]
+fn iteration_segment_renders_bracketed_index() {
+    let mut stack = QualifiedPath::new();
+    stack.push(PathSegment::DependentStep("5"));
+    stack.push(PathSegment::Iteration(2));
+    stack.push(PathSegment::DependentStep("a"));
+    assert_eq!(stack.render(), "/5/[2]/a");
+}
+
 #[test]
 fn attribute_frame_composes_role_and_place() {
     let frame = vec![

@@ -39,7 +39,11 @@ pub trait Prompt {
     fn announce(&mut self, message: &str);
 
     /// Block until the operator answers the most recent `step` prompt.
-    fn ask(&mut self) -> UserInput;
+    /// When `choices` is non-empty the operator selects one of those
+    /// response values, yielding `Done(Literali(choice))`; an empty slice
+    /// presents the plain done/skip/fail/quit verdict, yielding
+    /// `Done(Unitus)`. Skip, fail, and quit remain available either way.
+    fn ask(&mut self, choices: &[&str]) -> UserInput;
 }
 
 /// Interactive console prompt. Writes to stdout, reads line-buffered
@@ -92,9 +96,23 @@ impl<R: BufRead, W: Write> Prompt for Console<R, W> {
         let _ = writeln!(self.output, "{}", message);
     }
 
-    fn ask(&mut self) -> UserInput {
+    fn ask(&mut self, choices: &[&str]) -> UserInput {
         loop {
-            let _ = write!(self.output, "[d]one / [s]kip / [f]ail / [q]uit ? ");
+            if choices.is_empty() {
+                let _ = write!(self.output, "[d]one / [s]kip / [f]ail / [q]uit ? ");
+            } else {
+                for (i, choice) in choices
+                    .iter()
+                    .enumerate()
+                {
+                    let _ = writeln!(self.output, "  {}) {}", i + 1, choice);
+                }
+                let _ = write!(
+                    self.output,
+                    "[1-{}] / [s]kip / [f]ail / [q]uit ? ",
+                    choices.len()
+                );
+            }
             let _ = self
                 .output
                 .flush();
@@ -107,13 +125,21 @@ impl<R: BufRead, W: Write> Prompt for Console<R, W> {
                 Ok(_) => {}
                 Err(_) => return UserInput::Quit,
             }
-            match line
-                .trim_start()
+            let trimmed = line.trim();
+            // A numbered selection picks the corresponding response value.
+            if !choices.is_empty() {
+                if let Ok(n) = trimmed.parse::<usize>() {
+                    if (1..=choices.len()).contains(&n) {
+                        return UserInput::Done(Value::Literali(choices[n - 1].to_string()));
+                    }
+                }
+            }
+            match trimmed
                 .chars()
                 .next()
                 .map(|c| c.to_ascii_lowercase())
             {
-                Some('d') => return UserInput::Done(Value::Unitus),
+                Some('d') if choices.is_empty() => return UserInput::Done(Value::Unitus),
                 Some('s') => return UserInput::Skip,
                 Some('f') => return UserInput::Fail,
                 Some('q') => return UserInput::Quit,
@@ -147,7 +173,9 @@ pub enum Event {
         title: String,
     },
     Announce(String),
-    Ask,
+    Ask {
+        choices: Vec<String>,
+    },
 }
 
 #[allow(dead_code)]
@@ -198,9 +226,14 @@ impl Prompt for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(&mut self) -> UserInput {
+    fn ask(&mut self, choices: &[&str]) -> UserInput {
         self.events
-            .push(Event::Ask);
+            .push(Event::Ask {
+                choices: choices
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect(),
+            });
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
