@@ -89,6 +89,7 @@ pub enum Operation<'i> {
     String(Vec<Fragment<'i>>),
     Multiline(Option<&'i str>, Vec<&'i str>),
     Tablet(Vec<Entry<'i>>),
+    List(Vec<Operation<'i>>),
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
     Sequence(Vec<Operation<'i>>),

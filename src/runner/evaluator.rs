@@ -83,6 +83,13 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
             }
             Ok(Value::Tabularum(pairs))
         }
+        Operation::List(items) => {
+            let mut values = Vec::with_capacity(items.len());
+            for item in items {
+                values.push(evaluate(env, item)?);
+            }
+            Ok(Value::Arraeum(values))
+        }
         Operation::Bind { names, value } => {
             let v = evaluate(env, value)?;
             bind_names(env, names, v)?;

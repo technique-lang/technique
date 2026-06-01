@@ -188,6 +188,31 @@ fn render_fragments<'i>(fragments: &[(Syntax, Cow<'i, str>)], renderer: &dyn Ren
     result
 }
 
+/// A list reads as a tablet when it is non-empty and every element is a
+/// labelled value. Such lists are laid out and treated as blocks rather than
+/// inline.
+fn is_tablet_list(elements: &[Expression]) -> bool {
+    !elements.is_empty()
+        && elements
+            .iter()
+            .all(|element| {
+                if let Expression::Pair(_, _) = element {
+                    true
+                } else {
+                    false
+                }
+            })
+}
+
+/// True when an expression is a tablet-shaped list (see `is_tablet_list`).
+fn is_tablet_list_expr(expr: &Expression) -> bool {
+    if let Expression::List(elements, _) = expr {
+        is_tablet_list(elements)
+    } else {
+        false
+    }
+}
+
 struct Formatter<'i> {
     fragments: Vec<(Syntax, Cow<'i, str>)>,
     nesting: u8,
@@ -329,8 +354,12 @@ impl<'i> Formatter<'i> {
     }
 
     fn render_inline_code(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
+        if is_tablet_list_expr(expr) {
+            // Not inline; caller handles the block layout specially.
+            return Vec::new();
+        }
         match expr {
-            Expression::Tablet(_, _) | Expression::Multiline(_, _, _) => {
+            Expression::Multiline(_, _, _) => {
                 // These are not inline, caller should handle specially
                 Vec::new()
             }
@@ -657,7 +686,7 @@ impl<'i> Formatter<'i> {
                     line.add_breakable(syntax, text);
                 }
                 Descriptive::CodeInline(expr) => match expr {
-                    Expression::Tablet(_, _) => {
+                    _ if is_tablet_list_expr(expr) => {
                         line.flush();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.append_char('\n');
@@ -884,11 +913,7 @@ impl<'i> Formatter<'i> {
                 let inline = if has_separator {
                     true
                 } else if expressions.len() == 1 {
-                    if let Expression::Tablet(_, _) = &expressions[0] {
-                        false
-                    } else {
-                        true
-                    }
+                    !is_tablet_list_expr(&expressions[0])
                 } else {
                     false
                 };
@@ -1075,7 +1100,8 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_variables(variables);
             }
-            Expression::Tablet(pairs, _) => self.append_tablet(pairs),
+            Expression::Pair(pair, _) => self.append_pair(pair),
+            Expression::List(elements, _) => self.append_list(elements),
             Expression::Separator => {}
         }
     }
@@ -1205,25 +1231,53 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Structure, ")");
     }
 
-    fn append_tablet(&mut self, pairs: &'i Vec<Pair>) {
-        self.add_fragment_reference(Syntax::Structure, "[");
-        self.append_char('\n');
+    fn append_pair(&mut self, pair: &'i Pair) {
+        self.add_fragment_reference(Syntax::Quote, "\"");
+        self.add_fragment_reference(Syntax::Label, pair.label);
+        self.add_fragment_reference(Syntax::Quote, "\"");
+        self.add_fragment_reference(Syntax::Neutral, " ");
+        self.add_fragment_reference(Syntax::Structure, "=");
+        self.add_fragment_reference(Syntax::Neutral, " ");
+        self.append_expression(&pair.value);
+    }
 
-        self.increase(4);
-        for pair in pairs {
-            self.indent();
-            self.add_fragment_reference(Syntax::Quote, "\"");
-            self.add_fragment_reference(Syntax::Label, pair.label);
-            self.add_fragment_reference(Syntax::Quote, "\"");
-            self.add_fragment_reference(Syntax::Neutral, " ");
-            self.add_fragment_reference(Syntax::Structure, "=");
-            self.add_fragment_reference(Syntax::Neutral, " ");
-            self.append_expression(&pair.value);
-            self.append_char('\n');
+    /// A list whose elements are all labelled (a tablet) is laid out one
+    /// element per line; any other list, and the empty list, is inline.
+    fn append_list(&mut self, elements: &'i Vec<Expression>) {
+        if elements.is_empty() {
+            self.add_fragment_reference(Syntax::Structure, "[]");
+            return;
         }
-        self.decrease(4);
 
-        self.indent();
+        if is_tablet_list(elements) {
+            self.add_fragment_reference(Syntax::Structure, "[");
+            self.append_char('\n');
+
+            self.increase(4);
+            for element in elements {
+                self.indent();
+                self.append_expression(element);
+                self.append_char('\n');
+            }
+            self.decrease(4);
+
+            self.indent();
+            self.add_fragment_reference(Syntax::Structure, "]");
+            return;
+        }
+
+        self.add_fragment_reference(Syntax::Structure, "[");
+        for (i, element) in elements
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.add_fragment_reference(Syntax::Structure, ",");
+            }
+            self.add_fragment_reference(Syntax::Neutral, " ");
+            self.append_expression(element);
+        }
+        self.add_fragment_reference(Syntax::Neutral, " ");
         self.add_fragment_reference(Syntax::Structure, "]");
     }
 }

@@ -834,6 +834,36 @@ run :
 }
 
 #[test]
+fn expression_list_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    [ 1, 4, 9 ]
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::List(items) = &ops[0] else {
+        panic!("expected List, got {:?}", ops[0]);
+    };
+    assert_eq!(items.len(), 3);
+    for item in items {
+        let Operation::Number(_) = item else {
+            panic!("expected Number element, got {:?}", item);
+        };
+    }
+}
+
+#[test]
 fn foreach_codeblock_becomes_loop_with_subscopes_as_body() {
     let source = r#"
 % technique v1
