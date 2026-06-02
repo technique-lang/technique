@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::language;
 use crate::parsing;
-use crate::program::{Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
+use crate::program::{ExecutableRef, Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
 use crate::translation::translate;
 
 #[test]
@@ -728,12 +728,10 @@ run :
     let Operation::Execute(executable) = &ops[0] else {
         panic!("expected Execute, got {:?}", ops[0]);
     };
-    assert_eq!(
-        executable
-            .target
-            .value,
-        "sum"
-    );
+    let ExecutableRef::Unresolved(target) = &executable.target else {
+        panic!("expected Unresolved, got {:?}", executable.target);
+    };
+    assert_eq!(target.value, "sum");
     assert_eq!(
         executable
             .arguments
@@ -1036,12 +1034,10 @@ run :
     let Operation::Execute(executable) = &ops[0] else {
         panic!("expected Execute, got {:?}", ops[0]);
     };
-    assert_eq!(
-        executable
-            .target
-            .value,
-        "journal"
-    );
+    let ExecutableRef::Unresolved(target) = &executable.target else {
+        panic!("expected Unresolved, got {:?}", executable.target);
+    };
+    assert_eq!(target.value, "journal");
 }
 
 #[test]
@@ -1559,9 +1555,10 @@ delete_rds_instance :
         .iter()
         .map(|op| match op {
             Operation::Execute(executable) => {
-                executable
-                    .target
-                    .value
+                let ExecutableRef::Unresolved(target) = &executable.target else {
+                    panic!("expected Unresolved, got {:?}", executable.target);
+                };
+                target.value
             }
             other => panic!("expected Execute, got {:?}", other),
         })

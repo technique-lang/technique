@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::language::Identifier;
+use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
-use crate::program::{Fragment, Operation, Ordinal, Program, Subroutine};
+use crate::program::{
+    Executable, ExecutableRef, Fragment, Operation, Ordinal, Program, Subroutine,
+};
 use crate::runner::evaluator::Environment;
+use crate::runner::library::Library;
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
 use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
@@ -104,6 +107,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     let outcome = runner
         .run()
@@ -146,6 +150,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -176,6 +181,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -218,6 +224,7 @@ fn two_steps_prompted_in_source_order() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -259,6 +266,7 @@ fn pre_completed_step_short_circuits() {
         completed,
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -295,6 +303,7 @@ fn quit_propagates_and_stops_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     let outcome = runner
         .run()
@@ -353,6 +362,7 @@ fn section_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -399,6 +409,7 @@ fn section_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -437,6 +448,7 @@ fn parallel_step_index_starts_at_one() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -482,6 +494,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -531,6 +544,7 @@ helper :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -575,6 +589,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -627,6 +642,7 @@ fn loop_inside_step_produces_one_result() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -681,6 +697,7 @@ fn repeat_loops_until_quit() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -748,6 +765,7 @@ fn foreach_walks_body_once_per_list_element() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -769,6 +787,85 @@ fn foreach_walks_body_once_per_list_element() {
         })
         .collect();
     assert_eq!(steps, vec![("/[1]/a", "first"), ("/[2]/a", "second")]);
+}
+
+#[test]
+fn foreach_over_seq_builtin_runs() {
+    let mut fixture = StoreFixture::new("foreach-seq");
+
+    // The iterable is the result of the `seq` builtin rather than a seeded
+    // env binding, exercising the evaluator's Execute dispatch end to end.
+    let library = Library::core();
+    let seq = library
+        .resolve("seq")
+        .expect("seq registered");
+
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("n"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let names = [Identifier::new("n")];
+    let over = Operation::Execute(Executable {
+        target: ExecutableRef::Resolved(seq),
+        arguments: vec![
+            Operation::Number(LangNumeric::Integral(1)),
+            Operation::Number(LangNumeric::Integral(3)),
+        ],
+    });
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(over)),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+        library,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    // seq(1, 3) yields [1, 2, 3]; the body walks once per element with `n`
+    // bound to each in turn.
+    assert_eq!(
+        steps,
+        vec![("/[1]/a", "1"), ("/[2]/a", "2"), ("/[3]/a", "3")]
+    );
 }
 
 #[test]
@@ -829,6 +926,7 @@ fn foreach_destructures_tuple_elements() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -886,6 +984,7 @@ fn foreach_widens_primitive_to_singleton() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -943,6 +1042,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         env,
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::NotIterable) => {}
@@ -966,6 +1066,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         env,
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::NotIterable) => {}
@@ -980,6 +1081,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         Environment::new(),
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
@@ -1080,6 +1182,7 @@ greet(name) :
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -1122,6 +1225,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()

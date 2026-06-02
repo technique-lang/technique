@@ -1,22 +1,25 @@
-use super::messages::{generate_error_message, generate_runner_error, generate_translation_error};
+use super::messages::{
+    generate_error_message, generate_linking_error, generate_runner_error,
+    generate_translation_error,
+};
 use owo_colors::OwoColorize;
 use std::path::Path;
 use technique::{
-    formatting::Render, language::LoadingError, parsing::ParsingError, runner::RunnerError,
-    translation::TranslationError,
+    formatting::Render, language::LoadingError, linking::LinkingError, parsing::ParsingError,
+    runner::RunnerError, translation::TranslationError,
 };
 
-/// Format a parsing error with full details including source code context
-pub fn full_parsing_error<'i>(
-    error: &ParsingError,
-    filename: &'i Path,
-    source: &'i str,
-    renderer: &impl Render,
+/// Render an error with full source context: a header line, the offending
+/// source line, a caret underline of the given width, and the detail text.
+fn full_error(
+    problem: String,
+    details: String,
+    filename: &Path,
+    source: &str,
+    offset: usize,
+    width: usize,
 ) -> String {
-    let (problem, details) = generate_error_message(error, renderer);
     let input = generate_filename(filename);
-    let offset = error.offset();
-    let width = error.width();
 
     let i = calculate_line_number(source, offset);
     let j = calculate_column_number(source, offset);
@@ -67,6 +70,48 @@ pub fn full_parsing_error<'i>(
     .to_string()
 }
 
+/// Format a parsing error with full details including source code context
+pub fn full_parsing_error<'i>(
+    error: &ParsingError,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_error_message(error, renderer);
+    full_error(
+        problem,
+        details,
+        filename,
+        source,
+        error.offset(),
+        error.width(),
+    )
+}
+
+/// Format a translation error with full details including source code context
+pub fn full_translation_error<'i>(
+    error: &TranslationError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_translation_error(error, renderer);
+    let span = error.span();
+    full_error(problem, details, filename, source, span.offset, span.length)
+}
+
+/// Format a linking error with full details including source code context
+pub fn full_linking_error<'i>(
+    error: &LinkingError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_linking_error(error, renderer);
+    let span = error.span();
+    full_error(problem, details, filename, source, span.offset, span.length)
+}
+
 /// Format a parsing error with concise single-line output
 pub fn concise_parsing_error<'i>(
     error: &ParsingError,
@@ -100,6 +145,33 @@ pub fn concise_translation_error<'i>(
     renderer: &impl Render,
 ) -> String {
     let (problem, _) = generate_translation_error(error, renderer);
+    let input = generate_filename(filename);
+    let offset = error
+        .span()
+        .offset;
+    let i = calculate_line_number(source, offset);
+    let j = calculate_column_number(source, offset);
+    let line = i + 1;
+    let column = j + 1;
+
+    format!(
+        "{}: {}:{}:{} {}",
+        "error".bright_red(),
+        input,
+        line,
+        column,
+        problem.bold(),
+    )
+}
+
+/// Format a linking error with concise single-line output.
+pub fn concise_linking_error<'i>(
+    error: &LinkingError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, _) = generate_linking_error(error, renderer);
     let input = generate_filename(filename);
     let offset = error
         .span()

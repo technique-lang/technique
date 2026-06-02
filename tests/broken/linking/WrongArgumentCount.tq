@@ -1,0 +1,5 @@
+% technique v1
+
+powerdown :
+
+    1.  Inhibit the nodes { seq(1, 2, 3) }

@@ -5,13 +5,14 @@ use std::io;
 use std::path::PathBuf;
 
 use super::evaluator::Environment;
+use super::library::Library;
 use super::path::{PathSegment, QualifiedPath};
 use super::prompt::{Prompt, UserInput};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
 use crate::language;
-use crate::program::{Executable, Invocable, Operation, Ordinal, Program, SubroutineRef};
+use crate::program::{ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
 /// What executing an Operation (or evaluating a Step at any scale)
@@ -45,17 +46,38 @@ pub enum Failure {
 #[derive(Debug)]
 pub enum RunnerError {
     NoSuchRun(RunId),
-    StoreError { path: PathBuf, error: io::Error },
-    MalformedRecord { run_id: RunId, error: RecordError },
+    StoreError {
+        path: PathBuf,
+        error: io::Error,
+    },
+    MalformedRecord {
+        run_id: RunId,
+        error: RecordError,
+    },
     StartMissing(RunId),
     InvalidRunId(String),
     MissingEntryProcedure,
     UnboundVariable(String),
-    BindArityMismatch { expected: usize, actual: usize },
-    BindNotTuple { expected: usize },
+    BindArityMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    BindNotTuple {
+        expected: usize,
+    },
     NotIterable,
-    ParameterArityMismatch { expected: usize, actual: usize },
-    ParameterUnexpected { actual: usize },
+    InvalidArgument {
+        function: &'static str,
+        expected: &'static str,
+    },
+    UnresolvedFunction(String),
+    ParameterArityMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    ParameterUnexpected {
+        actual: usize,
+    },
     UserQuit,
 }
 
@@ -72,6 +94,7 @@ pub struct Runner<'i, P: Prompt> {
     prompt: P,
     env: Environment,
     path: QualifiedPath<'i>,
+    library: Library,
 }
 
 impl<'i, P: Prompt> Runner<'i, P> {
@@ -81,6 +104,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         completed: HashSet<String>,
         prompt: P,
         env: Environment,
+        library: Library,
     ) -> Self {
         Runner {
             program,
@@ -89,6 +113,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             prompt,
             env,
             path: QualifiedPath::new(),
+            library,
         }
     }
 
@@ -146,6 +171,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             } => self.walk_loop(names, over.as_deref(), body),
             Operation::Invoke(invocable) => self.walk_invoke(invocable),
             Operation::Execute(executable) => {
+                let function = self.executable_name(&executable.target);
                 let qualified = self
                     .path
                     .render();
@@ -157,16 +183,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     run_id,
                     path: qualified,
                     state: State::Execute {
-                        function: executable
-                            .target
-                            .value
-                            .to_string(),
+                        function: function.clone(),
                     },
                 };
                 self.appender
                     .append(&record)?;
                 self.prompt
-                    .announce(&describe_execute(executable));
+                    .announce(&describe_execute(&function));
                 Ok(Outcome::Done(Value::Unitus))
             }
             Operation::Bind { .. }
@@ -176,9 +199,23 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_) => {
-                let value = super::evaluator::evaluate(&mut self.env, op)?;
+                let value = super::evaluator::evaluate(&mut self.env, &self.library, op)?;
                 Ok(Outcome::Done(value))
             }
+        }
+    }
+
+    /// The name of a function target. FIXME an unresolved one (awaiting
+    /// domain linking) carries its identifier still.
+    fn executable_name(&self, target: &ExecutableRef<'_>) -> String {
+        match target {
+            ExecutableRef::Resolved(id) => self
+                .library
+                .name(*id)
+                .to_string(),
+            ExecutableRef::Unresolved(id) => id
+                .value
+                .to_string(),
         }
     }
 
@@ -259,7 +296,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 }
             }
             Some(expr) => {
-                let items = match super::evaluator::evaluate(&mut self.env, expr)? {
+                let items = match super::evaluator::evaluate(&mut self.env, &self.library, expr)? {
                     Value::Arraeum(items) => items,
                     // A scalar in list context is a singleton list.
                     value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
@@ -335,7 +372,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
         let title_text = match title {
-            Some(op) => match super::evaluator::evaluate(&mut self.env, op)? {
+            Some(op) => match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
                 Value::Literali(s) => s,
                 other => other.to_string(),
             },
@@ -426,7 +463,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             if !description_text.is_empty() {
                 description_text.push('\n');
             }
-            match super::evaluator::evaluate(&mut self.env, op)? {
+            match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
                 Value::Literali(s) => description_text.push_str(&s),
                 other => description_text.push_str(&other.to_string()),
             }
@@ -476,13 +513,8 @@ fn describe_loop(
     }
 }
 
-fn describe_execute(executable: &Executable<'_>) -> String {
-    format!(
-        "{}()",
-        executable
-            .target
-            .value
-    )
+fn describe_execute(function: &str) -> String {
+    format!("{}()", function)
 }
 
 /// Lift a `UserInput` from the prompt into the runner's `Outcome`.
