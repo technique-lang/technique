@@ -398,9 +398,7 @@ fn main() {
                         }
                         eprintln!(
                             "{}",
-                            problem::concise_translation_error(
-                                &error, &filename, &content, &Terminal
-                            )
+                            problem::full_translation_error(&error, &filename, &content, &Terminal)
                         );
                     }
                     std::process::exit(1);
@@ -431,7 +429,7 @@ fn main() {
                     }
                     eprintln!(
                         "{}",
-                        problem::concise_linking_error(&error, &filename, &content, &Terminal)
+                        problem::full_linking_error(&error, &filename, &content, &Terminal)
                     );
                 }
                 std::process::exit(1);

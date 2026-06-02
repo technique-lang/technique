@@ -9,17 +9,17 @@ use technique::{
     runner::RunnerError, translation::TranslationError,
 };
 
-/// Format a parsing error with full details including source code context
-pub fn full_parsing_error<'i>(
-    error: &ParsingError,
-    filename: &'i Path,
-    source: &'i str,
-    renderer: &impl Render,
+/// Render an error with full source context: a header line, the offending
+/// source line, a caret underline of the given width, and the detail text.
+fn full_error(
+    problem: String,
+    details: String,
+    filename: &Path,
+    source: &str,
+    offset: usize,
+    width: usize,
 ) -> String {
-    let (problem, details) = generate_error_message(error, renderer);
     let input = generate_filename(filename);
-    let offset = error.offset();
-    let width = error.width();
 
     let i = calculate_line_number(source, offset);
     let j = calculate_column_number(source, offset);
@@ -68,6 +68,48 @@ pub fn full_parsing_error<'i>(
     )
     .trim_ascii()
     .to_string()
+}
+
+/// Format a parsing error with full details including source code context
+pub fn full_parsing_error<'i>(
+    error: &ParsingError,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_error_message(error, renderer);
+    full_error(
+        problem,
+        details,
+        filename,
+        source,
+        error.offset(),
+        error.width(),
+    )
+}
+
+/// Format a translation error with full details including source code context
+pub fn full_translation_error<'i>(
+    error: &TranslationError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_translation_error(error, renderer);
+    let span = error.span();
+    full_error(problem, details, filename, source, span.offset, span.length)
+}
+
+/// Format a linking error with full details including source code context
+pub fn full_linking_error<'i>(
+    error: &LinkingError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_linking_error(error, renderer);
+    let span = error.span();
+    full_error(problem, details, filename, source, span.offset, span.length)
 }
 
 /// Format a parsing error with concise single-line output

@@ -1095,10 +1095,10 @@ pub fn generate_linking_error<'i>(
             Function {
                 target: Identifier::new("enumerate"),
                 parameters: vec![
-                    Expression::String(vec![Piece::Text("Men")], Span::default()),
-                    Expression::String(vec![Piece::Text("Women")], Span::default()),
+                    Expression::String(vec![Piece::Text("men")], Span::default()),
+                    Expression::String(vec![Piece::Text("women")], Span::default()),
                     Expression::String(
-                        vec![Piece::Text("Small Furry Creatures From Alpha Centauri")],
+                        vec![Piece::Text("small furry creatures from Alpha Centauri")],
                         Span::default(),
                     ),
                 ],
@@ -1119,7 +1119,9 @@ pub fn generate_linking_error<'i>(
             ),
             format!(
                 r#"
-A function  must be called with the correct number of arguments. Example functions:
+A function must be called with the correct number of arguments. Some example
+functions calls:
+
     {}
     {}
     {}
