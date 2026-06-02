@@ -70,6 +70,7 @@ pub enum RunnerError {
         function: &'static str,
         expected: &'static str,
     },
+    UnresolvedFunction(String),
     ParameterArityMismatch {
         expected: usize,
         actual: usize,
@@ -198,7 +199,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_) => {
-                let value = super::evaluator::evaluate(&mut self.env, op)?;
+                let value = super::evaluator::evaluate(&mut self.env, &self.library, op)?;
                 Ok(Outcome::Done(value))
             }
         }
@@ -295,7 +296,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 }
             }
             Some(expr) => {
-                let items = match super::evaluator::evaluate(&mut self.env, expr)? {
+                let items = match super::evaluator::evaluate(&mut self.env, &self.library, expr)? {
                     Value::Arraeum(items) => items,
                     // A scalar in list context is a singleton list.
                     value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
@@ -371,7 +372,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
         let title_text = match title {
-            Some(op) => match super::evaluator::evaluate(&mut self.env, op)? {
+            Some(op) => match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
                 Value::Literali(s) => s,
                 other => other.to_string(),
             },
@@ -462,7 +463,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             if !description_text.is_empty() {
                 description_text.push('\n');
             }
-            match super::evaluator::evaluate(&mut self.env, op)? {
+            match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
                 Value::Literali(s) => description_text.push_str(&s),
                 other => description_text.push_str(&other.to_string()),
             }

@@ -1215,6 +1215,10 @@ you can iterate over.
             format!("Wrong argument type passed to {}()", function),
             format!("The {}() function expected {} but was given something else.", function, expected),
         ),
+        RunnerError::UnresolvedFunction(function) => (
+            format!("Unresolved function {}()", function),
+            format!("The function {}() is not a builtin and is not provided by the domain.", function),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),

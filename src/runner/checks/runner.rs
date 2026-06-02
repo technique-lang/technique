@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::language::Identifier;
+use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
-use crate::program::{Fragment, Operation, Ordinal, Program, Subroutine};
+use crate::program::{
+    Executable, ExecutableRef, Fragment, Operation, Ordinal, Program, Subroutine,
+};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::prompt::{Event, Mock, UserInput};
@@ -785,6 +787,85 @@ fn foreach_walks_body_once_per_list_element() {
         })
         .collect();
     assert_eq!(steps, vec![("/[1]/a", "first"), ("/[2]/a", "second")]);
+}
+
+#[test]
+fn foreach_over_seq_builtin_runs() {
+    let mut fixture = StoreFixture::new("foreach-seq");
+
+    // The iterable is the result of the `seq` builtin rather than a seeded
+    // env binding, exercising the evaluator's Execute dispatch end to end.
+    let library = Library::core();
+    let seq = library
+        .resolve("seq")
+        .expect("seq registered");
+
+    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
+        Identifier::new("n"),
+    ))]);
+    let substep = Operation::Step {
+        ordinal: Ordinal::Dependent("a"),
+        attributes: Vec::new(),
+        description: vec![description],
+        body: Box::new(Operation::Sequence(Vec::new())),
+        responses: Vec::new(),
+    };
+    let names = [Identifier::new("n")];
+    let over = Operation::Execute(Executable {
+        target: ExecutableRef::Resolved(seq),
+        arguments: vec![
+            Operation::Number(LangNumeric::Integral(1)),
+            Operation::Number(LangNumeric::Integral(3)),
+        ],
+    });
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(over)),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+        library,
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    // seq(1, 3) yields [1, 2, 3]; the body walks once per element with `n`
+    // bound to each in turn.
+    assert_eq!(
+        steps,
+        vec![("/[1]/a", "1"), ("/[2]/a", "2"), ("/[3]/a", "3")]
+    );
 }
 
 #[test]

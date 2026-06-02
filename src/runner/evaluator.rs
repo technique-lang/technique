@@ -3,8 +3,9 @@
 
 use std::collections::HashMap;
 
+use super::library::Library;
 use super::runner::RunnerError;
-use crate::program::{Fragment, Operation};
+use crate::program::{ExecutableRef, Fragment, Operation};
 use crate::value::{Numeric, Value};
 
 /// Variable bindings established by the walker as `Bind` operations
@@ -40,11 +41,14 @@ impl Environment {
 /// specifically at this point values of variables need to be known from the
 /// `Environment` otherwise the `Operation` can't be evaluated.
 ///
-/// Non-value variants (Section / Step / Loop / Invoke / Execute) evaluate to
-/// `Unitus` rather than failing — `evaluate` is only meant to be called on
-/// value-bearing positions and that fallback keeps it total.
+/// A resolved `Execute` dispatches through the passed in `Library` to its
+/// builtin, evaluating its arguments before doing so.
 #[allow(dead_code)]
-pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, RunnerError> {
+pub fn evaluate<'i>(
+    env: &mut Environment,
+    library: &Library,
+    op: &Operation<'i>,
+) -> Result<Value, RunnerError> {
     match op {
         Operation::Variable(id) => env
             .lookup(id.value)
@@ -61,7 +65,7 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
             for fragment in fragments {
                 match fragment {
                     Fragment::Text(t) => text.push_str(t),
-                    Fragment::Interpolation(inner) => match evaluate(env, inner)? {
+                    Fragment::Interpolation(inner) => match evaluate(env, library, inner)? {
                         Value::Literali(s) => text.push_str(&s),
                         other => text.push_str(&other.to_string()),
                     },
@@ -73,7 +77,7 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
         Operation::Tablet(entries) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {
-                let v = evaluate(env, &entry.value)?;
+                let v = evaluate(env, library, &entry.value)?;
                 pairs.push((
                     entry
                         .label
@@ -86,27 +90,44 @@ pub fn evaluate<'i>(env: &mut Environment, op: &Operation<'i>) -> Result<Value, 
         Operation::List(items) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
-                values.push(evaluate(env, item)?);
+                values.push(evaluate(env, library, item)?);
             }
             Ok(Value::Arraeum(values))
         }
         Operation::Bind { names, value } => {
-            let v = evaluate(env, value)?;
+            let v = evaluate(env, library, value)?;
             bind_names(env, names, v)?;
             Ok(Value::Unitus)
         }
         Operation::Sequence(ops) => {
             let mut last = Value::Unitus;
             for child in ops {
-                last = evaluate(env, child)?;
+                last = evaluate(env, library, child)?;
             }
             Ok(last)
         }
+        Operation::Execute(executable) => match &executable.target {
+            ExecutableRef::Resolved(id) => {
+                let mut args = Vec::with_capacity(
+                    executable
+                        .arguments
+                        .len(),
+                );
+                for arg in &executable.arguments {
+                    args.push(evaluate(env, library, arg)?);
+                }
+                library.call(*id, &args)
+            }
+            ExecutableRef::Unresolved(target) => Err(RunnerError::UnresolvedFunction(
+                target
+                    .value
+                    .to_string(),
+            )),
+        },
         Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }
-        | Operation::Invoke(_)
-        | Operation::Execute(_) => Ok(Value::Unitus),
+        | Operation::Invoke(_) => Ok(Value::Unitus),
     }
 }
 
