@@ -174,11 +174,11 @@ fn main() {
                         .long("until")
                         .value_name("phase")
                         .value_parser(["parsing", "translation", "linking"])
-                        .default_value("parsing")
+                        .default_value("linking")
                         .action(ArgAction::Set)
-                        .help("Stop compilation after the given phase is complete so that the result can be inspected. \
-                            Use this in conjunction with the --output option. The phases are: \
-                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree;  \
+                        .help("Stop compilation early, after the given phase is complete. \
+                            Use this in conjunction with the --output option so that the result can be inspected. The phases are: \
+                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree; \
                             translation, which resolves names, checks references, and ensures the input is valid Technique; then finally \
                             linking, which ensures functions being called are available, checks parameters being passed, and provides the context to the execution environment.")
                 )
