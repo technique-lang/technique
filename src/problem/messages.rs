@@ -1,7 +1,7 @@
 use crate::problem::Present;
 use technique::{
-    formatting::Render, language::*, parsing::ParsingError, runner::RunnerError,
-    translation::TranslationError,
+    formatting::Render, language::*, linking::LinkingError, parsing::ParsingError,
+    runner::RunnerError, translation::TranslationError,
 };
 
 /// Generate problem and detail messages for parsing errors using AST construction
@@ -1019,7 +1019,7 @@ Hyphens, underscores, spaces, or subscripts are not valid in unit symbols.
     }
 }
 
-/// Generate problem and detail messages for errors occuring during the
+/// Generate problem and detail messages for errors occurring during the
 /// translation phase.
 pub fn generate_translation_error<'i>(
     error: &TranslationError<'i>,
@@ -1059,7 +1059,82 @@ pub fn generate_translation_error<'i>(
     }
 }
 
-/// Generate problem and detail messages for errors occuring when a proceure
+/// Generate problem and detail messages for errors occurring when function
+/// references are linked against the available function table.
+pub fn generate_linking_error<'i>(
+    error: &LinkingError<'i>,
+    renderer: &dyn Render,
+) -> (String, String) {
+    let examples = vec![
+        Expression::Execution(
+            Function {
+                target: Identifier::new("panic"),
+                parameters: vec![],
+            },
+            Span::default(),
+        ),
+        Expression::Execution(
+            Function {
+                target: Identifier::new("operate_kettle"),
+                parameters: vec![Expression::Number(
+                    Numeric::Scientific(Quantity {
+                        mantissa: Decimal {
+                            number: 100,
+                            precision: 0,
+                        },
+                        uncertainty: None,
+                        magnitude: None,
+                        symbol: "°C",
+                    }),
+                    Span::default(),
+                )],
+            },
+            Span::default(),
+        ),
+        Expression::Execution(
+            Function {
+                target: Identifier::new("enumerate"),
+                parameters: vec![
+                    Expression::String(vec![Piece::Text("Men")], Span::default()),
+                    Expression::String(vec![Piece::Text("Women")], Span::default()),
+                    Expression::String(
+                        vec![Piece::Text("Small Furry Creatures From Alpha Centauri")],
+                        Span::default(),
+                    ),
+                ],
+            },
+            Span::default(),
+        ),
+    ];
+
+    match error {
+        LinkingError::ArityMismatch {
+            function: Identifier { value: name, .. },
+            expected,
+            actual,
+        } => (
+            format!(
+                "Wrong number of arguments to {}(), expected {} but called with {}",
+                name, expected, actual
+            ),
+            format!(
+                r#"
+A function  must be called with the correct number of arguments. Example functions:
+    {}
+    {}
+    {}
+                "#,
+                examples[0].present(renderer),
+                examples[1].present(renderer),
+                examples[2].present(renderer)
+            )
+            .trim_ascii()
+            .to_string(),
+        ),
+    }
+}
+
+/// Generate problem and detail messages for errors occurring when a procedure
 /// is being evaluated by the runner.
 pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (String, String) {
     match error {

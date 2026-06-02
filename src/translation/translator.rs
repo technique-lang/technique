@@ -6,8 +6,8 @@ use crate::language;
 use crate::language::{Document, Span};
 
 use crate::program::{
-    Entry, Executable, Fragment, Invocable, Operation, Ordinal, Program, Subroutine, SubroutineId,
-    SubroutineRef,
+    Entry, Executable, ExecutableRef, Fragment, Invocable, Operation, Ordinal, Program, Subroutine,
+    SubroutineId, SubroutineRef,
 };
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
@@ -703,7 +703,7 @@ impl<'i> Translator<'i> {
                 Operation::Invoke(self.translate_invocation(invocation))
             }
             language::Expression::Execution(function, _) => Operation::Execute(Executable {
-                target: function.target,
+                target: ExecutableRef::Unresolved(function.target),
                 arguments: function
                     .parameters
                     .iter()

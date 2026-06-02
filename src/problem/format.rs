@@ -1,9 +1,12 @@
-use super::messages::{generate_error_message, generate_runner_error, generate_translation_error};
+use super::messages::{
+    generate_error_message, generate_linking_error, generate_runner_error,
+    generate_translation_error,
+};
 use owo_colors::OwoColorize;
 use std::path::Path;
 use technique::{
-    formatting::Render, language::LoadingError, parsing::ParsingError, runner::RunnerError,
-    translation::TranslationError,
+    formatting::Render, language::LoadingError, linking::LinkingError, parsing::ParsingError,
+    runner::RunnerError, translation::TranslationError,
 };
 
 /// Format a parsing error with full details including source code context
@@ -100,6 +103,33 @@ pub fn concise_translation_error<'i>(
     renderer: &impl Render,
 ) -> String {
     let (problem, _) = generate_translation_error(error, renderer);
+    let input = generate_filename(filename);
+    let offset = error
+        .span()
+        .offset;
+    let i = calculate_line_number(source, offset);
+    let j = calculate_column_number(source, offset);
+    let line = i + 1;
+    let column = j + 1;
+
+    format!(
+        "{}: {}:{}:{} {}",
+        "error".bright_red(),
+        input,
+        line,
+        column,
+        problem.bold(),
+    )
+}
+
+/// Format a linking error with concise single-line output.
+pub fn concise_linking_error<'i>(
+    error: &LinkingError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, _) = generate_linking_error(error, renderer);
     let input = generate_filename(filename);
     let offset = error
         .span()

@@ -10,8 +10,9 @@ use tracing_subscriber::{self, EnvFilter};
 
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
+use technique::linking;
 use technique::parsing;
-use technique::runner::{self, Outcome, RunId};
+use technique::runner::{self, Library, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -31,6 +32,7 @@ enum Output {
 enum Phase {
     Parsing,
     Translation,
+    Linking,
 }
 
 // Page dimensions in millimetres
@@ -171,13 +173,14 @@ fn main() {
                     Arg::new("until")
                         .long("until")
                         .value_name("phase")
-                        .value_parser(["parsing", "translation"])
+                        .value_parser(["parsing", "translation", "linking"])
                         .default_value("parsing")
                         .action(ArgAction::Set)
                         .help("Stop compilation after the given phase is complete so that the result can be inspected. \
                             Use this in conjunction with the --output option. The phases are: \
-                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree; then \
-                            translation, which resolves names, checks references, and ensures the input is valid Technique.")
+                            parsing, where the input is parsed from the surface language to an internal abstract syntax tree;  \
+                            translation, which resolves names, checks references, and ensures the input is valid Technique; then finally \
+                            linking, which ensures functions being called are available, checks parameters being passed, and provides the context to the execution environment.")
                 )
                 .arg(
                     Arg::new("filename")
@@ -330,6 +333,7 @@ fn main() {
             let until = match until.as_str() {
                 "parsing" => Phase::Parsing,
                 "translation" => Phase::Translation,
+                "linking" => Phase::Linking,
                 _ => panic!("Unrecognized --until value"),
             };
 
@@ -382,7 +386,7 @@ fn main() {
                 std::process::exit(0);
             }
 
-            let program = match translation::translate(&technique) {
+            let mut program = match translation::translate(&technique) {
                 Ok(program) => program,
                 Err(errors) => {
                     for (i, error) in errors
@@ -404,6 +408,36 @@ fn main() {
             };
 
             if let Phase::Translation = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", program);
+                    }
+                    Output::Silent => {}
+                }
+                std::process::exit(0);
+            }
+
+            let library = Library::core();
+            if let Err(errors) = linking::link(&mut program, &library) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::concise_linking_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
+
+            if let Phase::Linking = until {
                 match output {
                     Output::Terminal => {
                         eprintln!("{}", "ok".bright_green());
@@ -660,7 +694,7 @@ fn main() {
                 }
             };
 
-            let program = match translation::translate(&technique) {
+            let mut program = match translation::translate(&technique) {
                 Ok(program) => program,
                 Err(errors) => {
                     for (i, error) in errors
@@ -681,7 +715,24 @@ fn main() {
                 }
             };
 
-            match runner::start(filename, &program, &arguments) {
+            let library = Library::core();
+            if let Err(errors) = linking::link(&mut program, &library) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::concise_linking_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
+
+            match runner::start(filename, &program, &arguments, library) {
                 Ok((run_id, Outcome::Quit)) => {
                     eprintln!("paused; resume with `technique resume {}`", run_id.render());
                     std::process::exit(0);
@@ -743,7 +794,7 @@ fn main() {
                 }
             };
 
-            let program = match translation::translate(&technique) {
+            let mut program = match translation::translate(&technique) {
                 Ok(program) => program,
                 Err(errors) => {
                     for (i, error) in errors
@@ -764,7 +815,24 @@ fn main() {
                 }
             };
 
-            match runner::resume(run_id, &program) {
+            let library = Library::core();
+            if let Err(errors) = linking::link(&mut program, &library) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::concise_linking_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
+
+            match runner::resume(run_id, &program, library) {
                 Ok(Outcome::Quit) => {
                     eprintln!(
                         "paused; continue with `technique resume {}`",

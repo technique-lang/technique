@@ -147,12 +147,11 @@ pub enum SubroutineRef<'i> {
 
 /// Lowered form of `language::Function`. Functions live in a separate
 /// namespace from procedures: they are built-in or host-provided. The target
-/// is kept as a plain Identifier here; resolution happens at a later
-/// domain-linking phase, against whatever functions the executing domain
-/// provides.
+/// is an `ExecutableRef`, resolved against the available function table
+/// during the linking phase.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Executable<'i> {
-    pub target: language::Identifier<'i>,
+    pub target: ExecutableRef<'i>,
     pub arguments: Vec<Operation<'i>>,
 }
 
