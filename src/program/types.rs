@@ -78,10 +78,16 @@ impl<'i> Subroutine<'i> {
     }
 }
 
-/// Every node of the Intermediate Representation form resulting from
-/// desugaring the surface language is an `Operation` (c.f. opcode in an
-/// instruction set). Later this will be instantiated into a tree that the
-/// interpreter can walks recursively and reduce.
+/// Every node of the Intermediate Representation resulting from desugaring
+/// the surface language is an `Operation`. Collectively they form a tree that
+/// the runner can walk directly, being immutable means it can be revisited
+/// when needed by loop nodes. Structural nodes (`Section`, `Step`, `Loop`,
+/// ...) are traversed for their effects, and value-bearing nodes are reduced
+/// to a `Value` against a separate, mutable `Environment` (see
+/// `evaluator::evaluate`).
+///
+/// The Operation tree is not evaluated in place. All per-run state lives in
+/// the `runner::Environment`.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Operation<'i> {
     Variable(language::Identifier<'i>),
