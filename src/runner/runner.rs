@@ -46,17 +46,37 @@ pub enum Failure {
 #[derive(Debug)]
 pub enum RunnerError {
     NoSuchRun(RunId),
-    StoreError { path: PathBuf, error: io::Error },
-    MalformedRecord { run_id: RunId, error: RecordError },
+    StoreError {
+        path: PathBuf,
+        error: io::Error,
+    },
+    MalformedRecord {
+        run_id: RunId,
+        error: RecordError,
+    },
     StartMissing(RunId),
     InvalidRunId(String),
     MissingEntryProcedure,
     UnboundVariable(String),
-    BindArityMismatch { expected: usize, actual: usize },
-    BindNotTuple { expected: usize },
+    BindArityMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    BindNotTuple {
+        expected: usize,
+    },
     NotIterable,
-    ParameterArityMismatch { expected: usize, actual: usize },
-    ParameterUnexpected { actual: usize },
+    InvalidArgument {
+        function: &'static str,
+        expected: &'static str,
+    },
+    ParameterArityMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    ParameterUnexpected {
+        actual: usize,
+    },
     UserQuit,
 }
 

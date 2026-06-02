@@ -2,7 +2,7 @@
 
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
-use crate::value::Value;
+use crate::value::{Numeric, Value};
 
 /// A native function: implemented in Rust, taking already-evaluated
 /// arguments.
@@ -29,8 +29,19 @@ impl Library {
     /// functions (functions supplied by the host environment) are declared
     /// and implemented by the relevant domain the Technique is executing in.
     pub fn core() -> Self {
+        let entry = |name, arity, pointer| Entry {
+            name,
+            arity,
+            pointer,
+        };
         Library {
-            functions: Vec::new(),
+            functions: vec![
+                entry("seq", 2, seq as Native),
+                entry("zip", 2, zip as Native),
+                entry("values", 1, values as Native),
+                entry("labels", 1, labels as Native),
+                entry("pairs", 1, pairs as Native),
+            ],
         }
     }
 
@@ -55,6 +66,100 @@ impl Library {
     /// Call the function at `id` with (already evaluated) arguments.
     pub fn call(&self, id: ExecutableId, args: &[Value]) -> Result<Value, RunnerError> {
         (self.functions[id.0].pointer)(args)
+    }
+}
+
+/// `seq(a, b)` — the inclusive integer range from `a` to `b` as a list,
+/// empty when `a > b`.
+fn seq(args: &[Value]) -> Result<Value, RunnerError> {
+    let a = as_integer("seq", &args[0])?;
+    let b = as_integer("seq", &args[1])?;
+    let range = (a..=b)
+        .map(|n| Value::Quanticle(Numeric::Integral(n)))
+        .collect();
+    Ok(Value::Arraeum(range))
+}
+
+/// `zip(xs, ys)` — a list of `(x, y)` pairs, one per position, truncated to
+/// the shorter input.
+fn zip(args: &[Value]) -> Result<Value, RunnerError> {
+    let xs = as_list("zip", &args[0])?;
+    let ys = as_list("zip", &args[1])?;
+    let pairs = xs
+        .iter()
+        .zip(ys.iter())
+        .map(|(x, y)| Value::Parametriq(vec![x.clone(), y.clone()]))
+        .collect();
+    Ok(Value::Arraeum(pairs))
+}
+
+/// `values(form)` — the values of a tablet's entries, in order, as a list.
+fn values(args: &[Value]) -> Result<Value, RunnerError> {
+    let entries = as_tablet("values", &args[0])?;
+    let values = entries
+        .iter()
+        .map(|(_, value)| value.clone())
+        .collect();
+    Ok(Value::Arraeum(values))
+}
+
+/// `labels(form)` — the labels of a tablet's entries, in order, as a list of
+/// text values.
+fn labels(args: &[Value]) -> Result<Value, RunnerError> {
+    let entries = as_tablet("labels", &args[0])?;
+    let labels = entries
+        .iter()
+        .map(|(label, _)| Value::Literali(label.clone()))
+        .collect();
+    Ok(Value::Arraeum(labels))
+}
+
+/// `pairs(form)` — a tablet's entries as a list of `(label, value)` pairs,
+/// so `foreach (k, v) in pairs(form)` destructures through the usual rule.
+fn pairs(args: &[Value]) -> Result<Value, RunnerError> {
+    let entries = as_tablet("pairs", &args[0])?;
+    let pairs = entries
+        .iter()
+        .map(|(label, value)| {
+            Value::Parametriq(vec![Value::Literali(label.clone()), value.clone()])
+        })
+        .collect();
+    Ok(Value::Arraeum(pairs))
+}
+
+fn as_integer(function: &'static str, value: &Value) -> Result<i64, RunnerError> {
+    if let Value::Quanticle(Numeric::Integral(n)) = value {
+        Ok(*n)
+    } else {
+        Err(RunnerError::InvalidArgument {
+            function,
+            expected: "an integer",
+        })
+    }
+}
+
+fn as_list<'a>(function: &'static str, value: &'a Value) -> Result<&'a [Value], RunnerError> {
+    if let Value::Arraeum(items) = value {
+        Ok(items)
+    } else {
+        Err(RunnerError::InvalidArgument {
+            function,
+            expected: "a list",
+        })
+    }
+}
+
+fn as_tablet<'a>(
+    function: &'static str,
+    value: &'a Value,
+) -> Result<&'a [(String, Value)], RunnerError> {
+    if let Value::Tabularum(entries) = value {
+        Ok(entries)
+    } else {
+        Err(RunnerError::InvalidArgument {
+            function,
+            expected: "a tablet",
+        })
     }
 }
 
@@ -87,3 +192,7 @@ impl Library {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "checks/library.rs"]
+mod check;

@@ -1211,6 +1211,10 @@ tablet's labels, and pairs() to get a sequence of tuples of labels and values
 you can iterate over.
             "#.trim_ascii().to_string(),
         ),
+        RunnerError::InvalidArgument { function, expected } => (
+            format!("Wrong argument type passed to {}()", function),
+            format!("The {}() function expected {} but was given something else.", function, expected),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
