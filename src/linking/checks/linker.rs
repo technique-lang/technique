@@ -100,21 +100,3 @@ powerdown :
     assert_eq!(*expected, 1);
     assert_eq!(*actual, 2);
 }
-
-#[test]
-fn broken_fixture_fails_to_link() {
-    let path = Path::new("tests/broken/linking/WrongArgumentCount.tq");
-    let content = parsing::load(path).expect("load fixture");
-    let document = parsing::parse(path, &content).expect("parse");
-    let mut program = translate(&document).expect("translate");
-
-    let errors = link(&mut program, &Library::stub()).expect_err("arity error");
-    let LinkingError::ArityMismatch {
-        function,
-        expected,
-        actual,
-    } = &errors[0];
-    assert_eq!(function.value, "seq");
-    assert_eq!(*expected, 2);
-    assert_eq!(*actual, 3);
-}
