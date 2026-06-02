@@ -8,11 +8,13 @@ use std::path::{Path, PathBuf};
 use crate::program::Program;
 
 mod evaluator;
+mod library;
 mod path;
 mod prompt;
 mod runner;
 mod state;
 
+pub use library::Library;
 pub use runner::{Outcome, RunnerError};
 pub use state::{RecordError, RunId};
 
@@ -31,13 +33,21 @@ pub fn start<'i>(
     document: &Path,
     program: &'i Program<'i>,
     arguments: &[String],
+    library: Library,
 ) -> Result<(RunId, Outcome), RunnerError> {
     let env = bind_parameters(program, arguments)?;
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (run_id, run_dir) = store.create(document, now_iso8601())?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
-    let mut runner = Runner::new(program, appender, HashSet::new(), Console::new(), env);
+    let mut runner = Runner::new(
+        program,
+        appender,
+        HashSet::new(),
+        Console::new(),
+        env,
+        library,
+    );
     let outcome = runner.run()?;
     Ok((run_id, outcome))
 }
@@ -54,7 +64,11 @@ pub fn locate(run_id: RunId) -> Result<PathBuf, RunnerError> {
 /// Open an existing run and walk the given program, short-circuiting
 /// any step whose FQN has already been recorded. Appends a `Resume`
 /// record at the root path before walking.
-pub fn resume<'i>(run_id: RunId, program: &'i Program<'i>) -> Result<Outcome, RunnerError> {
+pub fn resume<'i>(
+    run_id: RunId,
+    program: &'i Program<'i>,
+    library: Library,
+) -> Result<Outcome, RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (document, completed, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);
@@ -72,6 +86,7 @@ pub fn resume<'i>(run_id: RunId, program: &'i Program<'i>) -> Result<Outcome, Ru
         completed,
         Console::new(),
         Environment::new(),
+        library,
     );
     runner.run()
 }

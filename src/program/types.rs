@@ -155,6 +155,21 @@ pub struct Executable<'i> {
     pub arguments: Vec<Operation<'i>>,
 }
 
+/// Index of a function in the linked `Library`. This is the resolved form of
+/// the target of an `Executable`, analogous to `SubroutineId` for procedures.
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub struct ExecutableId(pub usize);
+
+/// Reference to a function. The translation phase emits these as
+/// `Unresolved`; the linking phase replaces references where a function is in
+/// the `Library` table with `Resolved`. Mirrors `SubroutineRef` for
+/// procedures.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ExecutableRef<'i> {
+    Unresolved(language::Identifier<'i>),
+    Resolved(ExecutableId),
+}
+
 /// A fragment of a string literal: either inline text or an interpolated
 /// expression. Defined here (rather than reusing `language::Piece`) because
 /// interpolations are themselves `Operation`s and may carry resolved

@@ -5,6 +5,7 @@ use crate::language::Identifier;
 use crate::parsing;
 use crate::program::{Fragment, Operation, Ordinal, Program, Subroutine};
 use crate::runner::evaluator::Environment;
+use crate::runner::library::Library;
 use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
 use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
@@ -104,6 +105,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     let outcome = runner
         .run()
@@ -146,6 +148,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -176,6 +179,7 @@ fn step_outcomes_recorded() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -218,6 +222,7 @@ fn two_steps_prompted_in_source_order() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -259,6 +264,7 @@ fn pre_completed_step_short_circuits() {
         completed,
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -295,6 +301,7 @@ fn quit_propagates_and_stops_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     let outcome = runner
         .run()
@@ -353,6 +360,7 @@ fn section_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -399,6 +407,7 @@ fn section_walking() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -437,6 +446,7 @@ fn parallel_step_index_starts_at_one() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -482,6 +492,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -531,6 +542,7 @@ helper :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -575,6 +587,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -627,6 +640,7 @@ fn loop_inside_step_produces_one_result() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -681,6 +695,7 @@ fn repeat_loops_until_quit() {
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
@@ -748,6 +763,7 @@ fn foreach_walks_body_once_per_list_element() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -829,6 +845,7 @@ fn foreach_destructures_tuple_elements() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -886,6 +903,7 @@ fn foreach_widens_primitive_to_singleton() {
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -943,6 +961,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         env,
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::NotIterable) => {}
@@ -966,6 +985,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         env,
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::NotIterable) => {}
@@ -980,6 +1000,7 @@ fn foreach_over_non_list_or_unbound_errors() {
         HashSet::new(),
         Mock::new(),
         Environment::new(),
+        Library::stub(),
     );
     match runner.run() {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
@@ -1080,6 +1101,7 @@ greet(name) :
         HashSet::new(),
         prompt,
         env,
+        Library::stub(),
     );
     runner
         .run()
@@ -1122,6 +1144,7 @@ test :
         HashSet::new(),
         prompt,
         Environment::new(),
+        Library::stub(),
     );
     runner
         .run()
