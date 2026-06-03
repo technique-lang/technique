@@ -1221,6 +1221,14 @@ you can iterate over.
             format!("Unresolved function {}()", function),
             format!("The function {}() is not a builtin and is not provided by the domain.", function),
         ),
+        RunnerError::ExecError(error) => (
+            "Could not run external command".to_string(),
+            format!("Launching or reading from the external command failed: {}.", error),
+        ),
+        RunnerError::CommandFailed(code) => (
+            format!("External command exited with status {}", code),
+            "The shell command run by exec() finished with a non-zero exit status.".to_string(),
+        ),
         RunnerError::IncompatibleCombination { left, right } => (
             format!("Cannot combine {} with {}", left, right),
             format!("Combining Values requires compatible kinds; a {} and a {} can't be added together.", left, right),

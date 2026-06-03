@@ -722,7 +722,26 @@ fn main() {
                 }
             };
 
-            let library = Library::core();
+            // Add domain-specific host functions to the Library based on
+            // whether the document or command-line indicate the domain being
+            // used. FUTURE the `core` and `system` functions are added here
+            // regardless, in time we should make that more configurable.
+
+            let domain = submatches
+                .get_one::<String>("domain")
+                .map(String::as_str)
+                .unwrap_or("source");
+            let domain: &dyn Domain = match domain {
+                "checklist" => &Checklist,
+                "nasa-esa-iss" => &NasaEsaIss,
+                "procedure" => &Procedure,
+                "recipe" => &Recipe,
+                _ => &Source,
+            };
+
+            let mut library = Library::core();
+            library.extend(Library::system());
+            library.extend(domain.functions());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -822,7 +841,12 @@ fn main() {
                 }
             };
 
-            let library = Library::core();
+            // TODO it is slightly problematic that we have to reconstruct the
+            // Library here and at present are hard-coding the functions being
+            // brought into scope.
+
+            let mut library = Library::core();
+            library.extend(Library::system());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()

@@ -1,5 +1,8 @@
 //! The function table for the evaluator.
 
+use std::io::Read;
+use std::process::{Command, Stdio};
+
 use super::context::Context;
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
@@ -12,10 +15,10 @@ use crate::value::{Numeric, Value};
 pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
 /// A function in the Library's table
-struct Entry {
-    name: &'static str,
-    arity: usize,
-    pointer: Native,
+pub struct Builtin {
+    pub name: &'static str,
+    pub arity: usize,
+    pub function: Native,
 }
 
 /// The set of functions available to a program, indexed by `ExecutableId`. A
@@ -23,7 +26,7 @@ struct Entry {
 /// domain contributes. It is used by the linking phase to perform lookups of
 /// function pointers, then ownership is passed to the runner.
 pub struct Library {
-    functions: Vec<Entry>,
+    functions: Vec<Builtin>,
 }
 
 impl Library {
@@ -32,20 +35,61 @@ impl Library {
     /// functions (functions supplied by the host environment) are declared
     /// and implemented by the relevant domain the Technique is executing in.
     pub fn core() -> Self {
-        let entry = |name, arity, pointer| Entry {
-            name,
-            arity,
-            pointer,
-        };
         Library {
             functions: vec![
-                entry("seq", 2, seq as Native),
-                entry("zip", 2, zip as Native),
-                entry("values", 1, values as Native),
-                entry("labels", 1, labels as Native),
-                entry("pairs", 1, pairs as Native),
+                Builtin {
+                    name: "seq",
+                    arity: 2,
+                    function: seq,
+                },
+                Builtin {
+                    name: "zip",
+                    arity: 2,
+                    function: zip,
+                },
+                Builtin {
+                    name: "values",
+                    arity: 1,
+                    function: values,
+                },
+                Builtin {
+                    name: "labels",
+                    arity: 1,
+                    function: labels,
+                },
+                Builtin {
+                    name: "pairs",
+                    arity: 1,
+                    function: pairs,
+                },
             ],
         }
+    }
+
+    /// The system layer: effectful, world-touching functions (process
+    /// execution and the clock). Kept out of `core` so a pure, isolated,
+    /// deterministic Technique can be run without them; an interactive run
+    /// adds this layer on top of `core`.
+    pub fn system() -> Vec<Builtin> {
+        vec![
+            Builtin {
+                name: "exec",
+                arity: 1,
+                function: exec,
+            },
+            Builtin {
+                name: "now",
+                arity: 0,
+                function: now,
+            },
+        ]
+    }
+
+    /// Add functions to the table, after the core builtins — the system layer
+    /// or a domain's own host functions.
+    pub fn extend(&mut self, builtins: impl IntoIterator<Item = Builtin>) {
+        self.functions
+            .extend(builtins);
     }
 
     /// Resolve a function name to its index, or `None` if no entry matches.
@@ -74,7 +118,7 @@ impl Library {
         context: &Context,
         args: &[Value],
     ) -> Result<Value, RunnerError> {
-        (self.functions[id.0].pointer)(context, args)
+        (self.functions[id.0].function)(context, args)
     }
 }
 
@@ -178,10 +222,10 @@ impl Library {
         fn unit(_: &Context, _: &[Value]) -> Result<Value, RunnerError> {
             Ok(Value::Unitus)
         }
-        let entry = |name, arity| Entry {
+        let entry = |name, arity| Builtin {
             name,
             arity,
-            pointer: unit as Native,
+            function: unit as Native,
         };
         Library {
             functions: vec![
