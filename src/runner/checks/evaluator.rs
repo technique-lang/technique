@@ -296,7 +296,7 @@ fn execute_unresolved_function_errors() {
     let mut env = Environment::new();
     let Err(RunnerError::UnknownFunction(name)) = evaluate(&library, &context, &mut env, &op)
     else {
-        panic!("expected UnresolvedFunction");
+        panic!("expected UnknownFunction");
     };
     assert_eq!(name, "click");
 }

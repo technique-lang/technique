@@ -74,34 +74,6 @@ third :
 }
 
 #[test]
-fn procedure_inside_section_registered() {
-    let source = r#"
-% technique v1
-
-outer :
-
-I. Section One
-
-inner : () -> ()
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let names: Vec<_> = program
-        .subroutines
-        .iter()
-        .map(|p| {
-            p.name
-                .as_ref()
-                .map(|id| id.value)
-        })
-        .collect();
-    assert_eq!(names, vec![Some("outer"), Some("inner")]);
-}
-
-#[test]
 fn procedure_title_extracted() {
     let source = r#"
 % technique v1
@@ -260,13 +232,17 @@ inner : () -> ()
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    // The inner procedure was hoisted into the flat list.
-    assert_eq!(
-        program
-            .subroutines
-            .len(),
-        2
-    );
+    // The inner procedure was hoisted into the flat list, after the outer.
+    let names: Vec<_> = program
+        .subroutines
+        .iter()
+        .map(|p| {
+            p.name
+                .as_ref()
+                .map(|id| id.value)
+        })
+        .collect();
+    assert_eq!(names, vec![Some("outer"), Some("inner")]);
 
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");

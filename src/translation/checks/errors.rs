@@ -274,6 +274,6 @@ run :
 
     assert_eq!(errors.len(), 1);
     let TranslationError::HeterogenousList { .. } = &errors[0] else {
-        panic!("expected MixedBracket, got {:?}", errors[0]);
+        panic!("expected HeterogenousList, got {:?}", errors[0]);
     };
 }
