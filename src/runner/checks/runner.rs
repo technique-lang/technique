@@ -106,11 +106,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     let outcome = runner
-        .run()
+        .run(env)
         .expect("run");
     assert_eq!(outcome, Outcome::Done(Value::Unitus));
     let pfftt = fixture.pfftt_contents();
@@ -149,11 +149,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
@@ -180,11 +180,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
@@ -223,11 +223,11 @@ fn two_steps_prompted_in_source_order() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -265,11 +265,11 @@ fn pre_completed_step_short_circuits() {
         fixture.take_appender(),
         completed,
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -302,11 +302,11 @@ fn quit_propagates_and_stops_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     let outcome = runner
-        .run()
+        .run(env)
         .expect("run");
     assert_eq!(outcome, Outcome::Quit);
 
@@ -361,11 +361,11 @@ fn section_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let prompt = runner.into_prompt();
     let events = prompt.events();
@@ -408,11 +408,11 @@ fn section_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let prompt = runner.into_prompt();
     let section_title = prompt
@@ -447,11 +447,11 @@ fn parallel_step_index_starts_at_one() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -493,11 +493,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -543,11 +543,11 @@ helper :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -594,11 +594,11 @@ greet(name) :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -647,10 +647,9 @@ peek :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
-    let Err(RunnerError::UnboundVariable(name)) = runner.run() else {
+    let Err(RunnerError::UnboundVariable(name)) = runner.run(env) else {
         panic!("expected UnboundVariable from the isolated frame");
     };
     assert_eq!(name, "secret");
@@ -681,10 +680,10 @@ greet(name) :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
-    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run() else {
+    let env = Environment::new();
+    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run(env) else {
         panic!("expected ParameterArityMismatch");
     };
     assert_eq!(expected, 1);
@@ -711,11 +710,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -764,11 +763,10 @@ fn loop_inside_step_produces_one_result() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // One Start record, then the enclosing step's Begin and Done — the
@@ -819,11 +817,11 @@ fn repeat_loops_until_quit() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -887,11 +885,10 @@ fn foreach_walks_body_once_per_list_element() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // The body is walked once per element. Each Step event carries an
@@ -964,11 +961,11 @@ fn foreach_over_seq_builtin_runs() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         library,
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1048,11 +1045,10 @@ fn foreach_destructures_tuple_elements() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1106,11 +1102,10 @@ fn foreach_widens_primitive_to_singleton() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1164,10 +1159,9 @@ fn foreach_over_non_list_or_unbound_errors() {
         tuple_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        env,
         Library::stub(),
     );
-    match runner.run() {
+    match runner.run(env) {
         Err(RunnerError::NotIterable) => {}
         other => panic!("expected NotIterable, got {:?}", other),
     }
@@ -1188,10 +1182,9 @@ fn foreach_over_non_list_or_unbound_errors() {
         tablet_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        env,
         Library::stub(),
     );
-    match runner.run() {
+    match runner.run(env) {
         Err(RunnerError::NotIterable) => {}
         other => panic!("expected NotIterable, got {:?}", other),
     }
@@ -1203,10 +1196,10 @@ fn foreach_over_non_list_or_unbound_errors() {
         unbound_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        Environment::new(),
         Library::stub(),
     );
-    match runner.run() {
+    let env = Environment::new();
+    match runner.run(env) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
         other => panic!("expected UnboundVariable, got {:?}", other),
     }
@@ -1304,11 +1297,10 @@ greet(name) :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1347,11 +1339,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // The prompt offered the two declared responses as choices.

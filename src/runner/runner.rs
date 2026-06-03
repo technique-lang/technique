@@ -92,7 +92,6 @@ pub struct Runner<'i, P: Prompt> {
     appender: Appender,
     completed: HashSet<String>,
     prompt: P,
-    env: Environment,
     path: QualifiedPath<'i>,
     library: Library,
 }
@@ -103,7 +102,6 @@ impl<'i, P: Prompt> Runner<'i, P> {
         appender: Appender,
         completed: HashSet<String>,
         prompt: P,
-        env: Environment,
         library: Library,
     ) -> Self {
         Runner {
@@ -111,7 +109,6 @@ impl<'i, P: Prompt> Runner<'i, P> {
             appender,
             completed,
             prompt,
-            env,
             path: QualifiedPath::new(),
             library,
         }
@@ -128,7 +125,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
     /// selection here is `program.subroutines[0]` — the synthetic
     /// anonymous wrapper if the document is top-level Steps, otherwise
     /// the first declared procedure.
-    pub fn run(&mut self) -> Result<Outcome, RunnerError> {
+    pub fn run(&mut self, mut env: Environment) -> Result<Outcome, RunnerError> {
         let entry = self
             .program
             .subroutines
@@ -142,7 +139,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             self.path
                 .push(PathSegment::Procedure(name));
         }
-        let result = self.walk(&entry.body);
+        let result = self.walk(&mut env, &entry.body);
         if name.is_some() {
             self.path
                 .pop();
@@ -150,26 +147,30 @@ impl<'i, P: Prompt> Runner<'i, P> {
         result
     }
 
-    fn walk(&mut self, op: &'i Operation<'i>) -> Result<Outcome, RunnerError> {
+    fn walk(
+        &mut self,
+        env: &mut Environment,
+        op: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
         match op {
-            Operation::Sequence(ops) => self.walk_sequence(ops),
+            Operation::Sequence(ops) => self.walk_sequence(env, ops),
             Operation::Section {
                 numeral,
                 title,
                 body,
                 ..
-            } => self.walk_section(numeral, title.as_deref(), body),
+            } => self.walk_section(env, numeral, title.as_deref(), body),
             Operation::Step { .. } => {
                 // Dependent vs Parallel ordinal index needs the
                 // surrounding Sequence's parallel counter; a Step
                 // encountered outside a Sequence (i.e. as the entire
                 // body of a procedure) is treated as Dependent.
-                self.walk_step(op, 0)
+                self.walk_step(env, op, 0)
             }
             Operation::Loop {
                 names, over, body, ..
-            } => self.walk_loop(names, over.as_deref(), body),
-            Operation::Invoke(invocable) => self.walk_invoke(invocable),
+            } => self.walk_loop(env, names, over.as_deref(), body),
+            Operation::Invoke(invocable) => self.walk_invoke(env, invocable),
             Operation::Execute(executable) => {
                 let function = self.executable_name(&executable.target);
                 let qualified = self
@@ -199,7 +200,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_) => {
-                let value = super::evaluator::evaluate(&mut self.env, &self.library, op)?;
+                let value = super::evaluator::evaluate(&self.library, env, op)?;
                 Ok(Outcome::Done(value))
             }
         }
@@ -219,7 +220,11 @@ impl<'i, P: Prompt> Runner<'i, P> {
         }
     }
 
-    fn walk_invoke(&mut self, invocable: &'i Invocable<'i>) -> Result<Outcome, RunnerError> {
+    fn walk_invoke(
+        &mut self,
+        env: &mut Environment,
+        invocable: &'i Invocable<'i>,
+    ) -> Result<Outcome, RunnerError> {
         match &invocable.target {
             SubroutineRef::Resolved(id) => {
                 let subroutine = &self
@@ -248,7 +253,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .iter()
                     .zip(&invocable.arguments)
                 {
-                    let value = super::evaluator::evaluate(&mut self.env, &self.library, arg)?;
+                    let value = super::evaluator::evaluate(&self.library, env, arg)?;
                     local.extend(
                         param
                             .value
@@ -280,11 +285,9 @@ impl<'i, P: Prompt> Runner<'i, P> {
                         .push(PathSegment::Procedure(name));
                 }
 
-                // Swap the callee's environment in for the body walk,
-                // restoring the caller's afterwards (even on error).
-                let caller = std::mem::replace(&mut self.env, local);
-                let result = self.walk(&subroutine.body);
-                self.env = caller;
+                // Walk the body against the callee's own environment; `local`
+                // is dropped on return, leaving the caller's `env` untouched.
+                let result = self.walk(&mut local, &subroutine.body);
 
                 if name.is_some() {
                     self.path
@@ -311,6 +314,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
     /// registered.
     fn walk_loop(
         &mut self,
+        env: &mut Environment,
         names: &'i [language::Identifier<'i>],
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
@@ -323,7 +327,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 loop {
                     self.path
                         .push(PathSegment::Iteration(number));
-                    let result = self.walk(body);
+                    let result = self.walk(env, body);
                     self.path
                         .pop();
 
@@ -334,7 +338,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 }
             }
             Some(expr) => {
-                let items = match super::evaluator::evaluate(&mut self.env, &self.library, expr)? {
+                let items = match super::evaluator::evaluate(&self.library, env, expr)? {
                     Value::Arraeum(items) => items,
                     // A scalar in list context is a singleton list.
                     value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
@@ -346,12 +350,12 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .into_iter()
                     .enumerate()
                 {
-                    super::evaluator::bind_names(&mut self.env, names, item)?;
+                    super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
                     self.path
                         .push(PathSegment::Iteration(number));
-                    let result = self.walk(body);
+                    let result = self.walk(env, body);
                     self.path
                         .pop();
 
@@ -364,7 +368,11 @@ impl<'i, P: Prompt> Runner<'i, P> {
         }
     }
 
-    fn walk_sequence(&mut self, ops: &'i [Operation<'i>]) -> Result<Outcome, RunnerError> {
+    fn walk_sequence(
+        &mut self,
+        env: &mut Environment,
+        ops: &'i [Operation<'i>],
+    ) -> Result<Outcome, RunnerError> {
         let mut parallel_idx: usize = 0;
         for op in ops {
             let outcome = match op {
@@ -376,9 +384,9 @@ impl<'i, P: Prompt> Runner<'i, P> {
                         }
                         Ordinal::Dependent(_) => 0,
                     };
-                    self.walk_step(op, index)?
+                    self.walk_step(env, op, index)?
                 }
-                _ => self.walk(op)?,
+                _ => self.walk(env, op)?,
             };
             if let Outcome::Quit = outcome {
                 return Ok(Outcome::Quit);
@@ -389,13 +397,14 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
     fn walk_section(
         &mut self,
+        env: &mut Environment,
         numeral: &'i str,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
-        let result = self.perform_section(title, body);
+        let result = self.perform_section(env, title, body);
         self.path
             .pop();
         result
@@ -403,6 +412,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
     fn perform_section(
         &mut self,
+        env: &mut Environment,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
@@ -410,7 +420,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
         let title_text = match title {
-            Some(op) => match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
+            Some(op) => match super::evaluator::evaluate(&self.library, env, op)? {
                 Value::Literali(s) => s,
                 other => other.to_string(),
             },
@@ -418,11 +428,12 @@ impl<'i, P: Prompt> Runner<'i, P> {
         };
         self.prompt
             .section(&qualified, &title_text);
-        self.walk(body)
+        self.walk(env, body)
     }
 
     fn walk_step(
         &mut self,
+        env: &mut Environment,
         op: &'i Operation<'i>,
         parallel_index: usize,
     ) -> Result<Outcome, RunnerError> {
@@ -451,7 +462,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let result = self.perform_step(&qualified, body, description, responses);
+        let result = self.perform_step(env, &qualified, body, description, responses);
 
         self.path
             .pop();
@@ -465,6 +476,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
 
     fn perform_step(
         &mut self,
+        env: &mut Environment,
         qualified: &str,
         body: &'i Operation<'i>,
         description: &'i [Operation<'i>],
@@ -492,7 +504,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         self.appender
             .append(&begin)?;
 
-        if let Outcome::Quit = self.walk(body)? {
+        if let Outcome::Quit = self.walk(env, body)? {
             return Ok(Outcome::Quit);
         }
 
@@ -501,7 +513,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             if !description_text.is_empty() {
                 description_text.push('\n');
             }
-            match super::evaluator::evaluate(&mut self.env, &self.library, op)? {
+            match super::evaluator::evaluate(&self.library, env, op)? {
                 Value::Literali(s) => description_text.push_str(&s),
                 other => description_text.push_str(&other.to_string()),
             }

@@ -45,8 +45,8 @@ impl Environment {
 /// builtin, evaluating its arguments before doing so.
 #[allow(dead_code)]
 pub fn evaluate<'i>(
-    env: &mut Environment,
     library: &Library,
+    env: &mut Environment,
     op: &Operation<'i>,
 ) -> Result<Value, RunnerError> {
     match op {
@@ -65,7 +65,7 @@ pub fn evaluate<'i>(
             for fragment in fragments {
                 match fragment {
                     Fragment::Text(t) => text.push_str(t),
-                    Fragment::Interpolation(inner) => match evaluate(env, library, inner)? {
+                    Fragment::Interpolation(inner) => match evaluate(library, env, inner)? {
                         Value::Literali(s) => text.push_str(&s),
                         other => text.push_str(&other.to_string()),
                     },
@@ -77,7 +77,7 @@ pub fn evaluate<'i>(
         Operation::Tablet(entries) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {
-                let v = evaluate(env, library, &entry.value)?;
+                let v = evaluate(library, env, &entry.value)?;
                 pairs.push((
                     entry
                         .label
@@ -90,19 +90,19 @@ pub fn evaluate<'i>(
         Operation::List(items) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
-                values.push(evaluate(env, library, item)?);
+                values.push(evaluate(library, env,item)?);
             }
             Ok(Value::Arraeum(values))
         }
         Operation::Bind { names, value } => {
-            let v = evaluate(env, library, value)?;
+            let v = evaluate(library, env,value)?;
             bind_names(env, names, v)?;
             Ok(Value::Unitus)
         }
         Operation::Sequence(ops) => {
             let mut last = Value::Unitus;
             for child in ops {
-                last = evaluate(env, library, child)?;
+                last = evaluate(library, env,child)?;
             }
             Ok(last)
         }
@@ -114,7 +114,7 @@ pub fn evaluate<'i>(
                         .len(),
                 );
                 for arg in &executable.arguments {
-                    args.push(evaluate(env, library, arg)?);
+                    args.push(evaluate(library, env,arg)?);
                 }
                 library.call(*id, &args)
             }

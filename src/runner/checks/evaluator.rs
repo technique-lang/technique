@@ -10,7 +10,7 @@ fn variable_lookup() {
     let library = Library::core();
     let op = Operation::Variable(Identifier::new("missing"));
     let mut env = Environment::new();
-    match evaluate(&mut env, &library, &op) {
+    match evaluate(&library, &mut env, &op) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "missing"),
         other => panic!("expected UnboundVariable, got {:?}", other),
     }
@@ -21,7 +21,7 @@ fn variable_lookup() {
         value::Value::Literali("World".to_string()),
     );
     let op = Operation::Variable(Identifier::new("name"));
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("World".to_string()));
 }
 
@@ -30,7 +30,7 @@ fn number_evaluates_to_quanticle() {
     let library = Library::core();
     let op = Operation::Number(LangNumeric::Integral(42));
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Quanticle(value::Numeric::Integral(42)));
 }
 
@@ -47,7 +47,7 @@ fn string_interpolation() {
         Fragment::Interpolation(Operation::Variable(Identifier::new("name"))),
         Fragment::Text("!"),
     ]);
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("Hello, World!".to_string()));
 
     let op = Operation::String(vec![
@@ -55,7 +55,7 @@ fn string_interpolation() {
         Fragment::Interpolation(Operation::Variable(Identifier::new("nope"))),
     ]);
     let mut env = Environment::new();
-    match evaluate(&mut env, &library, &op) {
+    match evaluate(&library, &mut env, &op) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "nope"),
         other => panic!("expected UnboundVariable, got {:?}", other),
     }
@@ -66,7 +66,7 @@ fn multiline_joins_with_newlines() {
     let library = Library::core();
     let op = Operation::Multiline(None, vec!["foo", "bar", "baz"]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("foo\nbar\nbaz".to_string()));
 }
 
@@ -84,7 +84,7 @@ fn tablet_entries_evaluate() {
         },
     ]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(
         v,
         value::Value::Tabularum(vec![
@@ -109,7 +109,7 @@ fn list_elements_evaluate() {
         Operation::Number(LangNumeric::Integral(9)),
     ]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(
         v,
         value::Value::Arraeum(vec![
@@ -131,7 +131,7 @@ fn bind_extends_env_for_subsequent_lookup() {
     let lookup = Operation::Variable(Identifier::new("greeting"));
     let seq = Operation::Sequence(vec![bind, lookup]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &seq).expect("evaluated");
+    let v = evaluate(&library, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Literali("Hello".to_string()));
 }
 
@@ -144,12 +144,12 @@ fn sequence_evaluation() {
         Operation::Number(LangNumeric::Integral(3)),
     ]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &seq).expect("evaluated");
+    let v = evaluate(&library, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Quanticle(value::Numeric::Integral(3)));
 
     let seq = Operation::Sequence(vec![]);
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &seq).expect("evaluated");
+    let v = evaluate(&library, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Unitus);
 }
 
@@ -177,7 +177,7 @@ fn multi_name_bind_destructures_parametriq() {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("triple"))),
     };
-    let result = evaluate(&mut env, &library, &bind).expect("evaluated");
+    let result = evaluate(&library, &mut env, &bind).expect("evaluated");
     assert_eq!(result, value::Value::Unitus);
     assert_eq!(
         env.lookup("a"),
@@ -213,7 +213,7 @@ fn multi_name_bind_wrong_arity_errors() {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("pair"))),
     };
-    match evaluate(&mut env, &library, &bind) {
+    match evaluate(&library, &mut env, &bind) {
         Err(RunnerError::BindArityMismatch { expected, actual }) => {
             assert_eq!(expected, 3);
             assert_eq!(actual, 2);
@@ -235,7 +235,7 @@ fn multi_name_bind_against_scalar_errors_as_not_tuple() {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("scalar"))),
     };
-    match evaluate(&mut env, &library, &bind) {
+    match evaluate(&library, &mut env, &bind) {
         Err(RunnerError::BindNotTuple { expected }) => {
             assert_eq!(expected, 2);
         }
@@ -257,7 +257,7 @@ fn execute_dispatches_resolved_builtin() {
         ],
     });
     let mut env = Environment::new();
-    let v = evaluate(&mut env, &library, &op).expect("evaluated");
+    let v = evaluate(&library, &mut env, &op).expect("evaluated");
     assert_eq!(
         v,
         value::Value::Arraeum(vec![
@@ -276,7 +276,7 @@ fn execute_unresolved_function_errors() {
         arguments: Vec::new(),
     });
     let mut env = Environment::new();
-    let Err(RunnerError::UnresolvedFunction(name)) = evaluate(&mut env, &library, &op) else {
+    let Err(RunnerError::UnresolvedFunction(name)) = evaluate(&library, &mut env, &op) else {
         panic!("expected UnresolvedFunction");
     };
     assert_eq!(name, "click");
