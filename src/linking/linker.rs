@@ -11,12 +11,16 @@ pub enum LinkingError<'i> {
         expected: usize,
         actual: usize,
     },
+    /// A function call naming nothing in the function table — neither a core
+    /// nor system builtin nor a function the selected domain provides.
+    UnresolvedFunction { function: language::Identifier<'i> },
 }
 
 impl<'i> LinkingError<'i> {
     pub fn span(&self) -> Span {
         match self {
             LinkingError::ArityMismatch { function, .. } => function.span,
+            LinkingError::UnresolvedFunction { function } => function.span,
         }
     }
 }
@@ -48,20 +52,23 @@ fn link_operation<'i>(
     match op {
         Operation::Execute(executable) => {
             if let ExecutableRef::Unresolved(id) = &executable.target {
-                if let Some(exec_id) = library.resolve(id.value) {
-                    let expected = library.arity(exec_id);
-                    let actual = executable
-                        .arguments
-                        .len();
-                    if actual == expected {
-                        executable.target = ExecutableRef::Resolved(exec_id);
-                    } else {
-                        problems.push(LinkingError::ArityMismatch {
-                            function: *id,
-                            expected,
-                            actual,
-                        });
+                match library.resolve(id.value) {
+                    Some(exec_id) => {
+                        let expected = library.arity(exec_id);
+                        let actual = executable
+                            .arguments
+                            .len();
+                        if actual == expected {
+                            executable.target = ExecutableRef::Resolved(exec_id);
+                        } else {
+                            problems.push(LinkingError::ArityMismatch {
+                                function: *id,
+                                expected,
+                                actual,
+                            });
+                        }
                     }
+                    None => problems.push(LinkingError::UnresolvedFunction { function: *id }),
                 }
             }
             for arg in &mut executable.arguments {

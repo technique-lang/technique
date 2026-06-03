@@ -1,18 +1,24 @@
 //! The function table for the evaluator.
 
+use std::io::Read;
+use std::process::{Command, Stdio};
+
+use super::context::Context;
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
 
-/// A native function: implemented in Rust, taking already-evaluated
-/// arguments.
-pub type Native = fn(&[Value]) -> Result<Value, RunnerError>;
+/// A native function: implemented in Rust, taking an execution Context (host
+/// capabilities) and the already-evaluated arguments. Pure builtins disregard
+/// the Context; effectful functions from the host domain (e.g. `exec`) use
+/// it.
+pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
 /// A function in the Library's table
-struct Entry {
-    name: &'static str,
-    arity: usize,
-    pointer: Native,
+pub struct Builtin {
+    pub name: &'static str,
+    pub arity: usize,
+    pub function: Native,
 }
 
 /// The set of functions available to a program, indexed by `ExecutableId`. A
@@ -20,7 +26,7 @@ struct Entry {
 /// domain contributes. It is used by the linking phase to perform lookups of
 /// function pointers, then ownership is passed to the runner.
 pub struct Library {
-    functions: Vec<Entry>,
+    functions: Vec<Builtin>,
 }
 
 impl Library {
@@ -29,20 +35,61 @@ impl Library {
     /// functions (functions supplied by the host environment) are declared
     /// and implemented by the relevant domain the Technique is executing in.
     pub fn core() -> Self {
-        let entry = |name, arity, pointer| Entry {
-            name,
-            arity,
-            pointer,
-        };
         Library {
             functions: vec![
-                entry("seq", 2, seq as Native),
-                entry("zip", 2, zip as Native),
-                entry("values", 1, values as Native),
-                entry("labels", 1, labels as Native),
-                entry("pairs", 1, pairs as Native),
+                Builtin {
+                    name: "seq",
+                    arity: 2,
+                    function: seq,
+                },
+                Builtin {
+                    name: "zip",
+                    arity: 2,
+                    function: zip,
+                },
+                Builtin {
+                    name: "values",
+                    arity: 1,
+                    function: values,
+                },
+                Builtin {
+                    name: "labels",
+                    arity: 1,
+                    function: labels,
+                },
+                Builtin {
+                    name: "pairs",
+                    arity: 1,
+                    function: pairs,
+                },
             ],
         }
+    }
+
+    /// The system layer: effectful, world-touching functions (process
+    /// execution and the clock). Kept out of `core` so a pure, isolated,
+    /// deterministic Technique can be run without them; an interactive run
+    /// adds this layer on top of `core`.
+    pub fn system() -> Vec<Builtin> {
+        vec![
+            Builtin {
+                name: "exec",
+                arity: 1,
+                function: exec,
+            },
+            Builtin {
+                name: "now",
+                arity: 0,
+                function: now,
+            },
+        ]
+    }
+
+    /// Add functions to the table, after the core builtins — the system layer
+    /// or a domain's own host functions.
+    pub fn extend(&mut self, builtins: impl IntoIterator<Item = Builtin>) {
+        self.functions
+            .extend(builtins);
     }
 
     /// Resolve a function name to its index, or `None` if no entry matches.
@@ -63,15 +110,21 @@ impl Library {
         self.functions[id.0].name
     }
 
-    /// Call the function at `id` with (already evaluated) arguments.
-    pub fn call(&self, id: ExecutableId, args: &[Value]) -> Result<Value, RunnerError> {
-        (self.functions[id.0].pointer)(args)
+    /// Call the function at `id` with the execution context and (already
+    /// evaluated) arguments.
+    pub fn call(
+        &self,
+        id: ExecutableId,
+        context: &Context,
+        args: &[Value],
+    ) -> Result<Value, RunnerError> {
+        (self.functions[id.0].function)(context, args)
     }
 }
 
 /// `seq(a, b)` — the inclusive integer range from `a` to `b` as a list,
 /// empty when `a > b`.
-fn seq(args: &[Value]) -> Result<Value, RunnerError> {
+fn seq(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let a = as_integer("seq", &args[0])?;
     let b = as_integer("seq", &args[1])?;
     let range = (a..=b)
@@ -82,7 +135,7 @@ fn seq(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `zip(xs, ys)` — a list of `(x, y)` pairs, one per position, truncated to
 /// the shorter input.
-fn zip(args: &[Value]) -> Result<Value, RunnerError> {
+fn zip(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let xs = as_list("zip", &args[0])?;
     let ys = as_list("zip", &args[1])?;
     let pairs = xs
@@ -94,7 +147,7 @@ fn zip(args: &[Value]) -> Result<Value, RunnerError> {
 }
 
 /// `values(form)` — the values of a tablet's entries, in order, as a list.
-fn values(args: &[Value]) -> Result<Value, RunnerError> {
+fn values(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("values", &args[0])?;
     let values = entries
         .iter()
@@ -105,7 +158,7 @@ fn values(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `labels(form)` — the labels of a tablet's entries, in order, as a list of
 /// text values.
-fn labels(args: &[Value]) -> Result<Value, RunnerError> {
+fn labels(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("labels", &args[0])?;
     let labels = entries
         .iter()
@@ -116,7 +169,7 @@ fn labels(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `pairs(form)` — a tablet's entries as a list of `(label, value)` pairs,
 /// so `foreach (k, v) in pairs(form)` destructures through the usual rule.
-fn pairs(args: &[Value]) -> Result<Value, RunnerError> {
+fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("pairs", &args[0])?;
     let pairs = entries
         .iter()
@@ -125,6 +178,69 @@ fn pairs(args: &[Value]) -> Result<Value, RunnerError> {
         })
         .collect();
     Ok(Value::Arraeum(pairs))
+}
+
+/// `exec(script)` — run a shell script, teeing its stdout through the Context
+/// to the operator as it streams while accumulating it as the return value.
+/// Output is held as bytes until the end so a chunk split mid-UTF-8 is
+/// harmless and only one String is allocated. A non-zero exit is an error.
+fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+    let script = match &args[0] {
+        Value::Literali(script) => script,
+        _ => {
+            return Err(RunnerError::InvalidArgument {
+                function: "exec",
+                expected: "a shell script string",
+            })
+        }
+    };
+
+    let mut child = Command::new("bash")
+        .arg("-c")
+        .arg(script)
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(RunnerError::ExecError)?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .expect("child stdout was piped");
+    let mut captured = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = stdout
+            .read(&mut buffer)
+            .map_err(RunnerError::ExecError)?;
+        if count == 0 {
+            break;
+        }
+        context
+            .write(&buffer[..count])
+            .map_err(RunnerError::ExecError)?;
+        captured.extend_from_slice(&buffer[..count]);
+    }
+
+    let status = child
+        .wait()
+        .map_err(RunnerError::ExecError)?;
+    if !status.success() {
+        return Err(RunnerError::CommandFailed(
+            status
+                .code()
+                .unwrap_or(-1),
+        ));
+    }
+
+    Ok(Value::Literali(
+        String::from_utf8_lossy(&captured).into_owned(),
+    ))
+}
+
+/// `now()` — the current wall-clock time as an ISO 8601 string. A read of
+/// external state, hence part of the system layer rather than `core`.
+fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+    Ok(Value::Literali(super::runner::now_iso8601()))
 }
 
 fn as_integer(function: &'static str, value: &Value) -> Result<i64, RunnerError> {
@@ -166,28 +282,71 @@ fn as_tablet<'a>(
 #[cfg(test)]
 impl Library {
     pub fn stub() -> Self {
-        fn unit(_: &[Value]) -> Result<Value, RunnerError> {
+        fn unit(_: &Context, _: &[Value]) -> Result<Value, RunnerError> {
             Ok(Value::Unitus)
         }
-        let entry = |name, arity| Entry {
-            name,
-            arity,
-            pointer: unit as Native,
-        };
         Library {
             functions: vec![
-                entry("seq", 2),
-                entry("zip", 2),
-                entry("exec", 1),
-                entry("cmd", 1),
-                entry("now", 0),
-                entry("uuid", 0),
-                entry("timer", 1),
-                entry("journal", 1),
-                entry("click", 1),
-                entry("navigate", 1),
-                entry("select", 1),
-                entry("deselect", 1),
+                Builtin {
+                    name: "seq",
+                    arity: 2,
+                    function: unit,
+                },
+                Builtin {
+                    name: "zip",
+                    arity: 2,
+                    function: unit,
+                },
+                Builtin {
+                    name: "exec",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "cmd",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "now",
+                    arity: 0,
+                    function: unit,
+                },
+                Builtin {
+                    name: "uuid",
+                    arity: 0,
+                    function: unit,
+                },
+                Builtin {
+                    name: "timer",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "journal",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "click",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "navigate",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "select",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "deselect",
+                    arity: 1,
+                    function: unit,
+                },
             ],
         }
     }

@@ -8,6 +8,7 @@ use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
+use technique::domain::{self, Domain};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
@@ -115,6 +116,17 @@ impl TypedValueParser for PaperSizeParser {
                 .into_iter()
                 .map(PossibleValue::new),
         ))
+    }
+}
+
+/// Resolve a domain name to its handle.
+fn select_domain(name: &str) -> &'static dyn Domain {
+    match domain::domain_for(name) {
+        Some(domain) => domain,
+        None => {
+            eprintln!("{}: unrecognized domain \"{}\"", "error".bright_red(), name);
+            std::process::exit(1);
+        }
     }
 }
 
@@ -282,6 +294,14 @@ fn main() {
                         .help("The file containing the Technique document to run."),
                 )
                 .arg(
+                    Arg::new("domain")
+                        .short('d')
+                        .long("domain")
+                        .value_parser(["checklist", "nasa-esa-iss", "procedure", "recipe", "source"])
+                        .action(ArgAction::Set)
+                        .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
+                )
+                .arg(
                     Arg::new("arguments")
                         .num_args(0..)
                         .action(ArgAction::Append)
@@ -418,7 +438,17 @@ fn main() {
                 std::process::exit(0);
             }
 
-            let library = Library::core();
+            // Check validates against the functions a run would resolve
+            // against: core and system, plus the document's declared domain.
+            let name = technique
+                .header
+                .as_ref()
+                .and_then(|m| m.domain)
+                .unwrap_or("source");
+            let domain = select_domain(name);
+            let mut library = Library::core();
+            library.extend(Library::system());
+            library.extend(domain.functions());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -713,7 +743,26 @@ fn main() {
                 }
             };
 
-            let library = Library::core();
+            // Add domain-specific host functions to the Library based on
+            // whether the document or command-line indicate the domain being
+            // used. FUTURE the `core` and `system` functions are added here
+            // regardless, in time we should make that more configurable.
+
+            let name = submatches
+                .get_one::<String>("domain")
+                .map(String::as_str)
+                .or_else(|| {
+                    technique
+                        .header
+                        .as_ref()
+                        .and_then(|m| m.domain)
+                })
+                .unwrap_or("source");
+            let domain = select_domain(name);
+
+            let mut library = Library::core();
+            library.extend(Library::system());
+            library.extend(domain.functions());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -813,7 +862,12 @@ fn main() {
                 }
             };
 
-            let library = Library::core();
+            // TODO it is slightly problematic that we have to reconstruct the
+            // Library here and at present are hard-coding the functions being
+            // brought into scope.
+
+            let mut library = Library::core();
+            library.extend(Library::system());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()

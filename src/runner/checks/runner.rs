@@ -106,11 +106,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     let outcome = runner
-        .run()
+        .run(env)
         .expect("run");
     assert_eq!(outcome, Outcome::Done(Value::Unitus));
     let pfftt = fixture.pfftt_contents();
@@ -149,11 +149,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
@@ -180,11 +180,11 @@ fn step_outcomes_recorded() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
@@ -223,11 +223,11 @@ fn two_steps_prompted_in_source_order() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -265,11 +265,11 @@ fn pre_completed_step_short_circuits() {
         fixture.take_appender(),
         completed,
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -302,11 +302,11 @@ fn quit_propagates_and_stops_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     let outcome = runner
-        .run()
+        .run(env)
         .expect("run");
     assert_eq!(outcome, Outcome::Quit);
 
@@ -361,11 +361,11 @@ fn section_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let prompt = runner.into_prompt();
     let events = prompt.events();
@@ -408,11 +408,11 @@ fn section_walking() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
     let prompt = runner.into_prompt();
     let section_title = prompt
@@ -447,11 +447,11 @@ fn parallel_step_index_starts_at_one() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -493,11 +493,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -543,11 +543,11 @@ helper :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -569,6 +569,128 @@ helper :
 }
 
 #[test]
+fn invoke_binds_arguments_to_parameters() {
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <greet>("World")
+}
+
+greet(name) :
+
+1.  Hello { name }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-args");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let env = Environment::new();
+    runner
+        .run(env)
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    // The argument "World" is bound to greet's `name` parameter and
+    // interpolated into the step description.
+    assert_eq!(steps, vec![("/greet:1", "Hello World")]);
+}
+
+#[test]
+fn invoke_does_not_leak_caller_bindings() {
+    let source = r#"
+% technique v1
+
+main :
+{
+    <peek>()
+}
+
+peek :
+
+1.  Value is { secret }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-isolation");
+    // `secret` lives in the caller's (entry) frame; the callee `peek` runs
+    // in a fresh frame and must not see it.
+    let mut env = Environment::new();
+    env.extend("secret".to_string(), Value::Literali("99".to_string()));
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let Err(RunnerError::UnboundVariable(name)) = runner.run(env) else {
+        panic!("expected UnboundVariable from the isolated frame");
+    };
+    assert_eq!(name, "secret");
+}
+
+#[test]
+fn invoke_arity_mismatch_errors() {
+    let source = r#"
+% technique v1
+
+main :
+{
+    <greet>("a", "b")
+}
+
+greet(name) :
+
+1.  Hi
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-arity");
+    let prompt = Mock::with_answers([]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let env = Environment::new();
+    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run(env) else {
+        panic!("expected ParameterArityMismatch");
+    };
+    assert_eq!(expected, 1);
+    assert_eq!(actual, 2);
+}
+
+#[test]
 fn execute_announces_function_call() {
     let source = r#"
 % technique v1
@@ -578,8 +700,9 @@ test :
 1.  Do this { journal("hello") }
         "#
     .trim_ascii();
-    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    crate::linking::link(&mut program, &Library::stub()).expect("linked");
 
     let mut fixture = StoreFixture::new("execute-announce");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -588,11 +711,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -641,11 +764,10 @@ fn loop_inside_step_produces_one_result() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // One Start record, then the enclosing step's Begin and Done — the
@@ -696,11 +818,11 @@ fn repeat_loops_until_quit() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -764,11 +886,10 @@ fn foreach_walks_body_once_per_list_element() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // The body is walked once per element. Each Step event carries an
@@ -841,11 +962,11 @@ fn foreach_over_seq_builtin_runs() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         library,
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -925,11 +1046,10 @@ fn foreach_destructures_tuple_elements() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -983,11 +1103,10 @@ fn foreach_widens_primitive_to_singleton() {
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1041,10 +1160,9 @@ fn foreach_over_non_list_or_unbound_errors() {
         tuple_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        env,
         Library::stub(),
     );
-    match runner.run() {
+    match runner.run(env) {
         Err(RunnerError::NotIterable) => {}
         other => panic!("expected NotIterable, got {:?}", other),
     }
@@ -1065,10 +1183,9 @@ fn foreach_over_non_list_or_unbound_errors() {
         tablet_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        env,
         Library::stub(),
     );
-    match runner.run() {
+    match runner.run(env) {
         Err(RunnerError::NotIterable) => {}
         other => panic!("expected NotIterable, got {:?}", other),
     }
@@ -1080,10 +1197,10 @@ fn foreach_over_non_list_or_unbound_errors() {
         unbound_fixture.take_appender(),
         HashSet::new(),
         Mock::new(),
-        Environment::new(),
         Library::stub(),
     );
-    match runner.run() {
+    let env = Environment::new();
+    match runner.run(env) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
         other => panic!("expected UnboundVariable, got {:?}", other),
     }
@@ -1181,11 +1298,10 @@ greet(name) :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        env,
         Library::stub(),
     );
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     let prompt = runner.into_prompt();
@@ -1224,11 +1340,11 @@ test :
         fixture.take_appender(),
         HashSet::new(),
         prompt,
-        Environment::new(),
         Library::stub(),
     );
+    let env = Environment::new();
     runner
-        .run()
+        .run(env)
         .expect("run");
 
     // The prompt offered the two declared responses as choices.

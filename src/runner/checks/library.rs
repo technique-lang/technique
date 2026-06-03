@@ -1,3 +1,4 @@
+use crate::runner::context::Context;
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value::{Numeric, Value};
@@ -14,10 +15,11 @@ fn text(s: &str) -> Value {
 // evaluator takes once a call is resolved.
 fn call(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     let library = Library::core();
+    let context = Context::native();
     let id = library
         .resolve(name)
         .expect("builtin registered");
-    library.call(id, args)
+    library.call(id, &context, args)
 }
 
 #[test]

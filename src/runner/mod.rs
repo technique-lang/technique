@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::program::Program;
 
+mod context;
 mod evaluator;
 mod library;
 mod path;
@@ -14,7 +15,8 @@ mod prompt;
 mod runner;
 mod state;
 
-pub use library::Library;
+pub use context::Context;
+pub use library::{Builtin, Library, Native};
 pub use runner::{Outcome, RunnerError};
 pub use state::{RecordError, RunId};
 
@@ -40,15 +42,8 @@ pub fn start<'i>(
     let (run_id, run_dir) = store.create(document, now_iso8601())?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
-    let mut runner = Runner::new(
-        program,
-        appender,
-        HashSet::new(),
-        Console::new(),
-        env,
-        library,
-    );
-    let outcome = runner.run()?;
+    let mut runner = Runner::new(program, appender, HashSet::new(), Console::new(), library);
+    let outcome = runner.run(env)?;
     Ok((run_id, outcome))
 }
 
@@ -80,13 +75,7 @@ pub fn resume<'i>(
         state: State::Resume,
     };
     appender.append(&record)?;
-    let mut runner = Runner::new(
-        program,
-        appender,
-        completed,
-        Console::new(),
-        Environment::new(),
-        library,
-    );
-    runner.run()
+    let mut runner = Runner::new(program, appender, completed, Console::new(), library);
+    let env = Environment::new();
+    runner.run(env)
 }

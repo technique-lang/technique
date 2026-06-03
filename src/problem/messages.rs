@@ -1133,6 +1133,15 @@ functions calls:
             .trim_ascii()
             .to_string(),
         ),
+        LinkingError::UnresolvedFunction {
+            function: Identifier { value: name, .. },
+        } => (
+            format!("Unknown function {}()", name),
+            format!(
+                "The function {}() is neither builtin nor provided by the selected domain.",
+                name
+            ),
+        ),
     }
 }
 
@@ -1199,14 +1208,14 @@ procedure at the top of the Technique document.
             ),
             r#"
 Arguments were supplied on the command-line but the entry procedure at the top
-of the document doesn't take ant parameters.
+of the document doesn't take any parameters.
             "#.trim_ascii().to_string(),
         ),
         RunnerError::NotIterable => (
             "Iteration requires a list".to_string(),
             r#"
 The foreach loop control structure requires a list to iterate over, but the
-value supplied isn't one. A tablet is a dictonary, not a sequence. If you want
+value supplied isn't one. A tablet is a dictionary, not a sequence. If you want
 to use the values from a tablet convert them into a list first with the
 values() function. There is also a labels() function to get each of the
 tablet's labels, and pairs() to get a sequence of tuples of labels and values
@@ -1217,9 +1226,21 @@ you can iterate over.
             format!("Wrong argument type passed to {}()", function),
             format!("The {}() function expected {} but was given something else.", function, expected),
         ),
-        RunnerError::UnresolvedFunction(function) => (
-            format!("Unresolved function {}()", function),
-            format!("The function {}() is not a builtin and is not provided by the domain.", function),
+        RunnerError::UnknownFunction(function) => (
+            format!("Unknown function {}()", function),
+            format!("The function {}() is undefined. This should have been caught during the linking phase!", function),
+        ),
+        RunnerError::ExecError(error) => (
+            "Could not run external command".to_string(),
+            format!("Launching or reading from the external command failed: {}.", error),
+        ),
+        RunnerError::CommandFailed(code) => (
+            format!("External command exited with status {}", code),
+            "The shell command run by exec() finished with a non-zero exit status.".to_string(),
+        ),
+        RunnerError::IncompatibleCombination { left, right } => (
+            format!("Cannot combine {} with {}", left, right),
+            format!("Combining Values requires compatible kinds; a {} and a {} can't be added together.", left, right),
         ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),

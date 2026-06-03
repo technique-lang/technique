@@ -12,7 +12,7 @@ use crate::templating::template::Template;
 
 pub static TEMPLATE: &str = include_str!("source.typ");
 
-pub struct Source;
+pub use crate::domain::Source;
 
 impl Template for Source {
     fn markup(&self, document: &language::Document) -> String {

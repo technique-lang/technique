@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use super::context::Context;
 use super::library::Library;
 use super::runner::RunnerError;
 use crate::program::{ExecutableRef, Fragment, Operation};
@@ -35,6 +36,61 @@ impl Environment {
     }
 }
 
+/// The monoidal append operation for the Value type.
+///
+/// Combine two Values into one, with `Unitus` as the identity. Within-kind
+/// pairings combine (strings concatenate, lists append, tablets merge with
+/// last-write-wins on duplicate keys); cross-kind and not-yet-defined
+/// within-kind pairings are a hard error.
+///
+/// Note that this is deliberately *not* the value of a `Sequence`: a
+/// sequence is statement composition and takes its last member's value,
+/// while `+` accumulates — `{ "a"; "b" }` is `"b"`, but `"a" + "b"` is
+/// `"ab"`.
+#[allow(dead_code)]
+pub fn combine(left: Value, right: Value) -> Result<Value, RunnerError> {
+    match (left, right) {
+        (Value::Unitus, other) | (other, Value::Unitus) => Ok(other),
+        (Value::Literali(mut a), Value::Literali(b)) => {
+            a.push_str(&b);
+            Ok(Value::Literali(a))
+        }
+        (Value::Arraeum(mut a), Value::Arraeum(b)) => {
+            a.extend(b);
+            Ok(Value::Arraeum(a))
+        }
+        (Value::Tabularum(mut a), Value::Tabularum(b)) => {
+            for (key, value) in b {
+                match a
+                    .iter_mut()
+                    .find(|(existing, _)| *existing == key)
+                {
+                    Some(entry) => entry.1 = value,
+                    None => a.push((key, value)),
+                }
+            }
+            Ok(Value::Tabularum(a))
+        }
+        (left, right) => Err(RunnerError::IncompatibleCombination {
+            left: kind(&left),
+            right: kind(&right),
+        }),
+    }
+}
+
+/// Human-facing kind name of a Value, for combination error messages.
+fn kind(value: &Value) -> &'static str {
+    match value {
+        Value::Unitus => "unit",
+        Value::Literali(_) => "string",
+        Value::Quanticle(_) => "quantity",
+        Value::Tabularum(_) => "tablet",
+        Value::Arraeum(_) => "list",
+        Value::Parametriq(_) => "tuple",
+        Value::Futurae(_) => "future",
+    }
+}
+
 /// Evaluate an `Operation` to a `Value`.
 ///
 /// Fails with `UnboundVariable` etc if the operation cannot be resolved;
@@ -45,8 +101,9 @@ impl Environment {
 /// builtin, evaluating its arguments before doing so.
 #[allow(dead_code)]
 pub fn evaluate<'i>(
-    env: &mut Environment,
     library: &Library,
+    context: &Context,
+    env: &mut Environment,
     op: &Operation<'i>,
 ) -> Result<Value, RunnerError> {
     match op {
@@ -65,7 +122,8 @@ pub fn evaluate<'i>(
             for fragment in fragments {
                 match fragment {
                     Fragment::Text(t) => text.push_str(t),
-                    Fragment::Interpolation(inner) => match evaluate(env, library, inner)? {
+                    Fragment::Interpolation(inner) => match evaluate(library, context, env, inner)?
+                    {
                         Value::Literali(s) => text.push_str(&s),
                         other => text.push_str(&other.to_string()),
                     },
@@ -77,7 +135,7 @@ pub fn evaluate<'i>(
         Operation::Tablet(entries) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {
-                let v = evaluate(env, library, &entry.value)?;
+                let v = evaluate(library, context, env, &entry.value)?;
                 pairs.push((
                     entry
                         .label
@@ -90,19 +148,19 @@ pub fn evaluate<'i>(
         Operation::List(items) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
-                values.push(evaluate(env, library, item)?);
+                values.push(evaluate(library, context, env, item)?);
             }
             Ok(Value::Arraeum(values))
         }
         Operation::Bind { names, value } => {
-            let v = evaluate(env, library, value)?;
+            let v = evaluate(library, context, env, value)?;
             bind_names(env, names, v)?;
             Ok(Value::Unitus)
         }
         Operation::Sequence(ops) => {
             let mut last = Value::Unitus;
             for child in ops {
-                last = evaluate(env, library, child)?;
+                last = evaluate(library, context, env, child)?;
             }
             Ok(last)
         }
@@ -114,11 +172,11 @@ pub fn evaluate<'i>(
                         .len(),
                 );
                 for arg in &executable.arguments {
-                    args.push(evaluate(env, library, arg)?);
+                    args.push(evaluate(library, context, env, arg)?);
                 }
-                library.call(*id, &args)
+                library.call(*id, context, &args)
             }
-            ExecutableRef::Unresolved(target) => Err(RunnerError::UnresolvedFunction(
+            ExecutableRef::Unresolved(target) => Err(RunnerError::UnknownFunction(
                 target
                     .value
                     .to_string(),

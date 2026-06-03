@@ -55,7 +55,7 @@ powerdown :
 }
 
 #[test]
-fn unknown_function_left_unresolved() {
+fn unknown_function_is_an_error() {
     let source = r#"
 % technique v1
 
@@ -67,13 +67,12 @@ probe :
     let document = parsing::parse(path, source).expect("parse");
     let mut program = translate(&document).expect("translate");
 
-    link(&mut program, &Library::stub()).expect("link");
-
-    let executable = first_execute(&program.subroutines[0].body).expect("an Execute in the body");
-    let ExecutableRef::Unresolved(target) = &executable.target else {
-        panic!("expected Unresolved, got {:?}", executable.target);
+    let errors = link(&mut program, &Library::stub()).expect_err("unknown function");
+    assert_eq!(errors.len(), 1);
+    let LinkingError::UnresolvedFunction { function } = &errors[0] else {
+        panic!("expected UnresolvedFunction, got {:?}", errors[0]);
     };
-    assert_eq!(target.value, "mystery");
+    assert_eq!(function.value, "mystery");
 }
 
 #[test]
@@ -95,7 +94,10 @@ powerdown :
         function,
         expected,
         actual,
-    } = &errors[0];
+    } = &errors[0]
+    else {
+        panic!("expected ArityMismatch, got {:?}", errors[0]);
+    };
     assert_eq!(function.value, "cmd");
     assert_eq!(*expected, 1);
     assert_eq!(*actual, 2);

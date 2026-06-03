@@ -13,7 +13,7 @@ use crate::templating::template::Template;
 
 pub static TEMPLATE: &str = include_str!("checklist.typ");
 
-pub struct Checklist;
+pub use crate::domain::Checklist;
 
 impl Template for Checklist {
     fn markup(&self, document: &language::Document) -> String {
