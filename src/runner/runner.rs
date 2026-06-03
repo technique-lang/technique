@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
 
+use super::context::Context;
 use super::evaluator::Environment;
 use super::library::Library;
 use super::path::{PathSegment, QualifiedPath};
@@ -98,6 +99,7 @@ pub struct Runner<'i, P: Prompt> {
     prompt: P,
     path: QualifiedPath<'i>,
     library: Library,
+    context: Context,
 }
 
 impl<'i, P: Prompt> Runner<'i, P> {
@@ -115,6 +117,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             prompt,
             path: QualifiedPath::new(),
             library,
+            context: Context::native(),
         }
     }
 
@@ -204,7 +207,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_) => {
-                let value = super::evaluator::evaluate(&self.library, env, op)?;
+                let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Outcome::Done(value))
             }
         }
@@ -257,7 +260,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .iter()
                     .zip(&invocable.arguments)
                 {
-                    let value = super::evaluator::evaluate(&self.library, env, arg)?;
+                    let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
                     local.extend(
                         param
                             .value
@@ -342,14 +345,15 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 }
             }
             Some(expr) => {
-                let items = match super::evaluator::evaluate(&self.library, env, expr)? {
-                    Value::Arraeum(items) => items,
-                    // A scalar in list context is a singleton list.
-                    value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
-                    // A tablet is a record, not a sequence, so it does not
-                    // iterate directly.
-                    _ => return Err(RunnerError::NotIterable),
-                };
+                let items =
+                    match super::evaluator::evaluate(&self.library, &self.context, env, expr)? {
+                        Value::Arraeum(items) => items,
+                        // A scalar in list context is a singleton list.
+                        value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
+                        // A tablet is a record, not a sequence, so it does not
+                        // iterate directly.
+                        _ => return Err(RunnerError::NotIterable),
+                    };
                 for (i, item) in items
                     .into_iter()
                     .enumerate()
@@ -427,7 +431,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
         let title_text = match title {
-            Some(op) => match super::evaluator::evaluate(&self.library, env, op)? {
+            Some(op) => match super::evaluator::evaluate(&self.library, &self.context, env, op)? {
                 Value::Literali(s) => s,
                 other => other.to_string(),
             },
@@ -520,7 +524,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             if !description_text.is_empty() {
                 description_text.push('\n');
             }
-            match super::evaluator::evaluate(&self.library, env, op)? {
+            match super::evaluator::evaluate(&self.library, &self.context, env, op)? {
                 Value::Literali(s) => description_text.push_str(&s),
                 other => description_text.push_str(&other.to_string()),
             }

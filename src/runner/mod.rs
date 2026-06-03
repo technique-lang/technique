@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::program::Program;
 
+mod context;
 mod evaluator;
 mod library;
 mod path;

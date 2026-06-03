@@ -1,12 +1,15 @@
 //! The function table for the evaluator.
 
+use super::context::Context;
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
 
-/// A native function: implemented in Rust, taking already-evaluated
-/// arguments.
-pub type Native = fn(&[Value]) -> Result<Value, RunnerError>;
+/// A native function: implemented in Rust, taking an execution Context (host
+/// capabilities) and the already-evaluated arguments. Pure builtins disregard
+/// the Context; effectful functions from the host domain (e.g. `exec`) use
+/// it.
+pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
 /// A function in the Library's table
 struct Entry {
@@ -63,15 +66,21 @@ impl Library {
         self.functions[id.0].name
     }
 
-    /// Call the function at `id` with (already evaluated) arguments.
-    pub fn call(&self, id: ExecutableId, args: &[Value]) -> Result<Value, RunnerError> {
-        (self.functions[id.0].pointer)(args)
+    /// Call the function at `id` with the execution context and (already
+    /// evaluated) arguments.
+    pub fn call(
+        &self,
+        id: ExecutableId,
+        context: &Context,
+        args: &[Value],
+    ) -> Result<Value, RunnerError> {
+        (self.functions[id.0].pointer)(context, args)
     }
 }
 
 /// `seq(a, b)` — the inclusive integer range from `a` to `b` as a list,
 /// empty when `a > b`.
-fn seq(args: &[Value]) -> Result<Value, RunnerError> {
+fn seq(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let a = as_integer("seq", &args[0])?;
     let b = as_integer("seq", &args[1])?;
     let range = (a..=b)
@@ -82,7 +91,7 @@ fn seq(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `zip(xs, ys)` — a list of `(x, y)` pairs, one per position, truncated to
 /// the shorter input.
-fn zip(args: &[Value]) -> Result<Value, RunnerError> {
+fn zip(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let xs = as_list("zip", &args[0])?;
     let ys = as_list("zip", &args[1])?;
     let pairs = xs
@@ -94,7 +103,7 @@ fn zip(args: &[Value]) -> Result<Value, RunnerError> {
 }
 
 /// `values(form)` — the values of a tablet's entries, in order, as a list.
-fn values(args: &[Value]) -> Result<Value, RunnerError> {
+fn values(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("values", &args[0])?;
     let values = entries
         .iter()
@@ -105,7 +114,7 @@ fn values(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `labels(form)` — the labels of a tablet's entries, in order, as a list of
 /// text values.
-fn labels(args: &[Value]) -> Result<Value, RunnerError> {
+fn labels(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("labels", &args[0])?;
     let labels = entries
         .iter()
@@ -116,7 +125,7 @@ fn labels(args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `pairs(form)` — a tablet's entries as a list of `(label, value)` pairs,
 /// so `foreach (k, v) in pairs(form)` destructures through the usual rule.
-fn pairs(args: &[Value]) -> Result<Value, RunnerError> {
+fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("pairs", &args[0])?;
     let pairs = entries
         .iter()
@@ -166,7 +175,7 @@ fn as_tablet<'a>(
 #[cfg(test)]
 impl Library {
     pub fn stub() -> Self {
-        fn unit(_: &[Value]) -> Result<Value, RunnerError> {
+        fn unit(_: &Context, _: &[Value]) -> Result<Value, RunnerError> {
             Ok(Value::Unitus)
         }
         let entry = |name, arity| Entry {
