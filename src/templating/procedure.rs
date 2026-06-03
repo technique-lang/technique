@@ -13,7 +13,7 @@ use crate::templating::template::Template;
 
 pub static TEMPLATE: &str = include_str!("procedure.typ");
 
-pub struct Procedure;
+pub use crate::domain::Procedure;
 
 impl Template for Procedure {
     fn markup(&self, document: &language::Document) -> String {

@@ -9,7 +9,7 @@ use crate::templating::template::Template;
 
 pub static TEMPLATE: &str = include_str!("recipe.typ");
 
-pub struct Recipe;
+pub use crate::domain::Recipe;
 
 impl Template for Recipe {
     fn markup(&self, document: &language::Document) -> String {

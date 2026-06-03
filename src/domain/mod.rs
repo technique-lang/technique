@@ -19,3 +19,20 @@ pub(crate) mod serialize;
 pub mod source;
 
 pub use adapter::Adapter;
+pub use checklist::Checklist;
+pub use nasa_esa_iss::NasaEsaIss;
+pub use procedure::Procedure;
+pub use recipe::Recipe;
+pub use source::Source;
+
+use crate::runner::Builtin;
+
+/// The runtime facet of a domain: the domain-specific host functions it
+/// contributes to the interpreter's function table, on top of `Library::core`
+/// and the `Library::system` layer. Orthogonal to a domain's rendering
+/// projection (the `Template` trait).
+pub trait Domain {
+    fn functions(&self) -> Vec<Builtin> {
+        Vec::new()
+    }
+}

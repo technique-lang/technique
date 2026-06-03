@@ -8,6 +8,7 @@ use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
+use technique::domain::Domain;
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
@@ -280,6 +281,14 @@ fn main() {
                     Arg::new("filename")
                         .required(true)
                         .help("The file containing the Technique document to run."),
+                )
+                .arg(
+                    Arg::new("domain")
+                        .short('d')
+                        .long("domain")
+                        .value_parser(["checklist", "nasa-esa-iss", "procedure", "recipe", "source"])
+                        .action(ArgAction::Set)
+                        .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
                 )
                 .arg(
                     Arg::new("arguments")

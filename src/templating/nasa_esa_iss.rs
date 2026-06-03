@@ -10,7 +10,7 @@ use crate::templating::template::Template;
 
 pub static TEMPLATE: &str = include_str!("nasa_esa_iss.typ");
 
-pub struct NasaEsaIss;
+pub use crate::domain::NasaEsaIss;
 
 impl Template for NasaEsaIss {
     fn markup(&self, document: &language::Document) -> String {
