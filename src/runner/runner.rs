@@ -71,6 +71,10 @@ pub enum RunnerError {
         expected: &'static str,
     },
     UnresolvedFunction(String),
+    IncompatibleCombination {
+        left: &'static str,
+        right: &'static str,
+    },
     ParameterArityMismatch {
         expected: usize,
         actual: usize,
@@ -82,7 +86,7 @@ pub enum RunnerError {
 }
 
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
-/// the position in the document via a `QaulifiedPath` stack, carries an
+/// the position in the document via a `QualifiedPath` stack, carries an
 /// `Environment` with known result values. Maintains a set of
 /// already-completed step FQNs, an append handle to write results, and the
 /// prompt the operator interacts through.
@@ -374,6 +378,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         ops: &'i [Operation<'i>],
     ) -> Result<Outcome, RunnerError> {
         let mut parallel_idx: usize = 0;
+        let mut last = Value::Unitus;
         for op in ops {
             let outcome = match op {
                 Operation::Step { ordinal, .. } => {
@@ -388,11 +393,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 }
                 _ => self.walk(env, op)?,
             };
-            if let Outcome::Quit = outcome {
-                return Ok(Outcome::Quit);
+            match outcome {
+                Outcome::Done(value) => last = value,
+                Outcome::Quit => return Ok(Outcome::Quit),
+                Outcome::Skipped | Outcome::Failed(_) => {}
             }
         }
-        Ok(Outcome::Done(Value::Unitus))
+        Ok(Outcome::Done(last))
     }
 
     fn walk_section(

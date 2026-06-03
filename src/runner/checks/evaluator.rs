@@ -1,6 +1,6 @@
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
-use crate::runner::evaluator::{evaluate, Environment};
+use crate::runner::evaluator::{combine, evaluate, Environment};
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value;
@@ -135,6 +135,9 @@ fn bind_extends_env_for_subsequent_lookup() {
     assert_eq!(v, value::Value::Literali("Hello".to_string()));
 }
 
+// A sequence is statement composition: its value is the last member's value
+// (not a ⊕-fold — that will be the `+` operator's job).
+
 #[test]
 fn sequence_evaluation() {
     let library = Library::core();
@@ -153,11 +156,12 @@ fn sequence_evaluation() {
     assert_eq!(v, value::Value::Unitus);
 }
 
+// Build a Parametriq of three values by reducing a wrapped construction.
+// Simplest path: pre-stuff env with a Parametriq, then bind a tuple of names
+// to a Variable that looks it up.
+
 #[test]
 fn multi_name_bind_destructures_parametriq() {
-    // Build a Parametriq of three values by reducing a wrapped construction.
-    // Simplest path: pre-stuff env with a Parametriq, then bind a tuple of
-    // names to a Variable that looks it up.
     let library = Library::core();
     let mut env = Environment::new();
     env.extend(
@@ -280,4 +284,83 @@ fn execute_unresolved_function_errors() {
         panic!("expected UnresolvedFunction");
     };
     assert_eq!(name, "click");
+}
+
+// NOTE these tests of combine() document its behaviour when it was first
+// crafted, but the logic inherent in these rules has not been established as
+// being actually appropriate.
+
+#[test]
+fn combine_unit_is_identity() {
+    let s = value::Value::Literali("x".to_string());
+    let left = combine(value::Value::Unitus, s.clone()).expect("combined");
+    let right = combine(s.clone(), value::Value::Unitus).expect("combined");
+    assert_eq!(left, s);
+    assert_eq!(right, s);
+}
+
+#[test]
+fn combine_strings_concatenate() {
+    let a = value::Value::Literali("foo".to_string());
+    let b = value::Value::Literali("bar".to_string());
+    let v = combine(a, b).expect("combined");
+    assert_eq!(v, value::Value::Literali("foobar".to_string()));
+}
+
+#[test]
+fn combine_lists_append() {
+    let a = value::Value::Arraeum(vec![value::Value::Literali("a".to_string())]);
+    let b = value::Value::Arraeum(vec![value::Value::Literali("b".to_string())]);
+    let v = combine(a, b).expect("combined");
+    assert_eq!(
+        v,
+        value::Value::Arraeum(vec![
+            value::Value::Literali("a".to_string()),
+            value::Value::Literali("b".to_string()),
+        ])
+    );
+}
+
+#[test]
+fn combine_tablets_merge_last_write_wins() {
+    let a = value::Value::Tabularum(vec![
+        (
+            "host".to_string(),
+            value::Value::Literali("one".to_string()),
+        ),
+        ("port".to_string(), value::Value::Literali("80".to_string())),
+    ]);
+    let b = value::Value::Tabularum(vec![
+        (
+            "port".to_string(),
+            value::Value::Literali("443".to_string()),
+        ),
+        ("tls".to_string(), value::Value::Literali("yes".to_string())),
+    ]);
+    let v = combine(a, b).expect("combined");
+    assert_eq!(
+        v,
+        value::Value::Tabularum(vec![
+            (
+                "host".to_string(),
+                value::Value::Literali("one".to_string())
+            ),
+            (
+                "port".to_string(),
+                value::Value::Literali("443".to_string())
+            ),
+            ("tls".to_string(), value::Value::Literali("yes".to_string())),
+        ])
+    );
+}
+
+#[test]
+fn combine_cross_kind_errors() {
+    let a = value::Value::Quanticle(value::Numeric::Integral(42));
+    let b = value::Value::Literali("x".to_string());
+    let Err(RunnerError::IncompatibleCombination { left, right }) = combine(a, b) else {
+        panic!("expected IncompatibleCombination");
+    };
+    assert_eq!(left, "quantity");
+    assert_eq!(right, "string");
 }

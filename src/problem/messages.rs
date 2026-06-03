@@ -1221,6 +1221,10 @@ you can iterate over.
             format!("Unresolved function {}()", function),
             format!("The function {}() is not a builtin and is not provided by the domain.", function),
         ),
+        RunnerError::IncompatibleCombination { left, right } => (
+            format!("Cannot combine {} with {}", left, right),
+            format!("Combining Values requires compatible kinds; a {} and a {} can't be added together.", left, right),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
