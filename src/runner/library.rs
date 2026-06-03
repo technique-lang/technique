@@ -180,6 +180,69 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Arraeum(pairs))
 }
 
+/// `exec(script)` — run a shell script, teeing its stdout through the Context
+/// to the operator as it streams while accumulating it as the return value.
+/// Output is held as bytes until the end so a chunk split mid-UTF-8 is
+/// harmless and only one String is allocated. A non-zero exit is an error.
+fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+    let script = match &args[0] {
+        Value::Literali(script) => script,
+        _ => {
+            return Err(RunnerError::InvalidArgument {
+                function: "exec",
+                expected: "a shell script string",
+            })
+        }
+    };
+
+    let mut child = Command::new("bash")
+        .arg("-c")
+        .arg(script)
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(RunnerError::ExecError)?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .expect("child stdout was piped");
+    let mut captured = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = stdout
+            .read(&mut buffer)
+            .map_err(RunnerError::ExecError)?;
+        if count == 0 {
+            break;
+        }
+        context
+            .write(&buffer[..count])
+            .map_err(RunnerError::ExecError)?;
+        captured.extend_from_slice(&buffer[..count]);
+    }
+
+    let status = child
+        .wait()
+        .map_err(RunnerError::ExecError)?;
+    if !status.success() {
+        return Err(RunnerError::CommandFailed(
+            status
+                .code()
+                .unwrap_or(-1),
+        ));
+    }
+
+    Ok(Value::Literali(
+        String::from_utf8_lossy(&captured).into_owned(),
+    ))
+}
+
+/// `now()` — the current wall-clock time as an ISO 8601 string. A read of
+/// external state, hence part of the system layer rather than `core`.
+fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+    Ok(Value::Literali(super::runner::now_iso8601()))
+}
+
 fn as_integer(function: &'static str, value: &Value) -> Result<i64, RunnerError> {
     if let Value::Quanticle(Numeric::Integral(n)) = value {
         Ok(*n)
@@ -222,25 +285,68 @@ impl Library {
         fn unit(_: &Context, _: &[Value]) -> Result<Value, RunnerError> {
             Ok(Value::Unitus)
         }
-        let entry = |name, arity| Builtin {
-            name,
-            arity,
-            function: unit as Native,
-        };
         Library {
             functions: vec![
-                entry("seq", 2),
-                entry("zip", 2),
-                entry("exec", 1),
-                entry("cmd", 1),
-                entry("now", 0),
-                entry("uuid", 0),
-                entry("timer", 1),
-                entry("journal", 1),
-                entry("click", 1),
-                entry("navigate", 1),
-                entry("select", 1),
-                entry("deselect", 1),
+                Builtin {
+                    name: "seq",
+                    arity: 2,
+                    function: unit,
+                },
+                Builtin {
+                    name: "zip",
+                    arity: 2,
+                    function: unit,
+                },
+                Builtin {
+                    name: "exec",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "cmd",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "now",
+                    arity: 0,
+                    function: unit,
+                },
+                Builtin {
+                    name: "uuid",
+                    arity: 0,
+                    function: unit,
+                },
+                Builtin {
+                    name: "timer",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "journal",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "click",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "navigate",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "select",
+                    arity: 1,
+                    function: unit,
+                },
+                Builtin {
+                    name: "deselect",
+                    arity: 1,
+                    function: unit,
+                },
             ],
         }
     }

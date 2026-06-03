@@ -72,6 +72,8 @@ pub enum RunnerError {
         expected: &'static str,
     },
     UnresolvedFunction(String),
+    ExecError(io::Error),
+    CommandFailed(i32),
     IncompatibleCombination {
         left: &'static str,
         right: &'static str,
@@ -198,7 +200,17 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .append(&record)?;
                 self.prompt
                     .announce(&describe_execute(&function));
-                Ok(Outcome::Done(Value::Unitus))
+                // A resolved target runs through the evaluator, which calls
+                // the function with the live Context, teeing any output; an
+                // Unresolved target is announced only, not run.
+                match &executable.target {
+                    ExecutableRef::Resolved(_) => {
+                        let value =
+                            super::evaluator::evaluate(&self.library, &self.context, env, op)?;
+                        Ok(Outcome::Done(value))
+                    }
+                    ExecutableRef::Unresolved(_) => Ok(Outcome::Done(Value::Unitus)),
+                }
             }
             Operation::Bind { .. }
             | Operation::Variable(_)

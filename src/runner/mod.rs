@@ -15,7 +15,8 @@ mod prompt;
 mod runner;
 mod state;
 
-pub use library::Library;
+pub use context::Context;
+pub use library::{Builtin, Library, Native};
 pub use runner::{Outcome, RunnerError};
 pub use state::{RecordError, RunId};
 
