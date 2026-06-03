@@ -225,6 +225,38 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 let subroutine = &self
                     .program
                     .subroutines[id.0];
+
+                // Evaluate the call arguments in the caller's environment, then
+                // bind them positionally into a fresh environment for the
+                // callee. The callee sees only its parameters, not the caller's
+                // bindings.
+                let params = subroutine
+                    .parameters
+                    .unwrap_or(&[]);
+                let expected = params.len();
+                let actual = invocable
+                    .arguments
+                    .len();
+                if expected == 0 && actual > 0 {
+                    return Err(RunnerError::ParameterUnexpected { actual });
+                }
+                if expected != actual {
+                    return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                }
+                let mut local = Environment::new();
+                for (param, arg) in params
+                    .iter()
+                    .zip(&invocable.arguments)
+                {
+                    let value = super::evaluator::evaluate(&mut self.env, &self.library, arg)?;
+                    local.extend(
+                        param
+                            .value
+                            .to_string(),
+                        value,
+                    );
+                }
+
                 let name = subroutine
                     .name
                     .as_ref()
@@ -247,7 +279,13 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     self.path
                         .push(PathSegment::Procedure(name));
                 }
+
+                // Swap the callee's environment in for the body walk,
+                // restoring the caller's afterwards (even on error).
+                let caller = std::mem::replace(&mut self.env, local);
                 let result = self.walk(&subroutine.body);
+                self.env = caller;
+
                 if name.is_some() {
                     self.path
                         .pop();

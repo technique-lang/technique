@@ -569,6 +569,129 @@ helper :
 }
 
 #[test]
+fn invoke_binds_arguments_to_parameters() {
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <greet>("World")
+}
+
+greet(name) :
+
+1.  Hello { name }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-args");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+        Library::stub(),
+    );
+    runner
+        .run()
+        .expect("run");
+
+    let prompt = runner.into_prompt();
+    let steps: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Step {
+                qualified,
+                description,
+            } => Some((qualified.as_str(), description.as_str())),
+            _ => None,
+        })
+        .collect();
+    // The argument "World" is bound to greet's `name` parameter and
+    // interpolated into the step description.
+    assert_eq!(steps, vec![("/greet:1", "Hello World")]);
+}
+
+#[test]
+fn invoke_does_not_leak_caller_bindings() {
+    let source = r#"
+% technique v1
+
+main :
+{
+    <peek>()
+}
+
+peek :
+
+1.  Value is { secret }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-isolation");
+    // `secret` lives in the caller's (entry) frame; the callee `peek` runs
+    // in a fresh frame and must not see it.
+    let mut env = Environment::new();
+    env.extend("secret".to_string(), Value::Literali("99".to_string()));
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        env,
+        Library::stub(),
+    );
+    let Err(RunnerError::UnboundVariable(name)) = runner.run() else {
+        panic!("expected UnboundVariable from the isolated frame");
+    };
+    assert_eq!(name, "secret");
+}
+
+#[test]
+fn invoke_arity_mismatch_errors() {
+    let source = r#"
+% technique v1
+
+main :
+{
+    <greet>("a", "b")
+}
+
+greet(name) :
+
+1.  Hi
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("invoke-arity");
+    let prompt = Mock::with_answers([]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Environment::new(),
+        Library::stub(),
+    );
+    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run() else {
+        panic!("expected ParameterArityMismatch");
+    };
+    assert_eq!(expected, 1);
+    assert_eq!(actual, 2);
+}
+
+#[test]
 fn execute_announces_function_call() {
     let source = r#"
 % technique v1
