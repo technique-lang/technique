@@ -1199,14 +1199,14 @@ procedure at the top of the Technique document.
             ),
             r#"
 Arguments were supplied on the command-line but the entry procedure at the top
-of the document doesn't take ant parameters.
+of the document doesn't take any parameters.
             "#.trim_ascii().to_string(),
         ),
         RunnerError::NotIterable => (
             "Iteration requires a list".to_string(),
             r#"
 The foreach loop control structure requires a list to iterate over, but the
-value supplied isn't one. A tablet is a dictonary, not a sequence. If you want
+value supplied isn't one. A tablet is a dictionary, not a sequence. If you want
 to use the values from a tablet convert them into a list first with the
 values() function. There is also a labels() function to get each of the
 tablet's labels, and pairs() to get a sequence of tuples of labels and values
