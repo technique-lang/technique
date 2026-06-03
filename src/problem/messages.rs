@@ -1133,6 +1133,15 @@ functions calls:
             .trim_ascii()
             .to_string(),
         ),
+        LinkingError::UnresolvedFunction {
+            function: Identifier { value: name, .. },
+        } => (
+            format!("Unknown function {}()", name),
+            format!(
+                "The function {}() is neither builtin nor provided by the selected domain.",
+                name
+            ),
+        ),
     }
 }
 
@@ -1217,9 +1226,9 @@ you can iterate over.
             format!("Wrong argument type passed to {}()", function),
             format!("The {}() function expected {} but was given something else.", function, expected),
         ),
-        RunnerError::UnresolvedFunction(function) => (
-            format!("Unresolved function {}()", function),
-            format!("The function {}() is not a builtin and is not provided by the domain.", function),
+        RunnerError::UnknownFunction(function) => (
+            format!("Unknown function {}()", function),
+            format!("The function {}() is undefined. This should have been caught during the linking phase!", function),
         ),
         RunnerError::ExecError(error) => (
             "Could not run external command".to_string(),

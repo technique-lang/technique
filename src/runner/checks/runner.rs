@@ -700,8 +700,9 @@ test :
 1.  Do this { journal("hello") }
         "#
     .trim_ascii();
-    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    crate::linking::link(&mut program, &Library::stub()).expect("linked");
 
     let mut fixture = StoreFixture::new("execute-announce");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);

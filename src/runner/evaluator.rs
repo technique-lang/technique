@@ -176,7 +176,7 @@ pub fn evaluate<'i>(
                 }
                 library.call(*id, context, &args)
             }
-            ExecutableRef::Unresolved(target) => Err(RunnerError::UnresolvedFunction(
+            ExecutableRef::Unresolved(target) => Err(RunnerError::UnknownFunction(
                 target
                     .value
                     .to_string(),

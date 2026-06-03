@@ -8,7 +8,7 @@ use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
-use technique::domain::Domain;
+use technique::domain::{self, Domain};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
@@ -116,6 +116,17 @@ impl TypedValueParser for PaperSizeParser {
                 .into_iter()
                 .map(PossibleValue::new),
         ))
+    }
+}
+
+/// Resolve a domain name to its handle.
+fn select_domain(name: &str) -> &'static dyn Domain {
+    match domain::domain_for(name) {
+        Some(domain) => domain,
+        None => {
+            eprintln!("{}: unrecognized domain \"{}\"", "error".bright_red(), name);
+            std::process::exit(1);
+        }
     }
 }
 
@@ -427,7 +438,17 @@ fn main() {
                 std::process::exit(0);
             }
 
-            let library = Library::core();
+            // Check validates against the functions a run would resolve
+            // against: core and system, plus the document's declared domain.
+            let name = technique
+                .header
+                .as_ref()
+                .and_then(|m| m.domain)
+                .unwrap_or("source");
+            let domain = select_domain(name);
+            let mut library = Library::core();
+            library.extend(Library::system());
+            library.extend(domain.functions());
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -727,17 +748,17 @@ fn main() {
             // used. FUTURE the `core` and `system` functions are added here
             // regardless, in time we should make that more configurable.
 
-            let domain = submatches
+            let name = submatches
                 .get_one::<String>("domain")
                 .map(String::as_str)
+                .or_else(|| {
+                    technique
+                        .header
+                        .as_ref()
+                        .and_then(|m| m.domain)
+                })
                 .unwrap_or("source");
-            let domain: &dyn Domain = match domain {
-                "checklist" => &Checklist,
-                "nasa-esa-iss" => &NasaEsaIss,
-                "procedure" => &Procedure,
-                "recipe" => &Recipe,
-                _ => &Source,
-            };
+            let domain = select_domain(name);
 
             let mut library = Library::core();
             library.extend(Library::system());

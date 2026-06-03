@@ -294,7 +294,7 @@ fn execute_unresolved_function_errors() {
         arguments: Vec::new(),
     });
     let mut env = Environment::new();
-    let Err(RunnerError::UnresolvedFunction(name)) = evaluate(&library, &context, &mut env, &op)
+    let Err(RunnerError::UnknownFunction(name)) = evaluate(&library, &context, &mut env, &op)
     else {
         panic!("expected UnresolvedFunction");
     };

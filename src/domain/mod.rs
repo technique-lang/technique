@@ -36,3 +36,17 @@ pub trait Domain {
         Vec::new()
     }
 }
+
+/// Select a domain by name, for both the renderer and the runtime.
+/// `None` if the name matches no known domain — the caller reports that as an
+/// error rather than silently substituting a default.
+pub fn domain_for(name: &str) -> Option<&'static dyn Domain> {
+    match name {
+        "checklist" => Some(&Checklist),
+        "nasa-esa-iss" => Some(&NasaEsaIss),
+        "procedure" => Some(&Procedure),
+        "recipe" => Some(&Recipe),
+        "source" => Some(&Source),
+        _ => None,
+    }
+}
