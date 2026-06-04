@@ -5,10 +5,10 @@ use std::io;
 use std::path::PathBuf;
 
 use super::context::Context;
+use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
 use super::library::Library;
 use super::path::{PathSegment, QualifiedPath};
-use super::prompt::{Prompt, UserInput};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
@@ -94,40 +94,40 @@ pub enum RunnerError {
 /// already-completed step FQNs, an append handle to write results, and the
 /// prompt the operator interacts through.
 #[allow(dead_code)]
-pub struct Runner<'i, P: Prompt> {
+pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
     completed: HashSet<String>,
-    prompt: P,
+    driver: D,
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
 }
 
-impl<'i, P: Prompt> Runner<'i, P> {
+impl<'i, D: Driver> Runner<'i, D> {
     pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
         completed: HashSet<String>,
-        prompt: P,
+        driver: D,
         library: Library,
     ) -> Self {
         Runner {
             program,
             appender,
             completed,
-            prompt,
+            driver,
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
         }
     }
 
-    /// Consume the runner and return the inner prompt. Tests use this
+    /// Consume the runner and return the inner driver. Tests use this
     /// to assert on the Mock's event log after a run completes.
-    #[allow(dead_code)]
-    pub fn into_prompt(self) -> P {
-        self.prompt
+    #[cfg(test)]
+    pub fn into_driver(self) -> D {
+        self.driver
     }
 
     /// Walk the entry procedure top to bottom. Entry-procedure
@@ -198,7 +198,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 };
                 self.appender
                     .append(&record)?;
-                self.prompt
+                self.driver
                     .announce(&describe_execute(&function));
                 // Linking resolves every Execute against the library, so a
                 // target still Unresolved here means a resume-time runtime
@@ -310,7 +310,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 result
             }
             SubroutineRef::Unresolved(id) => {
-                self.prompt
+                self.driver
                     .announce(&format!("<{}>", id.value));
                 Ok(Outcome::Done(Value::Unitus))
             }
@@ -333,7 +333,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
-        self.prompt
+        self.driver
             .announce(&describe_loop(names, over));
         match over {
             None => {
@@ -444,7 +444,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             },
             None => String::new(),
         };
-        self.prompt
+        self.driver
             .section(&qualified, &title_text);
         self.walk(env, body)
     }
@@ -522,9 +522,11 @@ impl<'i, P: Prompt> Runner<'i, P> {
         self.appender
             .append(&begin)?;
 
-        if let Outcome::Quit = self.walk(env, body)? {
-            return Ok(Outcome::Quit);
-        }
+        let produced = match self.walk(env, body)? {
+            Outcome::Quit => return Ok(Outcome::Quit),
+            Outcome::Done(value) => value,
+            Outcome::Skipped | Outcome::Failed(_) => Value::Unitus,
+        };
 
         let mut description_text = String::new();
         for op in description {
@@ -537,7 +539,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             }
         }
 
-        self.prompt
+        self.driver
             .step(qualified, &description_text);
 
         let choices: Vec<&str> = responses
@@ -545,8 +547,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .map(|r| r.value)
             .collect();
         let outcome = outcome_from(
-            self.prompt
-                .ask(&choices),
+            self.driver
+                .ask(&choices, &produced),
         );
         if let Outcome::Quit = outcome {
             return Ok(Outcome::Quit);

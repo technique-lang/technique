@@ -13,7 +13,7 @@ use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
 use technique::parsing;
-use technique::runner::{self, Library, Outcome, RunId};
+use technique::runner::{self, Library, Mode, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -300,6 +300,15 @@ fn main() {
                         .value_parser(["checklist", "nasa-esa-iss", "procedure", "recipe", "source"])
                         .action(ArgAction::Set)
                         .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
+                )
+                .arg(
+                    Arg::new("mode")
+                        .short('m')
+                        .long("mode")
+                        .value_parser(["interactive", "automatic"])
+                        .default_value("interactive")
+                        .action(ArgAction::Set)
+                        .help("Whether to walk the procedure interactively, prompting the operator at each step, or automatically, taking each step's computed value and running to completion or first failure."),
                 )
                 .arg(
                     Arg::new("arguments")
@@ -689,6 +698,14 @@ fn main() {
 
             debug!(?arguments);
 
+            let mode = match submatches
+                .get_one::<String>("mode")
+                .map(String::as_str)
+            {
+                Some("automatic") => Mode::Automatic,
+                _ => Mode::Interactive,
+            };
+
             let filename = Path::new(filename);
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
@@ -779,7 +796,7 @@ fn main() {
                 std::process::exit(1);
             }
 
-            match runner::start(filename, &program, &arguments, library) {
+            match runner::start(mode, filename, &program, &arguments, library) {
                 Ok((run_id, Outcome::Quit)) => {
                     eprintln!("paused; resume with `technique resume {}`", run_id.render());
                     std::process::exit(0);

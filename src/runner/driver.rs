@@ -1,18 +1,26 @@
-//! Prompt trait, console implementation, and test mock.
+//! Driver trait, console and automatic implementations, and test mock.
 //!
-//! The walker tells the prompt what to show (`step`, `section`,
-//! `announce`) and then asks for the operator's verdict (`ask`). The
-//! split lets a console implementation render output to stdout, then
-//! read a line from stdin, while a test mock simply records what the
-//! walker tried to show and returns canned responses.
+//! A driver is what walks the operator (or no one) through a run; the
+//! run's `Mode` selects which. The walker tells the driver what to show
+//! (`step`, `section`, `announce`) and then asks for the step's outcome
+//! (`ask`). `Console` renders to stdout and reads the operator's verdict
+//! from stdin; `Automatic` takes the body's computed value with no human;
+//! `Mock` records what the walker tried to show and returns canned answers.
 
 use std::io::{self, BufRead, Write};
 
 use crate::value::Value;
 
+/// Which driver walks a run: `Interactive` prompts the user, `Automatic` runs
+/// to completion, taking each step's body value as the result.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Mode {
+    Interactive,
+    Automatic,
+}
+
 /// The person executing each step indicates a verdict on each prompt as
 /// follows:
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserInput {
     Done(Value),
@@ -21,11 +29,9 @@ pub enum UserInput {
     Quit,
 }
 
-/// What the walker uses to talk to the user executing the Technique. The two
-/// initial implementations are for an interactive console, `Console`, and for
-/// test cases, `Mock`.
-#[allow(dead_code)]
-pub trait Prompt {
+/// What the walker uses to drive a run. Implementations are the interactive
+/// console `Console`, the no-operator `Automatic`, and the test `Mock`.
+pub trait Driver {
     /// Show the step's Qualified Name and rendered description.
     /// The implementation displays them; it does not block waiting for
     /// input — the walker calls `ask` for that separately.
@@ -38,25 +44,24 @@ pub trait Prompt {
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
     fn announce(&mut self, message: &str);
 
-    /// Block until the operator answers the most recent `step` prompt.
-    /// When `choices` is non-empty the operator selects one of those
-    /// response values, yielding `Done(Literali(choice))`; an empty slice
-    /// presents the plain done/skip/fail/quit verdict, yielding
-    /// `Done(Unitus)`. Skip, fail, and quit remain available either way.
-    fn ask(&mut self, choices: &[&str]) -> UserInput;
+    /// Answer the most recent `step` prompt. `produced` is the value the
+    /// step body computed, offered as the step's value: `Console` presents it
+    /// for the operator to accept, `Automatic` takes it directly. When
+    /// `choices` is non-empty the operator instead selects one of those
+    /// response values, yielding `Done(Literali(choice))`. Skip, fail, and
+    /// quit are available either way.
+    fn ask(&mut self, choices: &[&str], produced: &Value) -> UserInput;
 }
 
 /// Interactive console prompt. Writes to stdout, reads line-buffered
 /// stdin. `d` → Done, `s` → Skip, `f` → Fail, `q` → Quit; matched
 /// case-insensitively on the first non-whitespace character. Anything
 /// else re-prompts.
-#[allow(dead_code)]
 pub struct Console<R: BufRead, W: Write> {
     input: R,
     output: W,
 }
 
-#[allow(dead_code)]
 impl Console<io::BufReader<io::Stdin>, io::Stdout> {
     /// Default console wired to process stdin (line-buffered) and
     /// stdout.
@@ -68,17 +73,17 @@ impl Console<io::BufReader<io::Stdin>, io::Stdout> {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl<R: BufRead, W: Write> Console<R, W> {
     /// Construct a console over arbitrary input and output handles.
-    /// Useful for end-to-end tests that exercise the actual rendering
-    /// and parsing paths without needing a TTY.
+    /// Useful for tests that exercise the actual rendering and parsing
+    /// paths without needing a TTY.
     pub fn with_handles(input: R, output: W) -> Self {
         Console { input, output }
     }
 }
 
-impl<R: BufRead, W: Write> Prompt for Console<R, W> {
+impl<R: BufRead, W: Write> Driver for Console<R, W> {
     fn step(&mut self, fqn: &str, description: &str) {
         let _ = writeln!(self.output, "  {}", fqn);
         let _ = writeln!(self.output, "{}", description);
@@ -96,7 +101,7 @@ impl<R: BufRead, W: Write> Prompt for Console<R, W> {
         let _ = writeln!(self.output, "{}", message);
     }
 
-    fn ask(&mut self, choices: &[&str]) -> UserInput {
+    fn ask(&mut self, choices: &[&str], produced: &Value) -> UserInput {
         loop {
             if choices.is_empty() {
                 let _ = write!(self.output, "[d]one / [s]kip / [f]ail / [q]uit ? ");
@@ -139,7 +144,7 @@ impl<R: BufRead, W: Write> Prompt for Console<R, W> {
                 .next()
                 .map(|c| c.to_ascii_lowercase())
             {
-                Some('d') if choices.is_empty() => return UserInput::Done(Value::Unitus),
+                Some('d') if choices.is_empty() => return UserInput::Done(produced.clone()),
                 Some('s') => return UserInput::Skip,
                 Some('f') => return UserInput::Fail,
                 Some('q') => return UserInput::Quit,
@@ -149,10 +154,56 @@ impl<R: BufRead, W: Write> Prompt for Console<R, W> {
     }
 }
 
+/// No-operator driver: writes a trace of each step to its output and takes
+/// the body's computed value as the step's outcome, running to completion
+/// or first failure. A pure-prose step (empty body value) records ().
+pub struct Automatic<W: Write> {
+    output: W,
+}
+
+impl Automatic<io::Stdout> {
+    pub fn new() -> Self {
+        Automatic {
+            output: io::stdout(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl<W: Write> Automatic<W> {
+    pub fn with_handle(output: W) -> Self {
+        Automatic { output }
+    }
+}
+
+impl<W: Write> Driver for Automatic<W> {
+    fn step(&mut self, fqn: &str, description: &str) {
+        let _ = writeln!(self.output, "  {}", fqn);
+        if !description.is_empty() {
+            let _ = writeln!(self.output, "{}", description);
+        }
+    }
+
+    fn section(&mut self, qualified: &str, title: &str) {
+        let _ = writeln!(self.output, "=== {} ===", qualified);
+        if !title.is_empty() {
+            let _ = writeln!(self.output, "{}", title);
+        }
+    }
+
+    fn announce(&mut self, message: &str) {
+        let _ = writeln!(self.output, "{}", message);
+    }
+
+    fn ask(&mut self, _choices: &[&str], produced: &Value) -> UserInput {
+        UserInput::Done(produced.clone())
+    }
+}
+
 /// Simulated prompt responses for test cases. Returns answers from a
 /// pre-loaded queue and records every announcement / step / section call so a
 /// test can assert what the walker tried to show.
-#[allow(dead_code)]
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub struct Mock {
     answers: std::collections::VecDeque<UserInput>,
@@ -161,7 +212,7 @@ pub struct Mock {
 
 /// One thing the walker showed (or attempted to show). Tests use this
 /// to inspect ordering and content of the walker's user-facing output.
-#[allow(dead_code)]
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Step {
@@ -178,7 +229,7 @@ pub enum Event {
     },
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl Mock {
     /// Construct a Mock with no canned answers — useful for tests that
     /// only inspect announcements and never reach an `ask` call.
@@ -204,7 +255,8 @@ impl Mock {
     }
 }
 
-impl Prompt for Mock {
+#[cfg(test)]
+impl Driver for Mock {
     fn step(&mut self, fqn: &str, description: &str) {
         self.events
             .push(Event::Step {
@@ -226,7 +278,7 @@ impl Prompt for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(&mut self, choices: &[&str]) -> UserInput {
+    fn ask(&mut self, choices: &[&str], _produced: &Value) -> UserInput {
         self.events
             .push(Event::Ask {
                 choices: choices
@@ -241,5 +293,5 @@ impl Prompt for Mock {
 }
 
 #[cfg(test)]
-#[path = "checks/prompt.rs"]
+#[path = "checks/driver.rs"]
 mod check;
