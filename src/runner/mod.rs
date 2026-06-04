@@ -3,6 +3,7 @@
 //! so a run can be resumed after interruption.
 
 use std::collections::HashSet;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use crate::program::Program;
@@ -46,6 +47,9 @@ pub fn start<'i>(
     let appender = Appender::open(pfftt, run_id)?;
     let outcome = match mode {
         Mode::Interactive => {
+            if !std::io::stdout().is_terminal() {
+                return Err(RunnerError::TerminalRequired);
+            }
             let mut runner =
                 Runner::new(program, appender, HashSet::new(), Console::new(), library);
             runner.run(env)?
@@ -76,6 +80,9 @@ pub fn resume<'i>(
     program: &'i Program<'i>,
     library: Library,
 ) -> Result<Outcome, RunnerError> {
+    if !std::io::stdout().is_terminal() {
+        return Err(RunnerError::TerminalRequired);
+    }
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (document, completed, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);

@@ -413,11 +413,48 @@ fn format_value(out: &mut String, value: &Value) {
         Value::Unit => out.push_str("()"),
         Value::Literal(text) => {
             out.push('"');
-            out.push_str(text);
+            escape_literal(out, text);
             out.push('"');
         }
         Value::Tablet(text) => out.push_str(text),
     }
+}
+
+// Escape a literal so it occupies a single record line: backslash and quote
+// are protected, and newlines/carriage returns become `\n` / `\r` so an
+// embedded multi-line value (e.g. captured exec output) survives the
+// line-oriented PFFTT format.
+fn escape_literal(out: &mut String, text: &str) {
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(c),
+        }
+    }
+}
+
+// Reverse `escape_literal`. An unknown escape (or a trailing backslash) is a
+// malformed record.
+fn unescape_literal(text: &str) -> Result<String, RecordError> {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('\\') => out.push('\\'),
+                Some('"') => out.push('"'),
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                _ => return Err(RecordError::MalformedState),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    Ok(out)
 }
 
 // Parse a single PFFTT record line into a Record.
@@ -536,7 +573,7 @@ fn parse_value(text: &str) -> Result<Value, RecordError> {
     if text == "()" {
         Ok(Value::Unit)
     } else if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') {
-        Ok(Value::Literal(text[1..text.len() - 1].to_string()))
+        Ok(Value::Literal(unescape_literal(&text[1..text.len() - 1])?))
     } else if text.starts_with('[') && text.ends_with(']') {
         Ok(Value::Tablet(text.to_string()))
     } else {

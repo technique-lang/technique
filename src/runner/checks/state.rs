@@ -503,6 +503,14 @@ fn record_round_trips_through_format_and_parse() {
             state: State::Done(Some(Value::Literal("Not Applicable".to_string()))),
         },
         Record {
+            recorded: "2026-05-14T12:00:02Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:8".to_string(),
+            state: State::Done(Some(Value::Literal(
+                "1: lo\n    inet 127.0.0.1/8\na quote \" and a slash \\".to_string(),
+            ))),
+        },
+        Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),
             run_id: RunId(1),
             path: "/a:4".to_string(),
@@ -531,6 +539,25 @@ fn record_round_trips_through_format_and_parse() {
             .expect("trailing newline");
         assert_eq!(parse_record(line).expect("parse"), original);
     }
+}
+
+#[test]
+fn multiline_literal_stays_on_one_record_line() {
+    // A multi-line value (e.g. captured exec output) must serialize to a
+    // single record line so the line-oriented store can read it back.
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        path: "/a:1".to_string(),
+        state: State::Done(Some(Value::Literal("first\nsecond\nthird".to_string()))),
+    };
+    let text = format_record(&record);
+    assert_eq!(
+        text.matches('\n')
+            .count(),
+        1
+    );
+    assert!(text.contains("\\n"));
 }
 
 #[test]

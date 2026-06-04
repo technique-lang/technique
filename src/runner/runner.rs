@@ -85,6 +85,7 @@ pub enum RunnerError {
     ParameterUnexpected {
         actual: usize,
     },
+    TerminalRequired,
     UserQuit,
 }
 
@@ -522,12 +523,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
-        let produced = match self.walk(env, body)? {
-            Outcome::Quit => return Ok(Outcome::Quit),
-            Outcome::Done(value) => value,
-            Outcome::Skipped | Outcome::Failed(_) => Value::Unitus,
-        };
-
+        // Show the step's heading and description before walking its body,
+        // so any output the body streams (e.g. exec) appears beneath the step
+        // it belongs to rather than ahead of it. The description interpolates
+        // only values bound by enclosing scopes, so it reads cleanly here.
         let mut description_text = String::new();
         for op in description {
             if !description_text.is_empty() {
@@ -542,13 +541,19 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &description_text);
 
+        let produced = match self.walk(env, body)? {
+            Outcome::Quit => return Ok(Outcome::Quit),
+            Outcome::Done(value) => value,
+            Outcome::Skipped | Outcome::Failed(_) => Value::Unitus,
+        };
+
         let choices: Vec<&str> = responses
             .iter()
             .map(|r| r.value)
             .collect();
         let outcome = outcome_from(
             self.driver
-                .ask(&choices, &produced),
+                .ask(&choices, produced),
         );
         if let Outcome::Quit = outcome {
             return Ok(Outcome::Quit);
