@@ -602,13 +602,15 @@ fn outcome_from(input: UserInput) -> Outcome {
     }
 }
 
-/// Project the runner's in-memory `Outcome` into the on-disk `State`
-/// the PFFTT writer expects. A chosen response records as a quoted
-/// literal; any other Done (the plain confirmation) records as unit.
-/// Quit is unreachable here: the caller filters it out before recording.
+/// Project the runner's in-memory `Outcome` into the on-disk `State` for the
+/// PFFTT file. A single-line input (a chosen response or whatever the user
+/// typed) records as a literal string. Multi-line literals (raw exec output)
+/// record as unit. The in-memory `Outcome` still carries the full value, so a
+/// value bound with `~` remains available in scope regardless. Quit is
+/// unreachable here: the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
-        Outcome::Done(Value::Literali(text)) => {
+        Outcome::Done(Value::Literali(text)) if !text.contains('\n') => {
             State::Done(Some(RecordValue::Literal(text.clone())))
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),

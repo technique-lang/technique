@@ -177,7 +177,7 @@ struct Interaction {
 impl Interaction {
     /// Seed an interaction with the supplied choices and a Value. There is
     /// some complex UI logic encoded here:
-    /// 
+    ///
     /// - a non-empty `choices` array indicates we want to do selection
     /// between these choices;
     /// - a scalar Value becomes an editable buffer; and
@@ -353,7 +353,11 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
             Field::Frozen { .. } => {
                 // The value was already shown above; the prompt carries only
                 // the affordances, not a re-truncation of it.
-                write!(out, "{}[enter] done   [esc] skip / fail / quit", PROMPT_TEXT)?;
+                write!(
+                    out,
+                    "{}[enter] done   [esc] skip / fail / quit",
+                    PROMPT_TEXT
+                )?;
             }
             Field::Choose { choices, active } => {
                 let refs: Vec<&str> = choices

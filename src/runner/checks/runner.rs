@@ -1449,3 +1449,39 @@ fn automatic_driver_records_body_value() {
     let record = parse_record(lines[2]).expect("parse record");
     assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
 }
+
+#[test]
+fn multiline_body_value_records_unit_but_still_propagates() {
+    // A step whose body computes multi-line text (raw exec output) records ()
+    let mut fixture = StoreFixture::new("multiline-records-unit");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
+    )]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(
+        outcome,
+        Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
+    );
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+}
