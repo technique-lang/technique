@@ -372,7 +372,7 @@ fn section_walking() {
     let section_fqns: Vec<&str> = events
         .iter()
         .filter_map(|e| {
-            if let Event::Section { qualified, .. } = e {
+            if let Event::Enter { qualified, .. } = e {
                 Some(qualified.as_str())
             } else {
                 None
@@ -419,7 +419,7 @@ fn section_walking() {
         .events()
         .iter()
         .find_map(|e| {
-            if let Event::Section { title, .. } = e {
+            if let Event::Enter { title, .. } = e {
                 Some(title.as_str())
             } else {
                 None

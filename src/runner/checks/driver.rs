@@ -45,18 +45,22 @@ fn mock_records_offered_choices() {
 }
 
 #[test]
-fn mock_records_section_and_announce() {
+fn mock_records_enter_leave_and_announce() {
     let mut p = Mock::new();
-    p.section("I", "Setup");
+    p.enter("I", "Setup");
     p.announce("Calling helper");
+    p.leave("I");
     assert_eq!(
         p.events(),
         &[
-            Event::Section {
+            Event::Enter {
                 qualified: "I".to_string(),
                 title: "Setup".to_string(),
             },
             Event::Announce("Calling helper".to_string()),
+            Event::Leave {
+                qualified: "I".to_string(),
+            },
         ]
     );
 }
@@ -74,18 +78,18 @@ fn console_step_writes_fqn_and_description() {
     let mut p = Console::with_output(&mut output);
     p.step("local_network:I/1", "Check the cable.");
     let written = String::from_utf8(output).expect("utf8");
-    assert!(written.contains("local_network:I/1"));
-    assert!(written.contains("Check the cable."));
+    assert!(written.contains("→ local_network:I/1"));
+    assert!(written.contains("  Check the cable."));
 }
 
 #[test]
-fn console_section_writes_fqn_and_title() {
+fn console_enter_writes_fqn_and_title() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
-    p.section("I", "Setup");
+    p.enter("I", "Setup");
     let written = String::from_utf8(output).expect("utf8");
-    assert!(written.contains("I"));
-    assert!(written.contains("Setup"));
+    assert!(written.contains("↘ I"));
+    assert!(written.contains("  Setup"));
 }
 
 #[test]
@@ -311,6 +315,7 @@ fn render_choices_lists_options() {
     let mut out: Vec<u8> = Vec::new();
     draw(&mut out, &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
+    assert!(written.contains('▶'));
     assert!(written.contains("Yes"));
     assert!(written.contains("No"));
 }

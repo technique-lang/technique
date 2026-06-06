@@ -298,6 +298,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .append(&record)?;
                     self.path
                         .push(PathSegment::Procedure(name));
+                    let descended = self
+                        .path
+                        .render();
+                    self.driver
+                        .enter(&descended, "");
                 }
 
                 // Walk the body against the callee's own environment; `local`
@@ -305,8 +310,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let result = self.walk(&mut local, &subroutine.body);
 
                 if name.is_some() {
+                    let descended = self
+                        .path
+                        .render();
                     self.path
                         .pop();
+                    self.driver
+                        .leave(&descended);
                 }
                 result
             }
@@ -424,8 +434,13 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.path
             .push(PathSegment::Section(numeral));
         let result = self.perform_section(env, title, body);
+        let qualified = self
+            .path
+            .render();
         self.path
             .pop();
+        self.driver
+            .leave(&qualified);
         result
     }
 
@@ -446,7 +461,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             None => String::new(),
         };
         self.driver
-            .section(&qualified, &title_text);
+            .enter(&qualified, &title_text);
         self.walk(env, body)
     }
 

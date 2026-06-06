@@ -45,8 +45,14 @@ pub trait Driver {
     /// input — the walker calls `ask` for that separately.
     fn step(&mut self, qualified: &str, description: &str);
 
-    /// Announce entry to a Section, with its Qualified Name and title text.
-    fn section(&mut self, qualified: &str, title: &str);
+    /// Announce descent into a named scope — a Section or an invoked
+    /// subroutine — with its Qualified Name and title text (the `↘` marker).
+    fn enter(&mut self, qualified: &str, title: &str);
+
+    /// Announce ascent back out of a named scope, with the Qualified Name of
+    /// the scope being left (the `↙` marker). Paired with `enter`; loop
+    /// iterations do not emit it.
+    fn leave(&mut self, qualified: &str);
 
     /// Surface an informational line — Loop body announcements,
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
@@ -90,20 +96,19 @@ impl<W: Write> Console<W> {
 
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        let _ = writeln!(self.output, "  {}", fqn);
-        let _ = writeln!(self.output, "{}", description);
+        render_step(&mut self.output, fqn, description);
     }
 
-    fn section(&mut self, qualified: &str, title: &str) {
-        let _ = writeln!(self.output);
-        let _ = writeln!(self.output, "=== {} ===", qualified);
-        if !title.is_empty() {
-            let _ = writeln!(self.output, "{}", title);
-        }
+    fn enter(&mut self, qualified: &str, title: &str) {
+        render_enter(&mut self.output, qualified, title);
+    }
+
+    fn leave(&mut self, qualified: &str) {
+        render_leave(&mut self.output, qualified);
     }
 
     fn announce(&mut self, message: &str) {
-        let _ = writeln!(self.output, "{}", message);
+        write_indented(&mut self.output, message);
     }
 
     fn ask(&mut self, choices: &[&str], produced: Value) -> UserInput {
@@ -130,9 +135,48 @@ impl<W: Write> Driver for Console<W> {
             }
         };
         let _ = disable_raw_mode();
-        let _ = writeln!(self.output);
+        // The prompt is a live affordance, not a record: clear it on settle so
+        // the next state line reuses the row rather than leaving a trail of
+        // spent ▶ lines.
+        let _ = queue!(
+            self.output,
+            cursor::MoveToColumn(0),
+            Clear(ClearType::CurrentLine)
+        );
+        let _ = self
+            .output
+            .flush();
         result
     }
+}
+
+/// Write prompt text into the two character gutter, one line at a time.
+/// Console output sits in two bands: a one-glyph gutter (column 0) carrying
+/// the directional markers — `↘` descend, `→` step, `▶` prompt — and the body
+/// (column 2) carrying the qualified name, description, and prompt content.
+/// Raw subprocess output (`exec`) is streamed verbetum and thus flush-left at
+/// column 0.
+fn write_indented<W: Write>(out: &mut W, text: &str) {
+    for line in text.lines() {
+        let _ = writeln!(out, "  {}", line);
+    }
+}
+
+/// Render a step's `→` line and indented description.
+fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
+    let _ = writeln!(out, "→ {}", fqn);
+    write_indented(out, description);
+}
+
+/// Render a named scope's `↘` descent line and indented title.
+fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
+    let _ = writeln!(out, "↘ {}", qualified);
+    write_indented(out, title);
+}
+
+/// Render a named scope's `↙` ascent line.
+fn render_leave<W: Write>(out: &mut W, qualified: &str) {
+    let _ = writeln!(out, "↙ {}", qualified);
 }
 
 /// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
@@ -425,6 +469,7 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
                 write!(out, "{}", PROMPT_TEXT)?;
             }
             Field::Choose { choices, active } => {
+                write!(out, "{}", PROMPT_TEXT)?;
                 let refs: Vec<&str> = choices
                     .iter()
                     .map(String::as_str)
@@ -531,21 +576,19 @@ impl<W: Write> Automatic<W> {
 
 impl<W: Write> Driver for Automatic<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        let _ = writeln!(self.output, "  {}", fqn);
-        if !description.is_empty() {
-            let _ = writeln!(self.output, "{}", description);
-        }
+        render_step(&mut self.output, fqn, description);
     }
 
-    fn section(&mut self, qualified: &str, title: &str) {
-        let _ = writeln!(self.output, "=== {} ===", qualified);
-        if !title.is_empty() {
-            let _ = writeln!(self.output, "{}", title);
-        }
+    fn enter(&mut self, qualified: &str, title: &str) {
+        render_enter(&mut self.output, qualified, title);
+    }
+
+    fn leave(&mut self, qualified: &str) {
+        render_leave(&mut self.output, qualified);
     }
 
     fn announce(&mut self, message: &str) {
-        let _ = writeln!(self.output, "{}", message);
+        write_indented(&mut self.output, message);
     }
 
     fn ask(&mut self, _choices: &[&str], produced: Value) -> UserInput {
@@ -572,9 +615,12 @@ pub enum Event {
         qualified: String,
         description: String,
     },
-    Section {
+    Enter {
         qualified: String,
         title: String,
+    },
+    Leave {
+        qualified: String,
     },
     Announce(String),
     Ask {
@@ -618,11 +664,18 @@ impl Driver for Mock {
             });
     }
 
-    fn section(&mut self, fqn: &str, title: &str) {
+    fn enter(&mut self, fqn: &str, title: &str) {
         self.events
-            .push(Event::Section {
+            .push(Event::Enter {
                 qualified: fqn.to_string(),
                 title: title.to_string(),
+            });
+    }
+
+    fn leave(&mut self, fqn: &str) {
+        self.events
+            .push(Event::Leave {
+                qualified: fqn.to_string(),
             });
     }
 
