@@ -89,8 +89,9 @@ fn console_section_writes_fqn_and_title() {
 }
 
 #[test]
-fn edit_unedited_enter_preserves_produced() {
-    // An untouched Unitus stays Unitus, not Literali("").
+fn default_enter_completes_with_produced() {
+    // The default is confirmation: Enter accepts the body's value intact, so
+    // an untouched Unitus stays Unitus, not Literali("").
     let mut it = Interaction::begin(&[], Value::Unitus);
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
@@ -99,14 +100,19 @@ fn edit_unedited_enter_preserves_produced() {
 }
 
 #[test]
-fn edit_typed_enter_returns_literali() {
-    let mut it = Interaction::begin(&[], Value::Unitus);
-    for c in "eth0".chars() {
-        assert_eq!(
-            it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)),
-            None
-        );
-    }
+fn esc_edit_typed_enter_returns_literali() {
+    // Editing is opt-in: Esc -> Edit (the first menu item) opens the buffer
+    // seeded from the value, which the operator can then extend.
+    let mut it = Interaction::begin(&[], Value::Literali("eth".to_string()));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        None
+    );
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE)),
+        None
+    );
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(Value::Literali("eth0".to_string())))
@@ -114,9 +120,11 @@ fn edit_typed_enter_returns_literali() {
 }
 
 #[test]
-fn edit_backspace_trims_candidate() {
-    // The Literali candidate starts with the cursor at the end.
+fn esc_edit_seeds_buffer_and_backspace_trims() {
+    // Edit seeds the buffer from the produced value, cursor at the end.
     let mut it = Interaction::begin(&[], Value::Literali("abc".to_string()));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
         None
@@ -128,32 +136,33 @@ fn edit_backspace_trims_candidate() {
 }
 
 #[test]
-fn esc_menu_navigates_skip_fail_quit() {
-    let mut it = Interaction::begin(&[], Value::Unitus);
-    // Esc opens the menu on the first item, skip.
-    assert_eq!(
-        it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
-        None
-    );
+fn esc_menu_navigates_edit_skip_fail_quit() {
+    // For an editable scalar the menu is edit, skip, fail, quit in order.
+    let editable = || Value::Literali("eth0".to_string());
+
+    let mut it = Interaction::begin(&[], editable());
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Skip)
     );
 
-    let mut it = Interaction::begin(&[], Value::Unitus);
+    let mut it = Interaction::begin(&[], editable());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Fail)
     );
 
-    let mut it = Interaction::begin(&[], Value::Unitus);
+    let mut it = Interaction::begin(&[], editable());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     // Right past the end clamps on quit.
-    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    for _ in 0..5 {
+        it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    }
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Quit)
@@ -161,9 +170,30 @@ fn esc_menu_navigates_skip_fail_quit() {
 }
 
 #[test]
+fn esc_menu_omits_edit_for_unit_and_complex() {
+    // Neither a Unit step (pure confirmation) nor a complex value is
+    // inline-editable, so the menu skips Edit and the first item is Skip.
+    let mut it = Interaction::begin(&[], Value::Unitus);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Skip)
+    );
+
+    let tablet = Value::Tabularum(vec![("k".to_string(), Value::Unitus)]);
+    let mut it = Interaction::begin(&[], tablet);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Skip)
+    );
+}
+
+#[test]
 fn esc_menu_backs_out_to_field() {
     let mut it = Interaction::begin(&[], Value::Literali("x".to_string()));
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    // Esc out of the menu returns to the frozen value; Enter accepts it intact.
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
         None
@@ -239,9 +269,10 @@ fn multiline_scalar_is_read_only() {
 }
 
 #[test]
-fn render_frozen_shows_only_affordances() {
+fn render_frozen_shows_only_triangle() {
     // A read-only value (already streamed above) is not re-echoed on the
-    // prompt line; the line carries no raw newline and only the key options.
+    // prompt line, and the menu options are not advertised — the normal prompt
+    // is just the "play" triangle.
     let dump = Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string());
     let it = Interaction::begin(&[], dump);
     let mut out: Vec<u8> = Vec::new();
@@ -249,8 +280,8 @@ fn render_frozen_shows_only_affordances() {
     let written = String::from_utf8(out).expect("utf8");
     assert!(!written.contains('\n'));
     assert!(!written.contains("eth0"));
-    assert!(written.contains("[enter]"));
-    assert!(written.contains("[esc]"));
+    assert!(written.contains('▶'));
+    assert!(!written.contains("[enter]"));
 }
 
 #[test]
@@ -264,7 +295,10 @@ fn ctrl_c_quits_from_any_field() {
 
 #[test]
 fn render_edit_shows_candidate_text() {
-    let it = Interaction::begin(&[], Value::Literali("hello".to_string()));
+    let mut it = Interaction::begin(&[], Value::Literali("hello".to_string()));
+    // Frozen by default; once edited, the candidate text is shown for editing.
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
     draw(&mut out, &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");

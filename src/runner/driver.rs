@@ -64,10 +64,11 @@ pub trait Driver {
 
 /// Interactive console prompt in a terminal. `step` / `section` / `announce`
 /// print in "cooked mode" (to use the old terminfo slang term for it); `ask`
-/// switches to "raw mode" to read keystrokes, presenting the step's value as
-/// an editable candidate (if a scalar) or a read-only display (a complex
-/// value) and offering an `<Esc>` menu for Skip / Fail / Quit. The keystroke
-/// logic lives in `Interaction`; this is the terminal shell around it.
+/// switches to "raw mode" to read keystrokes. The default is confirmation:
+/// `<Enter>` completes the step, accepting the body's value intact. The
+/// `<Esc>` menu offers Skip / Fail / Quit and, for an editable scalar, Edit —
+/// the one path to reshape the value. The keystroke logic lives in
+/// `Interaction`; this is the terminal shell around it.
 pub struct Console<W: Write> {
     output: W,
 }
@@ -134,8 +135,36 @@ impl<W: Write> Driver for Console<W> {
     }
 }
 
-/// Esc-menu options, in navigation order.
-const MENU: [&str; 3] = ["skip", "fail", "quit"];
+/// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
+/// are the step exits. Navigation order is the slice order in `menu_items`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MenuItem {
+    Edit,
+    Skip,
+    Fail,
+    Quit,
+}
+
+impl MenuItem {
+    fn label(self) -> &'static str {
+        match self {
+            MenuItem::Edit => "Edit",
+            MenuItem::Skip => "Skip",
+            MenuItem::Fail => "Fail",
+            MenuItem::Quit => "Quit",
+        }
+    }
+}
+
+/// The two Esc-menus: with `Edit` first for an editable scalar, or just the
+/// exits otherwise.
+const EDIT_MENU: [MenuItem; 4] = [
+    MenuItem::Edit,
+    MenuItem::Skip,
+    MenuItem::Fail,
+    MenuItem::Quit,
+];
+const PLAIN_MENU: [MenuItem; 3] = [MenuItem::Skip, MenuItem::Fail, MenuItem::Quit];
 
 /// Prompt prefix shown before an editable / read-only candidate, and its
 /// width in terminal columns (for placing the edit cursor). Later we will
@@ -155,7 +184,7 @@ enum Field {
         buffer: String,
         cursor: usize,
         edited: bool,
-        produced: Value,
+        original: Value,
     },
     Frozen {
         produced: Value,
@@ -175,26 +204,22 @@ struct Interaction {
 }
 
 impl Interaction {
-    /// Seed an interaction with the supplied choices and a Value. There is
-    /// some complex UI logic encoded here:
+    /// Seed an interaction with the supplied choices and a Value. The
+    /// behaviour on pressing <Enter> is confirmation that the step is done,
+    /// not data entry: `<Enter>` completes the step and the step's value is
+    /// whatever its body produced.
     ///
-    /// - a non-empty `choices` array indicates we want to do selection
-    /// between these choices;
-    /// - a scalar Value becomes an editable buffer; and
-    /// - a complex value a read-only display.
+    /// - a non-empty `choices` array selects between Responses; otherwise
+    ///
+    /// - the Value originally produced by the step is shown `Frozen`, and
+    /// `<Enter>` accepts it intact.
+    ///
+    /// Editing is opt-in via the `<Esc>` menu (see `menu_items`), offered only
+    /// when the value is an editable scalar; `ask()` will later present that
+    /// same Edit field up-front.
     fn begin(choices: &[&str], produced: Value) -> Self {
         let field = if choices.is_empty() {
-            match produced {
-                Value::Unitus => edit(String::new(), Value::Unitus),
-                quantity @ Value::Quanticle(_) => {
-                    let buffer = quantity.to_string();
-                    edit(buffer, quantity)
-                }
-                Value::Literali(text) if is_inline(&text) => {
-                    edit(text.clone(), Value::Literali(text))
-                }
-                other => Field::Frozen { produced: other },
-            }
+            Field::Frozen { produced }
         } else {
             Field::Choose {
                 choices: choices
@@ -205,6 +230,30 @@ impl Interaction {
             }
         };
         Interaction { field, menu: None }
+    }
+
+    /// The `<Esc>` menu items for the current field. A `Frozen` editable scalar
+    /// offers `Edit` as the first item; everything else (a complex/multiline
+    /// value, an active Edit, a Response selection) offers only the exits.
+    fn menu_items(&self) -> &'static [MenuItem] {
+        match &self.field {
+            Field::Frozen { produced } if editable_seed(produced).is_some() => &EDIT_MENU,
+            _ => &PLAIN_MENU,
+        }
+    }
+
+    /// Transition a `Frozen` scalar into an editable buffer seeded from it.
+    /// Reached only via the `Edit` menu item, which is offered only when the
+    /// seed exists, so the fallback restore never fires in practice.
+    fn enter_edit(&mut self) {
+        if let Field::Frozen { produced } = &mut self.field {
+            let taken = std::mem::replace(produced, Value::Unitus);
+            match editable_seed(&taken) {
+                Some(seed) => self.field = edit(seed, taken),
+                None => self.field = Field::Frozen { produced: taken },
+            }
+        }
+        self.menu = None;
     }
 
     fn handle(&mut self, key: KeyEvent) -> Option<UserInput> {
@@ -229,23 +278,35 @@ impl Interaction {
     }
 
     fn menu_key(&mut self, code: KeyCode) -> Option<UserInput> {
-        let active = self
+        let len = self
+            .menu_items()
+            .len();
+        let active = (*self
             .menu
-            .as_mut()?;
+            .as_ref()?)
+        .min(len - 1);
         match code {
             KeyCode::Left => {
-                if *active > 0 {
-                    *active -= 1;
+                if active > 0 {
+                    self.menu = Some(active - 1);
                 }
                 None
             }
             KeyCode::Right => {
-                if *active + 1 < MENU.len() {
-                    *active += 1;
+                if active + 1 < len {
+                    self.menu = Some(active + 1);
                 }
                 None
             }
-            KeyCode::Enter => Some(menu_input(*active)),
+            KeyCode::Enter => match self.menu_items()[active] {
+                MenuItem::Edit => {
+                    self.enter_edit();
+                    None
+                }
+                MenuItem::Skip => Some(UserInput::Skip),
+                MenuItem::Fail => Some(UserInput::Fail),
+                MenuItem::Quit => Some(UserInput::Quit),
+            },
             KeyCode::Esc => {
                 self.menu = None;
                 None
@@ -260,13 +321,13 @@ impl Interaction {
                 buffer,
                 cursor,
                 edited,
-                produced,
+                original,
             } => match code {
                 KeyCode::Enter => {
                     if *edited {
                         Some(UserInput::Done(Value::Literali(std::mem::take(buffer))))
                     } else {
-                        Some(UserInput::Done(std::mem::replace(produced, Value::Unitus)))
+                        Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
                     }
                 }
                 KeyCode::Char(c) => {
@@ -338,8 +399,15 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
     match interaction.menu {
         Some(active) => {
-            write!(out, "esc: ")?;
-            render_choices(out, &MENU, active)?;
+            // The step is still running (timer ticking), so keep the same
+            // triangle; only the line's content changes to the menu choices.
+            write!(out, "{}", PROMPT_TEXT)?;
+            let labels: Vec<&str> = interaction
+                .menu_items()
+                .iter()
+                .map(|item| item.label())
+                .collect();
+            render_choices(out, &labels, active)?;
         }
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
@@ -351,13 +419,10 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
                 queue!(out, cursor::MoveToColumn(col))?;
             }
             Field::Frozen { .. } => {
-                // The value was already shown above; the prompt carries only
-                // the affordances, not a re-truncation of it.
-                write!(
-                    out,
-                    "{}[enter] done   [esc] skip / fail / quit",
-                    PROMPT_TEXT
-                )?;
+                // The value (if any) was already shown above; the normal prompt
+                // is just the "play" triangle. The exit/edit options are not
+                // advertised here — they appear only once <Esc> opens the menu.
+                write!(out, "{}", PROMPT_TEXT)?;
             }
             Field::Choose { choices, active } => {
                 let refs: Vec<&str> = choices
@@ -391,23 +456,29 @@ fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io:
     Ok(())
 }
 
-/// Map an Esc-menu index to its outcome.
-fn menu_input(index: usize) -> UserInput {
-    match index {
-        0 => UserInput::Skip,
-        1 => UserInput::Fail,
-        _ => UserInput::Quit,
+/// The buffer an editable scalar seeds its Edit field with: the rendered
+/// number for a Quanticle, the raw text for an inline Literali. `None` marks
+/// a value with nothing to edit, coming from a step returning Unit and thus
+/// is onlt pure confirmation.
+fn editable_seed(produced: &Value) -> Option<String> {
+    match produced {
+        Value::Unitus => None,
+        Value::Quanticle(_) => Some(produced.to_string()),
+        Value::Literali(text) if is_inline(text) => Some(text.clone()),
+        // Complex or multi-line values are not editable inline.
+        _ => None,
     }
 }
 
-/// Build an editable field from a scalar's text, cursor at the end.
-fn edit(buffer: String, produced: Value) -> Field {
+/// Build an editable field from a scalar's text, cursor at the end. The
+/// `original` value is returned verbatim if the buffer is accepted unedited.
+fn edit(buffer: String, original: Value) -> Field {
     let cursor = buffer.len();
     Field::Edit {
         buffer,
         cursor,
         edited: false,
-        produced,
+        original,
     }
 }
 
