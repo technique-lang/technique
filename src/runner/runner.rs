@@ -612,7 +612,7 @@ fn outcome_from(input: UserInput) -> Outcome {
     match input {
         UserInput::Done(value) => Outcome::Done(value),
         UserInput::Skip => Outcome::Skipped,
-        UserInput::Fail => Outcome::Failed(Failure::Aborted("Failed".to_string())),
+        UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
         UserInput::Quit => Outcome::Quit,
     }
 }

@@ -33,7 +33,7 @@ pub enum Mode {
 pub enum UserInput {
     Done(Value),
     Skip,
-    Fail,
+    Fail(String),
     Quit,
 }
 
@@ -216,6 +216,12 @@ const MENU: [MenuItem; 4] = [
 const PROMPT_TEXT: &str = "▶ ";
 const PROMPT_WIDTH: u16 = 2;
 
+/// Appended to the menu line (after the items) when soliciting a reason for
+/// e.g. failure; the typed buffer follows it. The Fail menu item stays
+/// selected while it is shown, so it reads as a submenu rather than another
+/// separate mode.
+const REASON_PREFIX: &str = "   Reason? ";
+
 /// Longest scalar offered as an inline-editable candidate. A longer (or
 /// multi-line) value can't be edited on one line, so it falls back to the
 /// read-only display.
@@ -239,12 +245,22 @@ enum Field {
     },
 }
 
+/// The inline buffer soliciting a fail reason, shown on the menu line while
+/// Fail is highlighted. A submenu of the menu, not a Field: the underlying
+/// `Frozen` value is left untouched so backing out restores it.
+struct Reason {
+    buffer: String,
+    cursor: usize,
+}
+
 /// Our state machine behind the "raw-mode" Console. `handle`
 /// folds one key into the state, returning `Some(UserInput)` once the
-/// operator has settled on an outcome.
+/// operator has settled on an outcome. `reason` is the Fail submenu, open only
+/// while `menu` rests on Fail.
 struct Interaction {
     field: Field,
     menu: Option<usize>,
+    reason: Option<Reason>,
 }
 
 impl Interaction {
@@ -273,7 +289,11 @@ impl Interaction {
                 active: 0,
             }
         };
-        Interaction { field, menu: None }
+        Interaction {
+            field,
+            menu: None,
+            reason: None,
+        }
     }
 
     /// Whether a menu item is currently selectable. Only `Edit` is ever
@@ -336,6 +356,11 @@ impl Interaction {
             }
         }
         if self
+            .reason
+            .is_some()
+        {
+            self.reason_key(key.code)
+        } else if self
             .menu
             .is_some()
         {
@@ -369,7 +394,15 @@ impl Interaction {
                     None
                 }
                 MenuItem::Skip => Some(UserInput::Skip),
-                MenuItem::Fail => Some(UserInput::Fail),
+                MenuItem::Fail => {
+                    // Open the reason submenu, leaving Fail highlighted and the
+                    // underlying value untouched so Esc can back out cleanly.
+                    self.reason = Some(Reason {
+                        buffer: String::new(),
+                        cursor: 0,
+                    });
+                    None
+                }
                 MenuItem::Quit => Some(UserInput::Quit),
             },
             KeyCode::Esc => {
@@ -377,6 +410,27 @@ impl Interaction {
                 None
             }
             _ => None,
+        }
+    }
+
+    /// Fold a key into the fail-reason submenu. `<Enter>` settles as
+    /// `Fail(reason)` (an empty reason is taken as given); `<Esc>` closes the
+    /// submenu back to the menu with Fail still highlighted; the rest edit the
+    /// inline buffer.
+    fn reason_key(&mut self, code: KeyCode) -> Option<UserInput> {
+        let reason = self
+            .reason
+            .as_mut()?;
+        match code {
+            KeyCode::Enter => Some(UserInput::Fail(std::mem::take(&mut reason.buffer))),
+            KeyCode::Esc => {
+                self.reason = None;
+                None
+            }
+            other => {
+                text_key(&mut reason.buffer, &mut reason.cursor, other);
+                None
+            }
         }
     }
 
@@ -399,30 +453,12 @@ impl Interaction {
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
                     }
                 }
-                KeyCode::Char(c) => {
-                    buffer.insert(*cursor, c);
-                    *cursor += c.len_utf8();
-                    *edited = true;
-                    None
-                }
-                KeyCode::Backspace => {
-                    if *cursor > 0 {
-                        let start = prev_boundary(buffer, *cursor);
-                        buffer.replace_range(start..*cursor, "");
-                        *cursor = start;
+                other => {
+                    if text_key(buffer, cursor, other) {
                         *edited = true;
                     }
                     None
                 }
-                KeyCode::Left => {
-                    *cursor = prev_boundary(buffer, *cursor);
-                    None
-                }
-                KeyCode::Right => {
-                    *cursor = next_boundary(buffer, *cursor);
-                    None
-                }
-                _ => None,
             },
             Field::Frozen { produced } => match code {
                 KeyCode::Enter => Some(UserInput::Done(std::mem::replace(produced, Value::Unitus))),
@@ -460,6 +496,18 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
             // triangle; only the line's content changes to the menu choices.
             write!(out, "{}", PROMPT_TEXT)?;
             render_menu(out, interaction, active)?;
+            if let Some(reason) = &interaction.reason {
+                write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                let col = PROMPT_WIDTH
+                    + menu_width()
+                    + REASON_PREFIX
+                        .chars()
+                        .count() as u16
+                    + reason.buffer[..reason.cursor]
+                        .chars()
+                        .count() as u16;
+                queue!(out, cursor::MoveToColumn(col))?;
+            }
         }
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
@@ -585,6 +633,60 @@ fn next_boundary(s: &str, i: usize) -> usize {
         .chars()
         .next()
         .map_or(i, |c| i + c.len_utf8())
+}
+
+/// Apply one text-editing key to a buffer and cursor, returning whether the
+/// buffer's content changed (an insertion or deletion) as opposed to a cursor
+/// move or an unhandled key. Callers tracking an `edited` flag set it on a
+/// `true` return; `<Enter>` / `<Esc>` are the caller's, not handled here.
+fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
+    match code {
+        KeyCode::Char(c) => {
+            buffer.insert(*cursor, c);
+            *cursor += c.len_utf8();
+            true
+        }
+        KeyCode::Backspace => {
+            if *cursor > 0 {
+                let start = prev_boundary(buffer, *cursor);
+                buffer.replace_range(start..*cursor, "");
+                *cursor = start;
+                true
+            } else {
+                false
+            }
+        }
+        KeyCode::Left => {
+            *cursor = prev_boundary(buffer, *cursor);
+            false
+        }
+        KeyCode::Right => {
+            *cursor = next_boundary(buffer, *cursor);
+            false
+        }
+        _ => false,
+    }
+}
+
+/// Visible width of the full menu — every item is drawn, and the reverse / dim
+/// escapes are zero-width, so this is just the laid-out label widths. Used to
+/// place the sub-menu cursor after the menu when shown on the same line.
+fn menu_width() -> u16 {
+    let mut width = 0u16;
+    for (i, item) in MENU
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            width += 2;
+        }
+        width += item
+            .label()
+            .chars()
+            .count() as u16
+            + 2;
+    }
+    width
 }
 
 /// No-operator driver: writes a trace of each step to its output and takes

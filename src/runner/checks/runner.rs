@@ -174,7 +174,7 @@ fn step_outcomes_recorded() {
         Operation::Sequence(vec![]),
     )]);
     let program = anonymous_with_body(body);
-    let prompt = Mock::with_answers([UserInput::Fail]);
+    let prompt = Mock::with_answers([UserInput::Fail("cable unplugged".to_string())]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
@@ -200,7 +200,7 @@ fn step_outcomes_recorded() {
     assert_eq!(
         record.state,
         State::Fail(Some(RecordValue::Tablet(
-            "[ reason = \"Failed\" ]".to_string()
+            "[ reason = \"cable unplugged\" ]".to_string()
         )))
     );
 }

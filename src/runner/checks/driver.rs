@@ -156,9 +156,16 @@ fn esc_menu_navigates_edit_skip_fail_quit() {
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    // Fail opens a reason buffer; it settles once the reason is entered.
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Fail)
+        None
+    );
+    it.handle(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Fail("no".to_string()))
     );
 
     let mut it = Interaction::begin(&[], editable());
@@ -204,6 +211,51 @@ fn menu_shows_greyed_edit_when_unavailable() {
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("Edit"));
     assert!(written.contains("Skip"));
+}
+
+#[test]
+fn fail_reason_backs_out_through_menu_to_field() {
+    // Fail opens the reason submenu; Esc closes it back to the menu (Fail still
+    // selectable), and a second Esc returns to the untouched frozen value, so
+    // Enter still completes the step with its produced value intact.
+    let mut it = Interaction::begin(&[], Value::Literali("eth0".to_string()));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    // Type into the reason, then abandon it.
+    it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+        None
+    );
+    // Back at the menu, Fail is still selectable.
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+        None
+    );
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Done(Value::Literali("eth0".to_string())))
+    );
+}
+
+#[test]
+fn fail_reason_reopens_empty_after_abandon() {
+    // Abandoning a reason discards its text; reopening Fail starts fresh.
+    let mut it = Interaction::begin(&[], Value::Unitus);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Fail("y".to_string()))
+    );
 }
 
 #[test]
@@ -320,6 +372,24 @@ fn render_edit_shows_candidate_text() {
     draw(&mut out, &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("hello"));
+}
+
+#[test]
+fn render_reason_submenu_on_menu_line() {
+    // Selecting Fail shows the reason prompt and the typed buffer on the same
+    // line as the still-listed menu items.
+    let mut it = Interaction::begin(&[], Value::Unitus);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    let mut out: Vec<u8> = Vec::new();
+    draw(&mut out, &it).expect("draw");
+    let written = String::from_utf8(out).expect("utf8");
+    assert!(written.contains("Fail"));
+    assert!(written.contains("Reason?"));
+    assert!(written.contains("ok"));
 }
 
 #[test]
