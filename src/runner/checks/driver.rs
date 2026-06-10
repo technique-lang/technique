@@ -174,9 +174,9 @@ fn esc_menu_navigates_edit_skip_fail_quit() {
 }
 
 #[test]
-fn esc_menu_omits_edit_for_unit_and_complex() {
+fn esc_menu_disables_edit_for_unit_and_complex() {
     // Neither a Unit step (pure confirmation) nor a complex value is
-    // inline-editable, so the menu skips Edit and the first item is Skip.
+    // inline-editable, so Edit is greyed and the menu opens on Skip.
     let mut it = Interaction::begin(&[], Value::Unitus);
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(
@@ -191,6 +191,19 @@ fn esc_menu_omits_edit_for_unit_and_complex() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Skip)
     );
+}
+
+#[test]
+fn menu_shows_greyed_edit_when_unavailable() {
+    // Edit is always listed so it stays discoverable; for a non-editable value
+    // it is drawn (greyed) alongside the exits, and the menu opens on Skip.
+    let mut it = Interaction::begin(&[], Value::Unitus);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    let mut out: Vec<u8> = Vec::new();
+    draw(&mut out, &it).expect("draw");
+    let written = String::from_utf8(out).expect("utf8");
+    assert!(written.contains("Edit"));
+    assert!(written.contains("Skip"));
 }
 
 #[test]

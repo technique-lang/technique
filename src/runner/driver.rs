@@ -200,15 +200,15 @@ impl MenuItem {
     }
 }
 
-/// The two Esc-menus: with `Edit` first for an editable scalar, or just the
-/// exits otherwise.
-const EDIT_MENU: [MenuItem; 4] = [
+/// The Esc-menu, always shown in full. `Edit` leads but is greyed and
+/// unselectable unless the produced value is an editable scalar, so the menu
+/// teaches that some steps can be edited while most cannot.
+const MENU: [MenuItem; 4] = [
     MenuItem::Edit,
     MenuItem::Skip,
     MenuItem::Fail,
     MenuItem::Quit,
 ];
-const PLAIN_MENU: [MenuItem; 3] = [MenuItem::Skip, MenuItem::Fail, MenuItem::Quit];
 
 /// Prompt prefix shown before an editable / read-only candidate, and its
 /// width in terminal columns (for placing the edit cursor). Later we will
@@ -276,14 +276,38 @@ impl Interaction {
         Interaction { field, menu: None }
     }
 
-    /// The `<Esc>` menu items for the current field. A `Frozen` editable scalar
-    /// offers `Edit` as the first item; everything else (a complex/multiline
-    /// value, an active Edit, a Response selection) offers only the exits.
-    fn menu_items(&self) -> &'static [MenuItem] {
-        match &self.field {
-            Field::Frozen { produced } if editable_seed(produced).is_some() => &EDIT_MENU,
-            _ => &PLAIN_MENU,
+    /// Whether a menu item is currently selectable. Only `Edit` is ever
+    /// disabled — offered when the produced value is an editable scalar, greyed
+    /// otherwise; the exits are always available. Navigation skips a disabled
+    /// item and the menu never opens onto one.
+    fn enabled(&self, item: MenuItem) -> bool {
+        match item {
+            MenuItem::Edit => match &self.field {
+                Field::Frozen { produced } => editable_seed(produced).is_some(),
+                _ => false,
+            },
+            _ => true,
         }
+    }
+
+    /// First selectable item, where the menu opens. The exits are always
+    /// enabled, so the fallback never fires.
+    fn first_enabled(&self) -> usize {
+        (0..MENU.len())
+            .find(|&i| self.enabled(MENU[i]))
+            .unwrap_or(0)
+    }
+
+    /// Nearest selectable item after / before `from`, or `None` at the edge —
+    /// so navigation stops rather than wrapping, and steps over a greyed item.
+    fn next_enabled(&self, from: usize) -> Option<usize> {
+        ((from + 1)..MENU.len()).find(|&i| self.enabled(MENU[i]))
+    }
+
+    fn prev_enabled(&self, from: usize) -> Option<usize> {
+        (0..from)
+            .rev()
+            .find(|&i| self.enabled(MENU[i]))
     }
 
     /// Transition a `Frozen` scalar into an editable buffer seeded from it.
@@ -322,27 +346,24 @@ impl Interaction {
     }
 
     fn menu_key(&mut self, code: KeyCode) -> Option<UserInput> {
-        let len = self
-            .menu_items()
-            .len();
         let active = (*self
             .menu
             .as_ref()?)
-        .min(len - 1);
+        .min(MENU.len() - 1);
         match code {
             KeyCode::Left => {
-                if active > 0 {
-                    self.menu = Some(active - 1);
+                if let Some(prev) = self.prev_enabled(active) {
+                    self.menu = Some(prev);
                 }
                 None
             }
             KeyCode::Right => {
-                if active + 1 < len {
-                    self.menu = Some(active + 1);
+                if let Some(next) = self.next_enabled(active) {
+                    self.menu = Some(next);
                 }
                 None
             }
-            KeyCode::Enter => match self.menu_items()[active] {
+            KeyCode::Enter => match MENU[active] {
                 MenuItem::Edit => {
                     self.enter_edit();
                     None
@@ -360,6 +381,10 @@ impl Interaction {
     }
 
     fn field_key(&mut self, code: KeyCode) -> Option<UserInput> {
+        if let KeyCode::Esc = code {
+            self.menu = Some(self.first_enabled());
+            return None;
+        }
         match &mut self.field {
             Field::Edit {
                 buffer,
@@ -397,18 +422,10 @@ impl Interaction {
                     *cursor = next_boundary(buffer, *cursor);
                     None
                 }
-                KeyCode::Esc => {
-                    self.menu = Some(0);
-                    None
-                }
                 _ => None,
             },
             Field::Frozen { produced } => match code {
                 KeyCode::Enter => Some(UserInput::Done(std::mem::replace(produced, Value::Unitus))),
-                KeyCode::Esc => {
-                    self.menu = Some(0);
-                    None
-                }
                 _ => None,
             },
             Field::Choose { choices, active } => match code {
@@ -427,10 +444,6 @@ impl Interaction {
                 KeyCode::Enter => Some(UserInput::Done(Value::Literali(std::mem::take(
                     &mut choices[*active],
                 )))),
-                KeyCode::Esc => {
-                    self.menu = Some(0);
-                    None
-                }
                 _ => None,
             },
         }
@@ -446,12 +459,7 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
             // The step is still running (timer ticking), so keep the same
             // triangle; only the line's content changes to the menu choices.
             write!(out, "{}", PROMPT_TEXT)?;
-            let labels: Vec<&str> = interaction
-                .menu_items()
-                .iter()
-                .map(|item| item.label())
-                .collect();
-            render_choices(out, &labels, active)?;
+            render_menu(out, interaction, active)?;
         }
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
@@ -496,6 +504,33 @@ fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io:
             queue!(out, SetAttribute(Attribute::Reset))?;
         } else {
             write!(out, " {} ", choice)?;
+        }
+    }
+    Ok(())
+}
+
+/// Render the Esc-menu: the active item in reverse video, a disabled item (a
+/// greyed `Edit`) dimmed, the rest plain. The active item is always enabled, so
+/// reverse and dim never apply to the same item.
+fn render_menu<W: Write>(out: &mut W, interaction: &Interaction, active: usize) -> io::Result<()> {
+    for (i, item) in MENU
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            write!(out, "  ")?;
+        }
+        let label = item.label();
+        if i == active {
+            queue!(out, SetAttribute(Attribute::Reverse))?;
+            write!(out, " {} ", label)?;
+            queue!(out, SetAttribute(Attribute::Reset))?;
+        } else if !interaction.enabled(*item) {
+            queue!(out, SetAttribute(Attribute::Dim))?;
+            write!(out, " {} ", label)?;
+            queue!(out, SetAttribute(Attribute::Reset))?;
+        } else {
+            write!(out, " {} ", label)?;
         }
     }
     Ok(())
