@@ -350,7 +350,6 @@ fn render_frozen_shows_only_triangle() {
     assert!(!written.contains('\n'));
     assert!(!written.contains("eth0"));
     assert!(written.contains('▶'));
-    assert!(!written.contains("[enter]"));
 }
 
 #[test]
@@ -375,9 +374,9 @@ fn render_edit_shows_candidate_text() {
 }
 
 #[test]
-fn render_reason_submenu_on_menu_line() {
-    // Selecting Fail shows the reason prompt and the typed buffer on the same
-    // line as the still-listed menu items.
+fn render_reason_replaces_menu() {
+    // Choosing Fail replaces the menu with the reason prompt on the same line,
+    // keeping the ▶ prefix; the menu items are gone, and it stays one line.
     let mut it = Interaction::begin(&[], Value::Unitus);
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
@@ -387,9 +386,10 @@ fn render_reason_submenu_on_menu_line() {
     let mut out: Vec<u8> = Vec::new();
     draw(&mut out, &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
-    assert!(written.contains("Fail"));
-    assert!(written.contains("Reason?"));
-    assert!(written.contains("ok"));
+    assert!(!written.contains('\n'));
+    assert!(written.contains('▶'));
+    assert!(written.contains("Reason? ok"));
+    assert!(!written.contains("Skip"));
 }
 
 #[test]

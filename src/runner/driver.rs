@@ -28,7 +28,9 @@ pub enum Mode {
 }
 
 /// The person executing each step indicates a verdict on each prompt as
-/// follows:
+/// follows. `Quit` stops the run (also Ctrl-C); the run stays resumable and is
+/// recorded as a `Stop` lifecycle event, so a deliberate stop is distinguishable
+/// from a crash.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserInput {
     Done(Value),
@@ -136,10 +138,11 @@ impl<W: Write> Driver for Console<W> {
         };
         let _ = disable_raw_mode();
         // The prompt is a live affordance, not a record: clear it on settle so
-        // the next state line reuses the row rather than leaving a trail of
-        // spent ▶ lines.
+        // the next state line reuses the row rather than leaving spent ▶ lines.
+        // Restore the caret, hidden while a menu was shown.
         let _ = queue!(
             self.output,
+            cursor::Show,
             cursor::MoveToColumn(0),
             Clear(ClearType::CurrentLine)
         );
@@ -180,7 +183,7 @@ fn render_leave<W: Write>(out: &mut W, qualified: &str) {
 }
 
 /// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
-/// are the step exits. Navigation order is the slice order in `menu_items`.
+/// are the step exits. Navigation order is the slice order in `MENU`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MenuItem {
     Edit,
@@ -216,11 +219,9 @@ const MENU: [MenuItem; 4] = [
 const PROMPT_TEXT: &str = "▶ ";
 const PROMPT_WIDTH: u16 = 2;
 
-/// Appended to the menu line (after the items) when soliciting a reason for
-/// e.g. failure; the typed buffer follows it. The Fail menu item stays
-/// selected while it is shown, so it reads as a submenu rather than another
-/// separate mode.
-const REASON_PREFIX: &str = "   Reason? ";
+/// Shown on the prompt line (after the `▶` prefix) when soliciting a reason for
+/// e.g. failure, replacing the menu; the typed buffer follows it.
+const REASON_PREFIX: &str = "Reason? ";
 
 /// Longest scalar offered as an inline-editable candidate. A longer (or
 /// multi-line) value can't be edited on one line, so it falls back to the
@@ -351,7 +352,7 @@ impl Interaction {
         {
             if let KeyCode::Char('c') = key.code {
                 // Believe it or not we actually have to handle <Ctrl>+<c>
-                // explicitly when in raw mode!
+                // explicitly when in raw mode! It reads as a blunt Quit.
                 return Some(UserInput::Quit);
             }
         }
@@ -486,43 +487,56 @@ impl Interaction {
     }
 }
 
-/// Draw the current interaction state onto a single, repeatedly-cleared
-/// terminal line, leaving the edit cursor at the right column.
+/// Draw the current interaction state onto the repeatedly-cleared prompt line.
+/// One line throughout: the confirm triangle, the Edit / response candidate, the
+/// menu, or — once Fail is chosen — the `Reason?` entry, which replaces the menu
+/// on the same line (keeping the `▶` prefix). The caret shows only where input
+/// is awaited at a point (confirm prompt, Edit buffer, reason field) and is
+/// hidden where a reverse-video highlight is the indicator (menu, choices).
 fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+
+    // Where the caret lands; `None` hides it.
+    let mut cursor_col: Option<u16> = None;
     match interaction.menu {
         Some(active) => {
             // The step is still running (timer ticking), so keep the same
-            // triangle; only the line's content changes to the menu choices.
+            // triangle; only the line's content changes.
             write!(out, "{}", PROMPT_TEXT)?;
-            render_menu(out, interaction, active)?;
-            if let Some(reason) = &interaction.reason {
-                write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
-                let col = PROMPT_WIDTH
-                    + menu_width()
-                    + REASON_PREFIX
-                        .chars()
-                        .count() as u16
-                    + reason.buffer[..reason.cursor]
-                        .chars()
-                        .count() as u16;
-                queue!(out, cursor::MoveToColumn(col))?;
+            match &interaction.reason {
+                Some(reason) => {
+                    write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                    cursor_col = Some(
+                        PROMPT_WIDTH
+                            + REASON_PREFIX
+                                .chars()
+                                .count() as u16
+                            + reason.buffer[..reason.cursor]
+                                .chars()
+                                .count() as u16,
+                    );
+                }
+                None => render_menu(out, interaction, active)?,
             }
         }
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
                 write!(out, "{}{}", PROMPT_TEXT, buffer)?;
-                let col = PROMPT_WIDTH
-                    + buffer[..*cursor]
-                        .chars()
-                        .count() as u16;
-                queue!(out, cursor::MoveToColumn(col))?;
+                cursor_col = Some(
+                    PROMPT_WIDTH
+                        + buffer[..*cursor]
+                            .chars()
+                            .count() as u16,
+                );
             }
             Field::Frozen { .. } => {
                 // The value (if any) was already shown above; the normal prompt
-                // is just the "play" triangle. The exit/edit options are not
-                // advertised here — they appear only once <Esc> opens the menu.
+                // is just the "play" triangle. The caret rests just past it: the
+                // step is awaiting input (an <Enter> to confirm, or typed text
+                // once editing). The exit/edit options are not advertised here —
+                // they appear only once <Esc> opens the menu.
                 write!(out, "{}", PROMPT_TEXT)?;
+                cursor_col = Some(PROMPT_WIDTH);
             }
             Field::Choose { choices, active } => {
                 write!(out, "{}", PROMPT_TEXT)?;
@@ -533,6 +547,11 @@ fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
                 render_choices(out, &refs, *active)?;
             }
         },
+    }
+
+    match cursor_col {
+        Some(col) => queue!(out, cursor::Show, cursor::MoveToColumn(col))?,
+        None => queue!(out, cursor::Hide)?,
     }
     out.flush()
 }
@@ -571,14 +590,14 @@ fn render_menu<W: Write>(out: &mut W, interaction: &Interaction, active: usize) 
         let label = item.label();
         if i == active {
             queue!(out, SetAttribute(Attribute::Reverse))?;
-            write!(out, " {} ", label)?;
+            write!(out, "{}", label)?;
             queue!(out, SetAttribute(Attribute::Reset))?;
         } else if !interaction.enabled(*item) {
             queue!(out, SetAttribute(Attribute::Dim))?;
-            write!(out, " {} ", label)?;
+            write!(out, "{}", label)?;
             queue!(out, SetAttribute(Attribute::Reset))?;
         } else {
-            write!(out, " {} ", label)?;
+            write!(out, "{}", label)?;
         }
     }
     Ok(())
@@ -666,27 +685,6 @@ fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
         }
         _ => false,
     }
-}
-
-/// Visible width of the full menu — every item is drawn, and the reverse / dim
-/// escapes are zero-width, so this is just the laid-out label widths. Used to
-/// place the sub-menu cursor after the menu when shown on the same line.
-fn menu_width() -> u16 {
-    let mut width = 0u16;
-    for (i, item) in MENU
-        .iter()
-        .enumerate()
-    {
-        if i > 0 {
-            width += 2;
-        }
-        width += item
-            .label()
-            .chars()
-            .count() as u16
-            + 2;
-    }
-    width
 }
 
 /// No-operator driver: writes a trace of each step to its output and takes
