@@ -16,21 +16,22 @@ use crate::language;
 use crate::program::{ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef};
 use crate::value::Value;
 
-/// What executing an Operation (or evaluating a Step at any scale)
-/// produced. `Done(Value)` is the natural success — for a leaf Step
-/// the operator's recorded value, for a Sequence / Section / procedure
-/// body the unit value once the whole subtree is finished. `Skipped` and
-/// `Failed` are operator verdicts on individual Steps. `Quit` is a
-/// control signal that propagates immediately up the call stack:
-/// nothing is recorded, a `technique resume` would pick up where
-/// this run paused.
+/// What executing an Operation (or evaluating a Step at any scale) produced.
+/// `Done(Value)` is the natural success — for a leaf Step the operator's
+/// recorded value, for a Sequence / Section / procedure body the unit value
+/// once the whole subtree is finished. `Skipped` and `Failed` are operator
+/// verdicts on individual Steps. `Stopped` is a control signal that
+/// propagates immediately up the call stack to halt the walk; the deliberate
+/// quit was already recorded as a `State::Stop` lifecycle event, so this
+/// carries no payload — a `technique resume` picks up from the first step
+/// with no recorded outcome.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
     Skipped,
     Failed(Failure),
-    Quit,
+    Stopped,
 }
 
 /// Why a Step failed.
@@ -356,8 +357,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                     self.path
                         .pop();
 
-                    if let Outcome::Quit = result? {
-                        return Ok(Outcome::Quit);
+                    if let Outcome::Stopped = result? {
+                        return Ok(Outcome::Stopped);
                     }
                     number += 1;
                 }
@@ -385,8 +386,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                     self.path
                         .pop();
 
-                    if let Outcome::Quit = result? {
-                        return Ok(Outcome::Quit);
+                    if let Outcome::Stopped = result? {
+                        return Ok(Outcome::Stopped);
                     }
                 }
                 Ok(Outcome::Done(Value::Unitus))
@@ -417,7 +418,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             };
             match outcome {
                 Outcome::Done(value) => last = value,
-                Outcome::Quit => return Ok(Outcome::Quit),
+                Outcome::Stopped => return Ok(Outcome::Stopped),
                 Outcome::Skipped | Outcome::Failed(_) => {}
             }
         }
@@ -557,7 +558,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .step(qualified, &description_text);
 
         let produced = match self.walk(env, body)? {
-            Outcome::Quit => return Ok(Outcome::Quit),
+            Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
             Outcome::Skipped | Outcome::Failed(_) => Value::Unitus,
         };
@@ -566,14 +567,27 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
-        let outcome = outcome_from(
-            self.driver
-                .ask(&choices, produced),
-        );
-        if let Outcome::Quit = outcome {
-            return Ok(Outcome::Quit);
+        let input = self
+            .driver
+            .ask(&choices, produced);
+
+        // Quit halts the walk and is recorded as a Stop lifecycle event at the
+        // root path, distinguishing a deliberate stop from a crash (which records
+        // nothing). This step's Begin stands without a matching outcome, so
+        // resume re-runs it.
+        if let UserInput::Quit = input {
+            let suspend = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: "/".to_string(),
+                state: State::Stop,
+            };
+            self.appender
+                .append(&suspend)?;
+            return Ok(Outcome::Stopped);
         }
 
+        let outcome = outcome_from(input);
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -613,7 +627,7 @@ fn outcome_from(input: UserInput) -> Outcome {
         UserInput::Done(value) => Outcome::Done(value),
         UserInput::Skip => Outcome::Skipped,
         UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
-        UserInput::Quit => Outcome::Quit,
+        UserInput::Quit => Outcome::Stopped,
     }
 }
 
@@ -633,7 +647,9 @@ fn record_state(outcome: &Outcome) -> State {
         Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
             format!("[ reason = \"{}\" ]", reason),
         ))),
-        Outcome::Quit => unreachable!("Quit is not recorded"),
+        Outcome::Stopped => {
+            unreachable!("Stop is recorded as a lifecycle event, not a step result")
+        }
     }
 }
 

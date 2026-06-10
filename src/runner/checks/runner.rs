@@ -308,7 +308,7 @@ fn quit_propagates_and_stops_walking() {
     let outcome = runner
         .run(env)
         .expect("run");
-    assert_eq!(outcome, Outcome::Quit);
+    assert_eq!(outcome, Outcome::Stopped);
 
     let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
@@ -325,9 +325,9 @@ fn quit_propagates_and_stops_walking() {
     // Only the first Step was prompted; the second never fired.
     assert_eq!(step_fqns, vec!["/1"]);
 
-    // Quit records the step's Begin (the operator started looking at it)
-    // but no Done/Skip/Fail — so the file is exactly the opening Start
-    // plus that single Begin.
+    // Quit records the step's Begin (the operator started looking at it), then
+    // a Stop lifecycle line at the root path — the deliberate-stop marker that
+    // tells a quit from a crash. No Done/Skip/Fail for the step itself.
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -337,9 +337,10 @@ fn quit_propagates_and_stops_walking() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 2);
+    assert_eq!(lines.len(), 3);
     assert!(lines[0].contains(" Start "));
     assert!(lines[1].ends_with(" Begin"));
+    assert!(lines[2].ends_with(" / Stop"));
 }
 
 #[test]

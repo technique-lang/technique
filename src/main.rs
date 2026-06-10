@@ -797,8 +797,11 @@ fn main() {
             }
 
             match runner::start(mode, filename, &program, &arguments, library) {
-                Ok((run_id, Outcome::Quit)) => {
-                    eprintln!("paused; resume with `technique resume {}`", run_id.render());
+                Ok((run_id, Outcome::Stopped)) => {
+                    eprintln!(
+                        "stopped; resume with `technique resume {}`",
+                        run_id.render()
+                    );
                     std::process::exit(0);
                 }
                 Ok((_, _)) => std::process::exit(0),
@@ -902,9 +905,9 @@ fn main() {
             }
 
             match runner::resume(run_id, &program, library) {
-                Ok(Outcome::Quit) => {
+                Ok(Outcome::Stopped) => {
                     eprintln!(
-                        "paused; continue with `technique resume {}`",
+                        "stopped; continue with `technique resume {}`",
                         run_id.render()
                     );
                     std::process::exit(0);
