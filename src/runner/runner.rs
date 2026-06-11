@@ -314,6 +314,11 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .announce(&format!("<{}>", id.value));
                 Ok(Outcome::Done(Value::Unitus))
             }
+            SubroutineRef::Deferred(ext) => {
+                self.driver
+                    .announce(&format!("<{}>", ext.value));
+                Ok(Outcome::Done(Value::Unitus))
+            }
         }
     }
 

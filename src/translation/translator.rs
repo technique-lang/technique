@@ -743,7 +743,7 @@ impl<'i> Translator<'i> {
     fn translate_invocation(&mut self, invocation: &'i language::Invocation<'i>) -> Invocable<'i> {
         let target = match &invocation.target {
             language::Target::Local(id) => SubroutineRef::Unresolved(*id),
-            language::Target::Remote(_) => todo!("remote invocation target"),
+            language::Target::Remote(external) => SubroutineRef::Deferred(*external),
         };
         let arguments = match &invocation.parameters {
             Some(params) => params

@@ -1137,10 +1137,7 @@ functions calls:
             function: Identifier { value: name, .. },
         } => (
             format!("Unknown function {}()", name),
-            format!(
-                "The function {}() is neither builtin nor provided by the selected domain.",
-                name
-            ),
+            "The function is neither builtin nor provided by the selected domain.".to_string(),
         ),
     }
 }
