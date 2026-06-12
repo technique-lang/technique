@@ -1354,7 +1354,7 @@ test :
         .events()
         .iter()
         .filter_map(|e| {
-            if let Event::Ask { choices } = e {
+            if let Event::Ask { choices, .. } = e {
                 Some(choices)
             } else {
                 None

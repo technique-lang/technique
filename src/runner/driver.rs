@@ -13,7 +13,7 @@
 use std::io::{self, Write};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crossterm::style::{Attribute, SetAttribute};
+use crossterm::style::{Attribute, SetAttribute, Stylize};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
@@ -66,8 +66,9 @@ pub trait Driver {
     /// `choices` is non-empty the operator instead selects one of those
     /// response values, yielding `Done(Literali(choice))`. Skip, fail, and
     /// quit are available either way. `produced` is consumed: the driver
-    /// either moves it into the returned `Done` or discards it.
-    fn ask(&mut self, choices: &[&str], produced: Value) -> UserInput;
+    /// either moves it into the returned `Done` or discards it. `qualified` is
+    /// the step's Qualified Name, repeated on the live prompt line.
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
 }
 
 /// Interactive console prompt in a terminal. `step` / `section` / `announce`
@@ -98,22 +99,24 @@ impl<W: Write> Console<W> {
 
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        render_step(&mut self.output, fqn, description);
+        let _ = writeln!(self.output, "{}", format!("→ {}", fqn).dark_grey());
+        write_indented(&mut self.output, description);
     }
 
     fn enter(&mut self, qualified: &str, title: &str) {
-        render_enter(&mut self.output, qualified, title);
+        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).blue());
+        write_indented(&mut self.output, title);
     }
 
     fn leave(&mut self, qualified: &str) {
-        render_leave(&mut self.output, qualified);
+        let _ = writeln!(self.output, "{}", format!("↙ {}", qualified).green());
     }
 
     fn announce(&mut self, message: &str) {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, choices: &[&str], produced: Value) -> UserInput {
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
         let mut interaction = Interaction::begin(choices, produced);
         // The interactive path is guarded on stdout being a terminal before
         // the walk begins, so a raw-mode failure here is an unexpected
@@ -123,7 +126,7 @@ impl<W: Write> Driver for Console<W> {
             return UserInput::Quit;
         }
         let result = loop {
-            if draw(&mut self.output, &interaction).is_err() {
+            if draw(&mut self.output, qualified, &interaction).is_err() {
                 break UserInput::Quit;
             }
             match event::read() {
@@ -137,15 +140,28 @@ impl<W: Write> Driver for Console<W> {
             }
         };
         let _ = disable_raw_mode();
-        // The prompt is a live affordance, not a record: clear it on settle so
-        // the next state line reuses the row rather than leaving spent ▶ lines.
-        // Restore the caret, hidden while a menu was shown.
+        // On settle the live `▶` prompt is replaced by a `→` verdict line in the
+        // outcome colour, which scrolls up into the permanent record — except
+        // Quit, which leaves the step unfinished (resume re-runs it) and so just
+        // clears the row. Restore the cursor, hidden while a menu was shown.
         let _ = queue!(
             self.output,
             cursor::Show,
             cursor::MoveToColumn(0),
             Clear(ClearType::CurrentLine)
         );
+        match &result {
+            UserInput::Done(_) => {
+                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).green());
+            }
+            UserInput::Skip => {
+                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).yellow());
+            }
+            UserInput::Fail(_) => {
+                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).red());
+            }
+            UserInput::Quit => {}
+        }
         let _ = self
             .output
             .flush();
@@ -213,11 +229,20 @@ const MENU: [MenuItem; 4] = [
     MenuItem::Quit,
 ];
 
-/// Prompt prefix shown before an editable / read-only candidate, and its
-/// width in terminal columns (for placing the edit cursor). Later we will
-/// toggle between ▶ and ■
-const PROMPT_TEXT: &str = "▶ ";
-const PROMPT_WIDTH: u16 = 2;
+/// Glyph leading the live prompt line; the qualified path and a separator
+/// follow it before the interactive content. Later we will toggle between ▶
+/// and ■.
+const PROMPT_SYMBOL: &str = "▶";
+
+/// Number of columns spanned by the prompt prefix (the trianle ▶ and the
+/// qualified path of the current scope).
+fn prompt_prefix_width(qualified: &str) -> u16 {
+    // glyph + space + path + two-space separator
+    2 + qualified
+        .chars()
+        .count() as u16
+        + 2
+}
 
 /// Shown on the prompt line (after the `▶` prefix) when soliciting a reason for
 /// e.g. failure, replacing the menu; the typed buffer follows it.
@@ -490,56 +515,49 @@ impl Interaction {
 /// Draw the current interaction state onto the repeatedly-cleared prompt line.
 /// One line throughout: the confirm triangle, the Edit / response candidate, the
 /// menu, or — once Fail is chosen — the `Reason?` entry, which replaces the menu
-/// on the same line (keeping the `▶` prefix). The caret shows only where input
+/// on the same line (keeping the `▶` prefix). The cursor shows only where input
 /// is awaited at a point (confirm prompt, Edit buffer, reason field) and is
 /// hidden where a reverse-video highlight is the indicator (menu, choices).
-fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
+fn draw<W: Write>(out: &mut W, qualified: &str, interaction: &Interaction) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
-    // Where the caret lands; `None` hides it.
+    // The prompt repeats the step's address in blue while the user works on
+    // the step.
+    let prefix = prompt_prefix_width(qualified);
+    write!(out, "{} {}  ", PROMPT_SYMBOL, qualified.blue())?;
+
+    // Where the cursor lands; a value of `None` hides it.
     let mut cursor_col: Option<u16> = None;
     match interaction.menu {
-        Some(active) => {
-            // The step is still running (timer ticking), so keep the same
-            // triangle; only the line's content changes.
-            write!(out, "{}", PROMPT_TEXT)?;
-            match &interaction.reason {
-                Some(reason) => {
-                    write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
-                    cursor_col = Some(
-                        PROMPT_WIDTH
-                            + REASON_PREFIX
-                                .chars()
-                                .count() as u16
-                            + reason.buffer[..reason.cursor]
-                                .chars()
-                                .count() as u16,
-                    );
-                }
-                None => render_menu(out, interaction, active)?,
+        Some(active) => match &interaction.reason {
+            Some(reason) => {
+                write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                cursor_col = Some(
+                    prefix
+                        + REASON_PREFIX
+                            .chars()
+                            .count() as u16
+                        + reason.buffer[..reason.cursor]
+                            .chars()
+                            .count() as u16,
+                );
             }
-        }
+            None => render_menu(out, interaction, active)?,
+        },
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
-                write!(out, "{}{}", PROMPT_TEXT, buffer)?;
+                write!(out, "{}", buffer)?;
                 cursor_col = Some(
-                    PROMPT_WIDTH
+                    prefix
                         + buffer[..*cursor]
                             .chars()
                             .count() as u16,
                 );
             }
             Field::Frozen { .. } => {
-                // The value (if any) was already shown above; the normal prompt
-                // is just the "play" triangle. The caret rests just past it: the
-                // step is awaiting input (an <Enter> to confirm, or typed text
-                // once editing). The exit/edit options are not advertised here —
-                // they appear only once <Esc> opens the menu.
-                write!(out, "{}", PROMPT_TEXT)?;
-                cursor_col = Some(PROMPT_WIDTH);
+                cursor_col = Some(prefix);
             }
             Field::Choose { choices, active } => {
-                write!(out, "{}", PROMPT_TEXT)?;
                 let refs: Vec<&str> = choices
                     .iter()
                     .map(String::as_str)
@@ -726,7 +744,7 @@ impl<W: Write> Driver for Automatic<W> {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, _choices: &[&str], produced: Value) -> UserInput {
+    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
         UserInput::Done(produced)
     }
 }
@@ -759,6 +777,7 @@ pub enum Event {
     },
     Announce(String),
     Ask {
+        qualified: String,
         choices: Vec<String>,
     },
 }
@@ -819,9 +838,10 @@ impl Driver for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(&mut self, choices: &[&str], _produced: Value) -> UserInput {
+    fn ask(&mut self, qualified: &str, choices: &[&str], _produced: Value) -> UserInput {
         self.events
             .push(Event::Ask {
+                qualified: qualified.to_string(),
                 choices: choices
                     .iter()
                     .map(|c| c.to_string())

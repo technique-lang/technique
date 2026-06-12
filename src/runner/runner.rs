@@ -569,7 +569,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .collect();
         let input = self
             .driver
-            .ask(&choices, produced);
+            .ask(qualified, &choices, produced);
 
         // Quit halts the walk and is recorded as a Stop lifecycle event at the
         // root path, distinguishing a deliberate stop from a crash (which records
