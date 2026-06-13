@@ -884,7 +884,7 @@ impl<W: Write> Driver for Automatic<W> {
 
     fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
         write_indented(&mut self.output, script);
-        UserInput::Done(Value::Unitus)
+        UserInput::Done(Value::Literali(script.to_string()))
     }
 
     fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
