@@ -272,11 +272,9 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
-                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
-                    description: description_ops,
                     source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
@@ -293,11 +291,9 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
-                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
-                    description: description_ops,
                     source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
