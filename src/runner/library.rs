@@ -14,10 +14,19 @@ use crate::value::{Numeric, Value};
 /// it.
 pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
+/// Whether a builtin is a pure function that computes a value or whether it
+/// is an action which performs a side-effect in the real world.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Nature {
+    Pure,
+    Action,
+}
+
 /// A function in the Library's table
 pub struct Builtin {
     pub name: &'static str,
     pub arity: usize,
+    pub nature: Nature,
     pub function: Native,
 }
 
@@ -40,26 +49,31 @@ impl Library {
                 Builtin {
                     name: "seq",
                     arity: 2,
+                    nature: Nature::Pure,
                     function: seq,
                 },
                 Builtin {
                     name: "zip",
                     arity: 2,
+                    nature: Nature::Pure,
                     function: zip,
                 },
                 Builtin {
                     name: "values",
                     arity: 1,
+                    nature: Nature::Pure,
                     function: values,
                 },
                 Builtin {
                     name: "labels",
                     arity: 1,
+                    nature: Nature::Pure,
                     function: labels,
                 },
                 Builtin {
                     name: "pairs",
                     arity: 1,
+                    nature: Nature::Pure,
                     function: pairs,
                 },
             ],
@@ -75,11 +89,13 @@ impl Library {
             Builtin {
                 name: "exec",
                 arity: 1,
+                nature: Nature::Action,
                 function: exec,
             },
             Builtin {
                 name: "now",
                 arity: 0,
+                nature: Nature::Pure,
                 function: now,
             },
         ]
@@ -108,6 +124,12 @@ impl Library {
     /// The name of the function at `id`.
     pub fn name(&self, id: ExecutableId) -> &'static str {
         self.functions[id.0].name
+    }
+
+    /// Whether the function at `id` is a commanded `Action` or a `Pure`
+    /// computation.
+    pub fn nature(&self, id: ExecutableId) -> Nature {
+        self.functions[id.0].nature
     }
 
     /// Call the function at `id` with the execution context and (already
@@ -290,61 +312,73 @@ impl Library {
                 Builtin {
                     name: "seq",
                     arity: 2,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "zip",
                     arity: 2,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "exec",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "cmd",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "now",
                     arity: 0,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "uuid",
                     arity: 0,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "timer",
                     arity: 1,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "journal",
                     arity: 1,
+                    nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "click",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "navigate",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "select",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "deselect",
                     arity: 1,
+                    nature: Nature::Action,
                     function: unit,
                 },
             ],
