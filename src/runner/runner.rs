@@ -713,7 +713,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
-        let step_text = crate::formatting::formatter::render_scope(
+        let step_text = crate::formatting::formatter::render_step(
             source,
             self.driver.renderer(),
         );

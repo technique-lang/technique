@@ -190,6 +190,20 @@ pub fn render_scope<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
             sub.append_attributes(attributes);
         }
         Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
+            sub.append_scope(scope);
+        }
+        _ => unreachable!(),
+    }
+    render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
+}
+
+/// Render step's without descending into nested subscopes.
+pub fn render_step<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    match scope {
+        Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
             sub.append_step(scope);
         }
         _ => unreachable!(),
@@ -795,13 +809,13 @@ impl<'i> Formatter<'i> {
         self.decrease(4);
     }
 
+    /// Render a step's its ordinal or bullet and its description paragraphs.
+    /// Nested subscopes are walked separately by append_scope().
     fn append_step(&mut self, step: &'i Scope) {
-        self.add_fragment_reference(Syntax::BlockBegin, "");
         match step {
             Scope::DependentBlock {
                 ordinal,
                 description: content,
-                subscopes: scopes,
                 ..
             } => {
                 self.indent();
@@ -812,21 +826,14 @@ impl<'i> Formatter<'i> {
                 }
 
                 self.increase(4);
-
                 if content.len() > 0 {
                     self.append_paragraphs(content);
                 }
-
-                if scopes.len() > 0 {
-                    self.append_scopes(scopes);
-                }
-
                 self.decrease(4);
             }
             Scope::ParallelBlock {
                 bullet,
                 description,
-                subscopes,
                 ..
             } => {
                 self.indent();
@@ -834,21 +841,13 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, "   ");
 
                 self.increase(4);
-
                 if description.len() > 0 {
                     self.append_paragraphs(description);
                 }
-
-                if subscopes.len() > 0 {
-                    self.append_scopes(subscopes);
-                }
-
                 self.decrease(4);
             }
             _ => panic!("Shouldn't be calling append_step() with a non-step Scope"),
         }
-
-        self.add_fragment_reference(Syntax::BlockEnd, "");
     }
 
     fn append_responses(&mut self, responses: &'i Vec<Response>) {
@@ -875,8 +874,15 @@ impl<'i> Formatter<'i> {
 
     fn append_scope(&mut self, scope: &'i Scope) {
         match scope {
-            Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
+            Scope::DependentBlock { subscopes, .. } | Scope::ParallelBlock { subscopes, .. } => {
+                self.add_fragment_reference(Syntax::BlockBegin, "");
                 self.append_step(scope);
+                if subscopes.len() > 0 {
+                    self.increase(4);
+                    self.append_scopes(subscopes);
+                    self.decrease(4);
+                }
+                self.add_fragment_reference(Syntax::BlockEnd, "");
             }
             Scope::AttributeBlock {
                 attributes,
