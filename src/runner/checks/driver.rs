@@ -211,7 +211,7 @@ fn menu_shows_greyed_edit_when_unavailable() {
     let mut it = Interaction::begin(&[], Value::Unitus);
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, "I/1", &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("Edit"));
     assert!(written.contains("Skip"));
@@ -349,7 +349,7 @@ fn render_frozen_shows_only_triangle() {
     let dump = Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string());
     let it = Interaction::begin(&[], dump);
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, "I/1", &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(!written.contains('\n'));
     assert!(!written.contains("eth0"));
@@ -372,7 +372,7 @@ fn render_edit_shows_candidate_text() {
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, "I/1", &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("hello"));
 }
@@ -388,7 +388,7 @@ fn render_reason_replaces_menu() {
     it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, "I/1", &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(!written.contains('\n'));
     assert!(written.contains('▶'));
@@ -400,7 +400,7 @@ fn render_reason_replaces_menu() {
 fn render_choices_lists_options() {
     let it = Interaction::begin(&["Yes", "No"], Value::Unitus);
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, "I/1", &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains('▶'));
     assert!(written.contains("Yes"));

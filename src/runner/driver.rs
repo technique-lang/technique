@@ -175,21 +175,26 @@ fn prompt<W: Write>(
     choices: &[&str],
     produced: Value,
 ) -> UserInput {
-    let result = interact(out, qualified, Interaction::begin(choices, produced));
-    // The settle line stays dark grey like the descent introducer: colour is
-    // reserved for the formatter's syntax highlighting, so the verdict speaks
-    // through a trailing glyph (a shape channel) rather than line colour.
-    match &result {
-        UserInput::Done(_) => {
-            let _ = writeln!(out, "{}", format!("{} {} ✓", settle, qualified).dark_grey());
-        }
-        UserInput::Skip => {
-            let _ = writeln!(out, "{}", format!("{} {} ⊘", settle, qualified).dark_grey());
-        }
-        UserInput::Fail(_) => {
-            let _ = writeln!(out, "{}", format!("{} {} ✗", settle, qualified).dark_grey());
-        }
-        UserInput::Quit => {}
+    let result = interact(out, qualified, settle, Interaction::begin(choices, produced));
+    let glyph = match &result {
+        UserInput::Done(_) => Some("✓"),
+        UserInput::Skip => Some("⊘"),
+        UserInput::Fail(_) => Some("✗"),
+        UserInput::Quit => None,
+    };
+    if let Some(g) = glyph {
+        let col = settle
+            .chars()
+            .count() as u16
+            + 1
+            + qualified
+                .chars()
+                .count() as u16
+            + 1;
+        let _ = queue!(out, cursor::MoveToColumn(col));
+        let _ = write!(out, "{}", g);
+        let _ = queue!(out, Clear(ClearType::UntilNewLine));
+        let _ = writeln!(out);
     }
     let _ = out.flush();
     result
@@ -205,16 +210,27 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
     let result = interact(
         out,
         qualified,
+        "→",
         Interaction { field, menu: None, reason: None },
     );
-    match &result {
-        UserInput::Done(_) | UserInput::Quit => {}
-        UserInput::Skip => {
-            let _ = writeln!(out, "{}", format!("→ {} ⊘", qualified).dark_grey());
-        }
-        UserInput::Fail(_) => {
-            let _ = writeln!(out, "{}", format!("→ {} ✗", qualified).dark_grey());
-        }
+    let glyph = match &result {
+        UserInput::Done(_) | UserInput::Quit => None,
+        UserInput::Skip => Some("⊘"),
+        UserInput::Fail(_) => Some("✗"),
+    };
+    if let Some(g) = glyph {
+        let col = "→"
+            .chars()
+            .count() as u16
+            + 1
+            + qualified
+                .chars()
+                .count() as u16
+            + 1;
+        let _ = queue!(out, cursor::MoveToColumn(col));
+        let _ = write!(out, "{}", g);
+        let _ = queue!(out, Clear(ClearType::UntilNewLine));
+        let _ = writeln!(out);
     }
     let _ = out.flush();
     result
@@ -223,7 +239,7 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
 /// row cleared. Shared by the step/scope prompt and the exec command gate; the
 /// caller writes whatever record line it wants afterward.
-fn interact<W: Write>(out: &mut W, qualified: &str, mut interaction: Interaction) -> UserInput {
+fn interact<W: Write>(out: &mut W, qualified: &str, settle: &str, mut interaction: Interaction) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
     // rather than a redirect; bail by quitting.
@@ -232,7 +248,7 @@ fn interact<W: Write>(out: &mut W, qualified: &str, mut interaction: Interaction
         return UserInput::Quit;
     }
     let result = loop {
-        if draw(out, qualified, &interaction).is_err() {
+        if draw(out, qualified, settle, &interaction).is_err() {
             break UserInput::Quit;
         }
         match event::read() {
@@ -246,13 +262,7 @@ fn interact<W: Write>(out: &mut W, qualified: &str, mut interaction: Interaction
         }
     };
     let _ = disable_raw_mode();
-    // Restore the cursor, hidden while a menu was shown.
-    let _ = queue!(
-        out,
-        cursor::Show,
-        cursor::MoveToColumn(0),
-        Clear(ClearType::CurrentLine)
-    );
+    let _ = queue!(out, cursor::Show);
     let _ = out.flush();
     result
 }
@@ -324,19 +334,25 @@ const MENU: [MenuItem; 4] = [
     MenuItem::Quit,
 ];
 
-/// Glyph leading the live prompt line; the qualified path and a separator
-/// follow it before the interactive content. Later we will toggle between ▶
-/// and ■.
+/// Shell-prompt glyph placed after the path, before the cursor — the
+/// equivalent of `$` or `>` in a shell.
 const PROMPT_SYMBOL: &str = "▶";
 
-/// Number of columns spanned by the prompt prefix (the trianle ▶ and the
-/// qualified path of the current scope).
-fn prompt_prefix_width(qualified: &str) -> u16 {
-    // glyph + space + path + two-space separator
-    2 + qualified
+/// Number of columns spanned by the prompt prefix:
+/// `{settle} {path} {PROMPT_SYMBOL} `
+fn prompt_prefix_width(qualified: &str, settle: &str) -> u16 {
+    settle
         .chars()
         .count() as u16
-        + 2
+        + 1 // space after settle
+        + qualified
+            .chars()
+            .count() as u16
+        + 1 // space before prompt symbol
+        + PROMPT_SYMBOL
+            .chars()
+            .count() as u16
+        + 1 // space after prompt symbol
 }
 
 /// Shown on the prompt line (after the `▶` prefix) when soliciting a reason for
@@ -608,18 +624,19 @@ impl Interaction {
 }
 
 /// Draw the current interaction state onto the repeatedly-cleared prompt line.
-/// One line throughout: the confirm triangle, the Edit / response candidate, the
-/// menu, or — once Fail is chosen — the `Reason?` entry, which replaces the menu
-/// on the same line (keeping the `▶` prefix). The cursor shows only where input
-/// is awaited at a point (confirm prompt, Edit buffer, reason field) and is
-/// hidden where a reverse-video highlight is the indicator (menu, choices).
-fn draw<W: Write>(out: &mut W, qualified: &str, interaction: &Interaction) -> io::Result<()> {
+/// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
+/// grey (matching the trace lines above), and ▶ is the shell-prompt character
+/// before the cursor/content area.
+fn draw<W: Write>(out: &mut W, qualified: &str, settle: &str, interaction: &Interaction) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
-    // The prompt repeats the step's address in blue while the user works on
-    // the step.
-    let prefix = prompt_prefix_width(qualified);
-    write!(out, "{} {}  ", PROMPT_SYMBOL, qualified.blue())?;
+    let prefix = prompt_prefix_width(qualified, settle);
+    write!(
+        out,
+        "{} {} ",
+        format!("{} {}", settle, qualified).dark_grey(),
+        PROMPT_SYMBOL,
+    )?;
 
     // Where the cursor lands; a value of `None` hides it.
     let mut cursor_col: Option<u16> = None;
