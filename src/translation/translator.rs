@@ -264,6 +264,7 @@ impl<'i> Translator<'i> {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
                     description: description_ops,
+                    source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 }
@@ -284,6 +285,7 @@ impl<'i> Translator<'i> {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
                     description: description_ops,
+                    source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 }

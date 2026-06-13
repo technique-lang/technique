@@ -5,32 +5,35 @@ use std::io;
 use std::path::PathBuf;
 
 use super::context::Context;
+use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
-use super::library::Library;
+use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
-use super::prompt::{Prompt, UserInput};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
 use crate::language;
-use crate::program::{ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef};
+use crate::program::{
+    Executable, ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef,
+};
 use crate::value::Value;
 
-/// What executing an Operation (or evaluating a Step at any scale)
-/// produced. `Done(Value)` is the natural success — for a leaf Step
-/// the operator's recorded value, for a Sequence / Section / procedure
-/// body the unit value once the whole subtree is finished. `Skipped` and
-/// `Failed` are operator verdicts on individual Steps. `Quit` is a
-/// control signal that propagates immediately up the call stack:
-/// nothing is recorded, a `technique resume` would pick up where
-/// this run paused.
+/// What executing an Operation (or evaluating a Step at any scale) produced.
+/// `Done(Value)` is the natural success — for a leaf Step the operator's
+/// recorded value, for a Sequence / Section / procedure body the unit value
+/// once the whole subtree is finished. `Skipped` and `Failed` are operator
+/// verdicts on individual Steps. `Stopped` is a control signal that
+/// propagates immediately up the call stack to halt the walk; the deliberate
+/// quit was already recorded as a `State::Stop` lifecycle event, so this
+/// carries no payload — a `technique resume` picks up from the first step
+/// with no recorded outcome.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
     Skipped,
     Failed(Failure),
-    Quit,
+    Stopped,
 }
 
 /// Why a Step failed.
@@ -85,6 +88,7 @@ pub enum RunnerError {
     ParameterUnexpected {
         actual: usize,
     },
+    TerminalRequired,
     UserQuit,
 }
 
@@ -94,40 +98,40 @@ pub enum RunnerError {
 /// already-completed step FQNs, an append handle to write results, and the
 /// prompt the operator interacts through.
 #[allow(dead_code)]
-pub struct Runner<'i, P: Prompt> {
+pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
     completed: HashSet<String>,
-    prompt: P,
+    driver: D,
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
 }
 
-impl<'i, P: Prompt> Runner<'i, P> {
+impl<'i, D: Driver> Runner<'i, D> {
     pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
         completed: HashSet<String>,
-        prompt: P,
+        driver: D,
         library: Library,
     ) -> Self {
         Runner {
             program,
             appender,
             completed,
-            prompt,
+            driver,
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
         }
     }
 
-    /// Consume the runner and return the inner prompt. Tests use this
+    /// Consume the runner and return the inner driver. Tests use this
     /// to assert on the Mock's event log after a run completes.
-    #[allow(dead_code)]
-    pub fn into_prompt(self) -> P {
-        self.prompt
+    #[cfg(test)]
+    pub fn into_driver(self) -> D {
+        self.driver
     }
 
     /// Walk the entry procedure top to bottom. Entry-procedure
@@ -147,12 +151,48 @@ impl<'i, P: Prompt> Runner<'i, P> {
         if let Some(name) = name {
             self.path
                 .push(PathSegment::Procedure(name));
+            let qualified = self
+                .path
+                .render();
+            self.driver
+                .enter(&qualified);
+            let declaration = crate::formatting::formatter::render_declaration(
+                name,
+                entry.parameters,
+                entry.signature,
+                self.driver.renderer(),
+            );
+            self.driver
+                .display(&declaration);
+            if let Some(t) = entry.title {
+                let title_text = crate::formatting::formatter::render_title(
+                    t,
+                    self.driver.renderer(),
+                );
+                self.driver
+                    .display(&title_text);
+            }
         }
         let result = self.walk(&mut env, &entry.body);
-        if name.is_some() {
+        // A named entry procedure is a structural scope: a completed run closes
+        // with a final sign-off prompt at its path. A Quit or error walk skips
+        // it — the run did not finish. An anonymous entry (a bare series of
+        // steps) has no procedure to accept, so it just ends.
+        let result = if name.is_some() {
+            let qualified = self
+                .path
+                .render();
+            let sealed = match result {
+                Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+                Ok(outcome) => self.seal_scope(&qualified, outcome),
+                Err(error) => Err(error),
+            };
             self.path
                 .pop();
-        }
+            sealed
+        } else {
+            result
+        };
         result
     }
 
@@ -191,21 +231,70 @@ impl<'i, P: Prompt> Runner<'i, P> {
                 let record = Record {
                     recorded: now_iso8601(),
                     run_id,
-                    path: qualified,
+                    path: qualified.clone(),
                     state: State::Execute {
                         function: function.clone(),
                     },
                 };
                 self.appender
                     .append(&record)?;
-                self.prompt
-                    .announce(&describe_execute(&function));
-                // Linking resolves every Execute against the library, so a
-                // target still Unresolved here means a resume-time runtime
-                // missing a builtin the run started with; the evaluator
-                // surfaces that as an error rather than running anything.
-                let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
-                Ok(Outcome::Done(value))
+                // An `Action` builtin (e.g. `exec`, `click`) is a command the
+                // user must command: show the script and run it only on their
+                // say-so. Skip or Fail declines the run and settles the step;
+                // Quit stops.
+                //
+                // `Pure` builtins (coercions, reading the clock) just announce
+                // and run.
+                let is_action = match &executable.target {
+                    ExecutableRef::Resolved(id) => {
+                        self.library
+                            .nature(*id)
+                            == Nature::Action
+                    }
+                    _ => false,
+                };
+                if is_action {
+                    let script = self.script_text(env, executable)?;
+                    match self
+                        .driver
+                        .command(&qualified, &script)
+                    {
+                        UserInput::Done(chosen) => {
+                            let value = super::evaluator::dispatch(
+                                &self.library,
+                                &self.context,
+                                env,
+                                executable,
+                                Some(&[chosen]),
+                            )?;
+                            Ok(Outcome::Done(value))
+                        }
+                        UserInput::Skip => Ok(Outcome::Skipped),
+                        UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
+                        UserInput::Quit => {
+                            let suspend = Record {
+                                recorded: now_iso8601(),
+                                run_id,
+                                path: "/".to_string(),
+                                state: State::Stop,
+                            };
+                            self.appender
+                                .append(&suspend)?;
+                            Ok(Outcome::Stopped)
+                        }
+                    }
+                } else {
+                    self.driver
+                        .announce(&describe_execute(&function));
+                    let value = super::evaluator::dispatch(
+                        &self.library,
+                        &self.context,
+                        env,
+                        executable,
+                        None,
+                    )?;
+                    Ok(Outcome::Done(value))
+                }
             }
             Operation::Bind { .. }
             | Operation::Variable(_)
@@ -231,6 +320,27 @@ impl<'i, P: Prompt> Runner<'i, P> {
             ExecutableRef::Unresolved(id) => id
                 .value
                 .to_string(),
+        }
+    }
+
+    /// The shell script an `exec` will run, rendered for the operator to see
+    /// before they command it. The command's first argument is the script.
+    fn script_text(
+        &self,
+        env: &mut Environment,
+        executable: &'i Executable<'i>,
+    ) -> Result<String, RunnerError> {
+        match executable
+            .arguments
+            .first()
+        {
+            Some(arg) => {
+                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
+                    Value::Literali(s) => Ok(s),
+                    other => Ok(other.to_string()),
+                }
+            }
+            None => Ok(String::new()),
         }
     }
 
@@ -281,6 +391,22 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     .as_ref()
                     .map(|n| n.value);
                 if let Some(name) = name {
+                    self.path
+                        .push(PathSegment::Procedure(name));
+                    let descended = self
+                        .path
+                        .render();
+                    if self
+                        .completed
+                        .contains(&descended)
+                    {
+                        self.path
+                            .pop();
+                        return Ok(Outcome::Done(Value::Unitus));
+                    }
+                    self.path
+                        .pop();
+
                     let qualified = self
                         .path
                         .render();
@@ -295,22 +421,54 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     };
                     self.appender
                         .append(&record)?;
+
                     self.path
                         .push(PathSegment::Procedure(name));
+                    self.driver
+                        .enter(&descended);
+                    let declaration = crate::formatting::formatter::render_declaration(
+                        name,
+                        subroutine.parameters,
+                        subroutine.signature,
+                        self.driver.renderer(),
+                    );
+                    self.driver
+                        .display(&declaration);
+                    if let Some(t) = subroutine.title {
+                        let title_text = crate::formatting::formatter::render_title(
+                            t,
+                            self.driver.renderer(),
+                        );
+                        self.driver
+                            .display(&title_text);
+                    }
                 }
 
                 // Walk the body against the callee's own environment; `local`
                 // is dropped on return, leaving the caller's `env` untouched.
                 let result = self.walk(&mut local, &subroutine.body);
 
+                // An invoked procedure is a structural scope: the operator signs
+                // it off at its close, like a Section, before control returns to
+                // the caller. A Quit or error walk skips the prompt — the
+                // procedure did not complete.
                 if name.is_some() {
+                    let qualified = self
+                        .path
+                        .render();
                     self.path
                         .pop();
+                    match result {
+                        Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+                        Ok(outcome) => self.seal_scope(&qualified, outcome),
+                        Err(error) => Err(error),
+                    }
+                } else {
+                    result
                 }
-                result
             }
             SubroutineRef::Unresolved(id) => {
-                self.prompt
+                self.driver
                     .announce(&format!("<{}>", id.value));
                 Ok(Outcome::Done(Value::Unitus))
             }
@@ -338,7 +496,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
-        self.prompt
+        self.driver
             .announce(&describe_loop(names, over));
         match over {
             None => {
@@ -350,8 +508,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     self.path
                         .pop();
 
-                    if let Outcome::Quit = result? {
-                        return Ok(Outcome::Quit);
+                    if let Outcome::Stopped = result? {
+                        return Ok(Outcome::Stopped);
                     }
                     number += 1;
                 }
@@ -379,8 +537,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
                     self.path
                         .pop();
 
-                    if let Outcome::Quit = result? {
-                        return Ok(Outcome::Quit);
+                    if let Outcome::Stopped = result? {
+                        return Ok(Outcome::Stopped);
                     }
                 }
                 Ok(Outcome::Done(Value::Unitus))
@@ -411,7 +569,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
             };
             match outcome {
                 Outcome::Done(value) => last = value,
-                Outcome::Quit => return Ok(Outcome::Quit),
+                Outcome::Stopped => return Ok(Outcome::Stopped),
                 Outcome::Skipped | Outcome::Failed(_) => {}
             }
         }
@@ -427,15 +585,34 @@ impl<'i, P: Prompt> Runner<'i, P> {
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
-        let result = self.perform_section(env, title, body);
+        let qualified = self
+            .path
+            .render();
+        if self
+            .completed
+            .contains(&qualified)
+        {
+            self.path
+                .pop();
+            return Ok(Outcome::Done(Value::Unitus));
+        }
+        let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
-        result
+        // A section is a structural scope: the operator signs it off at its
+        // close before the next sibling runs. A Quit or error walk skips the
+        // prompt — the section did not complete.
+        match result {
+            Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+            Ok(outcome) => self.seal_scope(&qualified, outcome),
+            Err(error) => Err(error),
+        }
     }
 
     fn perform_section(
         &mut self,
         env: &mut Environment,
+        numeral: &'i str,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
@@ -449,8 +626,8 @@ impl<'i, P: Prompt> Runner<'i, P> {
             },
             None => String::new(),
         };
-        self.prompt
-            .section(&qualified, &title_text);
+        self.driver
+            .section(&qualified, numeral, &title_text);
         self.walk(env, body)
     }
 
@@ -463,9 +640,10 @@ impl<'i, P: Prompt> Runner<'i, P> {
         let Operation::Step {
             ordinal,
             attributes,
-            description,
+            source,
             body,
             responses,
+            ..
         } = op
         else {
             unreachable!("walk_step called with non-Step operation");
@@ -485,7 +663,14 @@ impl<'i, P: Prompt> Runner<'i, P> {
             .path
             .render();
 
-        let result = self.perform_step(env, &qualified, body, description, responses);
+        let result = self.perform_step(
+            env,
+            &qualified,
+            ordinal,
+            body,
+            source,
+            responses,
+        );
 
         self.path
             .pop();
@@ -501,8 +686,9 @@ impl<'i, P: Prompt> Runner<'i, P> {
         &mut self,
         env: &mut Environment,
         qualified: &str,
+        _ordinal: &Ordinal<'i>,
         body: &'i Operation<'i>,
-        description: &'i [Operation<'i>],
+        source: &'i language::Scope<'i>,
         responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
         if self
@@ -527,36 +713,98 @@ impl<'i, P: Prompt> Runner<'i, P> {
         self.appender
             .append(&begin)?;
 
-        if let Outcome::Quit = self.walk(env, body)? {
-            return Ok(Outcome::Quit);
-        }
+        let step_text = crate::formatting::formatter::render_scope(
+            source,
+            self.driver.renderer(),
+        );
 
-        let mut description_text = String::new();
-        for op in description {
-            if !description_text.is_empty() {
-                description_text.push('\n');
-            }
-            match super::evaluator::evaluate(&self.library, &self.context, env, op)? {
-                Value::Literali(s) => description_text.push_str(&s),
-                other => description_text.push_str(&other.to_string()),
-            }
-        }
+        self.driver
+            .step(qualified, &step_text);
 
-        self.prompt
-            .step(qualified, &description_text);
+        let produced = match self.walk(env, body)? {
+            Outcome::Stopped => return Ok(Outcome::Stopped),
+            Outcome::Done(value) => value,
+            // The body declined its exec command beat (Skip / Fail), which
+            // settles the step: there is no result to judge, so record the
+            // outcome and return without the verdict prompt.
+            settled => {
+                let record = Record {
+                    recorded: now_iso8601(),
+                    run_id,
+                    path: qualified.to_string(),
+                    state: record_state(&settled),
+                };
+                self.appender
+                    .append(&record)?;
+                self.completed
+                    .insert(qualified.to_string());
+                return Ok(settled);
+            }
+        };
 
         let choices: Vec<&str> = responses
             .iter()
             .map(|r| r.value)
             .collect();
-        let outcome = outcome_from(
-            self.prompt
-                .ask(&choices),
-        );
-        if let Outcome::Quit = outcome {
-            return Ok(Outcome::Quit);
+        let input = self
+            .driver
+            .ask(qualified, &choices, produced);
+
+        // Quit halts the walk and is recorded as a Stop lifecycle event at the
+        // root path, distinguishing a deliberate stop from a crash (which records
+        // nothing). This step's Begin stands without a matching outcome, so
+        // resume re-runs it.
+        if let UserInput::Quit = input {
+            let suspend = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: "/".to_string(),
+                state: State::Stop,
+            };
+            self.appender
+                .append(&suspend)?;
+            return Ok(Outcome::Stopped);
         }
 
+        let outcome = outcome_from(input);
+        let record = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: qualified.to_string(),
+            state: record_state(&outcome),
+        };
+        self.appender
+            .append(&record)?;
+        self.completed
+            .insert(qualified.to_string());
+        Ok(outcome)
+    }
+
+    /// Sign off a completed structural scope — a Section at its close, or the
+    /// whole run at the entry procedure.
+    fn seal_scope(&mut self, qualified: &str, outcome: Outcome) -> Result<Outcome, RunnerError> {
+        let produced = match outcome {
+            Outcome::Done(value) => value,
+            _ => Value::Unitus,
+        };
+        let run_id = self
+            .appender
+            .run_id();
+        let input = self
+            .driver
+            .seal(qualified, produced);
+        if let UserInput::Quit = input {
+            let suspend = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: "/".to_string(),
+                state: State::Stop,
+            };
+            self.appender
+                .append(&suspend)?;
+            return Ok(Outcome::Stopped);
+        }
+        let outcome = outcome_from(input);
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -570,6 +818,7 @@ impl<'i, P: Prompt> Runner<'i, P> {
         Ok(outcome)
     }
 }
+
 
 fn describe_loop(
     names: &[crate::language::Identifier<'_>],
@@ -595,18 +844,20 @@ fn outcome_from(input: UserInput) -> Outcome {
     match input {
         UserInput::Done(value) => Outcome::Done(value),
         UserInput::Skip => Outcome::Skipped,
-        UserInput::Fail => Outcome::Failed(Failure::Aborted("Failed".to_string())),
-        UserInput::Quit => Outcome::Quit,
+        UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
+        UserInput::Quit => Outcome::Stopped,
     }
 }
 
-/// Project the runner's in-memory `Outcome` into the on-disk `State`
-/// the PFFTT writer expects. A chosen response records as a quoted
-/// literal; any other Done (the plain confirmation) records as unit.
-/// Quit is unreachable here: the caller filters it out before recording.
+/// Project the runner's in-memory `Outcome` into the on-disk `State` for the
+/// PFFTT file. A single-line input (a chosen response or whatever the user
+/// typed) records as a literal string. Multi-line literals (raw exec output)
+/// record as unit. The in-memory `Outcome` still carries the full value, so a
+/// value bound with `~` remains available in scope regardless. Quit is
+/// unreachable here: the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
-        Outcome::Done(Value::Literali(text)) => {
+        Outcome::Done(Value::Literali(text)) if !text.contains('\n') => {
             State::Done(Some(RecordValue::Literal(text.clone())))
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
@@ -614,7 +865,9 @@ fn record_state(outcome: &Outcome) -> State {
         Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
             format!("[ reason = \"{}\" ]", reason),
         ))),
-        Outcome::Quit => unreachable!("Quit is not recorded"),
+        Outcome::Stopped => {
+            unreachable!("Stop is recorded as a lifecycle event, not a step result")
+        }
     }
 }
 

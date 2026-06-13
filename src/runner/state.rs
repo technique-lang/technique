@@ -45,9 +45,11 @@ pub struct Record {
 }
 
 /// A lifecycle or step-outcome event; the keyword written into each PFFTT
-/// record line. `Start`, `Pause`, and `Resume` are run-lifecycle events
-/// emitted at the root path `/`; `Begin` marks the moment work starts
-/// on a step (paired with the eventual `Done`, `Skip`, or `Fail`).
+/// record line. `Start`, `Stop`, and `Resume` are run-lifecycle events emitted
+/// at the root path `/`; `Begin` marks the moment work starts on a step (paired
+/// with the eventual `Done`, `Skip`, or `Fail`). `Stop` records a deliberate
+/// quit — the run stays resumable, and the record distinguishes the quit from a
+/// crash (which records nothing).
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` records a host-function call from inside a step body.
@@ -55,7 +57,7 @@ pub struct Record {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum State {
     Start { uri: String },
-    Pause,
+    Stop,
     Resume,
     Invoke(InvokeTarget),
     Execute { function: String },
@@ -173,7 +175,7 @@ impl Store {
 
     /// Open an existing run. Parses the leading `Start` record to recover
     /// the source document, then replays `Done` / `Skip` / `Fail` records
-    /// into a set of completed step paths. `Pause` and `Resume` records
+    /// into a set of completed step paths. `Stop` and `Resume` records
     /// are passed over.
     pub fn open(&self, run_id: RunId) -> Result<(PathBuf, HashSet<String>, PathBuf), RunnerError> {
         let run_dir = self
@@ -220,7 +222,7 @@ impl Store {
                     completed.insert(record.path);
                 }
                 State::Start { .. }
-                | State::Pause
+                | State::Stop
                 | State::Resume
                 | State::Invoke(_)
                 | State::Execute { .. }
@@ -372,7 +374,7 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str("Start ");
             out.push_str(uri);
         }
-        State::Pause => out.push_str("Pause"),
+        State::Stop => out.push_str("Stop"),
         State::Resume => out.push_str("Resume"),
         State::Invoke(target) => {
             out.push_str("Invoke ");
@@ -413,11 +415,48 @@ fn format_value(out: &mut String, value: &Value) {
         Value::Unit => out.push_str("()"),
         Value::Literal(text) => {
             out.push('"');
-            out.push_str(text);
+            escape_literal(out, text);
             out.push('"');
         }
         Value::Tablet(text) => out.push_str(text),
     }
+}
+
+// Escape a literal so it occupies a single record line: backslash and quote
+// are protected, and newlines/carriage returns become `\n` / `\r` so an
+// embedded multi-line value (e.g. captured exec output) survives the
+// line-oriented PFFTT format.
+fn escape_literal(out: &mut String, text: &str) {
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(c),
+        }
+    }
+}
+
+// Reverse `escape_literal`. An unknown escape (or a trailing backslash) is a
+// malformed record.
+fn unescape_literal(text: &str) -> Result<String, RecordError> {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('\\') => out.push('\\'),
+                Some('"') => out.push('"'),
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                _ => return Err(RecordError::MalformedState),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    Ok(out)
 }
 
 // Parse a single PFFTT record line into a Record.
@@ -467,11 +506,11 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
                 uri: uri.to_string(),
             })
         }
-        "Pause" => {
+        "Stop" => {
             if rest.is_some() {
                 return Err(RecordError::MalformedState);
             }
-            Ok(State::Pause)
+            Ok(State::Stop)
         }
         "Resume" => {
             if rest.is_some() {
@@ -536,7 +575,7 @@ fn parse_value(text: &str) -> Result<Value, RecordError> {
     if text == "()" {
         Ok(Value::Unit)
     } else if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') {
-        Ok(Value::Literal(text[1..text.len() - 1].to_string()))
+        Ok(Value::Literal(unescape_literal(&text[1..text.len() - 1])?))
     } else if text.starts_with('[') && text.ends_with(']') {
         Ok(Value::Tablet(text.to_string()))
     } else {
