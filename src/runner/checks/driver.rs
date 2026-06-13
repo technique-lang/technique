@@ -52,11 +52,10 @@ fn mock_records_offered_choices() {
 }
 
 #[test]
-fn mock_records_enter_leave_and_announce() {
+fn mock_records_enter_and_announce() {
     let mut p = Mock::new();
     p.enter("I", "Setup");
     p.announce("Calling helper");
-    p.leave("I");
     assert_eq!(
         p.events(),
         &[
@@ -65,9 +64,6 @@ fn mock_records_enter_leave_and_announce() {
                 title: "Setup".to_string(),
             },
             Event::Announce("Calling helper".to_string()),
-            Event::Leave {
-                qualified: "I".to_string(),
-            },
         ]
     );
 }

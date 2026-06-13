@@ -51,11 +51,6 @@ pub trait Driver {
     /// subroutine — with its Qualified Name and title text (the `↘` marker).
     fn enter(&mut self, qualified: &str, title: &str);
 
-    /// Announce ascent back out of a named scope, with the Qualified Name of
-    /// the scope being left (the `↙` marker). Paired with `enter`; loop
-    /// iterations do not emit it.
-    fn leave(&mut self, qualified: &str);
-
     /// Surface an informational line — Loop body announcements,
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
     fn announce(&mut self, message: &str);
@@ -121,10 +116,6 @@ impl<W: Write> Driver for Console<W> {
         write_indented(&mut self.output, title);
     }
 
-    fn leave(&mut self, qualified: &str) {
-        let _ = writeln!(self.output, "{}", format!("↙ {}", qualified).green());
-    }
-
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         // Grey descent bracket (the address), then the prose heading.
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
@@ -146,9 +137,10 @@ impl<W: Write> Driver for Console<W> {
 
 /// Run one interactive prompt and settle it. The live `▶` line is drawn and
 /// re-drawn as keys arrive; on settle it is replaced by a `settle` verdict line
-/// (`→` for a step, `↙` for a scope close) in the outcome colour, which scrolls
-/// up into the record — except Quit, which leaves the scope unfinished (resume
-/// re-runs it) and just clears the row.
+/// (`→` for a step, `↙` for a scope close) in dark grey with a trailing verdict
+/// glyph (`✓` done, `⊘` skip, `✗` fail), which scrolls up into the record —
+/// except Quit, which leaves the scope unfinished (resume re-runs it) and just
+/// clears the row.
 fn prompt<W: Write>(
     out: &mut W,
     qualified: &str,
@@ -186,15 +178,18 @@ fn prompt<W: Write>(
         cursor::MoveToColumn(0),
         Clear(ClearType::CurrentLine)
     );
+    // The settle line stays dark grey like the descent introducer: colour is
+    // reserved for the formatter's syntax highlighting, so the verdict speaks
+    // through a trailing glyph (a shape channel) rather than line colour.
     match &result {
         UserInput::Done(_) => {
-            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).green());
+            let _ = writeln!(out, "{}", format!("{} {} ✓", settle, qualified).dark_grey());
         }
         UserInput::Skip => {
-            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).yellow());
+            let _ = writeln!(out, "{}", format!("{} {} ⊘", settle, qualified).dark_grey());
         }
         UserInput::Fail(_) => {
-            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).red());
+            let _ = writeln!(out, "{}", format!("{} {} ✗", settle, qualified).dark_grey());
         }
         UserInput::Quit => {}
     }
@@ -224,11 +219,6 @@ fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
 fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
     write_indented(out, title);
-}
-
-/// Render a named scope's `↙` ascent line.
-fn render_leave<W: Write>(out: &mut W, qualified: &str) {
-    let _ = writeln!(out, "↙ {}", qualified);
 }
 
 /// Render a Section heading: its numeral and title, e.g.
@@ -780,10 +770,6 @@ impl<W: Write> Driver for Automatic<W> {
         render_enter(&mut self.output, qualified, title);
     }
 
-    fn leave(&mut self, qualified: &str) {
-        render_leave(&mut self.output, qualified);
-    }
-
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         let _ = writeln!(self.output, "↘ {}", qualified);
         render_section(&mut self.output, numeral, title);
@@ -824,9 +810,6 @@ pub enum Event {
     Enter {
         qualified: String,
         title: String,
-    },
-    Leave {
-        qualified: String,
     },
     Section {
         qualified: String,
@@ -884,13 +867,6 @@ impl Driver for Mock {
             .push(Event::Enter {
                 qualified: fqn.to_string(),
                 title: title.to_string(),
-            });
-    }
-
-    fn leave(&mut self, fqn: &str) {
-        self.events
-            .push(Event::Leave {
-                qualified: fqn.to_string(),
             });
     }
 

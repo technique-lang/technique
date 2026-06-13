@@ -325,18 +325,24 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // is dropped on return, leaving the caller's `env` untouched.
                 let result = self.walk(&mut local, &subroutine.body);
 
+                // An invoked procedure is a structural scope: the operator signs
+                // it off at its close, like a Section, before control returns to
+                // the caller. A Quit or error walk skips the prompt — the
+                // procedure did not complete.
                 if name.is_some() {
-                    let descended = self
+                    let qualified = self
                         .path
                         .render();
                     self.path
                         .pop();
-                    if completed(&result) {
-                        self.driver
-                            .leave(&descended);
+                    match result {
+                        Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+                        Ok(outcome) => self.seal_scope(&qualified, outcome),
+                        Err(error) => Err(error),
                     }
+                } else {
+                    result
                 }
-                result
             }
             SubroutineRef::Unresolved(id) => {
                 self.driver
@@ -680,16 +686,6 @@ fn describe_loop(
 
 fn describe_execute(function: &str) -> String {
     format!("{}()", function)
-}
-
-/// Whether a scope's walk ran to completion. The `↙` close line is emitted
-/// only then — never on a Quit (`Stopped`) or an error unwind, where the scope
-/// did not finish and a green close would misread as success.
-fn completed(result: &Result<Outcome, RunnerError>) -> bool {
-    match result {
-        Ok(Outcome::Stopped) | Err(_) => false,
-        Ok(_) => true,
-    }
 }
 
 /// Lift a `UserInput` from the prompt into the runner's `Outcome`.
