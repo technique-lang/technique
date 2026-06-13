@@ -109,6 +109,7 @@ pub enum Operation<'i> {
         ordinal: Ordinal<'i>,
         attributes: Vec<&'i [language::Attribute<'i>]>,
         description: Vec<Operation<'i>>,
+        source: &'i language::Scope<'i>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
     },
@@ -128,7 +129,7 @@ pub enum Operation<'i> {
 /// captured by the parser (`"1"`, `"a"`, `"iii"`, ...); `Parallel` has no
 /// captured form, its position deriving from its index in the surrounding
 /// `Sequence`.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Ordinal<'i> {
     Dependent(&'i str),
     Parallel,

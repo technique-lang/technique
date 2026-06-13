@@ -104,19 +104,19 @@ fn procedure_segment() {
     stack.push(PathSegment::Procedure("local_network"));
     assert_eq!(stack.render(), "/local_network:");
 
-    // Procedure with a step: `/name:N`.
+    // Procedure with a step: `/name:/N`.
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::Procedure("make_coffee"));
     stack.push(PathSegment::DependentStep("2"));
-    assert_eq!(stack.render(), "/make_coffee:2");
+    assert_eq!(stack.render(), "/make_coffee:/2");
 
-    // Nested procedure: the inner frame replaces the outer prefix entirely.
+    // Nested procedure: each level is its own component.
     let mut stack = QualifiedPath::new();
     stack.push(PathSegment::Procedure("outer"));
     stack.push(PathSegment::DependentStep("1"));
     stack.push(PathSegment::Procedure("inner"));
     stack.push(PathSegment::DependentStep("2"));
-    assert_eq!(stack.render(), "/inner:2");
+    assert_eq!(stack.render(), "/outer:/1/inner:/2");
 }
 
 #[test]

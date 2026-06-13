@@ -13,10 +13,12 @@
 use std::io::{self, Write};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crossterm::style::{Attribute, SetAttribute};
+use crossterm::style::{Attribute, SetAttribute, Stylize};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
+use crate::formatting::{Identity, Render};
+use crate::highlighting::Terminal;
 use crate::value::Value;
 
 /// Which driver walks a run: `Interactive` prompts the user, `Automatic` runs
@@ -48,13 +50,11 @@ pub trait Driver {
     fn step(&mut self, qualified: &str, description: &str);
 
     /// Announce descent into a named scope — a Section or an invoked
-    /// subroutine — with its Qualified Name and title text (the `↘` marker).
-    fn enter(&mut self, qualified: &str, title: &str);
+    /// subroutine — with its Qualified Name (the `↘` marker).
+    fn enter(&mut self, qualified: &str);
 
-    /// Announce ascent back out of a named scope, with the Qualified Name of
-    /// the scope being left (the `↙` marker). Paired with `enter`; loop
-    /// iterations do not emit it.
-    fn leave(&mut self, qualified: &str);
+    /// Display a line of formatted content at the left margin.
+    fn display(&mut self, content: &str);
 
     /// Surface an informational line — Loop body announcements,
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
@@ -66,8 +66,31 @@ pub trait Driver {
     /// `choices` is non-empty the operator instead selects one of those
     /// response values, yielding `Done(Literali(choice))`. Skip, fail, and
     /// quit are available either way. `produced` is consumed: the driver
-    /// either moves it into the returned `Done` or discards it.
-    fn ask(&mut self, choices: &[&str], produced: Value) -> UserInput;
+    /// either moves it into the returned `Done` or discards it. `qualified` is
+    /// the step's Qualified Name, repeated on the live prompt line.
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
+
+    /// Gate a shell `exec` on the user's command: show the `script` to be run
+    /// and settle on the user's verdict. `Done` means run it now; Skip / Fail
+    /// decline the run and settle the step; Quit stops. `Automatic` runs
+    /// unconditionally, returning `Done` without prompting.
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput;
+
+    /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
+    /// the section's sign-off closes with) followed by its prose heading —
+    /// numeral and title, e.g. `II. Check internet connectivity`.
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str);
+
+    /// Prompt the operator to sign off a completed structural scope — a Section
+    /// at its close, or the whole run at the entry procedure's close. Like
+    /// `ask` but with no response choices, settling to the `↙` close marker;
+    /// `produced` is the scope's value, offered for acceptance.
+    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
+
+    /// The syntax renderer for highlighting source fragments shown to the
+    /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
+    /// drivers return `Identity` (no markup).
+    fn renderer(&self) -> &'static dyn Render;
 }
 
 /// Interactive console prompt in a terminal. `step` / `section` / `announce`
@@ -98,88 +121,202 @@ impl<W: Write> Console<W> {
 
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        render_step(&mut self.output, fqn, description);
+        let _ = writeln!(self.output, "{}", format!("→ {}", fqn).dark_grey());
+        let _ = writeln!(self.output);
+        write_indented(&mut self.output, description);
+        let _ = writeln!(self.output);
     }
 
-    fn enter(&mut self, qualified: &str, title: &str) {
-        render_enter(&mut self.output, qualified, title);
+    fn enter(&mut self, qualified: &str) {
+        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
+        let _ = writeln!(self.output);
     }
 
-    fn leave(&mut self, qualified: &str) {
-        render_leave(&mut self.output, qualified);
+    fn display(&mut self, content: &str) {
+        let _ = writeln!(self.output, "{}", content);
+        let _ = writeln!(self.output);
+    }
+
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let renderer = self.renderer();
+        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
+        let _ = writeln!(self.output);
+        render_section(&mut self.output, numeral, title, renderer);
+        let _ = writeln!(self.output);
     }
 
     fn announce(&mut self, message: &str) {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, choices: &[&str], produced: Value) -> UserInput {
-        let mut interaction = Interaction::begin(choices, produced);
-        // The interactive path is guarded on stdout being a terminal before
-        // the walk begins, so a raw-mode failure here is an unexpected
-        // terminal fault rather than a redirect; bail by quitting.
-        if enable_raw_mode().is_err() {
-            let _ = writeln!(self.output, "(could not enter raw mode)");
-            return UserInput::Quit;
-        }
-        let result = loop {
-            if draw(&mut self.output, &interaction).is_err() {
-                break UserInput::Quit;
-            }
-            match event::read() {
-                Ok(event::Event::Key(key)) if key.kind != KeyEventKind::Release => {
-                    if let Some(input) = interaction.handle(key) {
-                        break input;
-                    }
-                }
-                Ok(_) => {}
-                Err(_) => break UserInput::Quit,
-            }
-        };
-        let _ = disable_raw_mode();
-        // The prompt is a live affordance, not a record: clear it on settle so
-        // the next state line reuses the row rather than leaving spent ▶ lines.
-        // Restore the caret, hidden while a menu was shown.
-        let _ = queue!(
-            self.output,
-            cursor::Show,
-            cursor::MoveToColumn(0),
-            Clear(ClearType::CurrentLine)
-        );
-        let _ = self
-            .output
-            .flush();
-        result
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
+        prompt(&mut self.output, qualified, "→", choices, produced)
+    }
+
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        prompt_command(&mut self.output, qualified, script)
+    }
+
+    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
+        prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Terminal
     }
 }
 
-/// Write prompt text into the two character gutter, one line at a time.
-/// Console output sits in two bands: a one-glyph gutter (column 0) carrying
-/// the directional markers — `↘` descend, `→` step, `▶` prompt — and the body
-/// (column 2) carrying the qualified name, description, and prompt content.
-/// Raw subprocess output (`exec`) is streamed verbetum and thus flush-left at
-/// column 0.
+/// Run one interactive prompt and settle it. The live `▶` line is drawn and
+/// re-drawn as keys arrive; on settle it is replaced by a `settle` verdict line
+/// (`→` for a step, `↙` for a scope close) in dark grey with a trailing verdict
+/// glyph (`✓` done, `⊘` skip, `✗` fail), which scrolls up into the record —
+/// except Quit, which leaves the scope unfinished (resume re-runs it) and just
+/// clears the row.
+fn prompt<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    choices: &[&str],
+    produced: Value,
+) -> UserInput {
+    let result = interact(out, qualified, settle, Interaction::begin(choices, produced));
+    let col = settle
+        .chars()
+        .count() as u16
+        + 1
+        + qualified
+            .chars()
+            .count() as u16
+        + 1;
+    match &result {
+        UserInput::Done(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✓".green());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Skip => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "⊘".yellow());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Fail(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✗".red());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Quit => {
+            let _ = writeln!(out);
+        }
+    }
+    let _ = out.flush();
+    result
+}
+
+/// Solicit the user's approval to run a shell command. The script appears
+/// pre-filled on the `▶` prompt line as if already typed — Enter runs it,
+/// typing edits it in place, Esc opens the menu (Skip / Fail / Quit). On
+/// `Done` no settle line is printed — the command's output follows immediately
+/// and the step's own verdict prompt judges the result.
+fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
+    let field = edit(script.to_string(), Value::Literali(script.to_string()));
+    let result = interact(
+        out,
+        qualified,
+        "→",
+        Interaction { field, menu: None, reason: None },
+    );
+    let col = "→"
+        .chars()
+        .count() as u16
+        + 1
+        + qualified
+            .chars()
+            .count() as u16
+        + 1;
+    match &result {
+        UserInput::Done(_) | UserInput::Quit => {
+            let _ = writeln!(out);
+        }
+        UserInput::Skip => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "⊘".yellow());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Fail(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✗".red());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+    }
+    let _ = out.flush();
+    result
+}
+
+/// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
+/// row cleared. Shared by the step/scope prompt and the exec command gate; the
+/// caller writes whatever record line it wants afterward.
+fn interact<W: Write>(out: &mut W, qualified: &str, settle: &str, mut interaction: Interaction) -> UserInput {
+    // The interactive path is guarded on stdout being a terminal before the
+    // walk begins, so a raw-mode failure here is an unexpected terminal fault
+    // rather than a redirect; bail by quitting.
+    if enable_raw_mode().is_err() {
+        let _ = writeln!(out, "(could not enter raw mode)");
+        return UserInput::Quit;
+    }
+    let result = loop {
+        if draw(out, qualified, settle, &interaction).is_err() {
+            break UserInput::Quit;
+        }
+        match event::read() {
+            Ok(event::Event::Key(key)) if key.kind != KeyEventKind::Release => {
+                if let Some(input) = interaction.handle(key) {
+                    break input;
+                }
+            }
+            Ok(_) => {}
+            Err(_) => break UserInput::Quit,
+        }
+    };
+    let _ = disable_raw_mode();
+    let _ = queue!(out, cursor::Show);
+    let _ = out.flush();
+    result
+}
+
+/// Write text indented by four spaces, replicating the canonical source
+/// layout the code formatter emits.
 fn write_indented<W: Write>(out: &mut W, text: &str) {
     for line in text.lines() {
-        let _ = writeln!(out, "  {}", line);
+        let _ = writeln!(out, "    {}", line);
     }
 }
 
-/// Render a step's `→` line and indented description.
+/// Render a step's `→` line and description.
 fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
     let _ = writeln!(out, "→ {}", fqn);
+    let _ = writeln!(out);
     write_indented(out, description);
+    let _ = writeln!(out);
 }
 
-/// Render a named scope's `↘` descent line and indented title.
-fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
+/// Render a named scope's `↘` descent line.
+fn render_enter<W: Write>(out: &mut W, qualified: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
-    write_indented(out, title);
 }
 
-/// Render a named scope's `↙` ascent line.
-fn render_leave<W: Write>(out: &mut W, qualified: &str) {
-    let _ = writeln!(out, "↙ {}", qualified);
+/// Render a Section heading: its numeral and title.
+fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str, renderer: &dyn Render) {
+    let styled_numeral = renderer.style(crate::formatting::Syntax::StepItem, numeral);
+    if title.is_empty() {
+        let _ = writeln!(out, "{}.", styled_numeral);
+    } else {
+        let _ = writeln!(out, "{}. {}", styled_numeral, title);
+    }
 }
 
 /// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
@@ -213,11 +350,26 @@ const MENU: [MenuItem; 4] = [
     MenuItem::Quit,
 ];
 
-/// Prompt prefix shown before an editable / read-only candidate, and its
-/// width in terminal columns (for placing the edit cursor). Later we will
-/// toggle between ▶ and ■
-const PROMPT_TEXT: &str = "▶ ";
-const PROMPT_WIDTH: u16 = 2;
+/// Shell-prompt glyph placed after the path, before the cursor — the
+/// equivalent of `$` or `>` in a shell.
+const PROMPT_SYMBOL: &str = "▶";
+
+/// Number of columns spanned by the prompt prefix:
+/// `{settle} {path} {PROMPT_SYMBOL} `
+fn prompt_prefix_width(qualified: &str, settle: &str) -> u16 {
+    settle
+        .chars()
+        .count() as u16
+        + 1 // space after settle
+        + qualified
+            .chars()
+            .count() as u16
+        + 1 // space before prompt symbol
+        + PROMPT_SYMBOL
+            .chars()
+            .count() as u16
+        + 1 // space after prompt symbol
+}
 
 /// Shown on the prompt line (after the `▶` prefix) when soliciting a reason for
 /// e.g. failure, replacing the menu; the typed buffer follows it.
@@ -488,58 +640,52 @@ impl Interaction {
 }
 
 /// Draw the current interaction state onto the repeatedly-cleared prompt line.
-/// One line throughout: the confirm triangle, the Edit / response candidate, the
-/// menu, or — once Fail is chosen — the `Reason?` entry, which replaces the menu
-/// on the same line (keeping the `▶` prefix). The caret shows only where input
-/// is awaited at a point (confirm prompt, Edit buffer, reason field) and is
-/// hidden where a reverse-video highlight is the indicator (menu, choices).
-fn draw<W: Write>(out: &mut W, interaction: &Interaction) -> io::Result<()> {
+/// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
+/// grey (matching the trace lines above), and ▶ is the shell-prompt character
+/// before the cursor/content area.
+fn draw<W: Write>(out: &mut W, qualified: &str, settle: &str, interaction: &Interaction) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
-    // Where the caret lands; `None` hides it.
+    let prefix = prompt_prefix_width(qualified, settle);
+    write!(
+        out,
+        "{} {} ",
+        format!("{} {}", settle, qualified).dark_grey(),
+        PROMPT_SYMBOL.blue(),
+    )?;
+
+    // Where the cursor lands; a value of `None` hides it.
     let mut cursor_col: Option<u16> = None;
     match interaction.menu {
-        Some(active) => {
-            // The step is still running (timer ticking), so keep the same
-            // triangle; only the line's content changes.
-            write!(out, "{}", PROMPT_TEXT)?;
-            match &interaction.reason {
-                Some(reason) => {
-                    write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
-                    cursor_col = Some(
-                        PROMPT_WIDTH
-                            + REASON_PREFIX
-                                .chars()
-                                .count() as u16
-                            + reason.buffer[..reason.cursor]
-                                .chars()
-                                .count() as u16,
-                    );
-                }
-                None => render_menu(out, interaction, active)?,
+        Some(active) => match &interaction.reason {
+            Some(reason) => {
+                write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                cursor_col = Some(
+                    prefix
+                        + REASON_PREFIX
+                            .chars()
+                            .count() as u16
+                        + reason.buffer[..reason.cursor]
+                            .chars()
+                            .count() as u16,
+                );
             }
-        }
+            None => render_menu(out, interaction, active)?,
+        },
         None => match &interaction.field {
             Field::Edit { buffer, cursor, .. } => {
-                write!(out, "{}{}", PROMPT_TEXT, buffer)?;
+                write!(out, "{}", buffer)?;
                 cursor_col = Some(
-                    PROMPT_WIDTH
+                    prefix
                         + buffer[..*cursor]
                             .chars()
                             .count() as u16,
                 );
             }
             Field::Frozen { .. } => {
-                // The value (if any) was already shown above; the normal prompt
-                // is just the "play" triangle. The caret rests just past it: the
-                // step is awaiting input (an <Enter> to confirm, or typed text
-                // once editing). The exit/edit options are not advertised here —
-                // they appear only once <Esc> opens the menu.
-                write!(out, "{}", PROMPT_TEXT)?;
-                cursor_col = Some(PROMPT_WIDTH);
+                cursor_col = Some(prefix);
             }
             Field::Choose { choices, active } => {
-                write!(out, "{}", PROMPT_TEXT)?;
                 let refs: Vec<&str> = choices
                     .iter()
                     .map(String::as_str)
@@ -714,20 +860,43 @@ impl<W: Write> Driver for Automatic<W> {
         render_step(&mut self.output, fqn, description);
     }
 
-    fn enter(&mut self, qualified: &str, title: &str) {
-        render_enter(&mut self.output, qualified, title);
+    fn enter(&mut self, qualified: &str) {
+        render_enter(&mut self.output, qualified);
+        let _ = writeln!(self.output);
     }
 
-    fn leave(&mut self, qualified: &str) {
-        render_leave(&mut self.output, qualified);
+    fn display(&mut self, content: &str) {
+        let _ = writeln!(self.output, "{}", content);
+        let _ = writeln!(self.output);
+    }
+
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let renderer = self.renderer();
+        let _ = writeln!(self.output, "↘ {}", qualified);
+        let _ = writeln!(self.output);
+        render_section(&mut self.output, numeral, title, renderer);
+        let _ = writeln!(self.output);
     }
 
     fn announce(&mut self, message: &str) {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, _choices: &[&str], produced: Value) -> UserInput {
+    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
         UserInput::Done(produced)
+    }
+
+    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
+        write_indented(&mut self.output, script);
+        UserInput::Done(Value::Literali(script.to_string()))
+    }
+
+    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+        UserInput::Done(produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
     }
 }
 
@@ -752,14 +921,23 @@ pub enum Event {
     },
     Enter {
         qualified: String,
+    },
+    Section {
+        qualified: String,
+        numeral: String,
         title: String,
     },
-    Leave {
-        qualified: String,
-    },
     Announce(String),
+    Command {
+        qualified: String,
+        script: String,
+    },
     Ask {
+        qualified: String,
         choices: Vec<String>,
+    },
+    Seal {
+        qualified: String,
     },
 }
 
@@ -799,18 +977,21 @@ impl Driver for Mock {
             });
     }
 
-    fn enter(&mut self, fqn: &str, title: &str) {
+    fn enter(&mut self, fqn: &str) {
         self.events
             .push(Event::Enter {
                 qualified: fqn.to_string(),
-                title: title.to_string(),
             });
     }
 
-    fn leave(&mut self, fqn: &str) {
+    fn display(&mut self, _content: &str) {}
+
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.events
-            .push(Event::Leave {
-                qualified: fqn.to_string(),
+            .push(Event::Section {
+                qualified: qualified.to_string(),
+                numeral: numeral.to_string(),
+                title: title.to_string(),
             });
     }
 
@@ -819,9 +1000,10 @@ impl Driver for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(&mut self, choices: &[&str], _produced: Value) -> UserInput {
+    fn ask(&mut self, qualified: &str, choices: &[&str], _produced: Value) -> UserInput {
         self.events
             .push(Event::Ask {
+                qualified: qualified.to_string(),
                 choices: choices
                     .iter()
                     .map(|c| c.to_string())
@@ -830,6 +1012,35 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    /// Records the command beat and auto-commands the run (`Done`) without
+    /// draining the answer queue — the exec gate is orthogonal to the step
+    /// verdicts a test drives. A test asserting gate behaviour inspects the
+    /// recorded `Command` event.
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        self.events
+            .push(Event::Command {
+                qualified: qualified.to_string(),
+                script: script.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
+    }
+
+    /// A scope sign-off auto-accepts (records `Done`) and records the event,
+    /// rather than draining the `ask` answer queue — the structural-scope
+    /// close is orthogonal to the step verdicts a test drives. A test
+    /// asserting sign-off behaviour inspects the recorded `Seal` event.
+    fn seal(&mut self, qualified: &str, _produced: Value) -> UserInput {
+        self.events
+            .push(Event::Seal {
+                qualified: qualified.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
     }
 }
 

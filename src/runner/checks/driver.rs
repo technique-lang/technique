@@ -10,24 +10,30 @@ fn mock_returns_canned_answers_in_order() {
         UserInput::Skip,
         UserInput::Quit,
     ]);
-    assert_eq!(p.ask(&[], Value::Unitus), UserInput::Done(Value::Unitus));
-    assert_eq!(p.ask(&[], Value::Unitus), UserInput::Skip);
-    assert_eq!(p.ask(&[], Value::Unitus), UserInput::Quit);
+    assert_eq!(
+        p.ask("/I/1", &[], Value::Unitus),
+        UserInput::Done(Value::Unitus)
+    );
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Skip);
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Quit);
 }
 
 #[test]
 fn mock_records_step_and_ask_events() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    p.step("local_network:I/1", "Check the cable.");
-    let _ = p.ask(&[], Value::Unitus);
+    p.step("/local_network:I/1", "Check the cable.");
+    let _ = p.ask("/local_network:I/1", &[], Value::Unitus);
     assert_eq!(
         p.events(),
         &[
             Event::Step {
-                qualified: "local_network:I/1".to_string(),
+                qualified: "/local_network:I/1".to_string(),
                 description: "Check the cable.".to_string(),
             },
-            Event::Ask { choices: vec![] },
+            Event::Ask {
+                qualified: "/local_network:I/1".to_string(),
+                choices: vec![],
+            },
         ]
     );
 }
@@ -35,32 +41,28 @@ fn mock_records_step_and_ask_events() {
 #[test]
 fn mock_records_offered_choices() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
-    let _ = p.ask(&["Yes", "No"], Value::Unitus);
+    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus);
     assert_eq!(
         p.events(),
         &[Event::Ask {
+            qualified: "I/1".to_string(),
             choices: vec!["Yes".to_string(), "No".to_string()],
         }]
     );
 }
 
 #[test]
-fn mock_records_enter_leave_and_announce() {
+fn mock_records_enter_and_announce() {
     let mut p = Mock::new();
-    p.enter("I", "Setup");
+    p.enter("I");
     p.announce("Calling helper");
-    p.leave("I");
     assert_eq!(
         p.events(),
         &[
             Event::Enter {
                 qualified: "I".to_string(),
-                title: "Setup".to_string(),
             },
             Event::Announce("Calling helper".to_string()),
-            Event::Leave {
-                qualified: "I".to_string(),
-            },
         ]
     );
 }
@@ -69,7 +71,7 @@ fn mock_records_enter_leave_and_announce() {
 #[should_panic(expected = "Mock::ask called with no canned answers remaining")]
 fn mock_ask_without_answers_panics() {
     let mut p = Mock::new();
-    let _ = p.ask(&[], Value::Unitus);
+    let _ = p.ask("I/1", &[], Value::Unitus);
 }
 
 #[test]
@@ -79,17 +81,16 @@ fn console_step_writes_fqn_and_description() {
     p.step("local_network:I/1", "Check the cable.");
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ local_network:I/1"));
-    assert!(written.contains("  Check the cable."));
+    assert!(written.contains("    Check the cable."));
 }
 
 #[test]
-fn console_enter_writes_fqn_and_title() {
+fn console_enter_writes_fqn() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
-    p.enter("I", "Setup");
+    p.enter("I");
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("↘ I"));
-    assert!(written.contains("  Setup"));
 }
 
 #[test]
@@ -207,7 +208,7 @@ fn menu_shows_greyed_edit_when_unavailable() {
     let mut it = Interaction::begin(&[], Value::Unitus);
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("Edit"));
     assert!(written.contains("Skip"));
@@ -345,7 +346,7 @@ fn render_frozen_shows_only_triangle() {
     let dump = Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string());
     let it = Interaction::begin(&[], dump);
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(!written.contains('\n'));
     assert!(!written.contains("eth0"));
@@ -368,7 +369,7 @@ fn render_edit_shows_candidate_text() {
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains("hello"));
 }
@@ -384,7 +385,7 @@ fn render_reason_replaces_menu() {
     it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(!written.contains('\n'));
     assert!(written.contains('▶'));
@@ -396,7 +397,7 @@ fn render_reason_replaces_menu() {
 fn render_choices_lists_options() {
     let it = Interaction::begin(&["Yes", "No"], Value::Unitus);
     let mut out: Vec<u8> = Vec::new();
-    draw(&mut out, &it).expect("draw");
+    draw(&mut out, "I/1", "→", &it).expect("draw");
     let written = String::from_utf8(out).expect("utf8");
     assert!(written.contains('▶'));
     assert!(written.contains("Yes"));
