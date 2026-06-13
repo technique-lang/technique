@@ -370,10 +370,22 @@ fn section_walking() {
         .expect("run");
     let prompt = runner.into_driver();
     let events = prompt.events();
+    // A section descends with a `Section` heading (its numeral) and signs off
+    // at its close with a `Seal` carrying the section's qualified path.
+    let section_numerals: Vec<&str> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::Section { numeral, .. } = e {
+                Some(numeral.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
     let section_fqns: Vec<&str> = events
         .iter()
         .filter_map(|e| {
-            if let Event::Enter { qualified, .. } = e {
+            if let Event::Seal { qualified } = e {
                 Some(qualified.as_str())
             } else {
                 None
@@ -390,6 +402,7 @@ fn section_walking() {
             }
         })
         .collect();
+    assert_eq!(section_numerals, vec!["I"]);
     assert_eq!(section_fqns, vec!["/I"]);
     assert_eq!(step_fqns, vec!["/I/1"]);
 
@@ -420,7 +433,7 @@ fn section_walking() {
         .events()
         .iter()
         .find_map(|e| {
-            if let Event::Enter { title, .. } = e {
+            if let Event::Section { title, .. } = e {
                 Some(title.as_str())
             } else {
                 None

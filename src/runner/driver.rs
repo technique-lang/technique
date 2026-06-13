@@ -69,6 +69,17 @@ pub trait Driver {
     /// either moves it into the returned `Done` or discards it. `qualified` is
     /// the step's Qualified Name, repeated on the live prompt line.
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
+
+    /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
+    /// the section's sign-off closes with) followed by its prose heading —
+    /// numeral and title, e.g. `II. Check internet connectivity`.
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str);
+
+    /// Prompt the operator to sign off a completed structural scope — a Section
+    /// at its close, or the whole run at the entry procedure's close. Like
+    /// `ask` but with no response choices, settling to the `↙` close marker;
+    /// `produced` is the scope's value, offered for acceptance.
+    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
 }
 
 /// Interactive console prompt in a terminal. `step` / `section` / `announce`
@@ -104,7 +115,9 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn enter(&mut self, qualified: &str, title: &str) {
-        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).blue());
+        // Grey: a descent opener is recessive scaffolding, not a status. Only
+        // the live prompt is ever blue.
+        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
         write_indented(&mut self.output, title);
     }
 
@@ -112,61 +125,81 @@ impl<W: Write> Driver for Console<W> {
         let _ = writeln!(self.output, "{}", format!("↙ {}", qualified).green());
     }
 
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        // Grey descent bracket (the address), then the prose heading.
+        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
+        render_section(&mut self.output, numeral, title);
+    }
+
     fn announce(&mut self, message: &str) {
         write_indented(&mut self.output, message);
     }
 
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
-        let mut interaction = Interaction::begin(choices, produced);
-        // The interactive path is guarded on stdout being a terminal before
-        // the walk begins, so a raw-mode failure here is an unexpected
-        // terminal fault rather than a redirect; bail by quitting.
-        if enable_raw_mode().is_err() {
-            let _ = writeln!(self.output, "(could not enter raw mode)");
-            return UserInput::Quit;
-        }
-        let result = loop {
-            if draw(&mut self.output, qualified, &interaction).is_err() {
-                break UserInput::Quit;
-            }
-            match event::read() {
-                Ok(event::Event::Key(key)) if key.kind != KeyEventKind::Release => {
-                    if let Some(input) = interaction.handle(key) {
-                        break input;
-                    }
-                }
-                Ok(_) => {}
-                Err(_) => break UserInput::Quit,
-            }
-        };
-        let _ = disable_raw_mode();
-        // On settle the live `▶` prompt is replaced by a `→` verdict line in the
-        // outcome colour, which scrolls up into the permanent record — except
-        // Quit, which leaves the step unfinished (resume re-runs it) and so just
-        // clears the row. Restore the cursor, hidden while a menu was shown.
-        let _ = queue!(
-            self.output,
-            cursor::Show,
-            cursor::MoveToColumn(0),
-            Clear(ClearType::CurrentLine)
-        );
-        match &result {
-            UserInput::Done(_) => {
-                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).green());
-            }
-            UserInput::Skip => {
-                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).yellow());
-            }
-            UserInput::Fail(_) => {
-                let _ = writeln!(self.output, "{}", format!("→ {}", qualified).red());
-            }
-            UserInput::Quit => {}
-        }
-        let _ = self
-            .output
-            .flush();
-        result
+        prompt(&mut self.output, qualified, "→", choices, produced)
     }
+
+    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
+        prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+}
+
+/// Run one interactive prompt and settle it. The live `▶` line is drawn and
+/// re-drawn as keys arrive; on settle it is replaced by a `settle` verdict line
+/// (`→` for a step, `↙` for a scope close) in the outcome colour, which scrolls
+/// up into the record — except Quit, which leaves the scope unfinished (resume
+/// re-runs it) and just clears the row.
+fn prompt<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    choices: &[&str],
+    produced: Value,
+) -> UserInput {
+    let mut interaction = Interaction::begin(choices, produced);
+    // The interactive path is guarded on stdout being a terminal before the
+    // walk begins, so a raw-mode failure here is an unexpected terminal fault
+    // rather than a redirect; bail by quitting.
+    if enable_raw_mode().is_err() {
+        let _ = writeln!(out, "(could not enter raw mode)");
+        return UserInput::Quit;
+    }
+    let result = loop {
+        if draw(out, qualified, &interaction).is_err() {
+            break UserInput::Quit;
+        }
+        match event::read() {
+            Ok(event::Event::Key(key)) if key.kind != KeyEventKind::Release => {
+                if let Some(input) = interaction.handle(key) {
+                    break input;
+                }
+            }
+            Ok(_) => {}
+            Err(_) => break UserInput::Quit,
+        }
+    };
+    let _ = disable_raw_mode();
+    // Restore the cursor, hidden while a menu was shown.
+    let _ = queue!(
+        out,
+        cursor::Show,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
+    match &result {
+        UserInput::Done(_) => {
+            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).green());
+        }
+        UserInput::Skip => {
+            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).yellow());
+        }
+        UserInput::Fail(_) => {
+            let _ = writeln!(out, "{}", format!("{} {}", settle, qualified).red());
+        }
+        UserInput::Quit => {}
+    }
+    let _ = out.flush();
+    result
 }
 
 /// Write prompt text into the two character gutter, one line at a time.
@@ -196,6 +229,17 @@ fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
 /// Render a named scope's `↙` ascent line.
 fn render_leave<W: Write>(out: &mut W, qualified: &str) {
     let _ = writeln!(out, "↙ {}", qualified);
+}
+
+/// Render a Section heading: its numeral and title, e.g.
+/// `II. Check internet connectivity`. Default colour — a heading is prose, not
+/// a status marker — so `Console` and `Automatic` share it.
+fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str) {
+    if title.is_empty() {
+        let _ = writeln!(out, "{}.", numeral);
+    } else {
+        let _ = writeln!(out, "{}. {}", numeral, title);
+    }
 }
 
 /// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
@@ -740,11 +784,20 @@ impl<W: Write> Driver for Automatic<W> {
         render_leave(&mut self.output, qualified);
     }
 
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let _ = writeln!(self.output, "↘ {}", qualified);
+        render_section(&mut self.output, numeral, title);
+    }
+
     fn announce(&mut self, message: &str) {
         write_indented(&mut self.output, message);
     }
 
     fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
+        UserInput::Done(produced)
+    }
+
+    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
         UserInput::Done(produced)
     }
 }
@@ -775,10 +828,18 @@ pub enum Event {
     Leave {
         qualified: String,
     },
+    Section {
+        qualified: String,
+        numeral: String,
+        title: String,
+    },
     Announce(String),
     Ask {
         qualified: String,
         choices: Vec<String>,
+    },
+    Seal {
+        qualified: String,
     },
 }
 
@@ -833,6 +894,15 @@ impl Driver for Mock {
             });
     }
 
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        self.events
+            .push(Event::Section {
+                qualified: qualified.to_string(),
+                numeral: numeral.to_string(),
+                title: title.to_string(),
+            });
+    }
+
     fn announce(&mut self, message: &str) {
         self.events
             .push(Event::Announce(message.to_string()));
@@ -850,6 +920,18 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    /// A scope sign-off auto-accepts (records `Done`) and records the event,
+    /// rather than draining the `ask` answer queue — the structural-scope
+    /// close is orthogonal to the step verdicts a test drives. A test
+    /// asserting sign-off behaviour inspects the recorded `Seal` event.
+    fn seal(&mut self, qualified: &str, _produced: Value) -> UserInput {
+        self.events
+            .push(Event::Seal {
+                qualified: qualified.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
     }
 }
 

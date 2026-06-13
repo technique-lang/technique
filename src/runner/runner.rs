@@ -151,10 +151,25 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .push(PathSegment::Procedure(name));
         }
         let result = self.walk(&mut env, &entry.body);
-        if name.is_some() {
+        // A named entry procedure is a structural scope: a completed run closes
+        // with a final sign-off prompt at its path. A Quit or error walk skips
+        // it — the run did not finish. An anonymous entry (a bare series of
+        // steps) has no procedure to accept, so it just ends.
+        let result = if name.is_some() {
+            let qualified = self
+                .path
+                .render();
+            let sealed = match result {
+                Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+                Ok(outcome) => self.seal_scope(&qualified, outcome),
+                Err(error) => Err(error),
+            };
             self.path
                 .pop();
-        }
+            sealed
+        } else {
+            result
+        };
         result
     }
 
@@ -316,8 +331,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .render();
                     self.path
                         .pop();
-                    self.driver
-                        .leave(&descended);
+                    if completed(&result) {
+                        self.driver
+                            .leave(&descended);
+                    }
                 }
                 result
             }
@@ -434,20 +451,26 @@ impl<'i, D: Driver> Runner<'i, D> {
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
-        let result = self.perform_section(env, title, body);
+        let result = self.perform_section(env, numeral, title, body);
         let qualified = self
             .path
             .render();
         self.path
             .pop();
-        self.driver
-            .leave(&qualified);
-        result
+        // A section is a structural scope: the operator signs it off at its
+        // close before the next sibling runs. A Quit or error walk skips the
+        // prompt — the section did not complete.
+        match result {
+            Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+            Ok(outcome) => self.seal_scope(&qualified, outcome),
+            Err(error) => Err(error),
+        }
     }
 
     fn perform_section(
         &mut self,
         env: &mut Environment,
+        numeral: &'i str,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
@@ -462,7 +485,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             None => String::new(),
         };
         self.driver
-            .enter(&qualified, &title_text);
+            .section(&qualified, numeral, &title_text);
         self.walk(env, body)
     }
 
@@ -600,6 +623,44 @@ impl<'i, D: Driver> Runner<'i, D> {
             .insert(qualified.to_string());
         Ok(outcome)
     }
+
+    /// Sign off a completed structural scope — a Section at its close, or the
+    /// whole run at the entry procedure.
+    fn seal_scope(&mut self, qualified: &str, outcome: Outcome) -> Result<Outcome, RunnerError> {
+        let produced = match outcome {
+            Outcome::Done(value) => value,
+            _ => Value::Unitus,
+        };
+        let run_id = self
+            .appender
+            .run_id();
+        let input = self
+            .driver
+            .seal(qualified, produced);
+        if let UserInput::Quit = input {
+            let suspend = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: "/".to_string(),
+                state: State::Stop,
+            };
+            self.appender
+                .append(&suspend)?;
+            return Ok(Outcome::Stopped);
+        }
+        let outcome = outcome_from(input);
+        let record = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: qualified.to_string(),
+            state: record_state(&outcome),
+        };
+        self.appender
+            .append(&record)?;
+        self.completed
+            .insert(qualified.to_string());
+        Ok(outcome)
+    }
 }
 
 fn describe_loop(
@@ -619,6 +680,16 @@ fn describe_loop(
 
 fn describe_execute(function: &str) -> String {
     format!("{}()", function)
+}
+
+/// Whether a scope's walk ran to completion. The `↙` close line is emitted
+/// only then — never on a Quit (`Stopped`) or an error unwind, where the scope
+/// did not finish and a green close would misread as success.
+fn completed(result: &Result<Outcome, RunnerError>) -> bool {
+    match result {
+        Ok(Outcome::Stopped) | Err(_) => false,
+        Ok(_) => true,
+    }
 }
 
 /// Lift a `UserInput` from the prompt into the runner's `Outcome`.
