@@ -7,13 +7,15 @@ use std::path::PathBuf;
 use super::context::Context;
 use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
-use super::library::Library;
+use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
 use super::state::{
     Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
 };
 use crate::language;
-use crate::program::{ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef};
+use crate::program::{
+    Executable, ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef,
+};
 use crate::value::Value;
 
 /// What executing an Operation (or evaluating a Step at any scale) produced.
@@ -208,21 +210,70 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let record = Record {
                     recorded: now_iso8601(),
                     run_id,
-                    path: qualified,
+                    path: qualified.clone(),
                     state: State::Execute {
                         function: function.clone(),
                     },
                 };
                 self.appender
                     .append(&record)?;
-                self.driver
-                    .announce(&describe_execute(&function));
-                // Linking resolves every Execute against the library, so a
-                // target still Unresolved here means a resume-time runtime
-                // missing a builtin the run started with; the evaluator
-                // surfaces that as an error rather than running anything.
-                let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
-                Ok(Outcome::Done(value))
+                // An `Action` builtin (e.g. `exec`, `click`) is a command the
+                // user must command: show the script and run it only on their
+                // say-so. Skip or Fail declines the run and settles the step;
+                // Quit stops.
+                //
+                // `Pure` builtins (coercions, reading the clock) just announce
+                // and run.
+                let is_action = match &executable.target {
+                    ExecutableRef::Resolved(id) => {
+                        self.library
+                            .nature(*id)
+                            == Nature::Action
+                    }
+                    _ => false,
+                };
+                if is_action {
+                    let script = self.script_text(env, executable)?;
+                    match self
+                        .driver
+                        .command(&qualified, &script)
+                    {
+                        UserInput::Done(chosen) => {
+                            let value = super::evaluator::dispatch(
+                                &self.library,
+                                &self.context,
+                                env,
+                                executable,
+                                Some(&[chosen]),
+                            )?;
+                            Ok(Outcome::Done(value))
+                        }
+                        UserInput::Skip => Ok(Outcome::Skipped),
+                        UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
+                        UserInput::Quit => {
+                            let suspend = Record {
+                                recorded: now_iso8601(),
+                                run_id,
+                                path: "/".to_string(),
+                                state: State::Stop,
+                            };
+                            self.appender
+                                .append(&suspend)?;
+                            Ok(Outcome::Stopped)
+                        }
+                    }
+                } else {
+                    self.driver
+                        .announce(&describe_execute(&function));
+                    let value = super::evaluator::dispatch(
+                        &self.library,
+                        &self.context,
+                        env,
+                        executable,
+                        None,
+                    )?;
+                    Ok(Outcome::Done(value))
+                }
             }
             Operation::Bind { .. }
             | Operation::Variable(_)
@@ -248,6 +299,27 @@ impl<'i, D: Driver> Runner<'i, D> {
             ExecutableRef::Unresolved(id) => id
                 .value
                 .to_string(),
+        }
+    }
+
+    /// The shell script an `exec` will run, rendered for the operator to see
+    /// before they command it. The command's first argument is the script.
+    fn script_text(
+        &self,
+        env: &mut Environment,
+        executable: &'i Executable<'i>,
+    ) -> Result<String, RunnerError> {
+        match executable
+            .arguments
+            .first()
+        {
+            Some(arg) => {
+                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
+                    Value::Literali(s) => Ok(s),
+                    other => Ok(other.to_string()),
+                }
+            }
+            None => Ok(String::new()),
         }
     }
 
@@ -589,7 +661,22 @@ impl<'i, D: Driver> Runner<'i, D> {
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
-            Outcome::Skipped | Outcome::Failed(_) => Value::Unitus,
+            // The body declined its exec command beat (Skip / Fail), which
+            // settles the step: there is no result to judge, so record the
+            // outcome and return without the verdict prompt.
+            settled => {
+                let record = Record {
+                    recorded: now_iso8601(),
+                    run_id,
+                    path: qualified.to_string(),
+                    state: record_state(&settled),
+                };
+                self.appender
+                    .append(&record)?;
+                self.completed
+                    .insert(qualified.to_string());
+                return Ok(settled);
+            }
         };
 
         let choices: Vec<&str> = responses

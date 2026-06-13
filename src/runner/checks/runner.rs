@@ -746,6 +746,62 @@ test :
         .collect();
     assert_eq!(announcements, vec!["journal()"]);
 }
+    
+#[test]
+fn exec_step_solicits_command_then_judges() {
+    let source = r#"
+% technique v1
+
+test :
+
+1.  Run it { exec("ip addr") }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    crate::linking::link(&mut program, &Library::stub()).expect("linked");
+
+    let mut fixture = StoreFixture::new("exec-command");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    // The exec is gated. A Command beat shows the script at the step's path,
+    // and only once commanded does the step's own verdict prompt judge it.
+    let commands: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Command { qualified, script } = e {
+                Some((qualified.as_str(), script.as_str()))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let asks: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Ask { qualified, .. } = e {
+                Some(qualified.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(commands, vec![("/test:/1", "ip addr")]);
+    assert_eq!(asks, vec!["/test:/1"]);
+}
 
 #[test]
 fn loop_inside_step_produces_one_result() {

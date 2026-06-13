@@ -65,6 +65,12 @@ pub trait Driver {
     /// the step's Qualified Name, repeated on the live prompt line.
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
 
+    /// Gate a shell `exec` on the user's command: show the `script` to be run
+    /// and settle on the user's verdict. `Done` means run it now; Skip / Fail
+    /// decline the run and settle the step; Quit stops. `Automatic` runs
+    /// unconditionally, returning `Done` without prompting.
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput;
+
     /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
     /// the section's sign-off closes with) followed by its prose heading —
     /// numeral and title, e.g. `II. Check internet connectivity`.
@@ -130,6 +136,10 @@ impl<W: Write> Driver for Console<W> {
         prompt(&mut self.output, qualified, "→", choices, produced)
     }
 
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        prompt_command(&mut self.output, qualified, script)
+    }
+
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
     }
@@ -148,7 +158,57 @@ fn prompt<W: Write>(
     choices: &[&str],
     produced: Value,
 ) -> UserInput {
-    let mut interaction = Interaction::begin(choices, produced);
+    let result = interact(out, qualified, Interaction::begin(choices, produced));
+    // The settle line stays dark grey like the descent introducer: colour is
+    // reserved for the formatter's syntax highlighting, so the verdict speaks
+    // through a trailing glyph (a shape channel) rather than line colour.
+    match &result {
+        UserInput::Done(_) => {
+            let _ = writeln!(out, "{}", format!("{} {} ✓", settle, qualified).dark_grey());
+        }
+        UserInput::Skip => {
+            let _ = writeln!(out, "{}", format!("{} {} ⊘", settle, qualified).dark_grey());
+        }
+        UserInput::Fail(_) => {
+            let _ = writeln!(out, "{}", format!("{} {} ✗", settle, qualified).dark_grey());
+        }
+        UserInput::Quit => {}
+    }
+    let _ = out.flush();
+    result
+}
+
+/// Solicit the user's command to run a shell `exec`. The script is shown above
+/// the prompt as context so pressing `<Enter>` to run it is an informed act; it
+/// is also seeded as the candidate value so `<Esc>`→Edit can tweak an inline
+/// command before running, and Skip / Fail / Quit stay available. On run
+/// (`Done`) no settle line is printed — the command's output follows
+/// immediately, and the step's own verdict prompt judges the result; Skip and
+/// Fail decline the run and settle the step here with a grey verdict line.
+fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
+    write_indented(out, script);
+    let result = interact(
+        out,
+        qualified,
+        Interaction::begin(&[], Value::Literali(script.to_string())),
+    );
+    match &result {
+        UserInput::Done(_) | UserInput::Quit => {}
+        UserInput::Skip => {
+            let _ = writeln!(out, "{}", format!("→ {} ⊘", qualified).dark_grey());
+        }
+        UserInput::Fail(_) => {
+            let _ = writeln!(out, "{}", format!("→ {} ✗", qualified).dark_grey());
+        }
+    }
+    let _ = out.flush();
+    result
+}
+
+/// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
+/// row cleared. Shared by the step/scope prompt and the exec command gate; the
+/// caller writes whatever record line it wants afterward.
+fn interact<W: Write>(out: &mut W, qualified: &str, mut interaction: Interaction) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
     // rather than a redirect; bail by quitting.
@@ -178,21 +238,6 @@ fn prompt<W: Write>(
         cursor::MoveToColumn(0),
         Clear(ClearType::CurrentLine)
     );
-    // The settle line stays dark grey like the descent introducer: colour is
-    // reserved for the formatter's syntax highlighting, so the verdict speaks
-    // through a trailing glyph (a shape channel) rather than line colour.
-    match &result {
-        UserInput::Done(_) => {
-            let _ = writeln!(out, "{}", format!("{} {} ✓", settle, qualified).dark_grey());
-        }
-        UserInput::Skip => {
-            let _ = writeln!(out, "{}", format!("{} {} ⊘", settle, qualified).dark_grey());
-        }
-        UserInput::Fail(_) => {
-            let _ = writeln!(out, "{}", format!("{} {} ✗", settle, qualified).dark_grey());
-        }
-        UserInput::Quit => {}
-    }
     let _ = out.flush();
     result
 }
@@ -783,6 +828,11 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
+    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
+        write_indented(&mut self.output, script);
+        UserInput::Done(Value::Unitus)
+    }
+
     fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
         UserInput::Done(produced)
     }
@@ -817,6 +867,10 @@ pub enum Event {
         title: String,
     },
     Announce(String),
+    Command {
+        qualified: String,
+        script: String,
+    },
     Ask {
         qualified: String,
         choices: Vec<String>,
@@ -896,6 +950,19 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    /// Records the command beat and auto-commands the run (`Done`) without
+    /// draining the answer queue — the exec gate is orthogonal to the step
+    /// verdicts a test drives. A test asserting gate behaviour inspects the
+    /// recorded `Command` event.
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        self.events
+            .push(Event::Command {
+                qualified: qualified.to_string(),
+                script: script.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
     }
 
     /// A scope sign-off auto-accepts (records `Done`) and records the event,

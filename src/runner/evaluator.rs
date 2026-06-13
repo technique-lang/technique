@@ -164,24 +164,7 @@ pub fn evaluate<'i>(
             }
             Ok(last)
         }
-        Operation::Execute(executable) => match &executable.target {
-            ExecutableRef::Resolved(id) => {
-                let mut args = Vec::with_capacity(
-                    executable
-                        .arguments
-                        .len(),
-                );
-                for arg in &executable.arguments {
-                    args.push(evaluate(library, context, env, arg)?);
-                }
-                library.call(*id, context, &args)
-            }
-            ExecutableRef::Unresolved(target) => Err(RunnerError::UnknownFunction(
-                target
-                    .value
-                    .to_string(),
-            )),
-        },
+        Operation::Execute(executable) => dispatch(library, context, env, executable, None),
         Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }
@@ -228,6 +211,43 @@ pub(super) fn bind_names(
         }
     }
     Ok(())
+}
+
+/// Run a builtin function. When `override_args` is `None`, arguments are
+/// evaluated from the executable's AST. When `Some`, the pre-evaluated
+/// values are used directly (the Action path, where the user may have
+/// edited the command before confirming). This is the single site that
+/// calls into the Library.
+#[allow(dead_code)]
+pub fn dispatch<'i>(
+    library: &Library,
+    context: &Context,
+    env: &mut Environment,
+    executable: &crate::program::Executable<'i>,
+    override_args: Option<&[Value]>,
+) -> Result<Value, RunnerError> {
+    match &executable.target {
+        ExecutableRef::Resolved(id) => {
+            if let Some(args) = override_args {
+                library.call(*id, context, args)
+            } else {
+                let mut args = Vec::with_capacity(
+                    executable
+                        .arguments
+                        .len(),
+                );
+                for arg in &executable.arguments {
+                    args.push(evaluate(library, context, env, arg)?);
+                }
+                library.call(*id, context, &args)
+            }
+        }
+        ExecutableRef::Unresolved(target) => Err(RunnerError::UnknownFunction(
+            target
+                .value
+                .to_string(),
+        )),
+    }
 }
 
 #[cfg(test)]
