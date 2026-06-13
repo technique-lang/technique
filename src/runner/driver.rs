@@ -176,25 +176,34 @@ fn prompt<W: Write>(
     produced: Value,
 ) -> UserInput {
     let result = interact(out, qualified, settle, Interaction::begin(choices, produced));
-    let glyph = match &result {
-        UserInput::Done(_) => Some("✓"),
-        UserInput::Skip => Some("⊘"),
-        UserInput::Fail(_) => Some("✗"),
-        UserInput::Quit => None,
-    };
-    if let Some(g) = glyph {
-        let col = settle
+    let col = settle
+        .chars()
+        .count() as u16
+        + 1
+        + qualified
             .chars()
             .count() as u16
-            + 1
-            + qualified
-                .chars()
-                .count() as u16
-            + 1;
-        let _ = queue!(out, cursor::MoveToColumn(col));
-        let _ = write!(out, "{}", g);
-        let _ = queue!(out, Clear(ClearType::UntilNewLine));
-        let _ = writeln!(out);
+        + 1;
+    match &result {
+        UserInput::Done(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✓".green());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Skip => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "⊘".yellow());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Fail(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✗".red());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Quit => {}
     }
     let _ = out.flush();
     result
@@ -213,24 +222,28 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
         "→",
         Interaction { field, menu: None, reason: None },
     );
-    let glyph = match &result {
-        UserInput::Done(_) | UserInput::Quit => None,
-        UserInput::Skip => Some("⊘"),
-        UserInput::Fail(_) => Some("✗"),
-    };
-    if let Some(g) = glyph {
-        let col = "→"
+    let col = "→"
+        .chars()
+        .count() as u16
+        + 1
+        + qualified
             .chars()
             .count() as u16
-            + 1
-            + qualified
-                .chars()
-                .count() as u16
-            + 1;
-        let _ = queue!(out, cursor::MoveToColumn(col));
-        let _ = write!(out, "{}", g);
-        let _ = queue!(out, Clear(ClearType::UntilNewLine));
-        let _ = writeln!(out);
+        + 1;
+    match &result {
+        UserInput::Done(_) | UserInput::Quit => {}
+        UserInput::Skip => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "⊘".yellow());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
+        UserInput::Fail(_) => {
+            let _ = queue!(out, cursor::MoveToColumn(col));
+            let _ = write!(out, "{}", "✗".red());
+            let _ = queue!(out, Clear(ClearType::UntilNewLine));
+            let _ = writeln!(out);
+        }
     }
     let _ = out.flush();
     result
@@ -635,7 +648,7 @@ fn draw<W: Write>(out: &mut W, qualified: &str, settle: &str, interaction: &Inte
         out,
         "{} {} ",
         format!("{} {}", settle, qualified).dark_grey(),
-        PROMPT_SYMBOL,
+        PROMPT_SYMBOL.blue(),
     )?;
 
     // Where the cursor lands; a value of `None` hides it.
