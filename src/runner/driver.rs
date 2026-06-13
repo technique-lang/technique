@@ -203,7 +203,9 @@ fn prompt<W: Write>(
             let _ = queue!(out, Clear(ClearType::UntilNewLine));
             let _ = writeln!(out);
         }
-        UserInput::Quit => {}
+        UserInput::Quit => {
+            let _ = writeln!(out);
+        }
     }
     let _ = out.flush();
     result
@@ -231,7 +233,10 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
             .count() as u16
         + 1;
     match &result {
-        UserInput::Done(_) | UserInput::Quit => {}
+        UserInput::Done(_) => {}
+        UserInput::Quit => {
+            let _ = writeln!(out);
+        }
         UserInput::Skip => {
             let _ = queue!(out, cursor::MoveToColumn(col));
             let _ = write!(out, "{}", "⊘".yellow());

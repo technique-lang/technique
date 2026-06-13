@@ -370,6 +370,22 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .as_ref()
                     .map(|n| n.value);
                 if let Some(name) = name {
+                    self.path
+                        .push(PathSegment::Procedure(name));
+                    let descended = self
+                        .path
+                        .render();
+                    if self
+                        .completed
+                        .contains(&descended)
+                    {
+                        self.path
+                            .pop();
+                        return Ok(Outcome::Done(Value::Unitus));
+                    }
+                    self.path
+                        .pop();
+
                     let qualified = self
                         .path
                         .render();
@@ -384,11 +400,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                     };
                     self.appender
                         .append(&record)?;
+
                     self.path
                         .push(PathSegment::Procedure(name));
-                    let descended = self
-                        .path
-                        .render();
                     let title_text = match subroutine.title {
                         Some(t) => crate::formatting::formatter::render_title(
                             t,
@@ -536,10 +550,18 @@ impl<'i, D: Driver> Runner<'i, D> {
     ) -> Result<Outcome, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
-        let result = self.perform_section(env, numeral, title, body);
         let qualified = self
             .path
             .render();
+        if self
+            .completed
+            .contains(&qualified)
+        {
+            self.path
+                .pop();
+            return Ok(Outcome::Done(Value::Unitus));
+        }
+        let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
         // A section is a structural scope: the operator signs it off at its
