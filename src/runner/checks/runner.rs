@@ -576,10 +576,10 @@ helper :
             }
         })
         .collect();
-    // The Step inside `helper` was reached and prompted, with the
-    // helper procedure as the FQN prefix (the outer `main` frame is
-    // overridden by the inner Procedure segment).
-    assert_eq!(step_fqns, vec!["/helper:1"]);
+    // The Step inside `helper` was reached and prompted, with the full
+    // enclosing hierarchy in the FQN: the entry `main` frame, the
+    // invoked `helper` frame, then the step.
+    assert_eq!(step_fqns, vec!["/main:/helper:/1"]);
 }
 
 #[test]
@@ -629,7 +629,7 @@ greet(name) :
         .collect();
     // The argument "World" is bound to greet's `name` parameter and
     // interpolated into the step description.
-    assert_eq!(steps, vec![("/greet:1", "Hello World")]);
+    assert_eq!(steps, vec![("/main:/greet:/1", "Hello World")]);
 }
 
 #[test]

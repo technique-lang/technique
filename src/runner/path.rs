@@ -46,42 +46,24 @@ impl<'i> QualifiedPath<'i> {
             .pop()
     }
 
-    /// Render the current path as a PFFTT absolute path string,
-    /// always rooted at `/`. A `Procedure` segment opens a fresh scope,
-    /// so only segments after the last `Procedure` are shown; the
-    /// procedure's name (with trailing `:`) joins immediately to the
-    /// root. Other segments are `/`-joined after the procedure prefix.
-    /// An attribute frame containing the `@*` reset role contributes
-    /// nothing.
+    /// Render the current path as a PFFTT absolute path string, always
+    /// rooted at `/`. The full enclosing hierarchy is shown: every scope
+    /// level is its own `/`-delimited component, with a `Procedure`
+    /// segment suffixed by `:`. An attribute frame containing the `@*`
+    /// reset role contributes nothing.
     ///
     /// A `foreach` or `repeat` keyword creates a scope as well. When
     /// iterating it is recorded using a path segment of the form `[n]`,
     /// one-origin. Thus `/5/[2]/a` would be the first substep within the
     /// second iteration of a scope within the 5th step of a Technique.
     pub fn render(&self) -> String {
-        let mut prefix: Option<&str> = None;
-        let mut start: usize = 0;
-        for (i, segment) in self
+        let pieces: Vec<String> = self
             .segments
-            .iter()
-            .enumerate()
-        {
-            if let PathSegment::Procedure(name) = segment {
-                prefix = Some(*name);
-                start = i + 1;
-            }
-        }
-
-        let pieces: Vec<String> = self.segments[start..]
             .iter()
             .filter_map(render_segment)
             .collect();
 
         let mut text = String::from("/");
-        if let Some(name) = prefix {
-            text.push_str(name);
-            text.push(':');
-        }
         text.push_str(&pieces.join("/"));
         text
     }
@@ -94,7 +76,7 @@ fn render_segment(segment: &PathSegment) -> Option<String> {
         PathSegment::ParallelStep(index) => Some(format!("-{}", index)),
         PathSegment::Iteration(number) => Some(format!("[{}]", number)), // you can't "index" into it!
         PathSegment::Attributes(frame) => render_attributes(frame),
-        PathSegment::Procedure(_) => None,
+        PathSegment::Procedure(name) => Some(format!("{}:", name)),
     }
 }
 
