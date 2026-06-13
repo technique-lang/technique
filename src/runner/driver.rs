@@ -233,8 +233,7 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
             .count() as u16
         + 1;
     match &result {
-        UserInput::Done(_) => {}
-        UserInput::Quit => {
+        UserInput::Done(_) | UserInput::Quit => {
             let _ = writeln!(out);
         }
         UserInput::Skip => {
