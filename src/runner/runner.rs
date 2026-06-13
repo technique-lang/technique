@@ -151,6 +151,27 @@ impl<'i, D: Driver> Runner<'i, D> {
         if let Some(name) = name {
             self.path
                 .push(PathSegment::Procedure(name));
+            let qualified = self
+                .path
+                .render();
+            self.driver
+                .enter(&qualified);
+            let declaration = crate::formatting::formatter::render_declaration(
+                name,
+                entry.parameters,
+                entry.signature,
+                self.driver.renderer(),
+            );
+            self.driver
+                .display(&declaration);
+            if let Some(t) = entry.title {
+                let title_text = crate::formatting::formatter::render_title(
+                    t,
+                    self.driver.renderer(),
+                );
+                self.driver
+                    .display(&title_text);
+            }
         }
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
@@ -403,15 +424,24 @@ impl<'i, D: Driver> Runner<'i, D> {
 
                     self.path
                         .push(PathSegment::Procedure(name));
-                    let title_text = match subroutine.title {
-                        Some(t) => crate::formatting::formatter::render_title(
+                    self.driver
+                        .enter(&descended);
+                    let declaration = crate::formatting::formatter::render_declaration(
+                        name,
+                        subroutine.parameters,
+                        subroutine.signature,
+                        self.driver.renderer(),
+                    );
+                    self.driver
+                        .display(&declaration);
+                    if let Some(t) = subroutine.title {
+                        let title_text = crate::formatting::formatter::render_title(
                             t,
                             self.driver.renderer(),
-                        ),
-                        None => String::new(),
-                    };
-                    self.driver
-                        .enter(&descended, &title_text);
+                        );
+                        self.driver
+                            .display(&title_text);
+                    }
                 }
 
                 // Walk the body against the callee's own environment; `local`

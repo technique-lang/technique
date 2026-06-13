@@ -155,19 +155,28 @@ pub fn render_expression<'i>(expression: &'i Expression, renderer: &dyn Render) 
 }
 
 pub fn render_procedure_declaration<'i>(procedure: &'i Procedure, renderer: &dyn Render) -> String {
+    render_declaration(
+        procedure.name.value,
+        procedure.parameters.as_ref().map(|v| v.as_slice()),
+        procedure.signature.as_ref(),
+        renderer,
+    )
+}
+
+pub fn render_declaration<'i>(
+    name: &'i str,
+    parameters: Option<&'i [Identifier<'i>]>,
+    signature: Option<&'i Signature<'i>>,
+    renderer: &dyn Render,
+) -> String {
     let mut sub = Formatter::new(78);
-    sub.append(
-        Syntax::Declaration,
-        procedure
-            .name
-            .value,
-    );
-    if let Some(parameters) = &procedure.parameters {
+    sub.append(Syntax::Declaration, name);
+    if let Some(parameters) = parameters {
         sub.append_parameters(parameters);
     }
     sub.add_fragment_reference(Syntax::Neutral, " ");
     sub.add_fragment_reference(Syntax::Structure, ":");
-    if let Some(signature) = &procedure.signature {
+    if let Some(signature) = signature {
         sub.add_fragment_reference(Syntax::Neutral, " ");
         sub.append_signature(signature);
     }
@@ -645,7 +654,7 @@ impl<'i> Formatter<'i> {
     }
 
     // Output names surrounded by parenthesis
-    pub fn append_parameters(&mut self, variables: &'i Vec<Identifier>) {
+    pub fn append_parameters(&mut self, variables: &'i [Identifier]) {
         self.add_fragment_reference(Syntax::Structure, "(");
         for (i, variable) in variables
             .iter()

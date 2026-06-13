@@ -54,14 +54,13 @@ fn mock_records_offered_choices() {
 #[test]
 fn mock_records_enter_and_announce() {
     let mut p = Mock::new();
-    p.enter("I", "Setup");
+    p.enter("I");
     p.announce("Calling helper");
     assert_eq!(
         p.events(),
         &[
             Event::Enter {
                 qualified: "I".to_string(),
-                title: "Setup".to_string(),
             },
             Event::Announce("Calling helper".to_string()),
         ]
@@ -86,14 +85,12 @@ fn console_step_writes_fqn_and_description() {
 }
 
 #[test]
-fn console_enter_writes_fqn_and_title() {
+fn console_enter_writes_fqn() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
-    p.enter("I", "Setup");
+    p.enter("I");
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("↘ I"));
-    assert!(written.contains("Setup"));
-    assert!(!written.contains("    Setup"));
 }
 
 #[test]

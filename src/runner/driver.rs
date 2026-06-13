@@ -50,8 +50,11 @@ pub trait Driver {
     fn step(&mut self, qualified: &str, description: &str);
 
     /// Announce descent into a named scope — a Section or an invoked
-    /// subroutine — with its Qualified Name and title text (the `↘` marker).
-    fn enter(&mut self, qualified: &str, title: &str);
+    /// subroutine — with its Qualified Name (the `↘` marker).
+    fn enter(&mut self, qualified: &str);
+
+    /// Display a line of formatted content at the left margin.
+    fn display(&mut self, content: &str);
 
     /// Surface an informational line — Loop body announcements,
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
@@ -124,12 +127,13 @@ impl<W: Write> Driver for Console<W> {
         let _ = writeln!(self.output);
     }
 
-    fn enter(&mut self, qualified: &str, title: &str) {
+    fn enter(&mut self, qualified: &str) {
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
-        if !title.is_empty() {
-            let _ = writeln!(self.output);
-            let _ = writeln!(self.output, "{}", title);
-        }
+        let _ = writeln!(self.output);
+    }
+
+    fn display(&mut self, content: &str) {
+        let _ = writeln!(self.output, "{}", content);
         let _ = writeln!(self.output);
     }
 
@@ -300,14 +304,9 @@ fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
     let _ = writeln!(out);
 }
 
-/// Render a named scope's `↘` descent line and title.
-fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
+/// Render a named scope's `↘` descent line.
+fn render_enter<W: Write>(out: &mut W, qualified: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
-    if !title.is_empty() {
-        let _ = writeln!(out);
-        let _ = writeln!(out, "{}", title);
-    }
-    let _ = writeln!(out);
 }
 
 /// Render a Section heading: its numeral and title.
@@ -861,8 +860,14 @@ impl<W: Write> Driver for Automatic<W> {
         render_step(&mut self.output, fqn, description);
     }
 
-    fn enter(&mut self, qualified: &str, title: &str) {
-        render_enter(&mut self.output, qualified, title);
+    fn enter(&mut self, qualified: &str) {
+        render_enter(&mut self.output, qualified);
+        let _ = writeln!(self.output);
+    }
+
+    fn display(&mut self, content: &str) {
+        let _ = writeln!(self.output, "{}", content);
+        let _ = writeln!(self.output);
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
@@ -916,7 +921,6 @@ pub enum Event {
     },
     Enter {
         qualified: String,
-        title: String,
     },
     Section {
         qualified: String,
@@ -973,13 +977,14 @@ impl Driver for Mock {
             });
     }
 
-    fn enter(&mut self, fqn: &str, title: &str) {
+    fn enter(&mut self, fqn: &str) {
         self.events
             .push(Event::Enter {
                 qualified: fqn.to_string(),
-                title: title.to_string(),
             });
     }
+
+    fn display(&mut self, _content: &str) {}
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.events
