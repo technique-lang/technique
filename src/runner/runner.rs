@@ -389,8 +389,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let descended = self
                         .path
                         .render();
+                    let title_text = match subroutine.title {
+                        Some(t) => crate::formatting::formatter::render_title(
+                            t,
+                            self.driver.renderer(),
+                        ),
+                        None => String::new(),
+                    };
                     self.driver
-                        .enter(&descended, "");
+                        .enter(&descended, &title_text);
                 }
 
                 // Walk the body against the callee's own environment; `local`
@@ -576,9 +583,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         let Operation::Step {
             ordinal,
             attributes,
-            description,
+            source,
             body,
             responses,
+            ..
         } = op
         else {
             unreachable!("walk_step called with non-Step operation");
@@ -598,7 +606,14 @@ impl<'i, D: Driver> Runner<'i, D> {
             .path
             .render();
 
-        let result = self.perform_step(env, &qualified, body, description, responses);
+        let result = self.perform_step(
+            env,
+            &qualified,
+            ordinal,
+            body,
+            source,
+            responses,
+        );
 
         self.path
             .pop();
@@ -614,8 +629,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         env: &mut Environment,
         qualified: &str,
+        _ordinal: &Ordinal<'i>,
         body: &'i Operation<'i>,
-        description: &'i [Operation<'i>],
+        source: &'i language::Scope<'i>,
         responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
         if self
@@ -640,23 +656,13 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
-        // Show the step's heading and description before walking its body,
-        // so any output the body streams (e.g. exec) appears beneath the step
-        // it belongs to rather than ahead of it. The description interpolates
-        // only values bound by enclosing scopes, so it reads cleanly here.
-        let mut description_text = String::new();
-        for op in description {
-            if !description_text.is_empty() {
-                description_text.push('\n');
-            }
-            match super::evaluator::evaluate(&self.library, &self.context, env, op)? {
-                Value::Literali(s) => description_text.push_str(&s),
-                other => description_text.push_str(&other.to_string()),
-            }
-        }
+        let step_text = crate::formatting::formatter::render_scope(
+            source,
+            self.driver.renderer(),
+        );
 
         self.driver
-            .step(qualified, &description_text);
+            .step(qualified, &step_text);
 
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
@@ -755,6 +761,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         Ok(outcome)
     }
 }
+
 
 fn describe_loop(
     names: &[crate::language::Identifier<'_>],

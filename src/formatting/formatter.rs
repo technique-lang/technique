@@ -133,6 +133,15 @@ pub fn render_descriptive<'i>(descriptive: &'i Descriptive, renderer: &dyn Rende
     render_fragments(&sub.fragments, renderer)
 }
 
+/// Render a procedure or section title with its leading `#` marker.
+pub fn render_title(title: &str, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.add_fragment_reference(Syntax::Header, "# ");
+    sub.add_fragment_reference(Syntax::Title, title);
+    sub.flush_current();
+    render_fragments(&sub.fragments, renderer)
+}
+
 pub fn render_function<'i>(function: &'i Function, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.append_function(function);
@@ -169,14 +178,16 @@ pub fn render_scope<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     match scope {
         Scope::AttributeBlock { attributes, .. } => {
-            // Render attributes without indentation for error messages
             sub.append_attributes(attributes);
         }
-        _ => {
-            panic!("Do not use for anything other than rendering Attribute line examples");
+        Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
+            sub.append_step(scope);
         }
+        _ => unreachable!(),
     }
     render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
 }
 
 /// Helper function to convert fragments to a styled string using a renderer

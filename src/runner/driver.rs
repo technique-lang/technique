@@ -17,6 +17,8 @@ use crossterm::style::{Attribute, SetAttribute, Stylize};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
+use crate::formatting::{Identity, Render};
+use crate::highlighting::Terminal;
 use crate::value::Value;
 
 /// Which driver walks a run: `Interactive` prompts the user, `Automatic` runs
@@ -81,6 +83,11 @@ pub trait Driver {
     /// `ask` but with no response choices, settling to the `↙` close marker;
     /// `produced` is the scope's value, offered for acceptance.
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
+
+    /// The syntax renderer for highlighting source fragments shown to the
+    /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
+    /// drivers return `Identity` (no markup).
+    fn renderer(&self) -> &'static dyn Render;
 }
 
 /// Interactive console prompt in a terminal. `step` / `section` / `announce`
@@ -112,20 +119,26 @@ impl<W: Write> Console<W> {
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
         let _ = writeln!(self.output, "{}", format!("→ {}", fqn).dark_grey());
+        let _ = writeln!(self.output);
         write_indented(&mut self.output, description);
+        let _ = writeln!(self.output);
     }
 
     fn enter(&mut self, qualified: &str, title: &str) {
-        // Grey: a descent opener is recessive scaffolding, not a status. Only
-        // the live prompt is ever blue.
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
-        write_indented(&mut self.output, title);
+        if !title.is_empty() {
+            let _ = writeln!(self.output);
+            let _ = writeln!(self.output, "{}", title);
+        }
+        let _ = writeln!(self.output);
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
-        // Grey descent bracket (the address), then the prose heading.
+        let renderer = self.renderer();
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
-        render_section(&mut self.output, numeral, title);
+        let _ = writeln!(self.output);
+        render_section(&mut self.output, numeral, title, renderer);
+        let _ = writeln!(self.output);
     }
 
     fn announce(&mut self, message: &str) {
@@ -142,6 +155,10 @@ impl<W: Write> Driver for Console<W> {
 
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Terminal
     }
 }
 
@@ -178,19 +195,17 @@ fn prompt<W: Write>(
     result
 }
 
-/// Solicit the user's command to run a shell `exec`. The script is shown above
-/// the prompt as context so pressing `<Enter>` to run it is an informed act; it
-/// is also seeded as the candidate value so `<Esc>`→Edit can tweak an inline
-/// command before running, and Skip / Fail / Quit stay available. On run
-/// (`Done`) no settle line is printed — the command's output follows
-/// immediately, and the step's own verdict prompt judges the result; Skip and
-/// Fail decline the run and settle the step here with a grey verdict line.
+/// Solicit the user's approval to run a shell command. The script appears
+/// pre-filled on the `▶` prompt line as if already typed — Enter runs it,
+/// typing edits it in place, Esc opens the menu (Skip / Fail / Quit). On
+/// `Done` no settle line is printed — the command's output follows immediately
+/// and the step's own verdict prompt judges the result.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
-    write_indented(out, script);
+    let field = edit(script.to_string(), Value::Literali(script.to_string()));
     let result = interact(
         out,
         qualified,
-        Interaction::begin(&[], Value::Literali(script.to_string())),
+        Interaction { field, menu: None, reason: None },
     );
     match &result {
         UserInput::Done(_) | UserInput::Quit => {}
@@ -242,38 +257,39 @@ fn interact<W: Write>(out: &mut W, qualified: &str, mut interaction: Interaction
     result
 }
 
-/// Write prompt text into the two character gutter, one line at a time.
-/// Console output sits in two bands: a one-glyph gutter (column 0) carrying
-/// the directional markers — `↘` descend, `→` step, `▶` prompt — and the body
-/// (column 2) carrying the qualified name, description, and prompt content.
-/// Raw subprocess output (`exec`) is streamed verbetum and thus flush-left at
-/// column 0.
+/// Write text indented by four spaces, replicating the canonical source
+/// layout the code formatter emits.
 fn write_indented<W: Write>(out: &mut W, text: &str) {
     for line in text.lines() {
-        let _ = writeln!(out, "  {}", line);
+        let _ = writeln!(out, "    {}", line);
     }
 }
 
-/// Render a step's `→` line and indented description.
+/// Render a step's `→` line and description.
 fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
     let _ = writeln!(out, "→ {}", fqn);
+    let _ = writeln!(out);
     write_indented(out, description);
+    let _ = writeln!(out);
 }
 
-/// Render a named scope's `↘` descent line and indented title.
+/// Render a named scope's `↘` descent line and title.
 fn render_enter<W: Write>(out: &mut W, qualified: &str, title: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
-    write_indented(out, title);
+    if !title.is_empty() {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "{}", title);
+    }
+    let _ = writeln!(out);
 }
 
-/// Render a Section heading: its numeral and title, e.g.
-/// `II. Check internet connectivity`. Default colour — a heading is prose, not
-/// a status marker — so `Console` and `Automatic` share it.
-fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str) {
+/// Render a Section heading: its numeral and title.
+fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str, renderer: &dyn Render) {
+    let styled_numeral = renderer.style(crate::formatting::Syntax::StepItem, numeral);
     if title.is_empty() {
-        let _ = writeln!(out, "{}.", numeral);
+        let _ = writeln!(out, "{}.", styled_numeral);
     } else {
-        let _ = writeln!(out, "{}. {}", numeral, title);
+        let _ = writeln!(out, "{}. {}", styled_numeral, title);
     }
 }
 
@@ -816,8 +832,11 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let renderer = self.renderer();
         let _ = writeln!(self.output, "↘ {}", qualified);
-        render_section(&mut self.output, numeral, title);
+        let _ = writeln!(self.output);
+        render_section(&mut self.output, numeral, title, renderer);
+        let _ = writeln!(self.output);
     }
 
     fn announce(&mut self, message: &str) {
@@ -835,6 +854,10 @@ impl<W: Write> Driver for Automatic<W> {
 
     fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
         UserInput::Done(produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
     }
 }
 
@@ -975,6 +998,10 @@ impl Driver for Mock {
                 qualified: qualified.to_string(),
             });
         UserInput::Done(Value::Unitus)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
     }
 }
 

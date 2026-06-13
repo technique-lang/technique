@@ -82,7 +82,7 @@ fn console_step_writes_fqn_and_description() {
     p.step("local_network:I/1", "Check the cable.");
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ local_network:I/1"));
-    assert!(written.contains("  Check the cable."));
+    assert!(written.contains("    Check the cable."));
 }
 
 #[test]
@@ -92,7 +92,8 @@ fn console_enter_writes_fqn_and_title() {
     p.enter("I", "Setup");
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("↘ I"));
-    assert!(written.contains("  Setup"));
+    assert!(written.contains("Setup"));
+    assert!(!written.contains("    Setup"));
 }
 
 #[test]

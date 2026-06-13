@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::language;
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
 use crate::program::{
@@ -72,11 +73,37 @@ impl Drop for StoreFixture {
     }
 }
 
+fn scope_for(ordinal: Ordinal<'static>) -> &'static language::Scope<'static> {
+    scope_with(ordinal, Vec::new())
+}
+
+fn scope_with(
+    ordinal: Ordinal<'static>,
+    description: Vec<language::Paragraph<'static>>,
+) -> &'static language::Scope<'static> {
+    let scope = match ordinal {
+        Ordinal::Dependent(s) => language::Scope::DependentBlock {
+            ordinal: s,
+            description,
+            subscopes: Vec::new(),
+            span: language::Span::default(),
+        },
+        Ordinal::Parallel => language::Scope::ParallelBlock {
+            bullet: '-',
+            description,
+            subscopes: Vec::new(),
+            span: language::Span::default(),
+        },
+    };
+    Box::leak(Box::new(scope))
+}
+
 fn step(ordinal: Ordinal<'static>, body: Operation<'static>) -> Operation<'static> {
     Operation::Step {
         ordinal,
         attributes: Vec::new(),
         description: Vec::new(),
+        source: scope_for(ordinal),
         body: Box::new(body),
         responses: Vec::new(),
     }
@@ -526,9 +553,12 @@ test :
             }
         })
         .collect();
-    // Step 1 only binds, so its description renders to empty. Step 2
-    // sees the binding established by step 1 and interpolates it.
-    assert_eq!(descriptions, vec!["", "Result: 42"]);
+    // Both steps render from their source paragraphs: the binding syntax
+    // and the interpolation reference are shown as-written, with ordinals.
+    assert_eq!(
+        descriptions,
+        vec!["1.  { 42 ~ answer }", "2.  Result: { answer }"]
+    );
 }
 
 #[test]
@@ -627,9 +657,8 @@ greet(name) :
             _ => None,
         })
         .collect();
-    // The argument "World" is bound to greet's `name` parameter and
-    // interpolated into the step description.
-    assert_eq!(steps, vec![("/main:/greet:/1", "Hello World")]);
+    // The step renders from its source paragraph, showing the template.
+    assert_eq!(steps, vec![("/main:/greet:/1", "1.  Hello { name }")]);
 }
 
 #[test]
@@ -746,7 +775,7 @@ test :
         .collect();
     assert_eq!(announcements, vec!["journal()"]);
 }
-    
+
 #[test]
 fn exec_step_solicits_command_then_judges() {
     let source = r#"
@@ -820,6 +849,7 @@ fn loop_inside_step_produces_one_result() {
         ordinal: Ordinal::Dependent("1"),
         attributes: Vec::new(),
         description: Vec::new(),
+        source: scope_for(Ordinal::Dependent("1")),
         body: Box::new(loop_op),
         responses: Vec::new(),
     };
@@ -867,6 +897,7 @@ fn repeat_loops_until_quit() {
         ordinal: Ordinal::Dependent("1"),
         attributes: Vec::new(),
         description: Vec::new(),
+        source: scope_for(Ordinal::Dependent("1")),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
     };
@@ -916,10 +947,17 @@ fn foreach_walks_body_once_per_list_element() {
     let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
         Identifier::new("item"),
     ))]);
+    let source_paragraphs = vec![language::Paragraph::new(vec![
+        language::Descriptive::CodeInline(language::Expression::Variable(
+            Identifier::new("item"),
+            language::Span::default(),
+        )),
+    ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         description: vec![description],
+        source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
     };
@@ -977,7 +1015,10 @@ fn foreach_walks_body_once_per_list_element() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec![("/[1]/a", "first"), ("/[2]/a", "second")]);
+    assert_eq!(
+        steps,
+        vec![("/[1]/a", "a.  { item }"), ("/[2]/a", "a.  { item }")]
+    );
 }
 
 #[test]
@@ -994,10 +1035,17 @@ fn foreach_over_seq_builtin_runs() {
     let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
         Identifier::new("n"),
     ))]);
+    let source_paragraphs = vec![language::Paragraph::new(vec![
+        language::Descriptive::CodeInline(language::Expression::Variable(
+            Identifier::new("n"),
+            language::Span::default(),
+        )),
+    ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         description: vec![description],
+        source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
     };
@@ -1055,7 +1103,11 @@ fn foreach_over_seq_builtin_runs() {
     // bound to each in turn.
     assert_eq!(
         steps,
-        vec![("/[1]/a", "1"), ("/[2]/a", "2"), ("/[3]/a", "3")]
+        vec![
+            ("/[1]/a", "a.  { n }"),
+            ("/[2]/a", "a.  { n }"),
+            ("/[3]/a", "a.  { n }"),
+        ]
     );
 }
 
@@ -1070,10 +1122,22 @@ fn foreach_destructures_tuple_elements() {
         Fragment::Text("/"),
         Fragment::Interpolation(Operation::Variable(Identifier::new("second"))),
     ]);
+    let source_paragraphs = vec![language::Paragraph::new(vec![
+        language::Descriptive::CodeInline(language::Expression::Variable(
+            Identifier::new("first"),
+            language::Span::default(),
+        )),
+        language::Descriptive::Text("/"),
+        language::Descriptive::CodeInline(language::Expression::Variable(
+            Identifier::new("second"),
+            language::Span::default(),
+        )),
+    ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         description: vec![description],
+        source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
     };
@@ -1131,7 +1195,7 @@ fn foreach_destructures_tuple_elements() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec!["a/b", "c/d"]);
+    assert_eq!(steps, vec!["a.  { first } / { second }", "a.  { first } / { second }"]);
 }
 
 #[test]
@@ -1143,10 +1207,17 @@ fn foreach_widens_primitive_to_singleton() {
     let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
         Identifier::new("item"),
     ))]);
+    let source_paragraphs = vec![language::Paragraph::new(vec![
+        language::Descriptive::CodeInline(language::Expression::Variable(
+            Identifier::new("item"),
+            language::Span::default(),
+        )),
+    ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         description: vec![description],
+        source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
     };
@@ -1191,7 +1262,7 @@ fn foreach_widens_primitive_to_singleton() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec![("/[1]/a", "lonely")]);
+    assert_eq!(steps, vec![("/[1]/a", "a.  { item }")]);
 }
 
 #[test]
@@ -1386,7 +1457,7 @@ greet(name) :
             }
         })
         .collect();
-    assert_eq!(descriptions, vec!["Hello world"]);
+    assert_eq!(descriptions, vec!["1.  Hello { name }"]);
 }
 
 #[test]
