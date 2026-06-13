@@ -145,11 +145,13 @@ pub struct Invocable<'i> {
 /// subroutine into `Program.subroutines`; the resolve pass walks the
 /// translated tree replacing matching `Unresolved` references with
 /// `Resolved`. Names that don't match any declared subroutine become a
-/// translation error.
+/// translation error. `Deferred` references (ie URLs) are left as-is; they
+/// are resolved at a later phase or at runtime.
 #[derive(Debug, Eq, PartialEq)]
 pub enum SubroutineRef<'i> {
     Unresolved(language::Identifier<'i>),
     Resolved(SubroutineId),
+    Deferred(language::External<'i>),
 }
 
 /// Lowered form of `language::Function`. Functions live in a separate

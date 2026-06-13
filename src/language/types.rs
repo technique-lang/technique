@@ -131,7 +131,7 @@ impl<'i> Identifier<'i> {
     }
 }
 
-#[derive(Eq, Debug)]
+#[derive(Clone, Copy, Eq, Debug)]
 pub struct External<'i> {
     pub value: &'i str,
     pub span: Span,

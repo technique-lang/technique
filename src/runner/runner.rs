@@ -472,6 +472,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .announce(&format!("<{}>", id.value));
                 Ok(Outcome::Done(Value::Unitus))
             }
+            SubroutineRef::Deferred(ext) => {
+                self.driver
+                    .announce(&format!("<{}>", ext.value));
+                Ok(Outcome::Done(Value::Unitus))
+            }
         }
     }
 
