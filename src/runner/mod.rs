@@ -3,25 +3,27 @@
 //! so a run can be resumed after interruption.
 
 use std::collections::HashSet;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use crate::program::Program;
 
 mod context;
+mod driver;
 mod evaluator;
 mod library;
 mod path;
-mod prompt;
 mod runner;
 mod state;
 
 pub use context::Context;
+pub use driver::Mode;
 pub use library::{Builtin, Library, Native};
 pub use runner::{Outcome, RunnerError};
 pub use state::{RecordError, RunId};
 
+use driver::{Automatic, Console};
 use evaluator::Environment;
-use prompt::Console;
 use runner::{bind_parameters, now_iso8601, Runner};
 use state::{construct_state_path, Appender, Record, State, Store};
 
@@ -32,6 +34,7 @@ const STORE_ROOT: &str = ".store";
 /// or quitting. Command-line arguments are bound to the entry procedure's
 /// parameters before the beginning the walk.
 pub fn start<'i>(
+    mode: Mode,
     document: &Path,
     program: &'i Program<'i>,
     arguments: &[String],
@@ -42,8 +45,21 @@ pub fn start<'i>(
     let (run_id, run_dir) = store.create(document, now_iso8601())?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
-    let mut runner = Runner::new(program, appender, HashSet::new(), Console::new(), library);
-    let outcome = runner.run(env)?;
+    let outcome = match mode {
+        Mode::Interactive => {
+            if !std::io::stdout().is_terminal() {
+                return Err(RunnerError::TerminalRequired);
+            }
+            let mut runner =
+                Runner::new(program, appender, HashSet::new(), Console::new(), library);
+            runner.run(env)?
+        }
+        Mode::Automatic => {
+            let mut runner =
+                Runner::new(program, appender, HashSet::new(), Automatic::new(), library);
+            runner.run(env)?
+        }
+    };
     Ok((run_id, outcome))
 }
 
@@ -64,6 +80,9 @@ pub fn resume<'i>(
     program: &'i Program<'i>,
     library: Library,
 ) -> Result<Outcome, RunnerError> {
+    if !std::io::stdout().is_terminal() {
+        return Err(RunnerError::TerminalRequired);
+    }
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (document, completed, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);

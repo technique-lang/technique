@@ -6,9 +6,9 @@ use crate::parsing;
 use crate::program::{
     Executable, ExecutableRef, Fragment, Operation, Ordinal, Program, Subroutine,
 };
+use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
-use crate::runner::prompt::{Event, Mock, UserInput};
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
 use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
 use crate::translation::translate;
@@ -174,7 +174,7 @@ fn step_outcomes_recorded() {
         Operation::Sequence(vec![]),
     )]);
     let program = anonymous_with_body(body);
-    let prompt = Mock::with_answers([UserInput::Fail]);
+    let prompt = Mock::with_answers([UserInput::Fail("cable unplugged".to_string())]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
@@ -200,7 +200,7 @@ fn step_outcomes_recorded() {
     assert_eq!(
         record.state,
         State::Fail(Some(RecordValue::Tablet(
-            "[ reason = \"Failed\" ]".to_string()
+            "[ reason = \"cable unplugged\" ]".to_string()
         )))
     );
 }
@@ -230,7 +230,7 @@ fn two_steps_prompted_in_source_order() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
         .events()
         .iter()
@@ -272,7 +272,7 @@ fn pre_completed_step_short_circuits() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
         .events()
         .iter()
@@ -308,9 +308,9 @@ fn quit_propagates_and_stops_walking() {
     let outcome = runner
         .run(env)
         .expect("run");
-    assert_eq!(outcome, Outcome::Quit);
+    assert_eq!(outcome, Outcome::Stopped);
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
         .events()
         .iter()
@@ -325,9 +325,9 @@ fn quit_propagates_and_stops_walking() {
     // Only the first Step was prompted; the second never fired.
     assert_eq!(step_fqns, vec!["/1"]);
 
-    // Quit records the step's Begin (the operator started looking at it)
-    // but no Done/Skip/Fail — so the file is exactly the opening Start
-    // plus that single Begin.
+    // Quit records the step's Begin (the operator started looking at it), then
+    // a Stop lifecycle line at the root path — the deliberate-stop marker that
+    // tells a quit from a crash. No Done/Skip/Fail for the step itself.
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -337,9 +337,10 @@ fn quit_propagates_and_stops_walking() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 2);
+    assert_eq!(lines.len(), 3);
     assert!(lines[0].contains(" Start "));
     assert!(lines[1].ends_with(" Begin"));
+    assert!(lines[2].ends_with(" / Stop"));
 }
 
 #[test]
@@ -367,12 +368,12 @@ fn section_walking() {
     runner
         .run(env)
         .expect("run");
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let events = prompt.events();
     let section_fqns: Vec<&str> = events
         .iter()
         .filter_map(|e| {
-            if let Event::Section { qualified, .. } = e {
+            if let Event::Enter { qualified, .. } = e {
                 Some(qualified.as_str())
             } else {
                 None
@@ -414,12 +415,12 @@ fn section_walking() {
     runner
         .run(env)
         .expect("run");
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let section_title = prompt
         .events()
         .iter()
         .find_map(|e| {
-            if let Event::Section { title, .. } = e {
+            if let Event::Enter { title, .. } = e {
                 Some(title.as_str())
             } else {
                 None
@@ -454,7 +455,7 @@ fn parallel_step_index_starts_at_one() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
         .events()
         .iter()
@@ -500,7 +501,7 @@ test :
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let descriptions: Vec<&str> = prompt
         .events()
         .iter()
@@ -550,7 +551,7 @@ helper :
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
         .events()
         .iter()
@@ -601,7 +602,7 @@ greet(name) :
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<(&str, &str)> = prompt
         .events()
         .iter()
@@ -718,7 +719,7 @@ test :
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let announcements: Vec<&str> = prompt
         .events()
         .iter()
@@ -825,7 +826,7 @@ fn repeat_loops_until_quit() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<&str> = prompt
         .events()
         .iter()
@@ -895,7 +896,7 @@ fn foreach_walks_body_once_per_list_element() {
     // The body is walked once per element. Each Step event carries an
     // `[n]` iteration segment in its path and the description it saw,
     // confirming the iteration variable was bound to that element.
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<(&str, &str)> = prompt
         .events()
         .iter()
@@ -969,7 +970,7 @@ fn foreach_over_seq_builtin_runs() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<(&str, &str)> = prompt
         .events()
         .iter()
@@ -1052,7 +1053,7 @@ fn foreach_destructures_tuple_elements() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<&str> = prompt
         .events()
         .iter()
@@ -1109,7 +1110,7 @@ fn foreach_widens_primitive_to_singleton() {
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let steps: Vec<(&str, &str)> = prompt
         .events()
         .iter()
@@ -1304,7 +1305,7 @@ greet(name) :
         .run(env)
         .expect("run");
 
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let descriptions: Vec<&str> = prompt
         .events()
         .iter()
@@ -1348,7 +1349,7 @@ test :
         .expect("run");
 
     // The prompt offered the two declared responses as choices.
-    let prompt = runner.into_prompt();
+    let prompt = runner.into_driver();
     let asked: Vec<&Vec<String>> = prompt
         .events()
         .iter()
@@ -1377,4 +1378,111 @@ test :
         record.state,
         State::Done(Some(RecordValue::Literal("Yes".to_string())))
     );
+}
+
+#[test]
+fn automatic_driver_records_body_value() {
+    // A value-bearing body under the automatic driver: no operator, no canned
+    // answers; the step's outcome is the body's computed value, recorded.
+    let mut fixture = StoreFixture::new("automatic-records-value");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::String(vec![Fragment::Text("probe output")]),
+    )]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let env = Environment::new();
+    let outcome = runner
+        .run(env)
+        .expect("run");
+    assert_eq!(
+        outcome,
+        Outcome::Done(Value::Literali("probe output".to_string()))
+    );
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(
+        record.state,
+        State::Done(Some(RecordValue::Literal("probe output".to_string())))
+    );
+
+    // A pure-prose step (empty body) records () — nothing was computed.
+    let mut fixture = StoreFixture::new("automatic-empty-body");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let env = Environment::new();
+    runner
+        .run(env)
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+}
+
+#[test]
+fn multiline_body_value_records_unit_but_still_propagates() {
+    // A step whose body computes multi-line text (raw exec output) records ()
+    let mut fixture = StoreFixture::new("multiline-records-unit");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
+    )]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(
+        outcome,
+        Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
+    );
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
 }

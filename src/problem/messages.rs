@@ -1242,6 +1242,15 @@ you can iterate over.
             format!("Cannot combine {} with {}", left, right),
             format!("Combining Values requires compatible kinds; a {} and a {} can't be added together.", left, right),
         ),
+        RunnerError::TerminalRequired => (
+            "Running interactively requires a terminal".to_string(),
+            r#"
+An interactive run writes its prompts to the terminal and reads user input
+direclty, so its output can't be redirected to a file or pipe. Use `technique
+run` in a terminal, or use `--mode=automatic` to run on auto; you can then
+safely redirect the output.
+            "#.trim_ascii().to_string(),
+        ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
             "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
