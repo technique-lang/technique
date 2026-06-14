@@ -222,12 +222,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                 body,
                 ..
             } => self.walk_section(env, numeral, title.as_deref(), body),
+            // Every body the translator emits is a `Sequence`, so a Step is
+            // always reached as one of its members, where `walk_sequence`
+            // supplies the parallel ordinal counter. A bare Step never reaches
+            // `walk` directly.
             Operation::Step { .. } => {
-                // Dependent vs Parallel ordinal index needs the
-                // surrounding Sequence's parallel counter; a Step
-                // encountered outside a Sequence (i.e. as the entire
-                // body of a procedure) is treated as Dependent.
-                self.walk_step(env, op, 0)
+                unreachable!("a Step is always walked as a Sequence member")
             }
             Operation::Loop {
                 names, over, body, ..
