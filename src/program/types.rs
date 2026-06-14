@@ -15,6 +15,9 @@ use crate::language;
 /// Top-level Technique translated to a runnable program.
 #[derive(Debug, Eq, PartialEq, Default)]
 pub struct Program<'i> {
+    /// The document's metadata header lines, shown as a preface before the
+    /// steps of the program are run.
+    pub prelude: Option<&'i language::Metadata<'i>>,
     /// All procedures declared in the input document, in source order. If an
     /// anonymous wrapper for a top-level `Technique::Steps`-only document was
     /// created it will be at index 0.
@@ -24,6 +27,7 @@ pub struct Program<'i> {
 impl<'i> Program<'i> {
     pub fn new() -> Self {
         Program {
+            prelude: None,
             subroutines: Vec::new(),
         }
     }

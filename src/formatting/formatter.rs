@@ -133,6 +133,15 @@ pub fn render_descriptive<'i>(descriptive: &'i Descriptive, renderer: &dyn Rende
     render_fragments(&sub.fragments, renderer)
 }
 
+/// Render the document's metadata header, coloured, to a String.
+pub fn render_header<'i>(metadata: &'i Metadata, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.format_header(metadata);
+    render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
+}
+
 /// Render a procedure or section title with its leading `#` marker.
 pub fn render_title(title: &str, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);

@@ -1667,6 +1667,50 @@ Brew using { 42 ~ water } then serve it hot.
 }
 
 #[test]
+fn metadata_header_displayed_as_prelude() {
+    let source = r#"
+% technique v1
+! MIT; © 2026 ACME
+& procedure
+
+make_coffee :
+
+1.  Pour
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("metadata-prelude");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    // The header is shown once, before the entry procedure's declaration.
+    let prompt = runner.into_driver();
+    let first = prompt
+        .events()
+        .iter()
+        .find_map(|e| {
+            if let Event::Display(content) = e {
+                Some(content.as_str())
+            } else {
+                None
+            }
+        })
+        .expect("a Display event");
+    assert_eq!(first, "% technique v1\n! MIT; © 2026 ACME\n& procedure");
+}
+
+#[test]
 fn step_with_responses_prompts_choices_and_records() {
     let source = r#"
 % technique v1

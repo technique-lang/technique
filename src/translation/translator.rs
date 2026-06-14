@@ -12,6 +12,11 @@ use crate::program::{
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
     let mut translator = Translator::new();
+    translator
+        .program
+        .prelude = document
+        .header
+        .as_ref();
 
     if let Some(body) = &document.body {
         if let language::Technique::Steps(scopes) = body {

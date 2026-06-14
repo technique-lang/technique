@@ -149,6 +149,18 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// anonymous wrapper if the document is top-level Steps, otherwise
     /// the first declared procedure.
     pub fn run(&mut self, mut env: Environment) -> Result<Outcome, RunnerError> {
+        if let Some(metadata) = self
+            .program
+            .prelude
+        {
+            let header = crate::formatting::formatter::render_header(
+                metadata,
+                self.driver
+                    .renderer(),
+            );
+            self.driver
+                .display(&header);
+        }
         let entry = self
             .program
             .subroutines
