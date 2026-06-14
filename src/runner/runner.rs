@@ -184,6 +184,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.driver
                     .display(&title_text);
             }
+            if !entry
+                .description
+                .is_empty()
+            {
+                let description = crate::formatting::formatter::render_description(
+                    entry.description,
+                    self.driver
+                        .renderer(),
+                );
+                self.driver
+                    .display(&description);
+            }
         }
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
@@ -455,6 +467,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                         );
                         self.driver
                             .display(&title_text);
+                    }
+                    if !subroutine
+                        .description
+                        .is_empty()
+                    {
+                        let description = crate::formatting::formatter::render_description(
+                            subroutine.description,
+                            self.driver
+                                .renderer(),
+                        );
+                        self.driver
+                            .display(&description);
                     }
                 }
 

@@ -203,13 +203,12 @@ impl<'i> Translator<'i> {
             }
         }
         let body = Operation::Sequence(ops);
-        let description_ops = self.translate_paragraphs(description);
 
         let entry = &mut self
             .program
             .subroutines[id.0];
         entry.title = title;
-        entry.description = description_ops;
+        entry.description = description;
         entry.parameters = procedure
             .parameters
             .as_ref()
@@ -391,16 +390,6 @@ impl<'i> Translator<'i> {
                 }
             }
         }
-    }
-
-    fn translate_paragraphs(
-        &mut self,
-        paragraphs: &'i [language::Paragraph<'i>],
-    ) -> Vec<Operation<'i>> {
-        paragraphs
-            .iter()
-            .map(|p| self.translate_paragraph(p))
-            .collect()
     }
 
     // Descriptive paragraphs are whitespace-agnostic and re-wrappable: the

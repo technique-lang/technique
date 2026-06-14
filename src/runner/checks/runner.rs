@@ -1621,6 +1621,52 @@ greet(name) :
 }
 
 #[test]
+fn entry_procedure_description_displayed_intact() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+Brew using { 42 ~ water } then serve it hot.
+
+1.  Pour
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("entry-description-intact");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    // The description renders from its source paragraph: the binding hoisted
+    // into the implicit step 0 still runs, but the prose is shown whole, with
+    // the binding syntax as-written.
+    let prompt = runner.into_driver();
+    let displayed: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Display(content) = e {
+                Some(content.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(displayed.contains(&"Brew using { 42 ~ water } then serve it hot."));
+}
+
+#[test]
 fn step_with_responses_prompts_choices_and_records() {
     let source = r#"
 % technique v1

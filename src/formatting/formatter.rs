@@ -206,6 +206,16 @@ pub fn render_scope<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
         .to_string()
 }
 
+/// Render a procedure's description: its prose paragraphs, blank-line
+/// separated, exactly as written in the source.
+pub fn render_description<'i>(paragraphs: &'i [Paragraph<'i>], renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_paragraphs(paragraphs);
+    render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
+}
+
 /// Render step's without descending into nested subscopes.
 pub fn render_step<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
@@ -711,7 +721,7 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Forma, forma.value)
     }
 
-    fn append_paragraphs(&mut self, paragraphs: &'i Vec<Paragraph>) {
+    fn append_paragraphs(&mut self, paragraphs: &'i [Paragraph<'i>]) {
         for (i, paragraph) in paragraphs
             .iter()
             .enumerate()

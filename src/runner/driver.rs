@@ -1024,6 +1024,7 @@ pub enum Event {
     Enter {
         qualified: String,
     },
+    Display(String),
     Section {
         qualified: String,
         numeral: String,
@@ -1089,7 +1090,10 @@ impl Driver for Mock {
             });
     }
 
-    fn display(&mut self, _content: &str) {}
+    fn display(&mut self, content: &str) {
+        self.events
+            .push(Event::Display(content.to_string()));
+    }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.events

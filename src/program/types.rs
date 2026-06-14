@@ -40,7 +40,7 @@ pub struct Subroutine<'i> {
     /// then `None`, otherwise all procedures have names.
     pub name: Option<language::Identifier<'i>>,
     pub title: Option<&'i str>,
-    pub description: Vec<Operation<'i>>,
+    pub description: &'i [language::Paragraph<'i>],
     pub parameters: Option<&'i [language::Identifier<'i>]>,
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
@@ -55,7 +55,7 @@ impl<'i> Subroutine<'i> {
         Subroutine {
             name: Some(name),
             title: None,
-            description: Vec::new(),
+            description: &[],
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
@@ -69,7 +69,7 @@ impl<'i> Subroutine<'i> {
         Subroutine {
             name: None,
             title: None,
-            description: Vec::new(),
+            description: &[],
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
