@@ -859,9 +859,9 @@ fn record_state(outcome: &Outcome) -> State {
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped => State::Skip,
-        Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
-            format!("[ reason = \"{}\" ]", reason),
-        ))),
+        Outcome::Failed(Failure::Aborted(reason)) => {
+            State::Fail(Some(super::state::fail_reason(reason)))
+        }
         Outcome::Stopped => {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
         }

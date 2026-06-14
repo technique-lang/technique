@@ -478,6 +478,17 @@ fn unescape_literal(text: &str) -> Result<String, RecordError> {
     Ok(out)
 }
 
+// Build the `Value` recorded for a failed step: a single-entry tablet
+// `[ reason = "<reason>" ]`. The reason is operator free text, so it is
+// escaped exactly as a literal field is, keeping the record on one line and
+// proof against an embedded quote, backslash, or newline.
+pub(crate) fn fail_reason(reason: &str) -> Value {
+    let mut text = String::from("[ reason = \"");
+    escape_literal(&mut text, reason);
+    text.push_str("\" ]");
+    Value::Tablet(text)
+}
+
 // Parse a single PFFTT record line into a Record.
 pub(crate) fn parse_record(line: &str) -> Result<Record, RecordError> {
     let line = line.trim_end_matches(['\r', '\n']);

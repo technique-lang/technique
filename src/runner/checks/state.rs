@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::runner::runner::RunnerError;
 use crate::runner::state::{
-    format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State, Store, Value,
+    fail_reason, format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State,
+    Store, Value,
 };
 
 // A scratch directory under the system temp dir, cleaned up on drop so panics
@@ -425,6 +426,27 @@ fn format_record_pins_on_disk_text() {
         format_record(&record),
         "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ reason = \"network unplugged\" ]\n"
     );
+}
+
+#[test]
+fn fail_reason_escapes_and_stays_on_one_line() {
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Fail(Some(fail_reason("said \"unplug\"\nthen left"))),
+    };
+    let line = format_record(&record);
+    assert_eq!(
+        line,
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ reason = \"said \\\"unplug\\\"\\nthen left\" ]\n"
+    );
+    assert_eq!(
+        line.matches('\n')
+            .count(),
+        1
+    );
+    assert_eq!(parse_record(&line).unwrap(), record);
 }
 
 #[test]
