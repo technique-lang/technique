@@ -5,13 +5,16 @@ use crate::language;
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
 use crate::program::{
-    Executable, ExecutableRef, Fragment, Operation, Ordinal, Program, Subroutine,
+    Executable, ExecutableRef, Fragment, Invocable, Operation, Ordinal, Program, Subroutine,
+    SubroutineRef,
 };
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
-use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
+use crate::runner::state::{
+    parse_record, Appender, InvokeTarget, State, Store, Value as RecordValue,
+};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -1769,4 +1772,118 @@ fn sequence_value_is_last_member() {
         })
         .collect();
     assert_eq!(dones, vec!["first".to_string(), "second".to_string()]);
+}
+
+#[test]
+fn deferred_invoke_is_prompted_and_recorded() {
+    // A call to an external procedure this run cannot resolve (it lives in
+    // another document or system) is presented for the operator to settle: the
+    // run does not descend into it, but the operator can mark it Done (it was
+    // performed, or recorded elsewhere), Skip, or Fail. The call site and the
+    // settled outcome are both recorded.
+    fn deferred_program() -> Program<'static> {
+        let external = language::External {
+            value: "https://example.com/probe",
+            span: language::Span::default(),
+        };
+        let invoke = Operation::Invoke(Invocable {
+            target: SubroutineRef::Deferred(external),
+            arguments: Vec::new(),
+        });
+        anonymous_with_body(Operation::Sequence(vec![invoke]))
+    }
+
+    // The operator marks the external procedure Done.
+    let mut fixture = StoreFixture::new("deferred-done");
+    let program = deferred_program();
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(outcome, Outcome::Done(Value::Unitus));
+
+    // The operator was prompted about the external node, by its FQP.
+    let prompt = runner.into_driver();
+    let asked: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::External { qualified } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, vec!["/<https://example.com/probe>"]);
+
+    // The trail records the Invoke call site at the caller's path and the
+    // Done outcome at the external's FQP.
+    let pfftt = fixture.pfftt_contents();
+    let records: Vec<(String, State)> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .map(|record| (record.path, record.state))
+        .collect();
+    assert!(records.contains(&(
+        "/".to_string(),
+        State::Invoke(InvokeTarget::Uri("https://example.com/probe".to_string()))
+    )));
+    assert!(records.contains(&(
+        "/<https://example.com/probe>".to_string(),
+        State::Done(Some(RecordValue::Unit))
+    )));
+
+    // The operator declines: Skip is recorded at the external's FQP. (The
+    // enclosing sequence proceeds and returns its last Done value, so the
+    // run's overall outcome is not itself the Skip — that is walk_sequence's
+    // concern, tested elsewhere; what matters here is the recorded Skip.)
+    let mut fixture = StoreFixture::new("deferred-skip");
+    let program = deferred_program();
+    let prompt = Mock::with_answers([UserInput::Skip]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let settled: Vec<State> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter(|record| record.path == "/<https://example.com/probe>")
+        .map(|record| record.state)
+        .collect();
+    assert_eq!(settled, vec![State::Skip]);
+
+    // Under an automatic run there is no operator to attest the external work
+    // and nothing executed it, so it records Skip rather than a fabricated Done.
+    let mut fixture = StoreFixture::new("deferred-automatic");
+    let program = deferred_program();
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let settled: Vec<State> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter(|record| record.path == "/<https://example.com/probe>")
+        .map(|record| record.state)
+        .collect();
+    assert_eq!(settled, vec![State::Skip]);
 }

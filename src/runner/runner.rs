@@ -488,9 +488,75 @@ impl<'i, D: Driver> Runner<'i, D> {
                 Ok(Outcome::Done(Value::Unitus))
             }
             SubroutineRef::Deferred(ext) => {
+                // An external target lives in another document or system, so
+                // this run cannot descend into it. Record the call site, then
+                // present the invocation as its own node for the operator to
+                // settle: Done if they performed (or recorded elsewhere) the
+                // external procedure, otherwise Skip or Fail. An unattended
+                // (automatic) run records Skip — nothing executed it and no one
+                // is present to attest it, so it is not marked Done.
+                let run_id = self
+                    .appender
+                    .run_id();
+                let caller = self
+                    .path
+                    .render();
+                self.appender
+                    .append(&Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: caller,
+                        state: State::Invoke(InvokeTarget::Uri(
+                            ext.value
+                                .to_string(),
+                        )),
+                    })?;
+
+                self.path
+                    .push(PathSegment::External(ext.value));
+                let qualified = self
+                    .path
+                    .render();
+                if self
+                    .completed
+                    .contains(&qualified)
+                {
+                    self.path
+                        .pop();
+                    return Ok(Outcome::Done(Value::Unitus));
+                }
+
                 self.driver
                     .announce(&format!("<{}>", ext.value));
-                Ok(Outcome::Done(Value::Unitus))
+                let input = self
+                    .driver
+                    .external(&qualified);
+                if let UserInput::Quit = input {
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: "/".to_string(),
+                            state: State::Stop,
+                        })?;
+                    self.path
+                        .pop();
+                    return Ok(Outcome::Stopped);
+                }
+
+                let outcome = outcome_from(input);
+                self.appender
+                    .append(&Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified.clone(),
+                        state: record_state(&outcome),
+                    })?;
+                self.completed
+                    .insert(qualified);
+                self.path
+                    .pop();
+                Ok(outcome)
             }
         }
     }

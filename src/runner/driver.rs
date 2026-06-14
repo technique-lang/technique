@@ -71,6 +71,14 @@ pub trait Driver {
     /// the step's Qualified Name, repeated on the live prompt line.
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
 
+    /// Settle an external invocation this run cannot perform (a `<uri>` call
+    /// into another document or system). `Console` prompts the operator to
+    /// attest it — `Done` if it was performed or recorded elsewhere, otherwise
+    /// `Skip` / `Fail` / `Quit`. The unattended drivers return `Skip`: nothing
+    /// executed it and no one is present to vouch that it was done, so the run
+    /// records that this execution did not do it rather than fabricating a Done.
+    fn external(&mut self, qualified: &str) -> UserInput;
+
     /// Gate a shell `exec` on the user's command: show the `script` to be run
     /// and settle on the user's verdict. `Done` means run it now; Skip / Fail
     /// decline the run and settle the step; Quit stops. `Automatic` runs
@@ -152,6 +160,10 @@ impl<W: Write> Driver for Console<W> {
 
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "→", choices, produced)
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        prompt(&mut self.output, qualified, "→", &[], Value::Unitus)
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
@@ -906,6 +918,10 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
+    fn external(&mut self, _qualified: &str) -> UserInput {
+        UserInput::Skip
+    }
+
     fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
         write_indented(&mut self.output, script);
         UserInput::Done(Value::Literali(script.to_string()))
@@ -950,6 +966,11 @@ impl Driver for Headless {
     fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
         self.results += 1;
         UserInput::Done(produced)
+    }
+
+    fn external(&mut self, _qualified: &str) -> UserInput {
+        self.results += 1;
+        UserInput::Skip
     }
 
     fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
@@ -1003,6 +1024,9 @@ pub enum Event {
     Ask {
         qualified: String,
         choices: Vec<String>,
+    },
+    External {
+        qualified: String,
     },
     Seal {
         qualified: String,
@@ -1080,6 +1104,16 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        self.events
+            .push(Event::External {
+                qualified: qualified.to_string(),
+            });
+        self.answers
+            .pop_front()
+            .expect("Mock::external called with no canned answers remaining")
     }
 
     /// Records the command beat and auto-commands the run (`Done`) without
