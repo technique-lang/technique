@@ -221,6 +221,7 @@ win_le_tour : Bicycle -> YellowJersey
                         },
                         Span::default(),
                     )],
+                    vec![],
                     Span::default(),
                 )],
                 span: Span::default(),

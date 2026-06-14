@@ -559,6 +559,7 @@ impl<'i> Formatter<'i> {
         let mut elements = procedure
             .elements
             .iter();
+        let mut preceded = false;
         if let Some(Element::Title(_, _)) = procedure
             .elements
             .first()
@@ -568,6 +569,7 @@ impl<'i> Formatter<'i> {
                     .next()
                     .unwrap(),
             );
+            preceded = true;
         }
 
         self.add_fragment_reference(Syntax::BlockEnd, "");
@@ -575,7 +577,15 @@ impl<'i> Formatter<'i> {
         // remaining elements
 
         for element in elements {
+            // A code block separates from a preceding title or description with
+            // a blank line, but collapses onto the declaration as the first element.
+            if let Element::CodeBlock(..) = element {
+                if preceded {
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                }
+            }
             self.append_element(element);
+            preceded = true;
         }
     }
 
@@ -595,7 +605,7 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Newline, "\n");
                 self.append_steps(steps);
             }
-            Element::CodeBlock(expressions, _) => {
+            Element::CodeBlock(expressions, subscopes, _) => {
                 self.add_fragment_reference(Syntax::Structure, "{");
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
@@ -608,6 +618,13 @@ impl<'i> Formatter<'i> {
                 self.decrease(4);
 
                 self.add_fragment_reference(Syntax::Structure, "}");
+
+                if !subscopes.is_empty() {
+                    self.add_fragment_reference(Syntax::Newline, "\n");
+                    self.increase(4);
+                    self.append_scopes(subscopes);
+                    self.decrease(4);
+                }
             }
         }
     }

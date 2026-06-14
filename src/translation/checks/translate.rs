@@ -878,6 +878,37 @@ run :
 }
 
 #[test]
+fn top_level_foreach_codeblock_nests_subscopes() {
+    // A foreach code block at procedure-body level (no enclosing attribute)
+    // owns the steps below it as its loop body, the same as the scoped case.
+    let source = r#"
+% technique v1
+
+run :
+
+{ foreach node in seq(1, 6) }
+    1.  Check Availability
+    2.  Confirm.
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Loop { names, body, .. } = &ops[0] else {
+        panic!("expected Loop, got {:?}", ops[0]);
+    };
+    assert_eq!(names[0].value, "node");
+    let Operation::Sequence(inner) = body.as_ref() else {
+        panic!("expected inner Sequence");
+    };
+    assert_eq!(inner.len(), 2);
+}
+
+#[test]
 fn foreach_with_tuple_names_borrows_all() {
     let source = r#"
 % technique v1
@@ -1416,7 +1447,9 @@ run :
 
 #[test]
 fn expression_repeat_translates() {
-    // `{ repeat 5 }` becomes Loop with names=[], over=None, body=Number(5).
+    // A bare `{ repeat }` with no subscopes to supply its body translates to a
+    // Loop with names=[], over=None, and an empty Sequence body — the body is
+    // provided by the code block's subscopes, as for `foreach` above.
     let source = r#"
 % technique v1
 
@@ -1446,9 +1479,10 @@ run :
     assert!(names.is_empty());
     assert!(over.is_none(), "repeat has no `over` source");
     assert!(responses.is_empty());
-    let Operation::Number(_) = body.as_ref() else {
-        panic!("expected Number body");
+    let Operation::Sequence(inner) = body.as_ref() else {
+        panic!("expected empty Sequence body");
     };
+    assert!(inner.is_empty());
 }
 
 #[test]
