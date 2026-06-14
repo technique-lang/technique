@@ -613,6 +613,55 @@ helper :
 }
 
 #[test]
+fn section_holding_procedure_descends() {
+    let source = r#"
+% technique v1
+
+outer :
+
+I. Setup
+
+inner :
+
+1.  inner step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("section-holding-procedure");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let env = Environment::new();
+    runner
+        .run(env)
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let step_fqns: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { qualified, .. } = e {
+                Some(qualified.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    // A section whose body declares a procedure descends into it: the step
+    // inside `inner` is reached, its FQN carrying the `outer` entry frame,
+    // the `I` section, then the invoked `inner` frame.
+    assert_eq!(step_fqns, vec!["/outer:/I/inner:/1"]);
+}
+
+#[test]
 fn invoke_binds_arguments_to_parameters() {
     let source = r#"
 % technique v1
@@ -1195,7 +1244,10 @@ fn foreach_destructures_tuple_elements() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec!["a.  { first } / { second }", "a.  { first } / { second }"]);
+    assert_eq!(
+        steps,
+        vec!["a.  { first } / { second }", "a.  { first } / { second }"]
+    );
 }
 
 #[test]

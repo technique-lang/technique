@@ -278,14 +278,21 @@ pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
     run_dir.join(name)
 }
 
+/// Where an `Appender` sends its records, normally an append-only PFFTT file
+/// in the store, or an in-memory sink for test runs that keep no persistent
+/// state.
+enum Target {
+    File { file: std::fs::File, path: PathBuf },
+    Discard,
+}
+
 /// Append-only writer for a PFFTT file. Used by the runner to append a
 /// record for each step boundary and lifecycle event. Carries the
-/// `RunId` so callers can stamp it onto records without plumbing it
+/// `RunId` so callers can stamp it onto records.
 /// through every layer.
 #[allow(dead_code)]
 pub struct Appender {
-    file: std::fs::File,
-    path: PathBuf,
+    target: Target,
     run_id: RunId,
 }
 
@@ -301,7 +308,18 @@ impl Appender {
                 path: path.clone(),
                 error,
             })?;
-        Ok(Appender { file, path, run_id })
+        Ok(Appender {
+            target: Target::File { file, path },
+            run_id,
+        })
+    }
+
+    /// An Appender that discards every record for use in tests.
+    pub fn sink() -> Self {
+        Appender {
+            target: Target::Discard,
+            run_id: RunId(0),
+        }
     }
 
     /// The `RunId` this Appender is writing records for.
@@ -314,14 +332,15 @@ impl Appender {
     pub fn append(&mut self, record: &Record) -> Result<(), RunnerError> {
         use std::io::Write;
         let text = format_record(record);
-        self.file
-            .write_all(text.as_bytes())
-            .map_err(|error| RunnerError::StoreError {
-                path: self
-                    .path
-                    .clone(),
-                error,
-            })
+        match &mut self.target {
+            Target::File { file, path } => file
+                .write_all(text.as_bytes())
+                .map_err(|error| RunnerError::StoreError {
+                    path: path.clone(),
+                    error,
+                }),
+            Target::Discard => Ok(()),
+        }
     }
 }
 

@@ -42,7 +42,8 @@ pub enum UserInput {
 }
 
 /// What the walker uses to drive a run. Implementations are the interactive
-/// console `Console`, the no-operator `Automatic`, and the test `Mock`.
+/// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
+/// and the test `Mock`.
 pub trait Driver {
     /// Show the step's Qualified Name and rendered description.
     /// The implementation displays them; it does not block waiting for
@@ -179,7 +180,12 @@ fn prompt<W: Write>(
     choices: &[&str],
     produced: Value,
 ) -> UserInput {
-    let result = interact(out, qualified, settle, Interaction::begin(choices, produced));
+    let result = interact(
+        out,
+        qualified,
+        settle,
+        Interaction::begin(choices, produced),
+    );
     let col = settle
         .chars()
         .count() as u16
@@ -226,7 +232,11 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
         out,
         qualified,
         "→",
-        Interaction { field, menu: None, reason: None },
+        Interaction {
+            field,
+            menu: None,
+            reason: None,
+        },
     );
     let col = "→"
         .chars()
@@ -260,7 +270,12 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
 /// row cleared. Shared by the step/scope prompt and the exec command gate; the
 /// caller writes whatever record line it wants afterward.
-fn interact<W: Write>(out: &mut W, qualified: &str, settle: &str, mut interaction: Interaction) -> UserInput {
+fn interact<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    mut interaction: Interaction,
+) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
     // rather than a redirect; bail by quitting.
@@ -643,7 +658,12 @@ impl Interaction {
 /// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
 /// grey (matching the trace lines above), and ▶ is the shell-prompt character
 /// before the cursor/content area.
-fn draw<W: Write>(out: &mut W, qualified: &str, settle: &str, interaction: &Interaction) -> io::Result<()> {
+fn draw<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    interaction: &Interaction,
+) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
     let prefix = prompt_prefix_width(qualified, settle);
@@ -892,6 +912,54 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+        UserInput::Done(produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
+    }
+}
+
+/// No-operator, no-output driver: takes each step and scope's computed value as
+/// its result, emitting nothing, and counts the results it settles — one per
+/// step and per structural-scope close. Lets a Technique be run without a
+/// terminal, the result count read back from `results()`.
+pub struct Headless {
+    results: usize,
+}
+
+impl Headless {
+    pub fn new() -> Self {
+        Headless { results: 0 }
+    }
+
+    pub fn results(&self) -> usize {
+        self.results
+    }
+}
+
+impl Driver for Headless {
+    fn step(&mut self, _qualified: &str, _description: &str) {}
+
+    fn enter(&mut self, _qualified: &str) {}
+
+    fn display(&mut self, _content: &str) {}
+
+    fn announce(&mut self, _message: &str) {}
+
+    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
+        self.results += 1;
+        UserInput::Done(produced)
+    }
+
+    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
+        UserInput::Done(Value::Literali(script.to_string()))
+    }
+
+    fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
+
+    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+        self.results += 1;
         UserInput::Done(produced)
     }
 

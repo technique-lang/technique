@@ -156,9 +156,16 @@ pub fn render_expression<'i>(expression: &'i Expression, renderer: &dyn Render) 
 
 pub fn render_procedure_declaration<'i>(procedure: &'i Procedure, renderer: &dyn Render) -> String {
     render_declaration(
-        procedure.name.value,
-        procedure.parameters.as_ref().map(|v| v.as_slice()),
-        procedure.signature.as_ref(),
+        procedure
+            .name
+            .value,
+        procedure
+            .parameters
+            .as_ref()
+            .map(|v| v.as_slice()),
+        procedure
+            .signature
+            .as_ref(),
         renderer,
     )
 }
