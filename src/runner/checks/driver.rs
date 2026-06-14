@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::runner::driver::{draw, Console, Driver, Event, Interaction, Mock, UserInput};
-use crate::value::Value;
+use crate::value::{Numeric, Value};
 
 #[test]
 fn mock_returns_canned_answers_in_order() {
@@ -137,6 +137,51 @@ fn esc_edit_seeds_buffer_and_backspace_trims() {
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(Value::Literali("ab".to_string())))
+    );
+}
+
+#[test]
+fn edited_quanticle_stays_a_quanticle() {
+    // Editing a numeric value and changing it keeps it numeric: 42 -> 43 is
+    // re-parsed back to a Quanticle, not flattened to text.
+    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE)),
+        None
+    );
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Done(Value::Quanticle(Numeric::Integral(43))))
+    );
+}
+
+#[test]
+fn unedited_quanticle_returns_verbatim() {
+    // Entering and leaving the edit without a change returns the original
+    // numeric value untouched.
+    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Done(Value::Quanticle(Numeric::Integral(42))))
+    );
+}
+
+#[test]
+fn edited_quanticle_rejects_non_numeric() {
+    // A numeric value edited into something that is not a number is not
+    // accepted: Enter stays in the edit so it can be corrected.
+    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        None
     );
 }
 

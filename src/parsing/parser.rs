@@ -3287,6 +3287,26 @@ fn malformed_response_pattern(content: &str) -> bool {
     re.is_match(content)
 }
 
+/// Parse a standalone numeric literal with the same grammar the parser uses
+/// inside a document. Used by the runner to validate a numeric value when
+/// input or edited.
+pub fn parse_numeric(text: &str) -> Option<Numeric<'_>> {
+    let mut parser = Parser::new();
+    parser.initialize(text);
+    let numeric = parser
+        .read_numeric()
+        .ok()?;
+    parser.trim_whitespace();
+    if parser
+        .source
+        .is_empty()
+    {
+        Some(numeric)
+    } else {
+        None
+    }
+}
+
 fn is_numeric(content: &str) -> bool {
     is_numeric_integral(content) || is_numeric_quantity(content)
 }

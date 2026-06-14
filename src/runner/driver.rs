@@ -627,10 +627,23 @@ impl Interaction {
                 original,
             } => match code {
                 KeyCode::Enter => {
-                    if *edited {
-                        Some(UserInput::Done(Value::Literali(std::mem::take(buffer))))
-                    } else {
+                    if !*edited {
+                        // Unchanged: return the original value verbatim, with
+                        // its type and exact value intact.
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
+                    } else if let Value::Quanticle(_) = original {
+                        // An edited numeric value stays numeric: re-parse the
+                        // buffer with the language's own number grammar. A
+                        // buffer that is not a valid number is not accepted —
+                        // the edit stays open for correction.
+                        match crate::parsing::parse_numeric(buffer) {
+                            Some(numeric) => Some(UserInput::Done(Value::Quanticle(
+                                crate::value::Numeric::from(&numeric),
+                            ))),
+                            None => None,
+                        }
+                    } else {
+                        Some(UserInput::Done(Value::Literali(std::mem::take(buffer))))
                     }
                 }
                 other => {
