@@ -270,6 +270,52 @@ fn empty_fail_reason_records_none() {
 }
 
 #[test]
+fn same_procedure_invoked_twice_runs_twice() {
+    // Two calls to the same procedure at the same path each run: `completed` is
+    // the resume snapshot, not a live within-run dedup, so the second call is
+    // not wrongly skipped just because the first reached the same FQP.
+    let source = r#"
+% technique v1
+
+main :
+
+{ <helper> }
+{ <helper> }
+
+helper :
+
+    1.  do the thing
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("double-invoke");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    let invokes = pfftt
+        .lines()
+        .filter(|line| line.contains("Invoke helper:"))
+        .count();
+    let begins = pfftt
+        .lines()
+        .filter(|line| line.contains("/main:/helper:/1 Begin"))
+        .count();
+    assert_eq!(invokes, 2, "both call sites should invoke helper");
+    assert_eq!(begins, 2, "helper's body should run on both calls");
+}
+
+#[test]
 fn two_steps_prompted_in_source_order() {
     let mut fixture = StoreFixture::new("two-steps");
     let body = Operation::Sequence(vec![

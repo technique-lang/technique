@@ -99,10 +99,9 @@ pub enum RunnerError {
 
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
 /// the position in the document via a `QualifiedPath` stack, carries an
-/// `Environment` with known result values. Maintains a set of
-/// already-completed step FQNs, an append handle to write results, and the
-/// prompt the operator interacts through.
-#[allow(dead_code)]
+/// `Environment` with known result values. Holds the set of step FQNs already
+/// completed in a *prior* run — the resume snapshotplus an append handle to
+/// write results and the prompt the operator interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
@@ -549,11 +548,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .append(&Record {
                         recorded: now_iso8601(),
                         run_id,
-                        path: qualified.clone(),
+                        path: qualified,
                         state: record_state(&outcome),
                     })?;
-                self.completed
-                    .insert(qualified);
                 self.path
                     .pop();
                 Ok(outcome)
@@ -814,8 +811,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                 };
                 self.appender
                     .append(&record)?;
-                self.completed
-                    .insert(qualified.to_string());
                 return Ok(settled);
             }
         };
@@ -853,8 +848,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         self.appender
             .append(&record)?;
-        self.completed
-            .insert(qualified.to_string());
         Ok(outcome)
     }
 
@@ -891,8 +884,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         self.appender
             .append(&record)?;
-        self.completed
-            .insert(qualified.to_string());
         Ok(outcome)
     }
 }
