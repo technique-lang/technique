@@ -1318,6 +1318,52 @@ fn foreach_widens_primitive_to_singleton() {
 }
 
 #[test]
+fn foreach_over_unit_iterates_nothing() {
+    // foreach item in source, where `source` is Unit (the value of an empty
+    // sequence or a pure-prose step). Unit is the absence of a value, so the
+    // loop iterates over nothing: the body never runs and the run completes.
+    let names = [Identifier::new("item")];
+    let substep = step(Ordinal::Dependent("a"), Operation::Sequence(Vec::new()));
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut fixture = StoreFixture::new("foreach-unit");
+    let mut env = Environment::new();
+    env.extend("source".to_string(), Value::Unitus);
+
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        Library::stub(),
+    );
+    runner
+        .run(env)
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let ran = prompt
+        .events()
+        .iter()
+        .any(|event| match event {
+            Event::Step { .. } => true,
+            _ => false,
+        });
+    assert!(!ran, "loop body must not run when iterating Unit");
+}
+
+#[test]
 fn foreach_over_non_list_or_unbound_errors() {
     // foreach item in source, where `source` is supplied by the caller's
     // environment. A tuple or tablet source is `NotIterable` (lists iterate

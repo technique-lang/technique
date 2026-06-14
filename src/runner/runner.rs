@@ -535,6 +535,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                         Value::Arraeum(items) => items,
                         // A scalar in list context is a singleton list.
                         value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
+                        // Unit is the absence of a value, so there is nothing
+                        // to iterate: the body runs zero times.
+                        Value::Unitus => Vec::new(),
                         // A tablet is a record, not a sequence, so it does not
                         // iterate directly.
                         _ => return Err(RunnerError::NotIterable),
