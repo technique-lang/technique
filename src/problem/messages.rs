@@ -1227,6 +1227,10 @@ you can iterate over.
             format!("Unknown function {}()", function),
             format!("The function {}() is undefined. This should have been caught during the linking phase!", function),
         ),
+        RunnerError::FunctionArityMismatch { function, expected, actual } => (
+            format!("Wrong number of arguments to {}()", function),
+            format!("The function {}() expects {} but {} given.", function, expected, actual),
+        ),
         RunnerError::ExecError(error) => (
             "Could not run external command".to_string(),
             format!("Launching or reading from the external command failed: {}.", error),

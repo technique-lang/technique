@@ -44,6 +44,22 @@ fn seq_rejects_non_integer() {
 }
 
 #[test]
+fn call_with_wrong_arity_errors_rather_than_panicking() {
+    let result = call("seq", &[int(1)]);
+    let Err(RunnerError::FunctionArityMismatch {
+        function,
+        expected,
+        actual,
+    }) = result
+    else {
+        panic!("expected FunctionArityMismatch, got {:?}", result);
+    };
+    assert_eq!(function, "seq");
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 1);
+}
+
+#[test]
 fn zip_pairs_truncating_to_shorter() {
     let xs = Value::Arraeum(vec![int(1), int(2), int(3)]);
     let ys = Value::Arraeum(vec![text("a"), text("b")]);

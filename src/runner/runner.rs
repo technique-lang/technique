@@ -75,6 +75,11 @@ pub enum RunnerError {
         expected: &'static str,
     },
     UnknownFunction(String),
+    FunctionArityMismatch {
+        function: &'static str,
+        expected: usize,
+        actual: usize,
+    },
     ExecError(io::Error),
     CommandFailed(i32),
     IncompatibleCombination {
