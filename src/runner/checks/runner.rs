@@ -236,6 +236,40 @@ fn step_outcomes_recorded() {
 }
 
 #[test]
+fn empty_fail_reason_records_none() {
+    // Failing a step without giving a reason records Fail with no reason at
+    // all, not an empty-string reason tablet.
+    let mut fixture = StoreFixture::new("fail-no-reason");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    let program = anonymous_with_body(body);
+    let prompt = Mock::with_answers([UserInput::Fail(String::new())]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Fail(None));
+}
+
+#[test]
 fn two_steps_prompted_in_source_order() {
     let mut fixture = StoreFixture::new("two-steps");
     let body = Operation::Sequence(vec![

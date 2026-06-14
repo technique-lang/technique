@@ -940,7 +940,13 @@ fn record_state(outcome: &Outcome) -> State {
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) => {
-            State::Fail(Some(super::state::fail_reason(reason)))
+            if reason.is_empty() {
+                // The operator failed the step without giving a reason; record
+                // the failure with no reason rather than an empty-string one.
+                State::Fail(None)
+            } else {
+                State::Fail(Some(super::state::fail_reason(reason)))
+            }
         }
         Outcome::Stopped => {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
