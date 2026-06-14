@@ -179,7 +179,12 @@ fn prompt<W: Write>(
     choices: &[&str],
     produced: Value,
 ) -> UserInput {
-    let result = interact(out, qualified, settle, Interaction::begin(choices, produced));
+    let result = interact(
+        out,
+        qualified,
+        settle,
+        Interaction::begin(choices, produced),
+    );
     let col = settle
         .chars()
         .count() as u16
@@ -226,7 +231,11 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
         out,
         qualified,
         "→",
-        Interaction { field, menu: None, reason: None },
+        Interaction {
+            field,
+            menu: None,
+            reason: None,
+        },
     );
     let col = "→"
         .chars()
@@ -260,7 +269,12 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
 /// row cleared. Shared by the step/scope prompt and the exec command gate; the
 /// caller writes whatever record line it wants afterward.
-fn interact<W: Write>(out: &mut W, qualified: &str, settle: &str, mut interaction: Interaction) -> UserInput {
+fn interact<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    mut interaction: Interaction,
+) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
     // rather than a redirect; bail by quitting.
@@ -643,7 +657,12 @@ impl Interaction {
 /// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
 /// grey (matching the trace lines above), and ▶ is the shell-prompt character
 /// before the cursor/content area.
-fn draw<W: Write>(out: &mut W, qualified: &str, settle: &str, interaction: &Interaction) -> io::Result<()> {
+fn draw<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    settle: &str,
+    interaction: &Interaction,
+) -> io::Result<()> {
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
     let prefix = prompt_prefix_width(qualified, settle);

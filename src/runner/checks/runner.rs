@@ -102,7 +102,6 @@ fn step(ordinal: Ordinal<'static>, body: Operation<'static>) -> Operation<'stati
     Operation::Step {
         ordinal,
         attributes: Vec::new(),
-        description: Vec::new(),
         source: scope_for(ordinal),
         body: Box::new(body),
         responses: Vec::new(),
@@ -848,7 +847,6 @@ fn loop_inside_step_produces_one_result() {
     let the_step = Operation::Step {
         ordinal: Ordinal::Dependent("1"),
         attributes: Vec::new(),
-        description: Vec::new(),
         source: scope_for(Ordinal::Dependent("1")),
         body: Box::new(loop_op),
         responses: Vec::new(),
@@ -896,7 +894,6 @@ fn repeat_loops_until_quit() {
     let inner = Operation::Step {
         ordinal: Ordinal::Dependent("1"),
         attributes: Vec::new(),
-        description: Vec::new(),
         source: scope_for(Ordinal::Dependent("1")),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
@@ -944,9 +941,6 @@ fn foreach_walks_body_once_per_list_element() {
 
     // foreach item in items: a substep whose description interpolates the
     // iteration variable, so each walk reveals which element it saw.
-    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
-        Identifier::new("item"),
-    ))]);
     let source_paragraphs = vec![language::Paragraph::new(vec![
         language::Descriptive::CodeInline(language::Expression::Variable(
             Identifier::new("item"),
@@ -956,7 +950,6 @@ fn foreach_walks_body_once_per_list_element() {
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
-        description: vec![description],
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
@@ -1032,9 +1025,6 @@ fn foreach_over_seq_builtin_runs() {
         .resolve("seq")
         .expect("seq registered");
 
-    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
-        Identifier::new("n"),
-    ))]);
     let source_paragraphs = vec![language::Paragraph::new(vec![
         language::Descriptive::CodeInline(language::Expression::Variable(
             Identifier::new("n"),
@@ -1044,7 +1034,6 @@ fn foreach_over_seq_builtin_runs() {
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
-        description: vec![description],
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
@@ -1117,11 +1106,6 @@ fn foreach_destructures_tuple_elements() {
 
     // foreach (first, second) in pairs: two names destructure each
     // tuple-shaped element positionally.
-    let description = Operation::String(vec![
-        Fragment::Interpolation(Operation::Variable(Identifier::new("first"))),
-        Fragment::Text("/"),
-        Fragment::Interpolation(Operation::Variable(Identifier::new("second"))),
-    ]);
     let source_paragraphs = vec![language::Paragraph::new(vec![
         language::Descriptive::CodeInline(language::Expression::Variable(
             Identifier::new("first"),
@@ -1136,7 +1120,6 @@ fn foreach_destructures_tuple_elements() {
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
-        description: vec![description],
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),
@@ -1195,7 +1178,10 @@ fn foreach_destructures_tuple_elements() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec!["a.  { first } / { second }", "a.  { first } / { second }"]);
+    assert_eq!(
+        steps,
+        vec!["a.  { first } / { second }", "a.  { first } / { second }"]
+    );
 }
 
 #[test]
@@ -1204,9 +1190,6 @@ fn foreach_widens_primitive_to_singleton() {
 
     // foreach item in source, where `source` is a bare scalar: it widens
     // to a one-element list and the body walks exactly once.
-    let description = Operation::String(vec![Fragment::Interpolation(Operation::Variable(
-        Identifier::new("item"),
-    ))]);
     let source_paragraphs = vec![language::Paragraph::new(vec![
         language::Descriptive::CodeInline(language::Expression::Variable(
             Identifier::new("item"),
@@ -1216,7 +1199,6 @@ fn foreach_widens_primitive_to_singleton() {
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
-        description: vec![description],
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
         body: Box::new(Operation::Sequence(Vec::new())),
         responses: Vec::new(),

@@ -108,7 +108,6 @@ pub enum Operation<'i> {
     Step {
         ordinal: Ordinal<'i>,
         attributes: Vec<&'i [language::Attribute<'i>]>,
-        description: Vec<Operation<'i>>,
         source: &'i language::Scope<'i>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,

@@ -232,10 +232,23 @@ impl<'i> Translator<'i> {
                     // scan for operations in section content
                     self.translate_descriptions(&mut body_ops, std::slice::from_ref(paragraph));
                 }
-                if let language::Technique::Steps(scopes) = body {
-                    for sub in scopes {
-                        self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                match body {
+                    language::Technique::Steps(scopes) => {
+                        for sub in scopes {
+                            self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                        }
                     }
+                    language::Technique::Procedures(procedures) => {
+                        // A section whose body declares procedures descends
+                        // into the first, its entry point.
+                        if let Some(procedure) = procedures.first() {
+                            body_ops.push(Operation::Invoke(Invocable {
+                                target: SubroutineRef::Unresolved(procedure.name),
+                                arguments: Vec::new(),
+                            }));
+                        }
+                    }
+                    language::Technique::Empty => {}
                 }
                 let title_op = title
                     .as_ref()
@@ -259,11 +272,9 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
-                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
-                    description: description_ops,
                     source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
@@ -280,11 +291,9 @@ impl<'i> Translator<'i> {
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
                 }
-                let description_ops = self.translate_paragraphs(description);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
-                    description: description_ops,
                     source: scope,
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,

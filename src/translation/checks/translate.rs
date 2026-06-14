@@ -217,7 +217,7 @@ I. First section
 }
 
 #[test]
-fn section_holding_procedures_yields_empty_body() {
+fn section_holding_procedures_invokes_first() {
     let source = r#"
 % technique v1
 
@@ -257,8 +257,12 @@ inner : () -> ()
     let Operation::Sequence(inner) = section_body.as_ref() else {
         panic!("expected inner Sequence");
     };
-    // Procedures-bodied section carries no executable operations of its own.
-    assert!(inner.is_empty());
+    // A procedures-bodied section descends into its first procedure.
+    assert_eq!(inner.len(), 1);
+    let Operation::Invoke(invocable) = &inner[0] else {
+        panic!("expected Invoke, got {:?}", inner[0]);
+    };
+    assert_eq!(invocable.target, SubroutineRef::Resolved(SubroutineId(1)));
 }
 
 #[test]
@@ -1729,7 +1733,9 @@ init : () -> ()
     let Operation::Sequence(section_body) = body.as_ref() else {
         panic!("expected Section body Sequence");
     };
-    assert_eq!(section_body.len(), 1, "title's Application is hoisted");
+    // First the title's hoisted `<init>` Application, then the descent into
+    // the section's first (and only) declared procedure, also `init`.
+    assert_eq!(section_body.len(), 2, "title's Application is hoisted");
     let Operation::Invoke(invocable) = &section_body[0] else {
         panic!("expected Invoke, got {:?}", section_body[0]);
     };

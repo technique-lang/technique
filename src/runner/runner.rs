@@ -160,14 +160,16 @@ impl<'i, D: Driver> Runner<'i, D> {
                 name,
                 entry.parameters,
                 entry.signature,
-                self.driver.renderer(),
+                self.driver
+                    .renderer(),
             );
             self.driver
                 .display(&declaration);
             if let Some(t) = entry.title {
                 let title_text = crate::formatting::formatter::render_title(
                     t,
-                    self.driver.renderer(),
+                    self.driver
+                        .renderer(),
                 );
                 self.driver
                     .display(&title_text);
@@ -430,14 +432,16 @@ impl<'i, D: Driver> Runner<'i, D> {
                         name,
                         subroutine.parameters,
                         subroutine.signature,
-                        self.driver.renderer(),
+                        self.driver
+                            .renderer(),
                     );
                     self.driver
                         .display(&declaration);
                     if let Some(t) = subroutine.title {
                         let title_text = crate::formatting::formatter::render_title(
                             t,
-                            self.driver.renderer(),
+                            self.driver
+                                .renderer(),
                         );
                         self.driver
                             .display(&title_text);
@@ -663,14 +667,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .path
             .render();
 
-        let result = self.perform_step(
-            env,
-            &qualified,
-            ordinal,
-            body,
-            source,
-            responses,
-        );
+        let result = self.perform_step(env, &qualified, ordinal, body, source, responses);
 
         self.path
             .pop();
@@ -713,9 +710,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
-        let step_text = crate::formatting::formatter::render_scope(
+        let step_text = crate::formatting::formatter::render_step(
             source,
-            self.driver.renderer(),
+            self.driver
+                .renderer(),
         );
 
         self.driver
@@ -818,7 +816,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         Ok(outcome)
     }
 }
-
 
 fn describe_loop(
     names: &[crate::language::Identifier<'_>],
