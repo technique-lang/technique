@@ -75,6 +75,11 @@ pub enum RunnerError {
         expected: &'static str,
     },
     UnknownFunction(String),
+    FunctionArityMismatch {
+        function: &'static str,
+        expected: usize,
+        actual: usize,
+    },
     ExecError(io::Error),
     CommandFailed(i32),
     IncompatibleCombination {
@@ -94,10 +99,9 @@ pub enum RunnerError {
 
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
 /// the position in the document via a `QualifiedPath` stack, carries an
-/// `Environment` with known result values. Maintains a set of
-/// already-completed step FQNs, an append handle to write results, and the
-/// prompt the operator interacts through.
-#[allow(dead_code)]
+/// `Environment` with known result values. Holds the set of step FQNs already
+/// completed in a *prior* run — the resume snapshotplus an append handle to
+/// write results and the prompt the operator interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
@@ -127,11 +131,17 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
-    /// Consume the runner and return the inner driver. Tests use this
-    /// to assert on the Mock's event log after a run completes.
-    #[cfg(test)]
+    /// Consume the runner and return the inner driver after a run completes.
+    /// Used to read a `Headless` driver's result count or to assert on the
+    /// Mock's event log.
     pub fn into_driver(self) -> D {
         self.driver
+    }
+
+    /// Consume the runner and return the inner appender after a run completes.
+    /// Used to read the recorded trail of an in-memory `Appender`.
+    pub fn into_appender(self) -> Appender {
+        self.appender
     }
 
     /// Walk the entry procedure top to bottom. Entry-procedure
@@ -211,12 +221,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                 body,
                 ..
             } => self.walk_section(env, numeral, title.as_deref(), body),
+            // Every body the translator emits is a `Sequence`, so a Step is
+            // always reached as one of its members, where `walk_sequence`
+            // supplies the parallel ordinal counter. A bare Step never reaches
+            // `walk` directly.
             Operation::Step { .. } => {
-                // Dependent vs Parallel ordinal index needs the
-                // surrounding Sequence's parallel counter; a Step
-                // encountered outside a Sequence (i.e. as the entire
-                // body of a procedure) is treated as Dependent.
-                self.walk_step(env, op, 0)
+                unreachable!("a Step is always walked as a Sequence member")
             }
             Operation::Loop {
                 names, over, body, ..
@@ -477,9 +487,73 @@ impl<'i, D: Driver> Runner<'i, D> {
                 Ok(Outcome::Done(Value::Unitus))
             }
             SubroutineRef::Deferred(ext) => {
+                // An external target lives in another document or system, so
+                // this run cannot descend into it. Record the call site, then
+                // present the invocation as its own node for the operator to
+                // settle: Done if they performed (or recorded elsewhere) the
+                // external procedure, otherwise Skip or Fail. An unattended
+                // (automatic) run records Skip — nothing executed it and no one
+                // is present to attest it, so it is not marked Done.
+                let run_id = self
+                    .appender
+                    .run_id();
+                let caller = self
+                    .path
+                    .render();
+                self.appender
+                    .append(&Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: caller,
+                        state: State::Invoke(InvokeTarget::Uri(
+                            ext.value
+                                .to_string(),
+                        )),
+                    })?;
+
+                self.path
+                    .push(PathSegment::External(ext.value));
+                let qualified = self
+                    .path
+                    .render();
+                if self
+                    .completed
+                    .contains(&qualified)
+                {
+                    self.path
+                        .pop();
+                    return Ok(Outcome::Done(Value::Unitus));
+                }
+
                 self.driver
                     .announce(&format!("<{}>", ext.value));
-                Ok(Outcome::Done(Value::Unitus))
+                let input = self
+                    .driver
+                    .external(&qualified);
+                if let UserInput::Quit = input {
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: "/".to_string(),
+                            state: State::Stop,
+                        })?;
+                    self.path
+                        .pop();
+                    return Ok(Outcome::Stopped);
+                }
+
+                let outcome = outcome_from(input);
+                self.appender
+                    .append(&Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified,
+                        state: record_state(&outcome),
+                    })?;
+                self.path
+                    .pop();
+                Ok(outcome)
             }
         }
     }
@@ -524,6 +598,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                         Value::Arraeum(items) => items,
                         // A scalar in list context is a singleton list.
                         value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
+                        // Unit is the absence of a value, so there is nothing
+                        // to iterate: the body runs zero times.
+                        Value::Unitus => Vec::new(),
                         // A tablet is a record, not a sequence, so it does not
                         // iterate directly.
                         _ => return Err(RunnerError::NotIterable),
@@ -734,8 +811,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                 };
                 self.appender
                     .append(&record)?;
-                self.completed
-                    .insert(qualified.to_string());
                 return Ok(settled);
             }
         };
@@ -773,8 +848,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         self.appender
             .append(&record)?;
-        self.completed
-            .insert(qualified.to_string());
         Ok(outcome)
     }
 
@@ -811,8 +884,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         self.appender
             .append(&record)?;
-        self.completed
-            .insert(qualified.to_string());
         Ok(outcome)
     }
 }
@@ -859,9 +930,15 @@ fn record_state(outcome: &Outcome) -> State {
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped => State::Skip,
-        Outcome::Failed(Failure::Aborted(reason)) => State::Fail(Some(RecordValue::Tablet(
-            format!("[ reason = \"{}\" ]", reason),
-        ))),
+        Outcome::Failed(Failure::Aborted(reason)) => {
+            if reason.is_empty() {
+                // The operator failed the step without giving a reason; record
+                // the failure with no reason rather than an empty-string one.
+                State::Fail(None)
+            } else {
+                State::Fail(Some(super::state::fail_reason(reason)))
+            }
+        }
         Outcome::Stopped => {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
         }

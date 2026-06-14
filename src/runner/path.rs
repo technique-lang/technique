@@ -15,6 +15,7 @@ pub enum PathSegment<'i> {
     Iteration(usize),
     Attributes(&'i [language::Attribute<'i>]),
     Procedure(&'i str),
+    External(&'i str),
 }
 
 /// Absolute path from the document root to the walker's current
@@ -77,6 +78,8 @@ fn render_segment(segment: &PathSegment) -> Option<String> {
         PathSegment::Iteration(number) => Some(format!("[{}]", number)), // you can't "index" into it!
         PathSegment::Attributes(frame) => render_attributes(frame),
         PathSegment::Procedure(name) => Some(format!("{}:", name)),
+        // An external invocation target, addressed by its source `<uri>` form.
+        PathSegment::External(uri) => Some(format!("<{}>", uri)),
     }
 }
 

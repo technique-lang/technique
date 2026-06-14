@@ -17,15 +17,15 @@ mod runner;
 mod state;
 
 pub use context::Context;
-pub use driver::Mode;
+pub use driver::{Headless, Mode};
+pub use evaluator::Environment;
 pub use library::{Builtin, Library, Native};
-pub use runner::{Outcome, RunnerError};
-pub use state::{RecordError, RunId};
+pub use runner::{Outcome, Runner, RunnerError};
+pub use state::{Appender, RecordError, RunId};
 
 use driver::{Automatic, Console};
-use evaluator::Environment;
-use runner::{bind_parameters, now_iso8601, Runner};
-use state::{construct_state_path, Appender, Record, State, Store};
+use runner::{bind_parameters, now_iso8601};
+use state::{construct_state_path, Record, State, Store};
 
 const STORE_ROOT: &str = ".store";
 

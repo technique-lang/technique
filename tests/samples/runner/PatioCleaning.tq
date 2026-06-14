@@ -1,0 +1,52 @@
+% technique v1
+& checklist
+
+high_pressure_cleaning :
+
+I. Setup
+
+setup_machine :
+
+# Setup Machine
+
+    1.  Water supply
+        a.  Unroll garden water hose
+        b.  Attach water hose to machine
+    2.  Sprayer
+        c.  Unroll machine black water hose
+        d.  Assemble wand
+        e.  Connect wand to black water hose
+    3.  Power
+        f.  Extend machine power cord
+        g.  Uncoil extension power cord
+        h.  Connect to mains
+    4.  Turn on water tap
+    5.  Turn on machine
+
+II. Cleaning
+
+clean_patio :
+
+# Perform Cleaning
+
+III. Finish
+
+tidy_up :
+
+# Tidy everything away
+
+    1.  Turn off machine
+    2.  Turn off water tap
+    3.  Water supply
+        a.  Drain nozzle pressure
+        b.  Detach water hose from machine
+        c.  Roll up garden water hose
+    4.  Sprayer
+        d.  Disassemble wand
+        e.  Roll up machine black water hose
+    5.  Power
+        f.  Roll up machine power cord
+        g.  Coil extension power cord
+    6.  Return equipment to storage
+        h.  Put machine back
+        j.  Put accessories away

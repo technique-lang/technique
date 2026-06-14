@@ -1,0 +1,12 @@
+% technique v1
+
+inspect_access_hatches :
+
+# Inspect each access panel
+
+{
+    foreach panel in [ "east", "north", "west" ]
+}
+    1.  Open panel
+    2.  Check seals
+    3.  Close panel

@@ -140,7 +140,15 @@ impl Library {
         context: &Context,
         args: &[Value],
     ) -> Result<Value, RunnerError> {
-        (self.functions[id.0].function)(context, args)
+        let builtin = &self.functions[id.0];
+        if args.len() != builtin.arity {
+            return Err(RunnerError::FunctionArityMismatch {
+                function: builtin.name,
+                expected: builtin.arity,
+                actual: args.len(),
+            });
+        }
+        (builtin.function)(context, args)
     }
 }
 

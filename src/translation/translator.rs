@@ -186,9 +186,17 @@ impl<'i> Translator<'i> {
                         self.append_attributes(&mut ops, &mut responses, scope, &[]);
                     }
                 }
-                language::Element::CodeBlock(expressions, _) => {
-                    for expression in expressions {
-                        ops.push(self.translate_expression(expression));
+                language::Element::CodeBlock(expressions, subscopes, _) => {
+                    match self.translate_loop_block(expressions, subscopes, &[]) {
+                        Some(loop_op) => ops.push(loop_op),
+                        None => {
+                            for expression in expressions {
+                                ops.push(self.translate_expression(expression));
+                            }
+                            for sub in subscopes {
+                                self.append_attributes(&mut ops, &mut responses, sub, &[]);
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -308,50 +316,63 @@ impl<'i> Translator<'i> {
                 expressions,
                 subscopes,
                 ..
-            } => {
-                let single = expressions.len() == 1;
-                match expressions.first() {
-                    Some(language::Expression::Foreach(names, source, _)) if single => {
-                        let mut body_ops = Vec::new();
-                        let mut responses = Vec::new();
-                        for sub in subscopes {
-                            self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
-                        }
-                        Operation::Loop {
-                            names,
-                            over: Some(Box::new(self.translate_expression(source))),
-                            body: Box::new(Operation::Sequence(body_ops)),
-                            responses,
-                        }
+            } => match self.translate_loop_block(expressions, subscopes, attrs) {
+                Some(loop_op) => loop_op,
+                None => {
+                    let mut ops = Vec::new();
+                    for expression in expressions {
+                        ops.push(self.translate_expression(expression));
                     }
-                    Some(language::Expression::Repeat(_, _)) if single => {
-                        let mut body_ops = Vec::new();
-                        let mut responses = Vec::new();
-                        for sub in subscopes {
-                            self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
-                        }
-                        Operation::Loop {
-                            names: &[],
-                            over: None,
-                            body: Box::new(Operation::Sequence(body_ops)),
-                            responses,
-                        }
+                    let mut responses = Vec::new();
+                    for sub in subscopes {
+                        self.append_attributes(&mut ops, &mut responses, sub, attrs);
                     }
-                    _ => {
-                        let mut ops = Vec::new();
-                        for expression in expressions {
-                            ops.push(self.translate_expression(expression));
-                        }
-                        let mut responses = Vec::new();
-                        for sub in subscopes {
-                            self.append_attributes(&mut ops, &mut responses, sub, attrs);
-                        }
-
-                        let _ = responses;
-                        Operation::Sequence(ops)
-                    }
+                    Operation::Sequence(ops)
                 }
+            },
+        }
+    }
+
+    // Build the `Loop` for a foreach or repeat code block, its subscopes
+    // forming the body. Returns None for any other code block, which the
+    // caller translates as a plain sequence of its expressions.
+    fn translate_loop_block(
+        &mut self,
+        expressions: &'i [language::Expression<'i>],
+        subscopes: &'i [language::Scope<'i>],
+        attrs: &[&'i [language::Attribute<'i>]],
+    ) -> Option<Operation<'i>> {
+        if expressions.len() != 1 {
+            return None;
+        }
+        match &expressions[0] {
+            language::Expression::Foreach(names, source, _) => {
+                let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
+                for sub in subscopes {
+                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                }
+                Some(Operation::Loop {
+                    names,
+                    over: Some(Box::new(self.translate_expression(source))),
+                    body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
+                })
             }
+            language::Expression::Repeat(_, _) => {
+                let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
+                for sub in subscopes {
+                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                }
+                Some(Operation::Loop {
+                    names: &[],
+                    over: None,
+                    body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
+                })
+            }
+            _ => None,
         }
     }
 
@@ -536,7 +557,7 @@ impl<'i> Translator<'i> {
                         description = Some(paragraphs.as_slice());
                     }
                 }
-                language::Element::Steps(_, _) | language::Element::CodeBlock(_, _) => {
+                language::Element::Steps(_, _) | language::Element::CodeBlock(..) => {
                     blocked = true;
                 }
             }

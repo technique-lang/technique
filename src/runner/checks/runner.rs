@@ -5,13 +5,16 @@ use crate::language;
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
 use crate::program::{
-    Executable, ExecutableRef, Fragment, Operation, Ordinal, Program, Subroutine,
+    Executable, ExecutableRef, Fragment, Invocable, Operation, Ordinal, Program, Subroutine,
+    SubroutineRef,
 };
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
-use crate::runner::state::{parse_record, Appender, State, Store, Value as RecordValue};
+use crate::runner::state::{
+    parse_record, Appender, InvokeTarget, State, Store, Value as RecordValue,
+};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -229,6 +232,86 @@ fn step_outcomes_recorded() {
             "[ reason = \"cable unplugged\" ]".to_string()
         )))
     );
+}
+
+#[test]
+fn empty_fail_reason_records_none() {
+    // Failing a step without giving a reason records Fail with no reason at
+    // all, not an empty-string reason tablet.
+    let mut fixture = StoreFixture::new("fail-no-reason");
+    let body = Operation::Sequence(vec![step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![]),
+    )]);
+    let program = anonymous_with_body(body);
+    let prompt = Mock::with_answers([UserInput::Fail(String::new())]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let lines: Vec<&str> = pfftt
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .collect();
+    let record = parse_record(lines[2]).expect("parse record");
+    assert_eq!(record.state, State::Fail(None));
+}
+
+#[test]
+fn same_procedure_invoked_twice_runs_twice() {
+    // Two calls to the same procedure at the same path each run: `completed` is
+    // the resume snapshot, not a live within-run dedup, so the second call is
+    // not wrongly skipped just because the first reached the same FQP.
+    let source = r#"
+% technique v1
+
+main :
+
+{ <helper> }
+{ <helper> }
+
+helper :
+
+    1.  do the thing
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("double-invoke");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    let invokes = pfftt
+        .lines()
+        .filter(|line| line.contains("Invoke helper:"))
+        .count();
+    let begins = pfftt
+        .lines()
+        .filter(|line| line.contains("/main:/helper:/1 Begin"))
+        .count();
+    assert_eq!(invokes, 2, "both call sites should invoke helper");
+    assert_eq!(begins, 2, "helper's body should run on both calls");
 }
 
 #[test]
@@ -609,6 +692,55 @@ helper :
     // enclosing hierarchy in the FQN: the entry `main` frame, the
     // invoked `helper` frame, then the step.
     assert_eq!(step_fqns, vec!["/main:/helper:/1"]);
+}
+
+#[test]
+fn section_holding_procedure_descends() {
+    let source = r#"
+% technique v1
+
+outer :
+
+I. Setup
+
+inner :
+
+1.  inner step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("section-holding-procedure");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let env = Environment::new();
+    runner
+        .run(env)
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let step_fqns: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { qualified, .. } = e {
+                Some(qualified.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    // A section whose body declares a procedure descends into it: the step
+    // inside `inner` is reached, its FQN carrying the `outer` entry frame,
+    // the `I` section, then the invoked `inner` frame.
+    assert_eq!(step_fqns, vec!["/outer:/I/inner:/1"]);
 }
 
 #[test]
@@ -1248,6 +1380,52 @@ fn foreach_widens_primitive_to_singleton() {
 }
 
 #[test]
+fn foreach_over_unit_iterates_nothing() {
+    // foreach item in source, where `source` is Unit (the value of an empty
+    // sequence or a pure-prose step). Unit is the absence of a value, so the
+    // loop iterates over nothing: the body never runs and the run completes.
+    let names = [Identifier::new("item")];
+    let substep = step(Ordinal::Dependent("a"), Operation::Sequence(Vec::new()));
+    let loop_op = Operation::Loop {
+        names: &names,
+        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
+        body: Box::new(Operation::Sequence(vec![substep])),
+        responses: Vec::new(),
+    };
+    let mut sub = Subroutine::anonymous();
+    sub.body = loop_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut fixture = StoreFixture::new("foreach-unit");
+    let mut env = Environment::new();
+    env.extend("source".to_string(), Value::Unitus);
+
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Mock::new(),
+        Library::stub(),
+    );
+    runner
+        .run(env)
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let ran = prompt
+        .events()
+        .iter()
+        .any(|event| match event {
+            Event::Step { .. } => true,
+            _ => false,
+        });
+    assert!(!ran, "loop body must not run when iterating Unit");
+}
+
+#[test]
 fn foreach_over_non_list_or_unbound_errors() {
     // foreach item in source, where `source` is supplied by the caller's
     // environment. A tuple or tablet source is `NotIterable` (lists iterate
@@ -1607,4 +1785,164 @@ fn multiline_body_value_records_unit_but_still_propagates() {
         .collect();
     let record = parse_record(lines[2]).expect("parse record");
     assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+}
+
+#[test]
+fn sequence_value_is_last_member() {
+    // Block semantics: a multi-member body sequence runs each step in order
+    // and takes the LAST member's value, not the first and not a fold. Both
+    // steps run (each records its own value), but the run returns "second".
+    let mut fixture = StoreFixture::new("sequence-last-member");
+    let body = Operation::Sequence(vec![
+        step(
+            Ordinal::Dependent("1"),
+            Operation::String(vec![Fragment::Text("first")]),
+        ),
+        step(
+            Ordinal::Dependent("2"),
+            Operation::String(vec![Fragment::Text("second")]),
+        ),
+    ]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(
+        outcome,
+        Outcome::Done(Value::Literali("second".to_string()))
+    );
+
+    // Both steps ran, recording their own value in order (a trailing scope
+    // seal records Unit, not a Literal, so it is excluded).
+    let pfftt = fixture.pfftt_contents();
+    let dones: Vec<String> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter_map(|record| match record.state {
+            State::Done(Some(RecordValue::Literal(text))) => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(dones, vec!["first".to_string(), "second".to_string()]);
+}
+
+#[test]
+fn deferred_invoke_is_prompted_and_recorded() {
+    // A call to an external procedure this run cannot resolve (it lives in
+    // another document or system) is presented for the operator to settle: the
+    // run does not descend into it, but the operator can mark it Done (it was
+    // performed, or recorded elsewhere), Skip, or Fail. The call site and the
+    // settled outcome are both recorded.
+    fn deferred_program() -> Program<'static> {
+        let external = language::External {
+            value: "https://example.com/probe",
+            span: language::Span::default(),
+        };
+        let invoke = Operation::Invoke(Invocable {
+            target: SubroutineRef::Deferred(external),
+            arguments: Vec::new(),
+        });
+        anonymous_with_body(Operation::Sequence(vec![invoke]))
+    }
+
+    // The operator marks the external procedure Done.
+    let mut fixture = StoreFixture::new("deferred-done");
+    let program = deferred_program();
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(outcome, Outcome::Done(Value::Unitus));
+
+    // The operator was prompted about the external node, by its FQP.
+    let prompt = runner.into_driver();
+    let asked: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::External { qualified } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, vec!["/<https://example.com/probe>"]);
+
+    // The trail records the Invoke call site at the caller's path and the
+    // Done outcome at the external's FQP.
+    let pfftt = fixture.pfftt_contents();
+    let records: Vec<(String, State)> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .map(|record| (record.path, record.state))
+        .collect();
+    assert!(records.contains(&(
+        "/".to_string(),
+        State::Invoke(InvokeTarget::Uri("https://example.com/probe".to_string()))
+    )));
+    assert!(records.contains(&(
+        "/<https://example.com/probe>".to_string(),
+        State::Done(Some(RecordValue::Unit))
+    )));
+
+    // The operator declines: Skip is recorded at the external's FQP. (The
+    // enclosing sequence proceeds and returns its last Done value, so the
+    // run's overall outcome is not itself the Skip — that is walk_sequence's
+    // concern, tested elsewhere; what matters here is the recorded Skip.)
+    let mut fixture = StoreFixture::new("deferred-skip");
+    let program = deferred_program();
+    let prompt = Mock::with_answers([UserInput::Skip]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let settled: Vec<State> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter(|record| record.path == "/<https://example.com/probe>")
+        .map(|record| record.state)
+        .collect();
+    assert_eq!(settled, vec![State::Skip]);
+
+    // Under an automatic run there is no operator to attest the external work
+    // and nothing executed it, so it records Skip rather than a fabricated Done.
+    let mut fixture = StoreFixture::new("deferred-automatic");
+    let program = deferred_program();
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let pfftt = fixture.pfftt_contents();
+    let settled: Vec<State> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter(|record| record.path == "/<https://example.com/probe>")
+        .map(|record| record.state)
+        .collect();
+    assert_eq!(settled, vec![State::Skip]);
 }

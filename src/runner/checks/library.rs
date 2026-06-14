@@ -22,6 +22,18 @@ fn call(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     library.call(id, &context, args)
 }
 
+// Invoke a system-layer builtin (exec, now) through an assembled core+system
+// Library, the way an interactive or automatic run does.
+fn call_system(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
+    let mut library = Library::core();
+    library.extend(Library::system());
+    let context = Context::native();
+    let id = library
+        .resolve(name)
+        .expect("builtin registered");
+    library.call(id, &context, args)
+}
+
 #[test]
 fn seq_builds_inclusive_range() {
     let result = call("seq", &[int(1), int(4)]).expect("seq");
@@ -41,6 +53,22 @@ fn seq_rejects_non_integer() {
         panic!("expected InvalidArgument, got {:?}", result);
     };
     assert_eq!(function, "seq");
+}
+
+#[test]
+fn call_with_wrong_arity_errors_rather_than_panicking() {
+    let result = call("seq", &[int(1)]);
+    let Err(RunnerError::FunctionArityMismatch {
+        function,
+        expected,
+        actual,
+    }) = result
+    else {
+        panic!("expected FunctionArityMismatch, got {:?}", result);
+    };
+    assert_eq!(function, "seq");
+    assert_eq!(expected, 2);
+    assert_eq!(actual, 1);
 }
 
 #[test]
@@ -93,4 +121,47 @@ fn projections_reject_non_tablet() {
         panic!("expected InvalidArgument, got {:?}", result);
     };
     assert_eq!(function, "values");
+}
+
+#[test]
+fn exec_captures_stdout_as_literal() {
+    let result = call_system("exec", &[text("printf 'hello world'")]).expect("exec");
+    assert_eq!(result, text("hello world"));
+}
+
+#[test]
+fn exec_tees_output_through_context() {
+    // exec streams the child's stdout live through the Context as it runs (the
+    // tee) while also accumulating it as the return value. A capturing Context
+    // lets the test observe the streamed bytes via `captured()`; they match the
+    // returned value.
+    let mut library = Library::core();
+    library.extend(Library::system());
+    let context = Context::capture();
+    let id = library
+        .resolve("exec")
+        .expect("builtin registered");
+    let result = library
+        .call(id, &context, &[text("printf 'streamed'")])
+        .expect("exec");
+    assert_eq!(result, text("streamed"));
+    assert_eq!(context.captured(), b"streamed".to_vec());
+}
+
+#[test]
+fn exec_rejects_non_string_argument() {
+    let result = call_system("exec", &[int(3)]);
+    let Err(RunnerError::InvalidArgument { function, .. }) = result else {
+        panic!("expected InvalidArgument, got {:?}", result);
+    };
+    assert_eq!(function, "exec");
+}
+
+#[test]
+fn exec_nonzero_exit_is_command_failed() {
+    let result = call_system("exec", &[text("exit 3")]);
+    let Err(RunnerError::CommandFailed(code)) = result else {
+        panic!("expected CommandFailed, got {:?}", result);
+    };
+    assert_eq!(code, 3);
 }

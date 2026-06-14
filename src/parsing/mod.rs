@@ -10,7 +10,7 @@ mod parser;
 mod scope;
 
 // Export the actual public API
-pub use parser::{parse_with_recovery, Parser, ParsingError};
+pub use parser::{parse_numeric, parse_with_recovery, Parser, ParsingError};
 
 /// Read a file and return an owned String. We pass that ownership back to the
 /// main function so that the Technique object created by parse() below can

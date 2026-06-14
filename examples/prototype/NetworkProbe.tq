@@ -1,0 +1,102 @@
+% technique v1
+! Proprietary and Confidential; © 2024 ACME, Inc
+
+connectivity_check(e, s) : LocalEnvironment, TargetService -> NetworkHealth
+
+# Network Connectivity Check
+
+We check the health of the network path between a machine at a customer site
+and a service running in a datacenter by establishing functionality at each
+layer between our device and the remote server.
+
+I. Local network connectivity <local_network>
+
+local_network :
+
+# Local Network Connectivity
+
+Establish that the local network environment is functioning.
+
+    1.  Check physical network interface { exec(
+        ```bash
+            ip addr
+        ```
+        ) } and look for eth0 being marked UP.
+    2.  Check local network connectivity
+    3.  Check local DHCP is working
+    4.  Check local DNS responding
+    5.  Verify reachability of local network gateway
+
+II. Reachability of site border relay <home_border>
+
+home_border :
+
+# Check site border router
+
+Can we traverse from the immediate local network to the edge of the network at
+this site?
+
+    1.  Verify reachability of this-side border router inside interface.
+
+III. Check internet connectivity <public_network>
+
+public_network :
+
+# Check connectivity to public internet
+
+Ensure we have a working internet uplink!
+
+    1.  Verify reachability known first hop upstream
+    2.  Check reachability of known global services
+    3.  Check global DNS responding.
+            'Reachable'
+
+IV. Check overlay network <overlay_network>
+
+overlay_network :
+
+# Check overlay network
+
+Verify that the overlay network control plane services are responding and that
+outbound packets are able to reach known hub nodes on that network.
+
+    1.  Check overlay control plane is responding with valid status.
+    2.  Verify reachability of known hub and exit nodes on overlay network.
+
+V. Reachability of away border relay <away_border>
+
+away_border :
+
+# Check connectivity to away-side border
+
+    1.  Verify reachability of away-side border router or relay node
+
+VI. Traversal of away side local network <away_network>
+
+away_network :
+
+# Check away-side network
+
+Now that we have connectivity to our foothold in the remote datacenter, we
+need to work out if we can get any further. At this point we establish that we
+are able to reach major services of the cloud infrastructure provider,
+specifically RDS and S3.
+
+    1.  Check away-side local network connectivity
+    2.  Check known cloud services responding <check_aws_health>
+
+check_aws_health :
+
+VII. Check response from remote service <service_endpoint>
+
+service_endpoint : Target -> Health
+
+# Confirm remote service health
+
+Finally run a sequence of checks to establish the remote service is reachable,
+answering, and healthy.
+
+    1.  Verify reachability of load balancer
+    2.  Verify health of load balancer
+    3.  Verify service responds to health check request
+    4.  Validate service responds correctly to test transaction

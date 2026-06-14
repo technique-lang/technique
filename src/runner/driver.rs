@@ -42,7 +42,8 @@ pub enum UserInput {
 }
 
 /// What the walker uses to drive a run. Implementations are the interactive
-/// console `Console`, the no-operator `Automatic`, and the test `Mock`.
+/// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
+/// and the test `Mock`.
 pub trait Driver {
     /// Show the step's Qualified Name and rendered description.
     /// The implementation displays them; it does not block waiting for
@@ -69,6 +70,14 @@ pub trait Driver {
     /// either moves it into the returned `Done` or discards it. `qualified` is
     /// the step's Qualified Name, repeated on the live prompt line.
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
+
+    /// Settle an external invocation this run cannot perform (a `<uri>` call
+    /// into another document or system). `Console` prompts the operator to
+    /// attest it — `Done` if it was performed or recorded elsewhere, otherwise
+    /// `Skip` / `Fail` / `Quit`. The unattended drivers return `Skip`: nothing
+    /// executed it and no one is present to vouch that it was done, so the run
+    /// records that this execution did not do it rather than fabricating a Done.
+    fn external(&mut self, qualified: &str) -> UserInput;
 
     /// Gate a shell `exec` on the user's command: show the `script` to be run
     /// and settle on the user's verdict. `Done` means run it now; Skip / Fail
@@ -151,6 +160,10 @@ impl<W: Write> Driver for Console<W> {
 
     fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "→", choices, produced)
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        prompt(&mut self.output, qualified, "→", &[], Value::Unitus)
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
@@ -614,10 +627,23 @@ impl Interaction {
                 original,
             } => match code {
                 KeyCode::Enter => {
-                    if *edited {
-                        Some(UserInput::Done(Value::Literali(std::mem::take(buffer))))
-                    } else {
+                    if !*edited {
+                        // Unchanged: return the original value verbatim, with
+                        // its type and exact value intact.
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
+                    } else if let Value::Quanticle(_) = original {
+                        // An edited numeric value stays numeric: re-parse the
+                        // buffer with the language's own number grammar. A
+                        // buffer that is not a valid number is not accepted —
+                        // the edit stays open for correction.
+                        match crate::parsing::parse_numeric(buffer) {
+                            Some(numeric) => Some(UserInput::Done(Value::Quanticle(
+                                crate::value::Numeric::from(&numeric),
+                            ))),
+                            None => None,
+                        }
+                    } else {
+                        Some(UserInput::Done(Value::Literali(std::mem::take(buffer))))
                     }
                 }
                 other => {
@@ -905,12 +931,69 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
+    fn external(&mut self, _qualified: &str) -> UserInput {
+        UserInput::Skip
+    }
+
     fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
         write_indented(&mut self.output, script);
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
     fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+        UserInput::Done(produced)
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
+    }
+}
+
+/// No-operator, no-output driver: takes each step and scope's computed value as
+/// its result, emitting nothing, and counts the results it settles — one per
+/// step and per structural-scope close. Lets a Technique be run without a
+/// terminal, the result count read back from `results()`.
+pub struct Headless {
+    results: usize,
+}
+
+impl Headless {
+    pub fn new() -> Self {
+        Headless { results: 0 }
+    }
+
+    pub fn results(&self) -> usize {
+        self.results
+    }
+}
+
+impl Driver for Headless {
+    fn step(&mut self, _qualified: &str, _description: &str) {}
+
+    fn enter(&mut self, _qualified: &str) {}
+
+    fn display(&mut self, _content: &str) {}
+
+    fn announce(&mut self, _message: &str) {}
+
+    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
+        self.results += 1;
+        UserInput::Done(produced)
+    }
+
+    fn external(&mut self, _qualified: &str) -> UserInput {
+        self.results += 1;
+        UserInput::Skip
+    }
+
+    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
+        UserInput::Done(Value::Literali(script.to_string()))
+    }
+
+    fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
+
+    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+        self.results += 1;
         UserInput::Done(produced)
     }
 
@@ -954,6 +1037,9 @@ pub enum Event {
     Ask {
         qualified: String,
         choices: Vec<String>,
+    },
+    External {
+        qualified: String,
     },
     Seal {
         qualified: String,
@@ -1031,6 +1117,16 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        self.events
+            .push(Event::External {
+                qualified: qualified.to_string(),
+            });
+        self.answers
+            .pop_front()
+            .expect("Mock::external called with no canned answers remaining")
     }
 
     /// Records the command beat and auto-commands the run (`Done`) without

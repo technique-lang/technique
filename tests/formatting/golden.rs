@@ -97,6 +97,6 @@ fn check_directory(dir: &Path) {
 
 #[test]
 fn ensure_identical_output() {
-    check_directory(Path::new("tests/golden/"));
+    check_directory(Path::new("tests/golden/parsing/"));
     check_directory(Path::new("examples/prototype/"));
 }

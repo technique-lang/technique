@@ -64,7 +64,7 @@ pub enum Element<'i> {
     Title(&'i str, Span),
     Description(Vec<Paragraph<'i>>, Span),
     Steps(Vec<Scope<'i>>, Span),
-    CodeBlock(Vec<Expression<'i>>, Span),
+    CodeBlock(Vec<Expression<'i>>, Vec<Scope<'i>>, Span),
 }
 
 impl PartialEq for Element<'_> {
@@ -73,7 +73,7 @@ impl PartialEq for Element<'_> {
             (Element::Title(a, _), Element::Title(b, _)) => a == b,
             (Element::Description(a, _), Element::Description(b, _)) => a == b,
             (Element::Steps(a, _), Element::Steps(b, _)) => a == b,
-            (Element::CodeBlock(a, _), Element::CodeBlock(b, _)) => a == b,
+            (Element::CodeBlock(a, sa, _), Element::CodeBlock(b, sb, _)) => a == b && sa == sb,
             _ => false,
         }
     }

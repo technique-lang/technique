@@ -1,0 +1,138 @@
+use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
+
+use technique::parsing;
+use technique::runner::{Appender, Environment, Headless, Library, Outcome, Runner};
+use technique::translation;
+
+use crate::common::list_technique_documents;
+
+// Strip the volatile leading fields — timestamp and run-id — from each
+// recorded PFFTT line, leaving the `<path> <state>` tail. That tail is what
+// the expected trail pins; the timestamp and run-id vary from one run to the
+// next.
+fn strip_timestamp_and_runid(trail: &str) -> Vec<String> {
+    trail
+        .lines()
+        .map(|line| {
+            line.splitn(3, ' ')
+                .nth(2)
+                .unwrap_or(line)
+                .to_string()
+        })
+        .collect()
+}
+
+/// Run every sample to completion headless, capturing the trail in memory,
+/// and assert two things: the run finishes `Done`, and the recorded walk
+/// matches the expected `.pfftt` checked in beside the sample. The walk
+/// records pin each step's qualified path and outcome in walk order, so a
+/// wrong path, a missing seal, a dropped iteration segment, or a reordered
+/// walk is caught. The in-memory capture holds only the walk (the store layer
+/// writes Start), so the first line is skipped when comparing. A sample
+/// without a matching `.pfftt` also fails.
+#[test]
+fn ensure_run() {
+    let dir = Path::new("tests/samples/runner/");
+    let files = list_technique_documents(dir);
+
+    let mut failures = Vec::new();
+
+    for file in &files {
+        let content = parsing::load(&file)
+            .unwrap_or_else(|e| panic!("Failed to load file {:?}: {:?}", file, e));
+
+        let document = match parsing::parse(&file, &content) {
+            Ok(document) => document,
+            Err(e) => {
+                println!("File {:?} failed to parse: {:?}", file, e);
+                failures.push(file.clone());
+                continue;
+            }
+        };
+
+        let program = match translation::translate(&document) {
+            Ok(program) => program,
+            Err(e) => {
+                println!("File {:?} failed to translate: {:?}", file, e);
+                failures.push(file.clone());
+                continue;
+            }
+        };
+
+        let mut library = Library::core();
+        library.extend(Library::system());
+        let mut runner = Runner::new(
+            &program,
+            Appender::memory(),
+            HashSet::new(),
+            Headless::new(),
+            library,
+        );
+        let outcome = match runner.run(Environment::new()) {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                println!("File {:?} did not run cleanly: {:?}", file, e);
+                failures.push(file.clone());
+                continue;
+            }
+        };
+        let recorded = strip_timestamp_and_runid(
+            runner
+                .into_appender()
+                .contents(),
+        );
+
+        // The expected file is a complete, valid PFFTT trail; its first line is
+        // the opening Start lifecycle record, which the in-memory walk capture
+        // does not include, so skip it before comparing the walk records.
+        let expected_path = file.with_extension("pfftt");
+        let expected_text = fs::read_to_string(&expected_path).unwrap_or_else(|e| {
+            panic!(
+                "missing expected trail {:?}: {:?} — add the .pfftt beside the sample",
+                expected_path, e
+            )
+        });
+        let expected: Vec<String> = strip_timestamp_and_runid(&expected_text)
+            .into_iter()
+            .skip(1)
+            .collect();
+
+        let finished = if let Outcome::Done(_) = outcome {
+            true
+        } else {
+            println!("File {:?} did not finish Done: {:?}", file, outcome);
+            false
+        };
+
+        if !finished || recorded != expected {
+            println!("\nTrail mismatch for {:?}", file);
+            println!("--- expected\n+++ recorded");
+            let max = recorded
+                .len()
+                .max(expected.len());
+            for i in 0..max {
+                let e = expected
+                    .get(i)
+                    .map(String::as_str)
+                    .unwrap_or("");
+                let r = recorded
+                    .get(i)
+                    .map(String::as_str)
+                    .unwrap_or("");
+                if e != r {
+                    println!("@@ line {} @@\n- {}\n+ {}", i + 1, e, r);
+                }
+            }
+            failures.push(file.clone());
+        }
+    }
+
+    if !failures.is_empty() {
+        panic!(
+            "Sample runs must finish Done and match their expected trail, but {} files failed",
+            failures.len()
+        );
+    }
+}

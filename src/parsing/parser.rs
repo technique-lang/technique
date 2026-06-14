@@ -1158,8 +1158,26 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 match parser.read_code_block() {
                     Ok(expressions) => {
+                        // A loop code block owns the steps below it as its body,
+                        // the way an attribute block owns its scope; `read_scopes`
+                        // stops at a trailing description, leaving it to be flagged.
+                        // A plain code block owns nothing, so following content
+                        // stays at this level.
+                        let subscopes = if is_loop_block(&expressions) {
+                            match parser.read_scopes() {
+                                Ok(subscopes) => subscopes,
+                                Err(error) => {
+                                    self.problems
+                                        .push(error);
+                                    parser.skip_to_next_line();
+                                    vec![]
+                                }
+                            }
+                        } else {
+                            vec![]
+                        };
                         let span = parser.span_since(elem_start);
-                        elements.push(Element::CodeBlock(expressions, span));
+                        elements.push(Element::CodeBlock(expressions, subscopes, span));
                     }
                     Err(error) => {
                         self.problems
@@ -3159,6 +3177,18 @@ fn is_code_block(content: &str) -> bool {
     re.is_match(content)
 }
 
+/// Is this code block is a control structure (`foreach` or `repeat`) which
+/// owns the steps below it as its body. A plain code does not.
+fn is_loop_block(expressions: &[Expression]) -> bool {
+    if expressions.len() != 1 {
+        return false;
+    }
+    match &expressions[0] {
+        Expression::Foreach(..) | Expression::Repeat(..) => true,
+        _ => false,
+    }
+}
+
 #[allow(unused)]
 fn is_code_inline(content: &str) -> bool {
     let content = content.trim_ascii_start();
@@ -3255,6 +3285,26 @@ fn is_enum_response(content: &str) -> bool {
 fn malformed_response_pattern(content: &str) -> bool {
     let re = regex!(r#"^\s*".+?"(\s*\|\s*".+?")+\s*$"#);
     re.is_match(content)
+}
+
+/// Parse a standalone numeric literal with the same grammar the parser uses
+/// inside a document. Used by the runner to validate a numeric value when
+/// input or edited.
+pub fn parse_numeric(text: &str) -> Option<Numeric<'_>> {
+    let mut parser = Parser::new();
+    parser.initialize(text);
+    let numeric = parser
+        .read_numeric()
+        .ok()?;
+    parser.trim_whitespace();
+    if parser
+        .source
+        .is_empty()
+    {
+        Some(numeric)
+    } else {
+        None
+    }
 }
 
 fn is_numeric(content: &str) -> bool {

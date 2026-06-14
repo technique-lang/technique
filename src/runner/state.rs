@@ -278,14 +278,22 @@ pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
     run_dir.join(name)
 }
 
+/// Where an `Appender` sends its records, normally an append-only PFFTT file
+/// in the store, or an in-memory sink for test runs that keep no persistent
+/// state.
+enum Target {
+    File { file: std::fs::File, path: PathBuf },
+    Memory(String),
+    Discard,
+}
+
 /// Append-only writer for a PFFTT file. Used by the runner to append a
 /// record for each step boundary and lifecycle event. Carries the
-/// `RunId` so callers can stamp it onto records without plumbing it
+/// `RunId` so callers can stamp it onto records.
 /// through every layer.
 #[allow(dead_code)]
 pub struct Appender {
-    file: std::fs::File,
-    path: PathBuf,
+    target: Target,
     run_id: RunId,
 }
 
@@ -301,7 +309,36 @@ impl Appender {
                 path: path.clone(),
                 error,
             })?;
-        Ok(Appender { file, path, run_id })
+        Ok(Appender {
+            target: Target::File { file, path },
+            run_id,
+        })
+    }
+
+    /// An Appender that discards every record for use in tests.
+    pub fn sink() -> Self {
+        Appender {
+            target: Target::Discard,
+            run_id: RunId(0),
+        }
+    }
+
+    /// An Appender that captures every record in memory for use in tests,
+    /// readable afterwards with `contents()`. Touches no filesystem.
+    pub fn memory() -> Self {
+        Appender {
+            target: Target::Memory(String::new()),
+            run_id: RunId(0),
+        }
+    }
+
+    /// The records captured by an in-memory Appender (`memory()`), as the raw
+    /// PFFTT text; empty for a file or discarding Appender.
+    pub fn contents(&self) -> &str {
+        match &self.target {
+            Target::Memory(buffer) => buffer,
+            _ => "",
+        }
     }
 
     /// The `RunId` this Appender is writing records for.
@@ -314,14 +351,19 @@ impl Appender {
     pub fn append(&mut self, record: &Record) -> Result<(), RunnerError> {
         use std::io::Write;
         let text = format_record(record);
-        self.file
-            .write_all(text.as_bytes())
-            .map_err(|error| RunnerError::StoreError {
-                path: self
-                    .path
-                    .clone(),
-                error,
-            })
+        match &mut self.target {
+            Target::File { file, path } => file
+                .write_all(text.as_bytes())
+                .map_err(|error| RunnerError::StoreError {
+                    path: path.clone(),
+                    error,
+                }),
+            Target::Memory(buffer) => {
+                buffer.push_str(&text);
+                Ok(())
+            }
+            Target::Discard => Ok(()),
+        }
     }
 }
 
@@ -457,6 +499,17 @@ fn unescape_literal(text: &str) -> Result<String, RecordError> {
         }
     }
     Ok(out)
+}
+
+// Build the `Value` recorded for a failed step: a single-entry tablet
+// `[ reason = "<reason>" ]`. The reason is operator free text, so it is
+// escaped exactly as a literal field is, keeping the record on one line and
+// proof against an embedded quote, backslash, or newline.
+pub(crate) fn fail_reason(reason: &str) -> Value {
+    let mut text = String::from("[ reason = \"");
+    escape_literal(&mut text, reason);
+    text.push_str("\" ]");
+    Value::Tablet(text)
 }
 
 // Parse a single PFFTT record line into a Record.
