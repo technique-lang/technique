@@ -1,51 +1,37 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 
 use technique::parsing;
-use technique::program::Operation;
-use technique::runner::{Appender, Environment, Headless, Library, Runner};
+use technique::runner::{Appender, Environment, Headless, Library, Outcome, Runner};
 use technique::translation;
 
 use crate::common::list_technique_documents;
 
-// Operations the runner records a Result for: every Step (recursing into its
-// substeps) and every Section scope. A subroutine's own scope is counted by
-// the caller. Read straight off the translated Program, so it is an
-// independent reference for what a clean run must produce.
-fn count_results(op: &Operation) -> usize {
-    match op {
-        Operation::Step { body, .. } => 1 + count_results(body),
-        Operation::Section { body, .. } => 1 + count_results(body),
-        Operation::Sequence(ops) | Operation::List(ops) => ops
-            .iter()
-            .map(count_results)
-            .sum(),
-        // A foreach over a literal list unrolls to one body pass per element,
-        // the loop adding no result of its own. A runtime iterable or a
-        // `repeat` has no statically known count, so such a sample cannot be
-        // checked this way (and `repeat` never terminates headless).
-        Operation::Loop { over, body, .. } => {
-            let iterations = match over {
-                Some(over) => match over.as_ref() {
-                    Operation::List(items) => items.len(),
-                    _ => panic!("ensure_run sample loops over a non-literal iterable"),
-                },
-                None => panic!("ensure_run sample uses `repeat`, which never terminates headless"),
-            };
-            iterations * count_results(body)
-        }
-        Operation::Bind { value, .. } => count_results(value),
-        _ => 0,
-    }
+// Strip the volatile leading fields — timestamp and run-id — from each
+// recorded PFFTT line, leaving the `<path> <state>` tail. That tail is what
+// the expected trail pins; the timestamp and run-id vary from one run to the
+// next.
+fn strip_timestamp_and_runid(trail: &str) -> Vec<String> {
+    trail
+        .lines()
+        .map(|line| {
+            line.splitn(3, ' ')
+                .nth(2)
+                .unwrap_or(line)
+                .to_string()
+        })
+        .collect()
 }
 
-/// Run every sample to completion headless and establish that each step had a
-/// result. Each sample is a linear Technique (each declared procedure invoked
-/// exactly once, no loops, no dead code), so the runner must settle a Result
-/// for every operation the translated Program declares: each Step, each
-/// Section, and each named procedure scope. The reference count is read
-/// straight off the Program; the `Headless` driver counts the results it
-/// actually settled, and the two must agree.
+/// Run every sample to completion headless, capturing the trail in memory,
+/// and assert two things: the run finishes `Done`, and the recorded walk
+/// matches the expected `.pfftt` checked in beside the sample. The walk
+/// records pin each step's qualified path and outcome in walk order, so a
+/// wrong path, a missing seal, a dropped iteration segment, or a reordered
+/// walk is caught. The in-memory capture holds only the walk (the store layer
+/// writes Start), so the first line is skipped when comparing. A sample
+/// without a matching `.pfftt` also fails.
 #[test]
 fn ensure_run() {
     let dir = Path::new("tests/samples/runner/");
@@ -75,52 +61,77 @@ fn ensure_run() {
             }
         };
 
-        let declared: usize = program
-            .subroutines
-            .iter()
-            .map(|sub| {
-                let own = if sub
-                    .name
-                    .is_some()
-                {
-                    1
-                } else {
-                    0
-                };
-                own + count_results(&sub.body)
-            })
-            .sum();
-
         let mut library = Library::core();
         library.extend(Library::system());
         let mut runner = Runner::new(
             &program,
-            Appender::sink(),
+            Appender::memory(),
             HashSet::new(),
             Headless::new(),
             library,
         );
-        if let Err(e) = runner.run(Environment::new()) {
-            println!("File {:?} did not run cleanly: {:?}", file, e);
-            failures.push(file.clone());
-            continue;
-        }
+        let outcome = match runner.run(Environment::new()) {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                println!("File {:?} did not run cleanly: {:?}", file, e);
+                failures.push(file.clone());
+                continue;
+            }
+        };
+        let recorded = strip_timestamp_and_runid(
+            runner
+                .into_appender()
+                .contents(),
+        );
 
-        let results = runner
-            .into_driver()
-            .results();
-        if results != declared {
-            println!(
-                "File {:?}: runner settled {} results, expecting {}",
-                file, results, declared
-            );
+        // The expected file is a complete, valid PFFTT trail; its first line is
+        // the opening Start lifecycle record, which the in-memory walk capture
+        // does not include, so skip it before comparing the walk records.
+        let expected_path = file.with_extension("pfftt");
+        let expected_text = fs::read_to_string(&expected_path).unwrap_or_else(|e| {
+            panic!(
+                "missing expected trail {:?}: {:?} — add the .pfftt beside the sample",
+                expected_path, e
+            )
+        });
+        let expected: Vec<String> = strip_timestamp_and_runid(&expected_text)
+            .into_iter()
+            .skip(1)
+            .collect();
+
+        let finished = if let Outcome::Done(_) = outcome {
+            true
+        } else {
+            println!("File {:?} did not finish Done: {:?}", file, outcome);
+            false
+        };
+
+        if !finished || recorded != expected {
+            println!("\nTrail mismatch for {:?}", file);
+            println!("--- expected\n+++ recorded");
+            let max = recorded
+                .len()
+                .max(expected.len());
+            for i in 0..max {
+                let e = expected
+                    .get(i)
+                    .map(String::as_str)
+                    .unwrap_or("");
+                let r = recorded
+                    .get(i)
+                    .map(String::as_str)
+                    .unwrap_or("");
+                if e != r {
+                    println!("@@ line {} @@\n- {}\n+ {}", i + 1, e, r);
+                }
+            }
             failures.push(file.clone());
         }
     }
 
     if !failures.is_empty() {
         panic!(
-            "Sample files should run with a result for every operation, but {} files failed",
+            "Sample runs must finish Done and match their expected trail, but {} files failed",
             failures.len()
         );
     }

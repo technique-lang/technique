@@ -139,6 +139,12 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
     }
 
+    /// Consume the runner and return the inner appender after a run completes.
+    /// Used to read the recorded trail of an in-memory `Appender`.
+    pub fn into_appender(self) -> Appender {
+        self.appender
+    }
+
     /// Walk the entry procedure top to bottom. Entry-procedure
     /// selection here is `program.subroutines[0]` — the synthetic
     /// anonymous wrapper if the document is top-level Steps, otherwise

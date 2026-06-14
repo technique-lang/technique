@@ -283,6 +283,7 @@ pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
 /// state.
 enum Target {
     File { file: std::fs::File, path: PathBuf },
+    Memory(String),
     Discard,
 }
 
@@ -322,6 +323,24 @@ impl Appender {
         }
     }
 
+    /// An Appender that captures every record in memory for use in tests,
+    /// readable afterwards with `contents()`. Touches no filesystem.
+    pub fn memory() -> Self {
+        Appender {
+            target: Target::Memory(String::new()),
+            run_id: RunId(0),
+        }
+    }
+
+    /// The records captured by an in-memory Appender (`memory()`), as the raw
+    /// PFFTT text; empty for a file or discarding Appender.
+    pub fn contents(&self) -> &str {
+        match &self.target {
+            Target::Memory(buffer) => buffer,
+            _ => "",
+        }
+    }
+
     /// The `RunId` this Appender is writing records for.
     pub fn run_id(&self) -> RunId {
         self.run_id
@@ -339,6 +358,10 @@ impl Appender {
                     path: path.clone(),
                     error,
                 }),
+            Target::Memory(buffer) => {
+                buffer.push_str(&text);
+                Ok(())
+            }
             Target::Discard => Ok(()),
         }
     }
