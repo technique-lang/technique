@@ -1678,3 +1678,49 @@ fn multiline_body_value_records_unit_but_still_propagates() {
     let record = parse_record(lines[2]).expect("parse record");
     assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
 }
+
+#[test]
+fn sequence_value_is_last_member() {
+    // Block semantics: a multi-member body sequence runs each step in order
+    // and takes the LAST member's value, not the first and not a fold. Both
+    // steps run (each records its own value), but the run returns "second".
+    let mut fixture = StoreFixture::new("sequence-last-member");
+    let body = Operation::Sequence(vec![
+        step(
+            Ordinal::Dependent("1"),
+            Operation::String(vec![Fragment::Text("first")]),
+        ),
+        step(
+            Ordinal::Dependent("2"),
+            Operation::String(vec![Fragment::Text("second")]),
+        ),
+    ]);
+    let program = anonymous_with_body(body);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(
+        outcome,
+        Outcome::Done(Value::Literali("second".to_string()))
+    );
+
+    // Both steps ran, recording their own value in order (a trailing scope
+    // seal records Unit, not a Literal, so it is excluded).
+    let pfftt = fixture.pfftt_contents();
+    let dones: Vec<String> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .filter_map(|record| match record.state {
+            State::Done(Some(RecordValue::Literal(text))) => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(dones, vec!["first".to_string(), "second".to_string()]);
+}
