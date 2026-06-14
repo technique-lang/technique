@@ -1,32 +1,63 @@
 //! Host capabilities available to native functions when they execute. For now
-//! the only capability is passing output through to the operator, and there is
-//! no state to carry — output goes straight to standard output. A future GUI
-//! or web frontend would hold a sink here and route through it, at which point
-//! `native()` stays the empty/default context and a separate constructor
-//! carries the real one.
+//! the only capability is passing output through to the operator: output goes
+//! straight to standard output, or — for tests — into an in-memory buffer. A
+//! future GUI or web frontend would hold its own sink here, with
+//! `native()` staying the terminal default and a separate constructor carrying
+//! the real one.
 
+use std::cell::RefCell;
 use std::io::{self, Write};
 
-pub struct Context;
+pub struct Context {
+    sink: Sink,
+}
+
+enum Sink {
+    Stdout,
+    // An in-memory buffer, used by tests. Kept a distinct variant from
+    // `Stdout` so the terminal path carries no interior-mutability wrapper.
+    // The `RefCell` lets `write(&self)` append through the shared reference
+    // the `Context` is threaded by.
+    Capture(RefCell<Vec<u8>>),
+}
 
 impl Context {
-    /// The default context of native host capabilities. Builtins that are
-    /// pure functions to manipulate Values ignore it.
+    /// The default context of native host capabilities, writing through to
+    /// standard output. Builtins that are pure functions to manipulate Values
+    /// ignore it.
     pub fn native() -> Self {
-        Context
+        Context { sink: Sink::Stdout }
+    }
+
+    /// A context that captures everything written through it in memory, for
+    /// use in tests; the bytes are read back with `captured()`. Touches no
+    /// terminal.
+    pub fn capture() -> Self {
+        Context {
+            sink: Sink::Capture(RefCell::new(Vec::new())),
+        }
     }
 
     /// Pass a slice of bytes through to the user immediately. This is the
     /// streaming primitive: a function teeing a child process's stdout reads
     /// it in chunks and writes each chunk here (while separately accumulating
     /// those bytes for its return value). No intermediate `String` is
-    /// allocated and a chunk split mid-UTF-8 is harmless. This calls
-    /// `flush()` so output appears to the user live.
-    #[allow(dead_code)]
+    /// allocated and a chunk split mid-UTF-8 is harmless. The terminal sink
+    /// calls `flush()` so output appears to the user live.
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
-        let mut out = io::stdout();
-        out.write_all(bytes)?;
-        out.flush()
+        match &self.sink {
+            Sink::Stdout => {
+                let mut out = io::stdout();
+                out.write_all(bytes)?;
+                out.flush()
+            }
+            Sink::Capture(buffer) => {
+                buffer
+                    .borrow_mut()
+                    .extend_from_slice(bytes);
+                Ok(())
+            }
+        }
     }
 
     /// Pass a complete, already known, text string through to the user. This
@@ -35,5 +66,15 @@ impl Context {
     #[allow(dead_code)]
     pub fn emit(&self, message: &str) -> io::Result<()> {
         self.write(message.as_bytes())
+    }
+
+    /// The bytes captured by a `capture()` context; empty for a native one.
+    pub fn captured(&self) -> Vec<u8> {
+        match &self.sink {
+            Sink::Capture(buffer) => buffer
+                .borrow()
+                .clone(),
+            Sink::Stdout => Vec::new(),
+        }
     }
 }

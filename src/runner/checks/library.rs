@@ -130,6 +130,25 @@ fn exec_captures_stdout_as_literal() {
 }
 
 #[test]
+fn exec_tees_output_through_context() {
+    // exec streams the child's stdout live through the Context as it runs (the
+    // tee) while also accumulating it as the return value. A capturing Context
+    // lets the test observe the streamed bytes via `captured()`; they match the
+    // returned value.
+    let mut library = Library::core();
+    library.extend(Library::system());
+    let context = Context::capture();
+    let id = library
+        .resolve("exec")
+        .expect("builtin registered");
+    let result = library
+        .call(id, &context, &[text("printf 'streamed'")])
+        .expect("exec");
+    assert_eq!(result, text("streamed"));
+    assert_eq!(context.captured(), b"streamed".to_vec());
+}
+
+#[test]
 fn exec_rejects_non_string_argument() {
     let result = call_system("exec", &[int(3)]);
     let Err(RunnerError::InvalidArgument { function, .. }) = result else {
