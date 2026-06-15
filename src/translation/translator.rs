@@ -6,8 +6,8 @@ use crate::language;
 use crate::language::{Document, Span};
 
 use crate::program::{
-    Entry, Executable, ExecutableRef, Fragment, Invocable, Operation, Ordinal, Program, Subroutine,
-    SubroutineId, SubroutineRef,
+    Entry, Executable, ExecutableRef, Fragment, Invocable, Locale, Operation, Ordinal, Program,
+    Subroutine, SubroutineId, SubroutineRef,
 };
 
 pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<TranslationError<'i>>> {
@@ -113,6 +113,7 @@ struct Translator<'i> {
     program: Program<'i>,
     problems: Vec<TranslationError<'i>>,
     known: HashMap<&'i str, SubroutineId>,
+    locus: Vec<Locale<'i>>,
 }
 
 impl<'i> Translator<'i> {
@@ -121,6 +122,7 @@ impl<'i> Translator<'i> {
             program: Program::new(),
             problems: Vec::new(),
             known: HashMap::new(),
+            locus: Vec::new(),
         }
     }
 
@@ -139,10 +141,16 @@ impl<'i> Translator<'i> {
                     }
 
                     // Element::Steps scopes may contain Sections, whose
-                    // bodies can in turn declare further procedures. Walk
-                    // the procedure's scopes so those nested declarations
-                    // are discovered; the walk is independent of whether
-                    // this procedure itself was a duplicate.
+                    // bodies can in turn declare further procedures. Walk the
+                    // procedure's scopes so those nested declarations are
+                    // discovered, with this procedure on the lexical prefix so
+                    // their addresses descend from it.
+                    self.locus
+                        .push(Locale::Procedure(
+                            procedure
+                                .name
+                                .value,
+                        ));
                     for element in &procedure.elements {
                         if let language::Element::Steps(scopes, _) = element {
                             for scope in scopes {
@@ -150,6 +158,8 @@ impl<'i> Translator<'i> {
                             }
                         }
                     }
+                    self.locus
+                        .pop();
                 }
             }
             language::Technique::Steps(scopes) => {
@@ -187,9 +197,16 @@ impl<'i> Translator<'i> {
         );
         self.known
             .insert(name, id);
+        let mut subroutine = Subroutine::new(procedure.name);
+        subroutine.locale = self
+            .locus
+            .iter()
+            .cloned()
+            .chain(std::iter::once(Locale::Procedure(name)))
+            .collect();
         self.program
             .subroutines
-            .push(Subroutine::new(procedure.name));
+            .push(subroutine);
         Some(id)
     }
 
@@ -597,8 +614,12 @@ impl<'i> Translator<'i> {
 
     fn collect_scope(&mut self, scope: &'i language::Scope<'i>) {
         match scope {
-            language::Scope::SectionChunk { body, .. } => {
+            language::Scope::SectionChunk { numeral, body, .. } => {
+                self.locus
+                    .push(Locale::Section(numeral));
                 self.collect_technique(body);
+                self.locus
+                    .pop();
             }
             language::Scope::DependentBlock { subscopes, .. }
             | language::Scope::ParallelBlock { subscopes, .. }

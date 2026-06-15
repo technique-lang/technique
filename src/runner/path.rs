@@ -47,6 +47,11 @@ impl<'i> QualifiedPath<'i> {
             .pop()
     }
 
+    /// Swap in a fresh set of segments, returning the displaced ones.
+    pub fn replace(&mut self, segments: Vec<PathSegment<'i>>) -> Vec<PathSegment<'i>> {
+        std::mem::replace(&mut self.segments, segments)
+    }
+
     /// Render the current path as a PFFTT absolute path string, always
     /// rooted at `/`. The full enclosing hierarchy is shown: every scope
     /// level is its own `/`-delimited component, with a `Procedure`
@@ -58,16 +63,20 @@ impl<'i> QualifiedPath<'i> {
     /// one-origin. Thus `/5/[2]/a` would be the first substep within the
     /// second iteration of a scope within the 5th step of a Technique.
     pub fn render(&self) -> String {
-        let pieces: Vec<String> = self
-            .segments
-            .iter()
-            .filter_map(render_segment)
-            .collect();
-
-        let mut text = String::from("/");
-        text.push_str(&pieces.join("/"));
-        text
+        render_path(&self.segments)
     }
+}
+
+/// Render a segment slice as a PFFTT absolute path, always rooted at `/`.
+pub fn render_path(segments: &[PathSegment]) -> String {
+    let pieces: Vec<String> = segments
+        .iter()
+        .filter_map(render_segment)
+        .collect();
+
+    let mut text = String::from("/");
+    text.push_str(&pieces.join("/"));
+    text
 }
 
 fn render_segment(segment: &PathSegment) -> Option<String> {

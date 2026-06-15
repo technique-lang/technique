@@ -178,27 +178,13 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value {
-        let prompt = format!(
-            "{} ({} : {}) ",
+        let label = format!(
+            "{}({} : {})",
             qualified,
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
-        let _ = write!(self.output, "{}", prompt.dark_grey());
-        let _ = self
-            .output
-            .flush();
-        let mut line = String::new();
-        if io::stdin()
-            .read_line(&mut line)
-            .is_err()
-        {
-            return Value::Unitus;
-        }
-        Value::Literali(
-            line.trim_end()
-                .to_string(),
-        )
+        prompt_acquire(&mut self.output, &label)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -304,6 +290,28 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
     }
     let _ = out.flush();
     result
+}
+
+/// Solicit a deferred input on the `▶` prompt line. The field starts empty:
+/// `<Enter>` accepts the empty default, typing overrides it.
+fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> Value {
+    let field = edit(String::new(), Value::Literali(String::new()));
+    let result = interact(
+        out,
+        label,
+        "↘",
+        Interaction {
+            field,
+            menu: None,
+            reason: None,
+        },
+    );
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = out.flush();
+    match result {
+        UserInput::Done(value) => value,
+        _ => Value::Unitus,
+    }
 }
 
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt

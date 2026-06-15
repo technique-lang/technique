@@ -308,7 +308,7 @@ helper :
         .count();
     let begins = pfftt
         .lines()
-        .filter(|line| line.contains("/main:/helper:/1 Begin"))
+        .filter(|line| line.contains("/helper:/1 Begin"))
         .count();
     assert_eq!(invokes, 2, "both call sites should invoke helper");
     assert_eq!(begins, 2, "helper's body should run on both calls");
@@ -754,10 +754,10 @@ helper :
             }
         })
         .collect();
-    // The Step inside `helper` was reached and prompted, with the full
-    // enclosing hierarchy in the FQN: the entry `main` frame, the
-    // invoked `helper` frame, then the step.
-    assert_eq!(step_fqns, vec!["/main:/helper:/1"]);
+    // The Step inside `helper` was reached and prompted. `helper` is a
+    // top-level procedure, so its lexical address is its own root — the
+    // call from `main` does not nest it under the call site.
+    assert_eq!(step_fqns, vec!["/helper:/1"]);
 }
 
 #[test]
@@ -855,7 +855,8 @@ greet(name) :
         })
         .collect();
     // The step renders from its source paragraph, showing the template.
-    assert_eq!(steps, vec![("/main:/greet:/1", "1.  Hello { name }")]);
+    // `greet` is a top-level procedure, addressed at its own root.
+    assert_eq!(steps, vec![("/greet:/1", "1.  Hello { name }")]);
 }
 
 #[test]

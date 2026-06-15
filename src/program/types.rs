@@ -38,6 +38,13 @@ impl<'i> Program<'i> {
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct SubroutineId(pub usize);
 
+/// One link in a subroutine's lexical address: an enclosing procedure or section.
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Locale<'i> {
+    Procedure(&'i str),
+    Section(&'i str),
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Subroutine<'i> {
     /// If this is a synthetic wrapper around a top-level `Technique::Steps`
@@ -49,6 +56,8 @@ pub struct Subroutine<'i> {
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
     pub responses: Vec<&'i language::Response<'i>>,
+    /// Where this procedure is declared, root outward.
+    pub locale: Vec<Locale<'i>>,
 }
 
 impl<'i> Subroutine<'i> {
@@ -64,6 +73,7 @@ impl<'i> Subroutine<'i> {
             signature: None,
             body: Operation::Sequence(Vec::new()),
             responses: Vec::new(),
+            locale: Vec::new(),
         }
     }
 
@@ -92,6 +102,7 @@ impl<'i> Subroutine<'i> {
             signature: None,
             body: Operation::Sequence(Vec::new()),
             responses: Vec::new(),
+            locale: Vec::new(),
         }
     }
 }

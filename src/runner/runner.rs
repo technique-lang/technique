@@ -14,7 +14,7 @@ use super::state::{
 };
 use crate::language;
 use crate::program::{
-    Executable, ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef,
+    Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, SubroutineRef,
 };
 use crate::value::Value;
 
@@ -419,23 +419,25 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .as_ref()
                     .map(|n| n.value);
                 if let Some(name) = name {
-                    self.path
-                        .push(PathSegment::Procedure(name));
-                    let descended = self
-                        .path
-                        .render();
+                    // Steps record under the callee's lexical address, not the
+                    // call site they were reached from.
+                    let lexical_segments: Vec<PathSegment> = subroutine
+                        .locale
+                        .iter()
+                        .map(|locale| match *locale {
+                            Locale::Procedure(n) => PathSegment::Procedure(n),
+                            Locale::Section(n) => PathSegment::Section(n),
+                        })
+                        .collect();
+                    let lexical = super::path::render_path(&lexical_segments);
                     if self
                         .completed
-                        .contains(&descended)
+                        .contains(&lexical)
                     {
-                        self.path
-                            .pop();
                         return Ok(Outcome::Done(Value::Unitus));
                     }
-                    self.path
-                        .pop();
 
-                    let qualified = self
+                    let caller = self
                         .path
                         .render();
                     let run_id = self
@@ -444,14 +446,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let record = Record {
                         recorded: now_iso8601(),
                         run_id,
-                        path: qualified,
+                        path: caller.clone(),
                         state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
                     };
                     self.appender
                         .append(&record)?;
 
-                    self.path
-                        .push(PathSegment::Procedure(name));
+                    // Deferred arguments are acquired at the call site, in the
+                    // invocation's source `<name>` form, before descending.
+                    let invoked = format!("{} <{}>", caller, name);
 
                     let formae = subroutine
                         .signature
@@ -470,7 +473,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .map(|f| f.value);
                             let value = self
                                 .driver
-                                .acquire(&descended, bind, forma);
+                                .acquire(&invoked, bind, forma);
                             if let Some(bind) = bind {
                                 local.extend(bind.to_string(), value);
                             }
@@ -489,7 +492,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     .get(i)
                                     .map(|f| f.value);
                                 self.driver
-                                    .acquire(&descended, bind, forma)
+                                    .acquire(&invoked, bind, forma)
                             } else {
                                 super::evaluator::evaluate(&self.library, &self.context, env, arg)?
                             };
@@ -499,8 +502,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                     }
 
+                    // Descend onto the callee's lexical address, restoring the
+                    // call site on return.
+                    let caller = self
+                        .path
+                        .replace(lexical_segments);
                     self.driver
-                        .enter(&descended);
+                        .enter(&lexical);
+
                     let declaration = crate::formatting::formatter::render_declaration(
                         name,
                         subroutine.parameters,
@@ -532,29 +541,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                         self.driver
                             .display(&description);
                     }
-                }
 
-                // Walk the body against the callee's own environment; `local`
-                // is dropped on return, leaving the caller's `env` untouched.
-                let result = self.walk(&mut local, &subroutine.body);
-
-                // An invoked procedure is a structural scope: the operator signs
-                // it off at its close, like a Section, before control returns to
-                // the caller. A Quit or error walk skips the prompt — the
-                // procedure did not complete.
-                if name.is_some() {
-                    let qualified = self
-                        .path
-                        .render();
-                    self.path
-                        .pop();
-                    match result {
+                    // Walk the callee's body in its own `local` environment,
+                    // then sign off its scope; a Quit or error skips the
+                    // sign-off, leaving the procedure unfinished.
+                    let result = self.walk(&mut local, &subroutine.body);
+                    let sealed = match result {
                         Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&qualified, outcome),
+                        Ok(outcome) => self.seal_scope(&lexical, outcome),
                         Err(error) => Err(error),
-                    }
+                    };
+                    self.path
+                        .replace(caller);
+                    sealed
                 } else {
-                    result
+                    self.walk(&mut local, &subroutine.body)
                 }
             }
             SubroutineRef::Unresolved(id) => {
