@@ -536,6 +536,11 @@ pub(crate) fn validate_forma(input: &str, span: Span) -> Option<Forma<'_>> {
         return None;
     }
 
+    // wildcard, represents "any" type.
+    if input == "*" {
+        return Some(Forma { value: input, span });
+    }
+
     let mut cs = input.chars();
 
     if !cs

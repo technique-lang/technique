@@ -201,6 +201,40 @@ fn signatures() {
 }
 
 #[test]
+fn signature_wildcards() {
+    let mut input = Parser::new();
+    input.initialize("* -> *");
+    assert_eq!(
+        input.read_signature(),
+        Ok(Signature {
+            requires: Genus::Single(Forma::new("*")),
+            provides: Genus::Single(Forma::new("*"))
+        })
+    );
+
+    input.initialize("(A, *) -> [*]");
+    assert_eq!(
+        input.read_signature(),
+        Ok(Signature {
+            requires: Genus::Tuple(vec![Forma::new("A"), Forma::new("*")]),
+            provides: Genus::List(Forma::new("*"))
+        })
+    );
+}
+
+#[test]
+fn hole_as_expression() {
+    // A bare `?` parses as a Hole outside argument position too — in a code
+    // block or as a binding value, not only inside an invocation's parens.
+    let mut input = Parser::new();
+    input.initialize("?");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Hole(Span::default()))
+    );
+}
+
+#[test]
 fn declaration_simple() {
     let mut input = Parser::new();
     input.initialize("making_coffee :");

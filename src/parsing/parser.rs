@@ -1561,6 +1561,10 @@ impl<'i> Parser<'i> {
             return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
         } else if content.starts_with('[') {
             self.read_bracket_expression()
+        } else if content.starts_with('?') {
+            self.advance(1);
+            let span = self.span_since(start);
+            Ok(Expression::Hole(span))
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
