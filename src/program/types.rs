@@ -102,6 +102,7 @@ pub enum Operation<'i> {
     List(Vec<Operation<'i>>),
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
+    Hole,
     Sequence(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,

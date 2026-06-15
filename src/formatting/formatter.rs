@@ -1171,6 +1171,9 @@ impl<'i> Formatter<'i> {
             }
             Expression::Pair(pair, _) => self.append_pair(pair),
             Expression::List(elements, _) => self.append_list(elements),
+            Expression::Hole(_) => {
+                self.add_fragment_reference(Syntax::Variable, "?");
+            }
             Expression::Separator => {}
         }
     }

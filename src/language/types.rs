@@ -188,6 +188,20 @@ pub enum Genus<'i> {
     List(Forma<'i>),
 }
 
+impl<'i> Genus<'i> {
+    /// The number of distinct values this genus carries. As the `requires`
+    /// of a procedure's signature this is the procedure's arity.
+    pub fn cardinality(&self) -> usize {
+        match self {
+            Genus::Unit => 0,
+            Genus::Single(_) => 1,
+            Genus::List(_) => 1,
+            Genus::Tuple(formas) => formas.len(),
+            Genus::Naked(formas) => formas.len(),
+        }
+    }
+}
+
 #[derive(Eq, Debug, PartialEq)]
 pub struct Signature<'i> {
     pub requires: Genus<'i>,
@@ -418,6 +432,7 @@ pub enum Expression<'i> {
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
     Pair(Box<Pair<'i>>, Span),
     List(Vec<Expression<'i>>, Span),
+    Hole(Span),
     Separator,
 }
 
@@ -441,6 +456,7 @@ impl PartialEq for Expression<'_> {
             }
             (Expression::Pair(a, _), Expression::Pair(b, _)) => a == b,
             (Expression::List(a, _), Expression::List(b, _)) => a == b,
+            (Expression::Hole(_), Expression::Hole(_)) => true,
             (Expression::Separator, Expression::Separator) => true,
             _ => false,
         }

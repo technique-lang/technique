@@ -2627,6 +2627,10 @@ impl<'i> Parser<'i> {
                     let decimal = outer.read_decimal_part()?;
                     let span = outer.span_since(param_start);
                     params.push(Expression::Number(Numeric::Integral(decimal.number), span));
+                } else if content.starts_with('?') {
+                    outer.advance(1);
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::Hole(span));
                 } else {
                     let name = outer.read_identifier()?;
                     let span = name.span;

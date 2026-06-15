@@ -477,6 +477,18 @@ fn reading_invocations() {
         })
     );
 
+    // A `?` argument is a deferred value: it parses to a Hole in parameter
+    // position, satisfying the callee's arity without naming a value.
+    input.initialize("<resume>(?)");
+    let result = input.read_invocation();
+    assert_eq!(
+        result,
+        Ok(Invocation {
+            target: Target::Local(Identifier::new("resume")),
+            parameters: Some(vec![Expression::Hole(Span::default())])
+        })
+    );
+
     // We don't have real support for this yet, but syntactically we will
     // support the idea of invoking a procedure at an external URL, so we
     // have this case as a placeholder.
