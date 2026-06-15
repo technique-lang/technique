@@ -67,6 +67,20 @@ impl<'i> Subroutine<'i> {
         }
     }
 
+    /// The number of arguments an invocation must supply. The signature's
+    /// `requires` is authoritative when present; otherwise the count falls
+    /// back to the named parameter list, or zero when neither is declared.
+    /// Translation guarantees the two agree when both are present.
+    pub fn arity(&self) -> usize {
+        match (self.signature, self.parameters) {
+            (Some(signature), _) => signature
+                .requires
+                .cardinality(),
+            (None, Some(parameters)) => parameters.len(),
+            (None, None) => 0,
+        }
+    }
+
     /// Synthetic anonymous-wrapper procedure used when a document has no
     /// procedure shell (a top-level `Technique::Steps`-only document).
     pub fn anonymous() -> Self {
@@ -143,6 +157,12 @@ pub enum Ordinal<'i> {
 pub struct Invocable<'i> {
     pub target: SubroutineRef<'i>,
     pub arguments: Vec<Operation<'i>>,
+    /// Elided is `true` when the invocation is make with no argument list at
+    /// all (the author wrote `<thing>` rather than `<thing>(x, y, z)`). A
+    /// bare invocation is the equivalent to an all-`?` list of the
+    /// target's arity — and so is passes the arity check. A parenthesised
+    /// list, including an empty `()`, must match the arity of the target.
+    pub elided: bool,
 }
 
 /// Reference to a subroutine. The collect pass registers every declared

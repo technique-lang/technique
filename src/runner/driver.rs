@@ -96,6 +96,9 @@ pub trait Driver {
     /// `produced` is the scope's value, offered for acceptance.
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
 
+    /// Obtain a value for a deferred input when entering a procedure
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value;
+
     /// The syntax renderer for highlighting source fragments shown to the
     /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
     /// drivers return `Identity` (no markup).
@@ -172,6 +175,30 @@ impl<W: Write> Driver for Console<W> {
 
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value {
+        let prompt = format!(
+            "{} ({} : {}) ",
+            qualified,
+            name.unwrap_or("?"),
+            forma.unwrap_or("?")
+        );
+        let _ = write!(self.output, "{}", prompt.dark_grey());
+        let _ = self
+            .output
+            .flush();
+        let mut line = String::new();
+        if io::stdin()
+            .read_line(&mut line)
+            .is_err()
+        {
+            return Value::Unitus;
+        }
+        Value::Literali(
+            line.trim_end()
+                .to_string(),
+        )
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -944,6 +971,10 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
+    fn acquire(&mut self, _qualified: &str, _name: Option<&str>, _forma: Option<&str>) -> Value {
+        Value::Unitus
+    }
+
     fn renderer(&self) -> &'static dyn Render {
         &Identity
     }
@@ -997,6 +1028,10 @@ impl Driver for Headless {
         UserInput::Done(produced)
     }
 
+    fn acquire(&mut self, _qualified: &str, _name: Option<&str>, _forma: Option<&str>) -> Value {
+        Value::Unitus
+    }
+
     fn renderer(&self) -> &'static dyn Render {
         &Identity
     }
@@ -1044,6 +1079,10 @@ pub enum Event {
     },
     Seal {
         qualified: String,
+    },
+    Acquire {
+        name: Option<String>,
+        forma: Option<String>,
     },
 }
 
@@ -1156,6 +1195,21 @@ impl Driver for Mock {
                 qualified: qualified.to_string(),
             });
         UserInput::Done(Value::Unitus)
+    }
+
+    fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value {
+        self.events
+            .push(Event::Acquire {
+                name: name.map(|n| n.to_string()),
+                forma: forma.map(|f| f.to_string()),
+            });
+        match self
+            .answers
+            .pop_front()
+        {
+            Some(UserInput::Done(value)) => value,
+            _ => Value::Unitus,
+        }
     }
 
     fn renderer(&self) -> &'static dyn Render {

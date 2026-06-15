@@ -338,7 +338,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::String(_)
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
-            | Operation::List(_) => {
+            | Operation::List(_)
+            | Operation::Hole => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Outcome::Done(value))
             }
@@ -362,7 +363,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// The shell script an `exec` will run, rendered for the operator to see
     /// before they command it. The command's first argument is the script.
     fn script_text(
-        &self,
+        &mut self,
         env: &mut Environment,
         executable: &'i Executable<'i>,
     ) -> Result<String, RunnerError> {
@@ -398,30 +399,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let params = subroutine
                     .parameters
                     .unwrap_or(&[]);
-                let expected = params.len();
+                let expected = subroutine.arity();
                 let actual = invocable
                     .arguments
                     .len();
-                if expected == 0 && actual > 0 {
-                    return Err(RunnerError::ParameterUnexpected { actual });
-                }
-                if expected != actual {
-                    return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                // A bare call defers every argument and is exempt; a written
+                // argument list must match arity exactly.
+                if !invocable.elided {
+                    if expected == 0 && actual > 0 {
+                        return Err(RunnerError::ParameterUnexpected { actual });
+                    }
+                    if expected != actual {
+                        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                    }
                 }
                 let mut local = Environment::new();
-                for (param, arg) in params
-                    .iter()
-                    .zip(&invocable.arguments)
-                {
-                    let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
-                    local.extend(
-                        param
-                            .value
-                            .to_string(),
-                        value,
-                    );
-                }
-
                 let name = subroutine
                     .name
                     .as_ref()
@@ -460,6 +452,53 @@ impl<'i, D: Driver> Runner<'i, D> {
 
                     self.path
                         .push(PathSegment::Procedure(name));
+
+                    let formae = subroutine
+                        .signature
+                        .map(|s| {
+                            s.requires
+                                .formae()
+                        })
+                        .unwrap_or_default();
+                    if invocable.elided {
+                        for i in 0..subroutine.arity() {
+                            let bind = params
+                                .get(i)
+                                .map(|p| p.value);
+                            let forma = formae
+                                .get(i)
+                                .map(|f| f.value);
+                            let value = self
+                                .driver
+                                .acquire(&descended, bind, forma);
+                            if let Some(bind) = bind {
+                                local.extend(bind.to_string(), value);
+                            }
+                        }
+                    } else {
+                        for (i, arg) in invocable
+                            .arguments
+                            .iter()
+                            .enumerate()
+                        {
+                            let bind = params
+                                .get(i)
+                                .map(|p| p.value);
+                            let value = if let Operation::Hole = arg {
+                                let forma = formae
+                                    .get(i)
+                                    .map(|f| f.value);
+                                self.driver
+                                    .acquire(&descended, bind, forma)
+                            } else {
+                                super::evaluator::evaluate(&self.library, &self.context, env, arg)?
+                            };
+                            if let Some(bind) = bind {
+                                local.extend(bind.to_string(), value);
+                            }
+                        }
+                    }
+
                     self.driver
                         .enter(&descended);
                     let declaration = crate::formatting::formatter::render_declaration(
@@ -471,6 +510,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     );
                     self.driver
                         .display(&declaration);
+
                     if let Some(t) = subroutine.title {
                         let title_text = crate::formatting::formatter::render_title(
                             t,

@@ -64,6 +64,21 @@ pub enum TranslationError<'i> {
     /// A local procedure invocation `<name>(...)` whose `name` doesn't
     /// match any procedure declared in this document is an error.
     UnresolvedProcedure(language::Identifier<'i>),
+    /// A procedure invocation `<name>(...)` whose argument count doesn't match
+    /// the arity of the procedure it resolves to.
+    ProcedureArityMismatch {
+        procedure: language::Identifier<'i>,
+        expected: usize,
+        actual: usize,
+    },
+    /// A procedure declaring both a parameter list and a signature whose
+    /// required inputs disagree in count. The names must correspond one-to-one
+    /// with the signature's inputs.
+    SignatureParameterMismatch {
+        procedure: language::Identifier<'i>,
+        parameters: usize,
+        requires: usize,
+    },
     /// Binding the result of a `repeat` to a variable is an error; the
     /// `repeat` keyword does not terminate naturally and does not produces a
     /// value so cannot be bound. Note: we could reconsider this in the fugure
@@ -86,6 +101,8 @@ impl<'i> TranslationError<'i> {
             TranslationError::DuplicateTitle { at, .. } => *at,
             TranslationError::InterleavedDescription { at, .. } => *at,
             TranslationError::UnresolvedProcedure(id) => id.span,
+            TranslationError::ProcedureArityMismatch { procedure, .. } => procedure.span,
+            TranslationError::SignatureParameterMismatch { procedure, .. } => procedure.span,
             TranslationError::BoundRepeat { at } => *at,
             TranslationError::HeterogenousList { at } => *at,
         }
@@ -223,6 +240,20 @@ impl<'i> Translator<'i> {
             .as_ref();
         entry.body = body;
         entry.responses = responses;
+
+        if let (Some(parameters), Some(signature)) = (&procedure.parameters, &procedure.signature) {
+            let requires = signature
+                .requires
+                .cardinality();
+            if parameters.len() != requires {
+                self.problems
+                    .push(TranslationError::SignatureParameterMismatch {
+                        procedure: procedure.name,
+                        parameters: parameters.len(),
+                        requires,
+                    });
+            }
+        }
     }
 
     fn translate_scope(
@@ -257,6 +288,7 @@ impl<'i> Translator<'i> {
                             body_ops.push(Operation::Invoke(Invocable {
                                 target: SubroutineRef::Unresolved(procedure.name),
                                 arguments: Vec::new(),
+                                elided: true,
                             }));
                         }
                     }
@@ -363,8 +395,10 @@ impl<'i> Translator<'i> {
                     responses,
                 })
             }
-            language::Expression::Repeat(_, _) => {
-                let mut body_ops = Vec::new();
+            language::Expression::Repeat(inner, _) => {
+                // `repeat <thing>` does `<thing>` over and over: the inline
+                // expression is the loop body. Any subscopes follow it.
+                let mut body_ops = vec![self.translate_expression(inner)];
                 let mut responses = Vec::new();
                 for sub in subscopes {
                     self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
@@ -447,6 +481,7 @@ impl<'i> Translator<'i> {
                 | language::Expression::Application(..)
                 | language::Expression::Execution(..)
                 | language::Expression::Binding(..)
+                | language::Expression::Hole(..)
                 | language::Expression::Separator => None,
             },
             language::Descriptive::Application(_) => None,
@@ -582,68 +617,106 @@ impl<'i> Translator<'i> {
     // Pass 1 become Resolved(SubroutineId); unmatched local references
     // are errors.
     fn resolve_references(&mut self) {
+        // Arity of every declared subroutine, indexed by SubroutineId, so an
+        // Invoke's argument count can be checked against the procedure it
+        // resolves to.
+        let arities: Vec<usize> = self
+            .program
+            .subroutines
+            .iter()
+            .map(Subroutine::arity)
+            .collect();
         for subroutine in &mut self
             .program
             .subroutines
         {
-            Self::resolve_operation(&mut subroutine.body, &self.known, &mut self.problems);
+            Self::resolve_operation(
+                &mut subroutine.body,
+                &self.known,
+                &arities,
+                &mut self.problems,
+            );
         }
     }
 
     fn resolve_operation(
         op: &mut Operation<'i>,
         known: &HashMap<&'i str, SubroutineId>,
+        arities: &[usize],
         problems: &mut Vec<TranslationError<'i>>,
     ) {
         match op {
             Operation::Invoke(invocable) => {
                 if let SubroutineRef::Unresolved(id) = &invocable.target {
                     match known.get(id.value) {
-                        Some(sub_id) => invocable.target = SubroutineRef::Resolved(*sub_id),
+                        Some(sub_id) => {
+                            // A bare call (`<thing>`) defers all arguments, so
+                            // it is exempt; a parenthesised list must match the
+                            // procedure's arity exactly.
+                            let expected = arities[sub_id.0];
+                            let actual = invocable
+                                .arguments
+                                .len();
+                            if !invocable.elided && expected != actual {
+                                problems.push(TranslationError::ProcedureArityMismatch {
+                                    procedure: *id,
+                                    expected,
+                                    actual,
+                                });
+                            }
+                            invocable.target = SubroutineRef::Resolved(*sub_id);
+                        }
                         None => problems.push(TranslationError::UnresolvedProcedure(*id)),
                     }
                 }
                 for arg in &mut invocable.arguments {
-                    Self::resolve_operation(arg, known, problems);
+                    Self::resolve_operation(arg, known, arities, problems);
                 }
             }
             Operation::Sequence(ops) => {
                 for op in ops {
-                    Self::resolve_operation(op, known, problems);
+                    Self::resolve_operation(op, known, arities, problems);
                 }
             }
-            Operation::Section { body, .. } => Self::resolve_operation(body, known, problems),
-            Operation::Step { body, .. } => Self::resolve_operation(body, known, problems),
+            Operation::Section { body, .. } => {
+                Self::resolve_operation(body, known, arities, problems)
+            }
+            Operation::Step { body, .. } => Self::resolve_operation(body, known, arities, problems),
             Operation::Loop { over, body, .. } => {
                 if let Some(over) = over {
-                    Self::resolve_operation(over, known, problems);
+                    Self::resolve_operation(over, known, arities, problems);
                 }
-                Self::resolve_operation(body, known, problems);
+                Self::resolve_operation(body, known, arities, problems);
             }
-            Operation::Bind { value, .. } => Self::resolve_operation(value, known, problems),
+            Operation::Bind { value, .. } => {
+                Self::resolve_operation(value, known, arities, problems)
+            }
             Operation::Execute(executable) => {
                 for arg in &mut executable.arguments {
-                    Self::resolve_operation(arg, known, problems);
+                    Self::resolve_operation(arg, known, arities, problems);
                 }
             }
             Operation::String(fragments) => {
                 for fragment in fragments {
                     if let Fragment::Interpolation(op) = fragment {
-                        Self::resolve_operation(op, known, problems);
+                        Self::resolve_operation(op, known, arities, problems);
                     }
                 }
             }
             Operation::Tablet(entries) => {
                 for entry in entries {
-                    Self::resolve_operation(&mut entry.value, known, problems);
+                    Self::resolve_operation(&mut entry.value, known, arities, problems);
                 }
             }
             Operation::List(items) => {
                 for item in items {
-                    Self::resolve_operation(item, known, problems);
+                    Self::resolve_operation(item, known, arities, problems);
                 }
             }
-            Operation::Variable(_) | Operation::Number(_) | Operation::Multiline(_, _) => {}
+            Operation::Variable(_)
+            | Operation::Number(_)
+            | Operation::Multiline(_, _)
+            | Operation::Hole => {}
         }
     }
 
@@ -762,6 +835,7 @@ impl<'i> Translator<'i> {
                     value: Box::new(self.translate_expression(value)),
                 }
             }
+            language::Expression::Hole(_) => Operation::Hole,
             language::Expression::Separator => Operation::Sequence(Vec::new()),
         }
     }
@@ -771,6 +845,9 @@ impl<'i> Translator<'i> {
             language::Target::Local(id) => SubroutineRef::Unresolved(*id),
             language::Target::Remote(external) => SubroutineRef::Deferred(*external),
         };
+        let elided = invocation
+            .parameters
+            .is_none();
         let arguments = match &invocation.parameters {
             Some(params) => params
                 .iter()
@@ -778,6 +855,10 @@ impl<'i> Translator<'i> {
                 .collect(),
             None => Vec::new(),
         };
-        Invocable { target, arguments }
+        Invocable {
+            target,
+            arguments,
+            elided,
+        }
     }
 }

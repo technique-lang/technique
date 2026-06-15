@@ -122,11 +122,12 @@ pub fn evaluate<'i>(
             for fragment in fragments {
                 match fragment {
                     Fragment::Text(t) => text.push_str(t),
-                    Fragment::Interpolation(inner) => match evaluate(library, context, env, inner)?
-                    {
-                        Value::Literali(s) => text.push_str(&s),
-                        other => text.push_str(&other.to_string()),
-                    },
+                    Fragment::Interpolation(inner) => {
+                        match evaluate(library, context, env, inner)? {
+                            Value::Literali(s) => text.push_str(&s),
+                            other => text.push_str(&other.to_string()),
+                        }
+                    }
                 }
             }
             Ok(Value::Literali(text))
@@ -165,6 +166,9 @@ pub fn evaluate<'i>(
             Ok(last)
         }
         Operation::Execute(executable) => dispatch(library, context, env, executable, None),
+        // A `?` reached outside a procedure invocation has no parameter name
+        // to defer against; it stands for an as-yet-unsupplied value.
+        Operation::Hole => Ok(Value::Futurae(String::new())),
         Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }

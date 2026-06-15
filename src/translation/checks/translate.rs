@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::language;
 use crate::parsing;
 use crate::program::{ExecutableRef, Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
-use crate::translation::translate;
+use crate::translation::{translate, TranslationError};
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -753,6 +753,105 @@ other : X -> Y
 }
 
 #[test]
+fn hole_argument_satisfies_arity_and_translates() {
+    // `?` fills the single argument slot the signature requires, so the call
+    // type-checks, and the argument lowers to Operation::Hole.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    <other>(?)
+}
+
+other : X -> Y
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Invoke(invocable) = &ops[0] else {
+        panic!("expected Invoke, got {:?}", ops[0]);
+    };
+    let [Operation::Hole] = invocable
+        .arguments
+        .as_slice()
+    else {
+        panic!(
+            "expected a single Hole argument, got {:?}",
+            invocable.arguments
+        );
+    };
+}
+
+#[test]
+fn bare_call_is_exempt_from_arity() {
+    // A bare `<other>` (no argument list) defers all arguments, so it passes
+    // against an arity-1 procedure and is marked elided with no arguments.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    <other>
+}
+
+other : X -> Y
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Invoke(invocable) = &ops[0] else {
+        panic!("expected Invoke, got {:?}", ops[0]);
+    };
+    assert!(invocable.elided, "a bare call is elided");
+    assert!(invocable
+        .arguments
+        .is_empty());
+}
+
+#[test]
+fn empty_parens_must_match_arity() {
+    // `<other>()` writes an explicit (empty) list, so it must match arity — a
+    // mismatch against arity 1.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    <other>()
+}
+
+other : X -> Y
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    let TranslationError::ProcedureArityMismatch {
+        expected, actual, ..
+    } = &errors[0]
+    else {
+        panic!("expected ProcedureArityMismatch, got {:?}", errors[0]);
+    };
+    assert_eq!(*expected, 1);
+    assert_eq!(*actual, 0);
+}
+
+#[test]
 fn expression_binding_translates() {
     let source = r#"
 % technique v1
@@ -1447,9 +1546,9 @@ run :
 
 #[test]
 fn expression_repeat_translates() {
-    // A bare `{ repeat }` with no subscopes to supply its body translates to a
-    // Loop with names=[], over=None, and an empty Sequence body — the body is
-    // provided by the code block's subscopes, as for `foreach` above.
+    // `repeat <thing>` loops over `<thing>`: the inline expression is the loop
+    // body. Here `repeat 5` translates to a Loop with names=[], over=None, and
+    // a body holding the repeated expression.
     let source = r#"
 % technique v1
 
@@ -1480,9 +1579,14 @@ run :
     assert!(over.is_none(), "repeat has no `over` source");
     assert!(responses.is_empty());
     let Operation::Sequence(inner) = body.as_ref() else {
-        panic!("expected empty Sequence body");
+        panic!("expected Sequence body");
     };
-    assert!(inner.is_empty());
+    let [Operation::Number(_)] = inner.as_slice() else {
+        panic!(
+            "expected the repeated expression in the body, got {:?}",
+            inner
+        );
+    };
 }
 
 #[test]

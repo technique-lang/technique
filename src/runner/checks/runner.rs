@@ -644,6 +644,72 @@ test :
 }
 
 #[test]
+fn hole_argument_acquired_at_entry() {
+    // main invokes cycle with `?`, declining to supply the Situation. The
+    // operator is asked for `s` once, when cycle is entered, and the bound
+    // value serves both reads in the body.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s ~ x }
+2.  Second { s ~ y }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("hole-at-entry");
+    // acquire (for `?`) pops first at entry, then the two step completions.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("the situation".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        acquired,
+        vec![(Some("s"), Some("Situation"))],
+        "asked once, at entry, for s : Situation"
+    );
+}
+
+#[test]
 fn resolved_invoke_descends_into_subroutine() {
     let source = r#"
 % technique v1
@@ -827,41 +893,6 @@ peek :
         panic!("expected UnboundVariable from the isolated frame");
     };
     assert_eq!(name, "secret");
-}
-
-#[test]
-fn invoke_arity_mismatch_errors() {
-    let source = r#"
-% technique v1
-
-main :
-{
-    <greet>("a", "b")
-}
-
-greet(name) :
-
-1.  Hi
-        "#
-    .trim_ascii();
-    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let mut fixture = StoreFixture::new("invoke-arity");
-    let prompt = Mock::with_answers([]);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        prompt,
-        Library::stub(),
-    );
-    let env = Environment::new();
-    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run(env) else {
-        panic!("expected ParameterArityMismatch");
-    };
-    assert_eq!(expected, 1);
-    assert_eq!(actual, 2);
 }
 
 #[test]
@@ -1938,6 +1969,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         let invoke = Operation::Invoke(Invocable {
             target: SubroutineRef::Deferred(external),
             arguments: Vec::new(),
+            elided: true,
         });
         anonymous_with_body(Operation::Sequence(vec![invoke]))
     }

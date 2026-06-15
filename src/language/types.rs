@@ -200,6 +200,20 @@ impl<'i> Genus<'i> {
             Genus::Naked(formas) => formas.len(),
         }
     }
+
+    pub fn formae(&self) -> Vec<&Forma<'i>> {
+        match self {
+            Genus::Unit => Vec::new(),
+            Genus::Single(forma) => vec![forma],
+            Genus::List(forma) => vec![forma],
+            Genus::Tuple(formas) => formas
+                .iter()
+                .collect(),
+            Genus::Naked(formas) => formas
+                .iter()
+                .collect(),
+        }
+    }
 }
 
 #[derive(Eq, Debug, PartialEq)]
