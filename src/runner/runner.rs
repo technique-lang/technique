@@ -307,17 +307,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                         UserInput::Skip => Ok(Outcome::Skipped),
                         UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
-                        UserInput::Quit => {
-                            let suspend = Record {
-                                recorded: now_iso8601(),
-                                run_id,
-                                path: "/".to_string(),
-                                state: State::Stop,
-                            };
-                            self.appender
-                                .append(&suspend)?;
-                            Ok(Outcome::Stopped)
-                        }
+                        UserInput::Quit => self.record_stop(),
                     }
                 } else {
                     self.driver
@@ -437,23 +427,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                         return Ok(Outcome::Done(Value::Unitus));
                     }
 
+                    // Acquire deferred arguments at the call site, in the
+                    // invocation's `<name>` form, before any Invoke is recorded.
                     let caller = self
                         .path
                         .render();
-                    let run_id = self
-                        .appender
-                        .run_id();
-                    let record = Record {
-                        recorded: now_iso8601(),
-                        run_id,
-                        path: caller.clone(),
-                        state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
-                    };
-                    self.appender
-                        .append(&record)?;
-
-                    // Deferred arguments are acquired at the call site, in the
-                    // invocation's source `<name>` form, before descending.
                     let invoked = format!("{} <{}>", caller, name);
 
                     let formae = subroutine
@@ -471,9 +449,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let forma = formae
                                 .get(i)
                                 .map(|f| f.value);
-                            let value = self
+                            let value = match self
                                 .driver
-                                .acquire(&invoked, bind, forma);
+                                .acquire(&invoked, bind, forma)
+                            {
+                                UserInput::Done(value) => value,
+                                other => return self.abandon(&lexical, other),
+                            };
                             if let Some(bind) = bind {
                                 local.extend(bind.to_string(), value);
                             }
@@ -491,8 +473,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 let forma = formae
                                     .get(i)
                                     .map(|f| f.value);
-                                self.driver
+                                match self
+                                    .driver
                                     .acquire(&invoked, bind, forma)
+                                {
+                                    UserInput::Done(value) => value,
+                                    other => return self.abandon(&lexical, other),
+                                }
                             } else {
                                 super::evaluator::evaluate(&self.library, &self.context, env, arg)?
                             };
@@ -502,9 +489,20 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                     }
 
-                    // Descend onto the callee's lexical address, restoring the
-                    // call site on return.
-                    let caller = self
+                    // Record the Invoke at the call site, then descend onto the
+                    // callee's lexical address, restored on return.
+                    let run_id = self
+                        .appender
+                        .run_id();
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: caller,
+                            state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
+                        })?;
+
+                    let saved = self
                         .path
                         .replace(lexical_segments);
                     self.driver
@@ -552,7 +550,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         Err(error) => Err(error),
                     };
                     self.path
-                        .replace(caller);
+                        .replace(saved);
                     sealed
                 } else {
                     self.walk(&mut local, &subroutine.body)
@@ -608,16 +606,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .driver
                     .external(&qualified);
                 if let UserInput::Quit = input {
-                    self.appender
-                        .append(&Record {
-                            recorded: now_iso8601(),
-                            run_id,
-                            path: "/".to_string(),
-                            state: State::Stop,
-                        })?;
                     self.path
                         .pop();
-                    return Ok(Outcome::Stopped);
+                    return self.record_stop();
                 }
 
                 let outcome = outcome_from(input);
@@ -900,20 +891,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             .driver
             .ask(qualified, &choices, produced);
 
-        // Quit halts the walk and is recorded as a Stop lifecycle event at the
-        // root path, distinguishing a deliberate stop from a crash (which records
-        // nothing). This step's Begin stands without a matching outcome, so
-        // resume re-runs it.
+        // Quit halts the walk; this step's Begin stands without a matching
+        // outcome, so resume re-runs it.
         if let UserInput::Quit = input {
-            let suspend = Record {
-                recorded: now_iso8601(),
-                run_id,
-                path: "/".to_string(),
-                state: State::Stop,
-            };
-            self.appender
-                .append(&suspend)?;
-            return Ok(Outcome::Stopped);
+            return self.record_stop();
         }
 
         let outcome = outcome_from(input);
@@ -942,15 +923,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .driver
             .seal(qualified, produced);
         if let UserInput::Quit = input {
-            let suspend = Record {
-                recorded: now_iso8601(),
-                run_id,
-                path: "/".to_string(),
-                state: State::Stop,
-            };
-            self.appender
-                .append(&suspend)?;
-            return Ok(Outcome::Stopped);
+            return self.record_stop();
         }
         let outcome = outcome_from(input);
         let record = Record {
@@ -962,6 +935,42 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&record)?;
         Ok(outcome)
+    }
+
+    /// Settle an invocation declined at its acquire prompt: Skip and Fail
+    /// record the call's outcome at `qualified`; Quit stops the run.
+    fn abandon(&mut self, qualified: &str, input: UserInput) -> Result<Outcome, RunnerError> {
+        if let UserInput::Quit = input {
+            return self.record_stop();
+        }
+        let outcome = outcome_from(input);
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: record_state(&outcome),
+            })?;
+        Ok(outcome)
+    }
+
+    /// Record a deliberate Stop at the root path and unwind the walk.
+    fn record_stop(&mut self) -> Result<Outcome, RunnerError> {
+        let run_id = self
+            .appender
+            .run_id();
+        let suspend = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: "/".to_string(),
+            state: State::Stop,
+        };
+        self.appender
+            .append(&suspend)?;
+        Ok(Outcome::Stopped)
     }
 }
 

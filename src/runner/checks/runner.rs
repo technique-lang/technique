@@ -710,6 +710,119 @@ cycle(s) : Situation -> Done
 }
 
 #[test]
+fn quit_while_acquiring_stops_the_run() {
+    // Ctrl-C at the implicit-argument prompt quits the run rather than
+    // accepting an empty value: the walk stops and a Stop event is recorded,
+    // and the callee's body never runs.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("quit-acquire");
+    let prompt = Mock::with_answers([UserInput::Quit]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(outcome, Outcome::Stopped);
+
+    let pfftt = fixture.pfftt_contents();
+    assert!(
+        pfftt
+            .lines()
+            .any(|line| line.contains(" / Stop")),
+        "a Stop lifecycle event is recorded at the root"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("/cycle:/1 Begin")),
+        "the callee's body must not run after the quit"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("Invoke")),
+        "declining at the prompt records no Invoke — the call never began"
+    );
+}
+
+#[test]
+fn skip_while_acquiring_records_the_skipped_invocation() {
+    // Skip at the implicit-argument prompt skips the invocation: a Skip is
+    // recorded at the callee's path (not silently swallowed) with no Invoke,
+    // and the callee's body never runs.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("skip-acquire");
+    let prompt = Mock::with_answers([UserInput::Skip]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    assert!(
+        pfftt
+            .lines()
+            .any(|line| line.contains("/cycle: Skip")),
+        "the skipped invocation is recorded at the callee's path"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("Invoke")),
+        "a declined call records no Invoke"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("/cycle:/1 Begin")),
+        "the callee's body never runs"
+    );
+}
+
+#[test]
 fn resolved_invoke_descends_into_subroutine() {
     let source = r#"
 % technique v1

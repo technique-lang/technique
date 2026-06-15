@@ -96,8 +96,9 @@ pub trait Driver {
     /// `produced` is the scope's value, offered for acceptance.
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
 
-    /// Obtain a value for a deferred input when entering a procedure
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value;
+    /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
+    /// abandon the call, Quit stops the run.
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput;
 
     /// The syntax renderer for highlighting source fragments shown to the
     /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
@@ -177,7 +178,7 @@ impl<W: Write> Driver for Console<W> {
         prompt(&mut self.output, qualified, "↙", &[], produced)
     }
 
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value {
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         let label = format!(
             "{}({} : {})",
             qualified,
@@ -292,9 +293,10 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
     result
 }
 
-/// Solicit a deferred input on the `▶` prompt line. The field starts empty:
-/// `<Enter>` accepts the empty default, typing overrides it.
-fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> Value {
+/// Solicit a deferred input on the `▶` prompt line: `<Enter>` accepts the
+/// empty default, typing overrides it; the `<Esc>` menu and `<Ctrl-C>` abandon
+/// the call.
+fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> UserInput {
     let field = edit(String::new(), Value::Literali(String::new()));
     let result = interact(
         out,
@@ -308,10 +310,7 @@ fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> Value {
     );
     let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
     let _ = out.flush();
-    match result {
-        UserInput::Done(value) => value,
-        _ => Value::Unitus,
-    }
+    result
 }
 
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
@@ -979,8 +978,13 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
-    fn acquire(&mut self, _qualified: &str, _name: Option<&str>, _forma: Option<&str>) -> Value {
-        Value::Unitus
+    fn acquire(
+        &mut self,
+        _qualified: &str,
+        _name: Option<&str>,
+        _forma: Option<&str>,
+    ) -> UserInput {
+        UserInput::Done(Value::Unitus)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -1036,8 +1040,13 @@ impl Driver for Headless {
         UserInput::Done(produced)
     }
 
-    fn acquire(&mut self, _qualified: &str, _name: Option<&str>, _forma: Option<&str>) -> Value {
-        Value::Unitus
+    fn acquire(
+        &mut self,
+        _qualified: &str,
+        _name: Option<&str>,
+        _forma: Option<&str>,
+    ) -> UserInput {
+        UserInput::Done(Value::Unitus)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -1205,19 +1214,15 @@ impl Driver for Mock {
         UserInput::Done(Value::Unitus)
     }
 
-    fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> Value {
+    fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         self.events
             .push(Event::Acquire {
                 name: name.map(|n| n.to_string()),
                 forma: forma.map(|f| f.to_string()),
             });
-        match self
-            .answers
+        self.answers
             .pop_front()
-        {
-            Some(UserInput::Done(value)) => value,
-            _ => Value::Unitus,
-        }
+            .unwrap_or(UserInput::Done(Value::Unitus))
     }
 
     fn renderer(&self) -> &'static dyn Render {
