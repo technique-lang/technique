@@ -13,7 +13,9 @@
 use std::io::{self, Write};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crossterm::style::{Attribute, SetAttribute, Stylize};
+use crossterm::style::{
+    Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor, Stylize,
+};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
@@ -799,7 +801,23 @@ fn draw<W: Write>(
     out.flush()
 }
 
-/// Render a horizontal row of options with the active one in reverse video.
+/// The orange that highlights Responses in the formatter, mirrored here so the
+/// menu carries the same identity.
+const RESPONSE: Color = Color::Rgb {
+    r: 0xf5,
+    g: 0x79,
+    b: 0x00,
+};
+
+/// A darker brown for the active Response, legible on the white highlight bar.
+const RESPONSE_ACTIVE: Color = Color::Rgb {
+    r: 0x8f,
+    g: 0x59,
+    b: 0x02,
+};
+
+/// Render a horizontal row of Response options in the formatter's orange, the
+/// active one in reverse video.
 fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io::Result<()> {
     for (i, choice) in choices
         .iter()
@@ -808,13 +826,19 @@ fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io:
         if i > 0 {
             write!(out, "  ")?;
         }
+        queue!(out, SetAttribute(Attribute::Bold))?;
         if i == active {
-            queue!(out, SetAttribute(Attribute::Reverse))?;
+            queue!(
+                out,
+                SetBackgroundColor(Color::White),
+                SetForegroundColor(RESPONSE_ACTIVE)
+            )?;
             write!(out, " {} ", choice)?;
-            queue!(out, SetAttribute(Attribute::Reset))?;
         } else {
+            queue!(out, SetForegroundColor(RESPONSE))?;
             write!(out, " {} ", choice)?;
         }
+        queue!(out, ResetColor, SetAttribute(Attribute::Reset))?;
     }
     Ok(())
 }
@@ -833,14 +857,14 @@ fn render_menu<W: Write>(out: &mut W, interaction: &Interaction, active: usize) 
         let label = item.label();
         if i == active {
             queue!(out, SetAttribute(Attribute::Reverse))?;
-            write!(out, "{}", label)?;
+            write!(out, " {} ", label)?;
             queue!(out, SetAttribute(Attribute::Reset))?;
         } else if !interaction.enabled(*item) {
             queue!(out, SetAttribute(Attribute::Dim))?;
-            write!(out, "{}", label)?;
+            write!(out, " {} ", label)?;
             queue!(out, SetAttribute(Attribute::Reset))?;
         } else {
-            write!(out, "{}", label)?;
+            write!(out, " {} ", label)?;
         }
     }
     Ok(())
