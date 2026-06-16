@@ -1871,9 +1871,14 @@ init : () -> ()
     let Operation::Sequence(section_body) = body.as_ref() else {
         panic!("expected Section body Sequence");
     };
-    // First the title's hoisted `<init>` Application, then the descent into
-    // the section's first (and only) declared procedure, also `init`.
-    assert_eq!(section_body.len(), 2, "title's Application is hoisted");
+    // The title's hoisted `<init>` Application is the section's single entry:
+    // an explicit invocation in the heading suppresses the synthetic descent
+    // into the first declared procedure, so the body holds one Invoke, not two.
+    assert_eq!(
+        section_body.len(),
+        1,
+        "title's Application is the sole entry"
+    );
     let Operation::Invoke(invocable) = &section_body[0] else {
         panic!("expected Invoke, got {:?}", section_body[0]);
     };

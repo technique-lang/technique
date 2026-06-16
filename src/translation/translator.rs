@@ -50,6 +50,19 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
     }
 }
 
+// Whether a section body already holds a procedure descent: an Invoke
+// hoisted from an explicit `<name>` in the section heading.
+fn descends(ops: &[Operation<'_>]) -> bool {
+    ops.iter()
+        .any(|op| {
+            if let Operation::Invoke(_) = op {
+                true
+            } else {
+                false
+            }
+        })
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum TranslationError<'i> {
     DuplicateProcedure(language::Identifier<'i>),
@@ -299,9 +312,19 @@ impl<'i> Translator<'i> {
                         }
                     }
                     language::Technique::Procedures(procedures) => {
-                        // A section whose body declares procedures descends
-                        // into the first, its entry point.
-                        if let Some(procedure) = procedures.first() {
+                        // A section descends into the first procedure its body
+                        // declares, its entry point. A heading that already
+                        // invokes one explicitly (a 
+                        // 
+                        // II. Do it now <thing>
+                        // 
+                        // in the title) has hoisted that invoke above and is
+                        // the descent already, pre-empting this one so the
+                        // procedure isn't run twice.
+                        if let Some(procedure) = procedures
+                            .first()
+                            .filter(|_| !descends(&body_ops))
+                        {
                             body_ops.push(Operation::Invoke(Invocable {
                                 target: SubroutineRef::Unresolved(procedure.name),
                                 arguments: Vec::new(),
