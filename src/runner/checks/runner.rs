@@ -1908,7 +1908,8 @@ test :
                 .is_empty()
         })
         .collect();
-    let record = parse_record(lines[2]).expect("parse record");
+    // Start, the entry `Begin`, the step `Begin`, then the step's outcome.
+    let record = parse_record(lines[3]).expect("parse record");
     assert_eq!(
         record.state,
         State::Done(Some(RecordValue::Literal("Yes".to_string())))

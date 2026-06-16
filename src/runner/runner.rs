@@ -208,6 +208,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.driver
                     .display(&description);
             }
+            self.begin_scope(&qualified)?;
         }
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
@@ -502,6 +503,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                             state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
                         })?;
 
+                    self.begin_scope(&lexical)?;
+
                     let saved = self
                         .path
                         .replace(lexical_segments);
@@ -745,6 +748,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .pop();
             return Ok(Outcome::Done(Value::Unitus));
         }
+        self.begin_scope(&qualified)?;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
@@ -907,6 +911,23 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&record)?;
         Ok(outcome)
+    }
+
+    /// Open a structural scope — the entry procedure, a Section, or an invoked
+    /// procedure — pairing with the `Done` its `seal_scope` records on close, so
+    /// every scope's address is bracketed `Begin`…`Done` just as a step's is.
+    fn begin_scope(&mut self, qualified: &str) -> Result<(), RunnerError> {
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: State::Begin,
+            })?;
+        Ok(())
     }
 
     /// Sign off a completed structural scope — a Section at its close, or the

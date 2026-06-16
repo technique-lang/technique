@@ -314,10 +314,10 @@ impl<'i> Translator<'i> {
                     language::Technique::Procedures(procedures) => {
                         // A section descends into the first procedure its body
                         // declares, its entry point. A heading that already
-                        // invokes one explicitly (a 
-                        // 
+                        // invokes one explicitly (a
+                        //
                         // II. Do it now <thing>
-                        // 
+                        //
                         // in the title) has hoisted that invoke above and is
                         // the descent already, pre-empting this one so the
                         // procedure isn't run twice.
