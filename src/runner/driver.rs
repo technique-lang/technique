@@ -604,6 +604,35 @@ impl Interaction {
         }
     }
 
+    /// Carry out a menu item, as `<Enter>` does on the highlighted one. Fail
+    /// opens the reason submenu, leaving the underlying value untouched so Esc
+    /// can back out cleanly.
+    fn activate(&mut self, item: MenuItem) -> Option<UserInput> {
+        match item {
+            MenuItem::Edit => {
+                self.enter_edit();
+                None
+            }
+            MenuItem::Skip => Some(UserInput::Skip),
+            MenuItem::Fail => {
+                self.reason = Some(Reason {
+                    buffer: String::new(),
+                    cursor: 0,
+                });
+                None
+            }
+            MenuItem::Quit => Some(UserInput::Quit),
+        }
+    }
+
+    /// A letter shortcut: rest the highlight on `item`, then activate it.
+    fn choose(&mut self, item: MenuItem) -> Option<UserInput> {
+        self.menu = MENU
+            .iter()
+            .position(|m| *m == item);
+        self.activate(item)
+    }
+
     fn menu_key(&mut self, code: KeyCode) -> Option<UserInput> {
         let active = (*self
             .menu
@@ -622,23 +651,10 @@ impl Interaction {
                 }
                 None
             }
-            KeyCode::Enter => match MENU[active] {
-                MenuItem::Edit => {
-                    self.enter_edit();
-                    None
-                }
-                MenuItem::Skip => Some(UserInput::Skip),
-                MenuItem::Fail => {
-                    // Open the reason submenu, leaving Fail highlighted and the
-                    // underlying value untouched so Esc can back out cleanly.
-                    self.reason = Some(Reason {
-                        buffer: String::new(),
-                        cursor: 0,
-                    });
-                    None
-                }
-                MenuItem::Quit => Some(UserInput::Quit),
-            },
+            KeyCode::Enter => self.activate(MENU[active]),
+            KeyCode::Char('s') | KeyCode::Char('S') => self.choose(MenuItem::Skip),
+            KeyCode::Char('f') | KeyCode::Char('F') => self.choose(MenuItem::Fail),
+            KeyCode::Char('q') | KeyCode::Char('Q') => self.choose(MenuItem::Quit),
             KeyCode::Esc => {
                 self.menu = None;
                 None
