@@ -1832,11 +1832,8 @@ choose :
 
 #[test]
 fn section_title_invocation_hoists_into_body() {
-    // A `<call>` in a section title is an executable Descriptive: it must
-    // be evaluated to render the title. It hoists into Section.body in the
-    // same way a procedure description's executables hoist into the
-    // procedure body, and so passes through the resolve pass like any
-    // other Invoke.
+    // A `<call>` in a section title hoists into the body as the explicit
+    // entry, suppressing the auto-descent so `init` runs once, not twice.
     let source = r#"
 % technique v1
 
@@ -1886,4 +1883,38 @@ init : () -> ()
         panic!("expected Resolved");
     };
     assert_eq!(idx, init_idx);
+}
+
+#[test]
+fn section_title_non_invoke_keeps_descent() {
+    // A title executable that is not an entry invocation keeps the descent.
+    let source = r#"
+% technique v1
+
+main :
+
+I. Count is { 42 }
+
+init : () -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Section { body, .. } = &ops[0] else {
+        panic!("expected Section");
+    };
+    let Operation::Sequence(section_body) = body.as_ref() else {
+        panic!("expected Section body Sequence");
+    };
+    // The title's value-read, then the descent into `init`.
+    assert_eq!(section_body.len(), 2);
+    let Operation::Invoke(invocable) = &section_body[1] else {
+        panic!("expected Invoke, got {:?}", section_body[1]);
+    };
+    assert_eq!(invocable.target, SubroutineRef::Resolved(SubroutineId(1)));
 }

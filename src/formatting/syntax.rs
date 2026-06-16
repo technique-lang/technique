@@ -28,6 +28,10 @@ pub enum Syntax {
     Language,
     Attribute,
     Structure,
+    Marker,
+    Done,
+    Skip,
+    Fail,
     BlockBegin,
     BlockEnd,
 }

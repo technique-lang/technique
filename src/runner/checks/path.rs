@@ -1,5 +1,5 @@
 use crate::language::{Attribute, Identifier, Span};
-use crate::runner::path::{PathSegment, QualifiedPath};
+use crate::runner::path::{display_path, PathSegment, QualifiedPath};
 
 #[test]
 fn empty_stack_renders_root() {
@@ -117,6 +117,35 @@ fn procedure_segment() {
     stack.push(PathSegment::Procedure("inner"));
     stack.push(PathSegment::DependentStep("2"));
     assert_eq!(stack.render(), "/outer:/1/inner:/2");
+}
+
+#[test]
+fn display_trims_entry_head() {
+    // Within a section the entry head is dropped, the numeral anchors instead.
+    assert_eq!(
+        display_path("/connectivity_check:/VI/check_aws_health:/7"),
+        "VI/check_aws_health:/7"
+    );
+
+    // A flat entry with no section keeps its name; only the leading slash goes.
+    assert_eq!(
+        display_path("/connectivity_check:/1"),
+        "connectivity_check:/1"
+    );
+    assert_eq!(
+        display_path("/activate_crisis_management:/-1"),
+        "activate_crisis_management:/-1"
+    );
+
+    // An ` <invocation>` annotation on the numeral is kept; the head still drops.
+    assert_eq!(
+        display_path("/connectivity_check:/VII <service_endpoint>"),
+        "VII <service_endpoint>"
+    );
+
+    // An anonymous technique has no head to drop; the leading slash still goes.
+    assert_eq!(display_path("/I/1"), "I/1");
+    assert_eq!(display_path("/I"), "I");
 }
 
 #[test]

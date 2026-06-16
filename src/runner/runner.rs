@@ -32,7 +32,8 @@ use crate::value::Value;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
-    Skipped,
+    /// Carries the body's computed value for block semantics; recorded as no value.
+    Skipped(Value),
     Failed(Failure),
     Stopped,
 }
@@ -88,10 +89,12 @@ pub enum RunnerError {
         right: &'static str,
     },
     ParameterArityMismatch {
-        expected: usize,
+        procedure: String,
+        parameters: Vec<String>,
         actual: usize,
     },
     ParameterUnexpected {
+        procedure: String,
         actual: usize,
     },
     TerminalRequired,
@@ -111,6 +114,9 @@ pub struct Runner<'i, D: Driver> {
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
+    /// Count of `exec` actions run; a rise across a step or scope's body
+    /// substantiates it for an unattended driver.
+    actions: usize,
 }
 
 impl<'i, D: Driver> Runner<'i, D> {
@@ -129,6 +135,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
+            actions: 0,
         }
     }
 
@@ -178,8 +185,49 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .path
                 .render();
             self.begin_scope(&qualified)?;
-            self.announce_procedure(entry, name, &qualified);
+            let params = entry
+                .parameters
+                .unwrap_or(&[]);
+            if params.is_empty() {
+                self.driver
+                    .enter(&qualified);
+            } else {
+                let echo = render_argument_echo(name, params, &env);
+                self.driver
+                    .enter(&echo);
+            }
+            let declaration = crate::formatting::formatter::render_declaration(
+                name,
+                entry.parameters,
+                entry.signature,
+                self.driver
+                    .renderer(),
+            );
+            self.driver
+                .display(&declaration);
+            if let Some(t) = entry.title {
+                let title_text = crate::formatting::formatter::render_title(
+                    t,
+                    self.driver
+                        .renderer(),
+                );
+                self.driver
+                    .display(&title_text);
+            }
+            if !entry
+                .description
+                .is_empty()
+            {
+                let description = crate::formatting::formatter::render_description(
+                    entry.description,
+                    self.driver
+                        .renderer(),
+                );
+                self.driver
+                    .display(&description);
+            }
         }
+        let actions_before = self.actions;
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
         // with a final sign-off prompt at its path. A Quit or error walk skips
@@ -189,9 +237,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
+            let effectful = self.actions > actions_before;
             let sealed = match result {
                 Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                Ok(outcome) => self.seal_scope(&qualified, outcome),
+                Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
                 Err(error) => Err(error),
             };
             self.path
@@ -274,9 +323,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 executable,
                                 Some(&[chosen]),
                             )?;
+                            self.actions += 1;
                             Ok(Outcome::Done(value))
                         }
-                        UserInput::Skip => Ok(Outcome::Skipped),
+                        UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
                         UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
                         UserInput::Quit => self.record_stop(),
                     }
@@ -367,11 +417,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // A bare call defers every argument and is exempt; a written
                 // argument list must match arity exactly.
                 if !invocable.elided {
+                    let procedure = subroutine
+                        .name
+                        .as_ref()
+                        .map(|n| n.value)
+                        .unwrap_or("the procedure")
+                        .to_string();
                     if expected == 0 && actual > 0 {
-                        return Err(RunnerError::ParameterUnexpected { actual });
+                        return Err(RunnerError::ParameterUnexpected { procedure, actual });
                     }
                     if expected != actual {
-                        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                        return Err(RunnerError::ParameterArityMismatch {
+                            procedure,
+                            parameters: describe_parameters(params, subroutine.signature),
+                            actual,
+                        });
                     }
                 }
                 let mut local = Environment::new();
@@ -483,10 +543,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
                     // sign-off, leaving the procedure unfinished.
+                    let actions_before = self.actions;
                     let result = self.walk(&mut local, &subroutine.body);
+                    let effectful = self.actions > actions_before;
                     let sealed = match result {
                         Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&lexical, outcome),
+                        Ok(outcome) => self.seal_scope(&lexical, outcome, effectful),
                         Err(error) => Err(error),
                     };
                     self.path
@@ -552,6 +614,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                     return self.record_stop();
                 }
 
+                self.driver
+                    .settle("→", &qualified, &input);
                 let outcome = outcome_from(input);
                 self.appender
                     .append(&Record {
@@ -583,19 +647,11 @@ impl<'i, D: Driver> Runner<'i, D> {
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
-        self.driver
-            .announce(&describe_loop(names, over));
         match over {
             None => {
                 let mut number = 1;
                 loop {
-                    self.path
-                        .push(PathSegment::Iteration(number));
-                    let result = self.walk(env, body);
-                    self.path
-                        .pop();
-
-                    if let Outcome::Stopped = result? {
+                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                     number += 1;
@@ -621,19 +677,44 @@ impl<'i, D: Driver> Runner<'i, D> {
                     super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
-                    self.path
-                        .push(PathSegment::Iteration(number));
-                    let result = self.walk(env, body);
-                    self.path
-                        .pop();
-
-                    if let Outcome::Stopped = result? {
+                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                 }
                 Ok(Outcome::Done(Value::Unitus))
             }
         }
+    }
+
+    /// Walk one pass of a loop body within its `[number]` iteration scope,
+    /// bracketing it with `↘`/`↙` chrome.
+    fn walk_iteration(
+        &mut self,
+        env: &mut Environment,
+        number: usize,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        self.path
+            .push(PathSegment::Iteration(number));
+        let qualified = self
+            .path
+            .render();
+        self.driver
+            .enter(&qualified);
+        let result = self.walk(env, body);
+        let verdict = match &result {
+            Ok(Outcome::Done(_)) => Some(UserInput::Done(Value::Unitus)),
+            Ok(Outcome::Skipped(_)) => Some(UserInput::Skip),
+            Ok(Outcome::Failed(Failure::Aborted(reason))) => Some(UserInput::Fail(reason.clone())),
+            _ => None,
+        };
+        if let Some(verdict) = verdict {
+            self.driver
+                .settle("↙", &qualified, &verdict);
+        }
+        self.path
+            .pop();
+        result
     }
 
     fn walk_sequence(
@@ -658,9 +739,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                 _ => self.walk(env, op)?,
             };
             match outcome {
-                Outcome::Done(value) => last = value,
+                Outcome::Done(value) | Outcome::Skipped(value) => last = value,
                 Outcome::Stopped => return Ok(Outcome::Stopped),
-                Outcome::Skipped | Outcome::Failed(_) => {}
+                Outcome::Failed(_) => {}
             }
         }
         Ok(Outcome::Done(last))
@@ -686,16 +767,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .pop();
             return Ok(Outcome::Done(Value::Unitus));
         }
+        let actions_before = self.actions;
         self.begin_scope(&qualified)?;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
+        let effectful = self.actions > actions_before;
         // A section is a structural scope: the operator signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
         match result {
             Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-            Ok(outcome) => self.seal_scope(&qualified, outcome),
+            Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
             Err(error) => Err(error),
         }
     }
@@ -806,6 +889,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &step_text);
 
+        let actions_before = self.actions;
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
@@ -829,9 +913,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
+        let effectful = self.actions > actions_before;
+        // `ask` consumes `produced`; keep a copy for a Skip to propagate.
+        let propagate = produced.clone();
         let input = self
             .driver
-            .ask(qualified, &choices, produced);
+            .ask(qualified, &choices, produced, effectful);
 
         // Quit halts the walk; this step's Begin stands without a matching
         // outcome, so resume re-runs it.
@@ -839,7 +926,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             return self.record_stop();
         }
 
-        let outcome = outcome_from(input);
+        self.driver
+            .settle("→", qualified, &input);
+        let outcome = match input {
+            UserInput::Skip => Outcome::Skipped(propagate),
+            other => outcome_from(other),
+        };
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -913,21 +1005,32 @@ impl<'i, D: Driver> Runner<'i, D> {
 
     /// Sign off a completed structural scope — a Section at its close, or the
     /// whole run at the entry procedure.
-    fn seal_scope(&mut self, qualified: &str, outcome: Outcome) -> Result<Outcome, RunnerError> {
+    fn seal_scope(
+        &mut self,
+        qualified: &str,
+        outcome: Outcome,
+        effectful: bool,
+    ) -> Result<Outcome, RunnerError> {
         let produced = match outcome {
-            Outcome::Done(value) => value,
+            Outcome::Done(value) | Outcome::Skipped(value) => value,
             _ => Value::Unitus,
         };
+        let propagate = produced.clone();
         let run_id = self
             .appender
             .run_id();
         let input = self
             .driver
-            .seal(qualified, produced);
+            .seal(qualified, produced, effectful);
         if let UserInput::Quit = input {
             return self.record_stop();
         }
-        let outcome = outcome_from(input);
+        self.driver
+            .settle("↙", qualified, &input);
+        let outcome = match input {
+            UserInput::Skip => Outcome::Skipped(propagate),
+            other => outcome_from(other),
+        };
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -976,21 +1079,6 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 }
 
-fn describe_loop(
-    names: &[crate::language::Identifier<'_>],
-    over: Option<&Operation<'_>>,
-) -> String {
-    let joined: Vec<&str> = names
-        .iter()
-        .map(|n| n.value)
-        .collect();
-    match over {
-        None => "repeat".to_string(),
-        Some(_) if joined.is_empty() => "foreach".to_string(),
-        Some(_) => format!("foreach {}", joined.join(", ")),
-    }
-}
-
 fn describe_execute(function: &str) -> String {
     format!("{}()", function)
 }
@@ -999,7 +1087,7 @@ fn describe_execute(function: &str) -> String {
 fn outcome_from(input: UserInput) -> Outcome {
     match input {
         UserInput::Done(value) => Outcome::Done(value),
-        UserInput::Skip => Outcome::Skipped,
+        UserInput::Skip => Outcome::Skipped(Value::Unitus),
         UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
         UserInput::Quit => Outcome::Stopped,
     }
@@ -1017,7 +1105,7 @@ fn record_state(outcome: &Outcome) -> State {
             State::Done(Some(RecordValue::Literal(text.clone())))
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
-        Outcome::Skipped => State::Skip,
+        Outcome::Skipped(_) => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) => {
             if reason.is_empty() {
                 // The operator failed the step without giving a reason; record
@@ -1031,6 +1119,56 @@ fn record_state(outcome: &Outcome) -> State {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
         }
     }
+}
+
+/// Render the entry call with arguments bound to each parameter in
+/// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
+fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
+    let bindings: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let value = match env.lookup(p.value) {
+                Some(Value::Literali(text)) => text.clone(),
+                Some(other) => other.to_string(),
+                None => String::new(),
+            };
+            format!("{} ~ {}", value, p.value)
+        })
+        .collect();
+    format!("{}: ({})", name, bindings.join(", "))
+}
+
+/// Describe a procedure's expected parameters as `name : Type` fragments for
+/// an arity error, falling back to whichever of name or forma is known.
+fn describe_parameters(
+    params: &[language::Identifier],
+    signature: Option<&language::Signature>,
+) -> Vec<String> {
+    let formae = signature
+        .map(|s| {
+            s.requires
+                .formae()
+        })
+        .unwrap_or_default();
+    let count = params
+        .len()
+        .max(formae.len());
+    (0..count)
+        .map(|i| {
+            let name = params
+                .get(i)
+                .map(|p| p.value);
+            let forma = formae
+                .get(i)
+                .map(|f| f.value);
+            match (name, forma) {
+                (Some(n), Some(t)) => format!("{} : {}", n, t),
+                (Some(n), None) => n.to_string(),
+                (None, Some(t)) => t.to_string(),
+                (None, None) => "?".to_string(),
+            }
+        })
+        .collect()
 }
 
 /// Build an `Environment` seeded with the entry procedure's parameters
@@ -1048,11 +1186,21 @@ pub(super) fn bind_parameters(
         .unwrap_or(&[]);
     let expected = params.len();
     let actual = arguments.len();
+    let procedure = entry
+        .name
+        .as_ref()
+        .map(|n| n.value)
+        .unwrap_or("the entry procedure")
+        .to_string();
     if expected == 0 && actual > 0 {
-        return Err(RunnerError::ParameterUnexpected { actual });
+        return Err(RunnerError::ParameterUnexpected { procedure, actual });
     }
     if expected != actual {
-        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+        return Err(RunnerError::ParameterArityMismatch {
+            procedure,
+            parameters: describe_parameters(params, entry.signature),
+            actual,
+        });
     }
     let mut env = Environment::new();
     for (param, argument) in params

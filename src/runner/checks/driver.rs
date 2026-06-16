@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::runner::driver::{draw, Console, Driver, Event, Interaction, Mock, UserInput};
+use crate::runner::driver::{
+    draw, Automatic, Console, Driver, Event, Interaction, Mock, UserInput,
+};
 use crate::value::{Numeric, Value};
 
 #[test]
@@ -11,18 +13,18 @@ fn mock_returns_canned_answers_in_order() {
         UserInput::Quit,
     ]);
     assert_eq!(
-        p.ask("/I/1", &[], Value::Unitus),
+        p.ask("/I/1", &[], Value::Unitus, true),
         UserInput::Done(Value::Unitus)
     );
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Skip);
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Quit);
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Skip);
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Quit);
 }
 
 #[test]
 fn mock_records_step_and_ask_events() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     p.step("/local_network:I/1", "Check the cable.");
-    let _ = p.ask("/local_network:I/1", &[], Value::Unitus);
+    let _ = p.ask("/local_network:I/1", &[], Value::Unitus, true);
     assert_eq!(
         p.events(),
         &[
@@ -41,7 +43,7 @@ fn mock_records_step_and_ask_events() {
 #[test]
 fn mock_records_offered_choices() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
-    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus);
+    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus, true);
     assert_eq!(
         p.events(),
         &[Event::Ask {
@@ -71,7 +73,7 @@ fn mock_records_enter_and_announce() {
 #[should_panic(expected = "Mock::ask called with no canned answers remaining")]
 fn mock_ask_without_answers_panics() {
     let mut p = Mock::new();
-    let _ = p.ask("I/1", &[], Value::Unitus);
+    let _ = p.ask("I/1", &[], Value::Unitus, true);
 }
 
 #[test]
@@ -82,6 +84,47 @@ fn console_step_writes_fqn_and_description() {
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ local_network:I/1"));
     assert!(written.contains("    Check the cable."));
+}
+
+#[test]
+fn automatic_settles_done_when_effectful_skip_otherwise() {
+    let mut p = Automatic::with_handle(Vec::new());
+    assert_eq!(
+        p.ask("/I/1", &[], Value::Literali("ran".to_string()), true),
+        UserInput::Done(Value::Literali("ran".to_string()))
+    );
+    assert_eq!(p.ask("/I/2", &[], Value::Unitus, false), UserInput::Skip);
+    assert_eq!(
+        p.seal("/I", Value::Unitus, true),
+        UserInput::Done(Value::Unitus)
+    );
+    assert_eq!(p.seal("/II", Value::Unitus, false), UserInput::Skip);
+}
+
+#[test]
+fn automatic_settle_renders_verdict_glyph() {
+    let mut output: Vec<u8> = Vec::new();
+    let mut p = Automatic::with_handle(&mut output);
+    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.settle("→", "/I/2", &UserInput::Skip);
+    p.settle("↙", "/I", &UserInput::Done(Value::Unitus));
+    let written = String::from_utf8(output).expect("utf8");
+    assert!(written.contains("→ I/1 ✓"));
+    assert!(written.contains("→ I/2 ⊘"));
+    assert!(written.contains("↙ I ✓"));
+}
+
+#[test]
+fn console_settle_writes_verdict_line() {
+    let mut output: Vec<u8> = Vec::new();
+    let mut p = Console::with_output(&mut output);
+    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.settle("↙", "/I", &UserInput::Skip);
+    let written = String::from_utf8(output).expect("utf8");
+    assert!(written.contains("→ I/1"));
+    assert!(written.contains("✓"));
+    assert!(written.contains("↙ I"));
+    assert!(written.contains("⊘"));
 }
 
 #[test]
@@ -141,10 +184,12 @@ fn esc_edit_seeds_buffer_and_backspace_trims() {
 }
 
 #[test]
-fn edited_quanticle_stays_a_quanticle() {
+fn quanticle_edit_roundtrips() {
+    let quanticle = || Value::Quanticle(Numeric::Integral(42));
+
     // Editing a numeric value and changing it keeps it numeric: 42 -> 43 is
     // re-parsed back to a Quanticle, not flattened to text.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
@@ -156,26 +201,20 @@ fn edited_quanticle_stays_a_quanticle() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(Value::Quanticle(Numeric::Integral(43))))
     );
-}
 
-#[test]
-fn unedited_quanticle_returns_verbatim() {
     // Entering and leaving the edit without a change returns the original
     // numeric value untouched.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Quanticle(Numeric::Integral(42))))
+        Some(UserInput::Done(quanticle()))
     );
-}
 
-#[test]
-fn edited_quanticle_rejects_non_numeric() {
     // A numeric value edited into something that is not a number is not
     // accepted: Enter stays in the edit so it can be corrected.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
@@ -350,13 +389,13 @@ fn choices_esc_opens_menu() {
 }
 
 #[test]
-fn complex_value_is_read_only() {
+fn read_only_values_accept_intact() {
+    // A tablet and multi-line text are both read-only: typing is ignored.
     let tablet = Value::Tabularum(vec![(
         "name".to_string(),
         Value::Literali("eth0".to_string()),
     )]);
     let mut it = Interaction::begin(&[], tablet.clone());
-    // Typing into a frozen value does nothing; Enter accepts it intact.
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)),
         None
@@ -365,12 +404,7 @@ fn complex_value_is_read_only() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(tablet))
     );
-}
 
-#[test]
-fn multiline_scalar_is_read_only() {
-    // A step whose body computed multi-line text (e.g. captured exec output)
-    // is not editable inline; it is accepted intact, like a complex value.
     let dump = Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string());
     let mut it = Interaction::begin(&[], dump.clone());
     assert_eq!(

@@ -11,7 +11,7 @@ use crate::program::{
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
-use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
+use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
 use crate::runner::state::{
     parse_record, Appender, InvokeTarget, State, Store, Value as RecordValue,
 };
@@ -1109,6 +1109,52 @@ test :
 }
 
 #[test]
+fn automatic_substantiates_only_effectful_steps() {
+    // An exec step settles Done; a pure-prose sibling Skip; the procedure
+    // seals Done since one step beneath it was effectful.
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Run it { exec("true") }
+
+2.  Just read this step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    let mut library = Library::core();
+    library.extend(Library::system());
+    crate::linking::link(&mut program, &library).expect("linked");
+
+    let mut fixture = StoreFixture::new("automatic-substantiation");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        library,
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Done(_) => {}
+        other => panic!("expected Done, got {:?}", other),
+    }
+    let trace = String::from_utf8(
+        runner
+            .into_driver()
+            .into_output(),
+    )
+    .expect("utf8");
+    assert!(trace.contains("→ check:/1 ✓"));
+    assert!(trace.contains("→ check:/2 ⊘"));
+    assert!(trace.contains("↙ check: ✓"));
+}
+
+#[test]
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 
@@ -1675,13 +1721,19 @@ connectivity_check(e, s) :
         Some(&Value::Literali("192.168.1.5".to_string()))
     );
 
-    // Too few arguments: ParameterArityMismatch.
+    // Too few arguments: ParameterArityMismatch names procedure and parameters.
     let args = ["foo".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected arity error");
-    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+    let RunnerError::ParameterArityMismatch {
+        procedure,
+        parameters,
+        actual,
+    } = error
+    else {
         panic!("expected ParameterArityMismatch, got {:?}", error);
     };
-    assert_eq!(expected, 2);
+    assert_eq!(procedure, "connectivity_check");
+    assert_eq!(parameters, vec!["e".to_string(), "s".to_string()]);
     assert_eq!(actual, 1);
 
     // Too many arguments: also ParameterArityMismatch.
@@ -1691,11 +1743,37 @@ connectivity_check(e, s) :
         "extra".to_string(),
     ];
     let error = bind_parameters(&program, &args).expect_err("expected arity error");
-    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+    let RunnerError::ParameterArityMismatch {
+        parameters, actual, ..
+    } = error
+    else {
         panic!("expected ParameterArityMismatch, got {:?}", error);
     };
-    assert_eq!(expected, 2);
+    assert_eq!(parameters.len(), 2);
     assert_eq!(actual, 3);
+
+    // With a signature, parameters are described as `name : Type`.
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) : LocalEnvironment, TargetService -> NetworkHealth
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let error = bind_parameters(&program, &[]).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { parameters, .. } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(
+        parameters,
+        vec![
+            "e : LocalEnvironment".to_string(),
+            "s : TargetService".to_string()
+        ]
+    );
 
     // Procedure declares no parameters but args supplied: ParameterUnexpected.
     let source = r#"
@@ -1710,9 +1788,10 @@ test :
     let program = translate(&document).expect("translate");
     let args = ["unwanted".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected unexpected error");
-    let RunnerError::ParameterUnexpected { actual } = error else {
+    let RunnerError::ParameterUnexpected { procedure, actual } = error else {
         panic!("expected ParameterUnexpected, got {:?}", error);
     };
+    assert_eq!(procedure, "test");
     assert_eq!(actual, 1);
 
     // No parameters and no args: empty environment, no error.
@@ -1720,6 +1799,30 @@ test :
     assert!(env
         .lookup("anything")
         .is_none());
+}
+
+#[test]
+fn argument_echo_binds_each_parameter() {
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["[]".to_string(), "0".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    let params = program
+        .subroutines
+        .first()
+        .unwrap()
+        .parameters
+        .unwrap();
+    let echo = render_argument_echo("connectivity_check", params, &env);
+    assert_eq!(echo, "connectivity_check: ([] ~ e, 0 ~ s)");
 }
 
 #[test]
@@ -1917,110 +2020,65 @@ test :
 }
 
 #[test]
-fn automatic_driver_records_body_value() {
-    // A value-bearing body under the automatic driver: no operator, no canned
-    // answers; the step's outcome is the body's computed value, recorded.
-    let mut fixture = StoreFixture::new("automatic-records-value");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
+fn automatic_propagates_body_value_but_records_skip() {
+    // Under the automatic driver the body value propagates as the outcome,
+    // but with no effectful work the step records Skip.
+    fn skip_of(label: &str, body: Operation<'static>) -> (Outcome, State) {
+        let mut fixture = StoreFixture::new(label);
+        let program = anonymous_with_body(Operation::Sequence(vec![step(
+            Ordinal::Dependent("1"),
+            body,
+        )]));
+        let mut runner = Runner::new(
+            &program,
+            fixture.take_appender(),
+            HashSet::new(),
+            Automatic::with_handle(Vec::new()),
+            Library::stub(),
+        );
+        let outcome = runner
+            .run(Environment::new())
+            .expect("run");
+        let pfftt = fixture.pfftt_contents();
+        let lines: Vec<&str> = pfftt
+            .lines()
+            .filter(|line| {
+                !line
+                    .trim()
+                    .is_empty()
+            })
+            .collect();
+        let state = parse_record(lines[2])
+            .expect("parse record")
+            .state;
+        (outcome, state)
+    }
+
+    // A single-line value propagates as the outcome; the step records Skip.
+    let (outcome, state) = skip_of(
+        "automatic-records-value",
         Operation::String(vec![Fragment::Text("probe output")]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
     );
-    let env = Environment::new();
-    let outcome = runner
-        .run(env)
-        .expect("run");
     assert_eq!(
         outcome,
         Outcome::Done(Value::Literali("probe output".to_string()))
     );
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(
-        record.state,
-        State::Done(Some(RecordValue::Literal("probe output".to_string())))
-    );
+    assert_eq!(state, State::Skip);
 
-    // A pure-prose step (empty body) records () — nothing was computed.
-    let mut fixture = StoreFixture::new("automatic-empty-body");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
-    );
-    let env = Environment::new();
-    runner
-        .run(env)
-        .expect("run");
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
-}
-
-#[test]
-fn multiline_body_value_records_unit_but_still_propagates() {
-    // A step whose body computes multi-line text (raw exec output) records ()
-    let mut fixture = StoreFixture::new("multiline-records-unit");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
+    // Multi-line text propagates intact and still records Skip.
+    let (outcome, state) = skip_of(
+        "multiline-records-unit",
         Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
     );
-    let outcome = runner
-        .run(Environment::new())
-        .expect("run");
     assert_eq!(
         outcome,
         Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
     );
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+    assert_eq!(state, State::Skip);
+
+    // A pure-prose step (empty body) also records Skip — nothing effectful ran.
+    let (_, state) = skip_of("automatic-empty-body", Operation::Sequence(vec![]));
+    assert_eq!(state, State::Skip);
 }
 
 #[test]
@@ -2055,18 +2113,14 @@ fn sequence_value_is_last_member() {
         Outcome::Done(Value::Literali("second".to_string()))
     );
 
-    // Both steps ran, recording their own value in order (a trailing scope
-    // seal records Unit, not a Literal, so it is excluded).
+    // Neither step is effectful, so each records Skip.
     let pfftt = fixture.pfftt_contents();
-    let dones: Vec<String> = pfftt
+    let skips = pfftt
         .lines()
         .filter_map(|line| parse_record(line).ok())
-        .filter_map(|record| match record.state {
-            State::Done(Some(RecordValue::Literal(text))) => Some(text),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(dones, vec!["first".to_string(), "second".to_string()]);
+        .filter(|record| record.state == State::Skip)
+        .count();
+    assert_eq!(skips, 2);
 }
 
 #[test]
