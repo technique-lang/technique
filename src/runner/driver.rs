@@ -96,6 +96,10 @@ pub trait Driver {
     /// `produced` is the scope's value, offered for acceptance.
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
 
+    /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
+    /// abandon the call, Quit stops the run.
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput;
+
     /// The syntax renderer for highlighting source fragments shown to the
     /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
     /// drivers return `Identity` (no markup).
@@ -172,6 +176,16 @@ impl<W: Write> Driver for Console<W> {
 
     fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+        let label = format!(
+            "{}({} : {})",
+            qualified,
+            name.unwrap_or("?"),
+            forma.unwrap_or("?")
+        );
+        prompt_acquire(&mut self.output, &label)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -275,6 +289,26 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
             let _ = writeln!(out);
         }
     }
+    let _ = out.flush();
+    result
+}
+
+/// Solicit a deferred input on the `▶` prompt line: `<Enter>` accepts the
+/// empty default, typing overrides it; the `<Esc>` menu and `<Ctrl-C>` abandon
+/// the call.
+fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> UserInput {
+    let field = edit(String::new(), Value::Literali(String::new()));
+    let result = interact(
+        out,
+        label,
+        "↘",
+        Interaction {
+            field,
+            menu: None,
+            reason: None,
+        },
+    );
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
     let _ = out.flush();
     result
 }
@@ -944,6 +978,15 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(produced)
     }
 
+    fn acquire(
+        &mut self,
+        _qualified: &str,
+        _name: Option<&str>,
+        _forma: Option<&str>,
+    ) -> UserInput {
+        UserInput::Done(Value::Unitus)
+    }
+
     fn renderer(&self) -> &'static dyn Render {
         &Identity
     }
@@ -997,6 +1040,15 @@ impl Driver for Headless {
         UserInput::Done(produced)
     }
 
+    fn acquire(
+        &mut self,
+        _qualified: &str,
+        _name: Option<&str>,
+        _forma: Option<&str>,
+    ) -> UserInput {
+        UserInput::Done(Value::Unitus)
+    }
+
     fn renderer(&self) -> &'static dyn Render {
         &Identity
     }
@@ -1024,6 +1076,7 @@ pub enum Event {
     Enter {
         qualified: String,
     },
+    Display(String),
     Section {
         qualified: String,
         numeral: String,
@@ -1043,6 +1096,10 @@ pub enum Event {
     },
     Seal {
         qualified: String,
+    },
+    Acquire {
+        name: Option<String>,
+        forma: Option<String>,
     },
 }
 
@@ -1089,7 +1146,10 @@ impl Driver for Mock {
             });
     }
 
-    fn display(&mut self, _content: &str) {}
+    fn display(&mut self, content: &str) {
+        self.events
+            .push(Event::Display(content.to_string()));
+    }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.events
@@ -1152,6 +1212,17 @@ impl Driver for Mock {
                 qualified: qualified.to_string(),
             });
         UserInput::Done(Value::Unitus)
+    }
+
+    fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+        self.events
+            .push(Event::Acquire {
+                name: name.map(|n| n.to_string()),
+                forma: forma.map(|f| f.to_string()),
+            });
+        self.answers
+            .pop_front()
+            .unwrap_or(UserInput::Done(Value::Unitus))
     }
 
     fn renderer(&self) -> &'static dyn Render {

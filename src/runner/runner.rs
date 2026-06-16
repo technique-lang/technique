@@ -14,7 +14,7 @@ use super::state::{
 };
 use crate::language;
 use crate::program::{
-    Executable, ExecutableRef, Invocable, Operation, Ordinal, Program, SubroutineRef,
+    Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, SubroutineRef,
 };
 use crate::value::Value;
 
@@ -149,6 +149,18 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// anonymous wrapper if the document is top-level Steps, otherwise
     /// the first declared procedure.
     pub fn run(&mut self, mut env: Environment) -> Result<Outcome, RunnerError> {
+        if let Some(metadata) = self
+            .program
+            .prelude
+        {
+            let header = crate::formatting::formatter::render_header(
+                metadata,
+                self.driver
+                    .renderer(),
+            );
+            self.driver
+                .display(&header);
+        }
         let entry = self
             .program
             .subroutines
@@ -183,6 +195,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                 );
                 self.driver
                     .display(&title_text);
+            }
+            if !entry
+                .description
+                .is_empty()
+            {
+                let description = crate::formatting::formatter::render_description(
+                    entry.description,
+                    self.driver
+                        .renderer(),
+                );
+                self.driver
+                    .display(&description);
             }
         }
         let result = self.walk(&mut env, &entry.body);
@@ -283,17 +307,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                         UserInput::Skip => Ok(Outcome::Skipped),
                         UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
-                        UserInput::Quit => {
-                            let suspend = Record {
-                                recorded: now_iso8601(),
-                                run_id,
-                                path: "/".to_string(),
-                                state: State::Stop,
-                            };
-                            self.appender
-                                .append(&suspend)?;
-                            Ok(Outcome::Stopped)
-                        }
+                        UserInput::Quit => self.record_stop(),
                     }
                 } else {
                     self.driver
@@ -314,7 +328,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::String(_)
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
-            | Operation::List(_) => {
+            | Operation::List(_)
+            | Operation::Hole => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Outcome::Done(value))
             }
@@ -338,7 +353,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// The shell script an `exec` will run, rendered for the operator to see
     /// before they command it. The command's first argument is the script.
     fn script_text(
-        &self,
+        &mut self,
         env: &mut Environment,
         executable: &'i Executable<'i>,
     ) -> Result<String, RunnerError> {
@@ -374,70 +389,125 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let params = subroutine
                     .parameters
                     .unwrap_or(&[]);
-                let expected = params.len();
+                let expected = subroutine.arity();
                 let actual = invocable
                     .arguments
                     .len();
-                if expected == 0 && actual > 0 {
-                    return Err(RunnerError::ParameterUnexpected { actual });
-                }
-                if expected != actual {
-                    return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                // A bare call defers every argument and is exempt; a written
+                // argument list must match arity exactly.
+                if !invocable.elided {
+                    if expected == 0 && actual > 0 {
+                        return Err(RunnerError::ParameterUnexpected { actual });
+                    }
+                    if expected != actual {
+                        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                    }
                 }
                 let mut local = Environment::new();
-                for (param, arg) in params
-                    .iter()
-                    .zip(&invocable.arguments)
-                {
-                    let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
-                    local.extend(
-                        param
-                            .value
-                            .to_string(),
-                        value,
-                    );
-                }
-
                 let name = subroutine
                     .name
                     .as_ref()
                     .map(|n| n.value);
                 if let Some(name) = name {
-                    self.path
-                        .push(PathSegment::Procedure(name));
-                    let descended = self
-                        .path
-                        .render();
+                    // Steps record under the callee's lexical address, not the
+                    // call site they were reached from.
+                    let lexical_segments: Vec<PathSegment> = subroutine
+                        .locale
+                        .iter()
+                        .map(|locale| match *locale {
+                            Locale::Procedure(n) => PathSegment::Procedure(n),
+                            Locale::Section(n) => PathSegment::Section(n),
+                        })
+                        .collect();
+                    let lexical = super::path::render_path(&lexical_segments);
                     if self
                         .completed
-                        .contains(&descended)
+                        .contains(&lexical)
                     {
-                        self.path
-                            .pop();
                         return Ok(Outcome::Done(Value::Unitus));
                     }
-                    self.path
-                        .pop();
 
-                    let qualified = self
+                    // Acquire deferred arguments at the call site, in the
+                    // invocation's `<name>` form, before any Invoke is recorded.
+                    let caller = self
                         .path
                         .render();
+                    let invoked = format!("{} <{}>", caller, name);
+
+                    let formae = subroutine
+                        .signature
+                        .map(|s| {
+                            s.requires
+                                .formae()
+                        })
+                        .unwrap_or_default();
+                    if invocable.elided {
+                        for i in 0..subroutine.arity() {
+                            let bind = params
+                                .get(i)
+                                .map(|p| p.value);
+                            let forma = formae
+                                .get(i)
+                                .map(|f| f.value);
+                            let value = match self
+                                .driver
+                                .acquire(&invoked, bind, forma)
+                            {
+                                UserInput::Done(value) => value,
+                                other => return self.abandon(&lexical, other),
+                            };
+                            if let Some(bind) = bind {
+                                local.extend(bind.to_string(), value);
+                            }
+                        }
+                    } else {
+                        for (i, arg) in invocable
+                            .arguments
+                            .iter()
+                            .enumerate()
+                        {
+                            let bind = params
+                                .get(i)
+                                .map(|p| p.value);
+                            let value = if let Operation::Hole = arg {
+                                let forma = formae
+                                    .get(i)
+                                    .map(|f| f.value);
+                                match self
+                                    .driver
+                                    .acquire(&invoked, bind, forma)
+                                {
+                                    UserInput::Done(value) => value,
+                                    other => return self.abandon(&lexical, other),
+                                }
+                            } else {
+                                super::evaluator::evaluate(&self.library, &self.context, env, arg)?
+                            };
+                            if let Some(bind) = bind {
+                                local.extend(bind.to_string(), value);
+                            }
+                        }
+                    }
+
+                    // Record the Invoke at the call site, then descend onto the
+                    // callee's lexical address, restored on return.
                     let run_id = self
                         .appender
                         .run_id();
-                    let record = Record {
-                        recorded: now_iso8601(),
-                        run_id,
-                        path: qualified,
-                        state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
-                    };
                     self.appender
-                        .append(&record)?;
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: caller,
+                            state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
+                        })?;
 
-                    self.path
-                        .push(PathSegment::Procedure(name));
+                    let saved = self
+                        .path
+                        .replace(lexical_segments);
                     self.driver
-                        .enter(&descended);
+                        .enter(&lexical);
+
                     let declaration = crate::formatting::formatter::render_declaration(
                         name,
                         subroutine.parameters,
@@ -447,6 +517,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     );
                     self.driver
                         .display(&declaration);
+
                     if let Some(t) = subroutine.title {
                         let title_text = crate::formatting::formatter::render_title(
                             t,
@@ -456,29 +527,33 @@ impl<'i, D: Driver> Runner<'i, D> {
                         self.driver
                             .display(&title_text);
                     }
-                }
-
-                // Walk the body against the callee's own environment; `local`
-                // is dropped on return, leaving the caller's `env` untouched.
-                let result = self.walk(&mut local, &subroutine.body);
-
-                // An invoked procedure is a structural scope: the operator signs
-                // it off at its close, like a Section, before control returns to
-                // the caller. A Quit or error walk skips the prompt — the
-                // procedure did not complete.
-                if name.is_some() {
-                    let qualified = self
-                        .path
-                        .render();
-                    self.path
-                        .pop();
-                    match result {
-                        Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&qualified, outcome),
-                        Err(error) => Err(error),
+                    if !subroutine
+                        .description
+                        .is_empty()
+                    {
+                        let description = crate::formatting::formatter::render_description(
+                            subroutine.description,
+                            self.driver
+                                .renderer(),
+                        );
+                        self.driver
+                            .display(&description);
                     }
+
+                    // Walk the callee's body in its own `local` environment,
+                    // then sign off its scope; a Quit or error skips the
+                    // sign-off, leaving the procedure unfinished.
+                    let result = self.walk(&mut local, &subroutine.body);
+                    let sealed = match result {
+                        Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
+                        Ok(outcome) => self.seal_scope(&lexical, outcome),
+                        Err(error) => Err(error),
+                    };
+                    self.path
+                        .replace(saved);
+                    sealed
                 } else {
-                    result
+                    self.walk(&mut local, &subroutine.body)
                 }
             }
             SubroutineRef::Unresolved(id) => {
@@ -531,16 +606,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .driver
                     .external(&qualified);
                 if let UserInput::Quit = input {
-                    self.appender
-                        .append(&Record {
-                            recorded: now_iso8601(),
-                            run_id,
-                            path: "/".to_string(),
-                            state: State::Stop,
-                        })?;
                     self.path
                         .pop();
-                    return Ok(Outcome::Stopped);
+                    return self.record_stop();
                 }
 
                 let outcome = outcome_from(input);
@@ -823,20 +891,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             .driver
             .ask(qualified, &choices, produced);
 
-        // Quit halts the walk and is recorded as a Stop lifecycle event at the
-        // root path, distinguishing a deliberate stop from a crash (which records
-        // nothing). This step's Begin stands without a matching outcome, so
-        // resume re-runs it.
+        // Quit halts the walk; this step's Begin stands without a matching
+        // outcome, so resume re-runs it.
         if let UserInput::Quit = input {
-            let suspend = Record {
-                recorded: now_iso8601(),
-                run_id,
-                path: "/".to_string(),
-                state: State::Stop,
-            };
-            self.appender
-                .append(&suspend)?;
-            return Ok(Outcome::Stopped);
+            return self.record_stop();
         }
 
         let outcome = outcome_from(input);
@@ -865,15 +923,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .driver
             .seal(qualified, produced);
         if let UserInput::Quit = input {
-            let suspend = Record {
-                recorded: now_iso8601(),
-                run_id,
-                path: "/".to_string(),
-                state: State::Stop,
-            };
-            self.appender
-                .append(&suspend)?;
-            return Ok(Outcome::Stopped);
+            return self.record_stop();
         }
         let outcome = outcome_from(input);
         let record = Record {
@@ -885,6 +935,42 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&record)?;
         Ok(outcome)
+    }
+
+    /// Settle an invocation declined at its acquire prompt: Skip and Fail
+    /// record the call's outcome at `qualified`; Quit stops the run.
+    fn abandon(&mut self, qualified: &str, input: UserInput) -> Result<Outcome, RunnerError> {
+        if let UserInput::Quit = input {
+            return self.record_stop();
+        }
+        let outcome = outcome_from(input);
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: record_state(&outcome),
+            })?;
+        Ok(outcome)
+    }
+
+    /// Record a deliberate Stop at the root path and unwind the walk.
+    fn record_stop(&mut self) -> Result<Outcome, RunnerError> {
+        let run_id = self
+            .appender
+            .run_id();
+        let suspend = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: "/".to_string(),
+            state: State::Stop,
+        };
+        self.appender
+            .append(&suspend)?;
+        Ok(Outcome::Stopped)
     }
 }
 

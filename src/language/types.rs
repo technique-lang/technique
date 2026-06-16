@@ -188,6 +188,34 @@ pub enum Genus<'i> {
     List(Forma<'i>),
 }
 
+impl<'i> Genus<'i> {
+    /// The number of distinct values this genus carries. As the `requires`
+    /// of a procedure's signature this is the procedure's arity.
+    pub fn cardinality(&self) -> usize {
+        match self {
+            Genus::Unit => 0,
+            Genus::Single(_) => 1,
+            Genus::List(_) => 1,
+            Genus::Tuple(formas) => formas.len(),
+            Genus::Naked(formas) => formas.len(),
+        }
+    }
+
+    pub fn formae(&self) -> Vec<&Forma<'i>> {
+        match self {
+            Genus::Unit => Vec::new(),
+            Genus::Single(forma) => vec![forma],
+            Genus::List(forma) => vec![forma],
+            Genus::Tuple(formas) => formas
+                .iter()
+                .collect(),
+            Genus::Naked(formas) => formas
+                .iter()
+                .collect(),
+        }
+    }
+}
+
 #[derive(Eq, Debug, PartialEq)]
 pub struct Signature<'i> {
     pub requires: Genus<'i>,
@@ -418,6 +446,7 @@ pub enum Expression<'i> {
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
     Pair(Box<Pair<'i>>, Span),
     List(Vec<Expression<'i>>, Span),
+    Hole(Span),
     Separator,
 }
 
@@ -441,6 +470,7 @@ impl PartialEq for Expression<'_> {
             }
             (Expression::Pair(a, _), Expression::Pair(b, _)) => a == b,
             (Expression::List(a, _), Expression::List(b, _)) => a == b,
+            (Expression::Hole(_), Expression::Hole(_)) => true,
             (Expression::Separator, Expression::Separator) => true,
             _ => false,
         }
@@ -504,6 +534,11 @@ pub(crate) fn validate_identifier(input: &str, span: Span) -> Option<Identifier<
 pub(crate) fn validate_forma(input: &str, span: Span) -> Option<Forma<'_>> {
     if input.len() == 0 {
         return None;
+    }
+
+    // wildcard, represents "any" type.
+    if input == "*" {
+        return Some(Forma { value: input, span });
     }
 
     let mut cs = input.chars();

@@ -15,6 +15,9 @@ use crate::language;
 /// Top-level Technique translated to a runnable program.
 #[derive(Debug, Eq, PartialEq, Default)]
 pub struct Program<'i> {
+    /// The document's metadata header lines, shown as a preface before the
+    /// steps of the program are run.
+    pub prelude: Option<&'i language::Metadata<'i>>,
     /// All procedures declared in the input document, in source order. If an
     /// anonymous wrapper for a top-level `Technique::Steps`-only document was
     /// created it will be at index 0.
@@ -24,6 +27,7 @@ pub struct Program<'i> {
 impl<'i> Program<'i> {
     pub fn new() -> Self {
         Program {
+            prelude: None,
             subroutines: Vec::new(),
         }
     }
@@ -34,17 +38,26 @@ impl<'i> Program<'i> {
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct SubroutineId(pub usize);
 
+/// One link in a subroutine's lexical address: an enclosing procedure or section.
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Locale<'i> {
+    Procedure(&'i str),
+    Section(&'i str),
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Subroutine<'i> {
     /// If this is a synthetic wrapper around a top-level `Technique::Steps`
     /// then `None`, otherwise all procedures have names.
     pub name: Option<language::Identifier<'i>>,
     pub title: Option<&'i str>,
-    pub description: Vec<Operation<'i>>,
+    pub description: &'i [language::Paragraph<'i>],
     pub parameters: Option<&'i [language::Identifier<'i>]>,
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
     pub responses: Vec<&'i language::Response<'i>>,
+    /// Where this procedure is declared, root outward.
+    pub locale: Vec<Locale<'i>>,
 }
 
 impl<'i> Subroutine<'i> {
@@ -55,11 +68,26 @@ impl<'i> Subroutine<'i> {
         Subroutine {
             name: Some(name),
             title: None,
-            description: Vec::new(),
+            description: &[],
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
             responses: Vec::new(),
+            locale: Vec::new(),
+        }
+    }
+
+    /// The number of arguments an invocation must supply. The signature's
+    /// `requires` is authoritative when present; otherwise the count falls
+    /// back to the named parameter list, or zero when neither is declared.
+    /// Translation guarantees the two agree when both are present.
+    pub fn arity(&self) -> usize {
+        match (self.signature, self.parameters) {
+            (Some(signature), _) => signature
+                .requires
+                .cardinality(),
+            (None, Some(parameters)) => parameters.len(),
+            (None, None) => 0,
         }
     }
 
@@ -69,11 +97,12 @@ impl<'i> Subroutine<'i> {
         Subroutine {
             name: None,
             title: None,
-            description: Vec::new(),
+            description: &[],
             parameters: None,
             signature: None,
             body: Operation::Sequence(Vec::new()),
             responses: Vec::new(),
+            locale: Vec::new(),
         }
     }
 }
@@ -98,6 +127,7 @@ pub enum Operation<'i> {
     List(Vec<Operation<'i>>),
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
+    Hole,
     Sequence(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,
@@ -138,6 +168,12 @@ pub enum Ordinal<'i> {
 pub struct Invocable<'i> {
     pub target: SubroutineRef<'i>,
     pub arguments: Vec<Operation<'i>>,
+    /// Elided is `true` when the invocation is make with no argument list at
+    /// all (the author wrote `<thing>` rather than `<thing>(x, y, z)`). A
+    /// bare invocation is the equivalent to an all-`?` list of the
+    /// target's arity — and so is passes the arity check. A parenthesised
+    /// list, including an empty `()`, must match the arity of the target.
+    pub elided: bool,
 }
 
 /// Reference to a subroutine. The collect pass registers every declared

@@ -133,6 +133,15 @@ pub fn render_descriptive<'i>(descriptive: &'i Descriptive, renderer: &dyn Rende
     render_fragments(&sub.fragments, renderer)
 }
 
+/// Render the document's metadata header, coloured, to a String.
+pub fn render_header<'i>(metadata: &'i Metadata, renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.format_header(metadata);
+    render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
+}
+
 /// Render a procedure or section title with its leading `#` marker.
 pub fn render_title(title: &str, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
@@ -201,6 +210,16 @@ pub fn render_scope<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
         }
         _ => unreachable!(),
     }
+    render_fragments(&sub.fragments, renderer)
+        .trim_end()
+        .to_string()
+}
+
+/// Render a procedure's description: its prose paragraphs, blank-line
+/// separated, exactly as written in the source.
+pub fn render_description<'i>(paragraphs: &'i [Paragraph<'i>], renderer: &dyn Render) -> String {
+    let mut sub = Formatter::new(78);
+    sub.append_paragraphs(paragraphs);
     render_fragments(&sub.fragments, renderer)
         .trim_end()
         .to_string()
@@ -711,7 +730,7 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Forma, forma.value)
     }
 
-    fn append_paragraphs(&mut self, paragraphs: &'i Vec<Paragraph>) {
+    fn append_paragraphs(&mut self, paragraphs: &'i [Paragraph<'i>]) {
         for (i, paragraph) in paragraphs
             .iter()
             .enumerate()
@@ -1152,6 +1171,9 @@ impl<'i> Formatter<'i> {
             }
             Expression::Pair(pair, _) => self.append_pair(pair),
             Expression::List(elements, _) => self.append_list(elements),
+            Expression::Hole(_) => {
+                self.add_fragment_reference(Syntax::Variable, "?");
+            }
             Expression::Separator => {}
         }
     }

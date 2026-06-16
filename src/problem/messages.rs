@@ -1042,19 +1042,75 @@ pub fn generate_translation_error<'i>(
             ..
         } => (
             format!("Description out of place in procedure '{}'", name),
-            "A procedure's free-text description must appear immediately after the title and before any steps or code blocks.".to_string(),
+            r#"
+A procedure's free-text description must appear immediately after the
+title and before any steps or code blocks.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         TranslationError::UnresolvedProcedure(Identifier { value: name, .. }) => (
             format!("Unresolved procedure '{}'", name),
-            "A `<name>` invocation must refer to a procedure declared in this document. Built-in functions use the `name(...)` form (without angle brackets).".to_string(),
+            r#"
+A `<name>` invocation must refer to a procedure declared in this
+document. Built-in functions use the `name(...)` form (without angle
+brackets).
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+        TranslationError::ProcedureArityMismatch {
+            procedure: Identifier { value: name, .. },
+            expected,
+            actual,
+        } => (
+            format!(
+                "Wrong number of arguments to <{}>. Expected {}, but called with {}",
+                name, expected, actual
+            ),
+            r#"
+A parenthesised argument list must supply one argument for each input the
+signature requires (or, absent a signature, each declared parameter). Omit
+the parentheses entirely to defer every argument.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+        TranslationError::SignatureParameterMismatch {
+            procedure: Identifier { value: name, .. },
+            parameters,
+            requires,
+        } => (
+            format!(
+                "Parameter list of '{}' disagrees with its signature. {} names but {} required inputs",
+                name, parameters, requires
+            ),
+            r#"
+When a procedure declares both a parameter list and a signature, the named
+parameters must correspond one-to-one with the inputs the signature
+requires.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         TranslationError::BoundRepeat { .. } => (
             "Cannot use the result of `repeat`".to_string(),
-            "A `repeat` runs indefinitely and produces no value, so its result cannot be bound to a variable.".to_string(),
+            r#"
+A `repeat` runs indefinitely and produces no value, so its result
+cannot be bound to a variable.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         TranslationError::HeterogenousList { .. } => (
             "Mixed List and Tablet syntax".to_string(),
-            "A `[...]` literal must be either a Tablet (every entry in the list a `\"label\" = value` pair) or a lLst (entries are actual values in sequence), not a mix of the two.".to_string(),
+            r#"
+A `[...]` literal must be either a Tablet (every entry in the list a
+`"label" = value` pair) or a List (entries are actual values in
+sequence), not a mix of the two.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
     }
 }
@@ -1148,7 +1204,8 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
     match error {
         RunnerError::NoSuchRun(run_id) => (
             format!("No such run '{:06}'", run_id.0),
-            "The directory for this run identifier was not found in the local state store.".to_string(),
+            "The directory for this run identifier was not found in the local state store."
+                .to_string(),
         ),
         RunnerError::StoreError { path, error } => (
             format!("I/O error with local state store at {}", path.display()),
@@ -1160,15 +1217,30 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
         ),
         RunnerError::StartMissing(run_id) => (
             format!("Start record missing in run '{:06}'", run_id.0),
-            "The state file is present but its first record (the Start event) is missing or malformed.".to_string(),
+            r#"
+The state file is present but its first record (the Start event) is
+missing or malformed.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::InvalidRunId(text) => (
             format!("Invalid run identifier '{}'", text),
-            "Run identifiers are integer values, conventionally rendered as six zero-padded digits.".to_string(),
+            r#"
+Run identifiers are integer values, conventionally rendered as six
+zero-padded digits.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::MissingEntryProcedure => (
             "No entry procedure".to_string(),
-            "The document has neither procedure declarations nor top-level steps so the runner can't start its walk.".to_string(),
+            r#"
+The document has neither procedure declarations nor top-level steps so
+the runner can't start its walk.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::UnboundVariable(name) => (
             format!("Unbound variable '{}'", name),
@@ -1179,14 +1251,24 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
                 "Binding arity mismatch: {} names but {} values",
                 expected, actual
             ),
-            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+            r#"
+Binding multiple variables requires the procedure being invoked or
+function being called to return a tuple of the same size.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::BindNotTuple { expected } => (
             format!(
                 "Binding requires a tuple: {} names but the value is not a tuple",
                 expected
             ),
-            "Binding multiple variables requires the procedure being invoked or function being called to return a tuple of the same size.".to_string(),
+            r#"
+Binding multiple variables requires the procedure being invoked or
+function being called to return a tuple of the same size.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::ParameterArityMismatch { expected, actual } => (
             format!(
@@ -1196,7 +1278,9 @@ pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (St
             r#"
 Arguments after the filename are passed as the parameters for the entry
 procedure at the top of the Technique document.
-            "#.trim_ascii().to_string(),
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::ParameterUnexpected { actual } => (
             format!(
@@ -1206,7 +1290,9 @@ procedure at the top of the Technique document.
             r#"
 Arguments were supplied on the command-line but the entry procedure at the top
 of the document doesn't take any parameters.
-            "#.trim_ascii().to_string(),
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::NotIterable => (
             "Iteration requires a list".to_string(),
@@ -1217,23 +1303,46 @@ to use the values from a tablet convert them into a list first with the
 values() function. There is also a labels() function to get each of the
 tablet's labels, and pairs() to get a sequence of tuples of labels and values
 you can iterate over.
-            "#.trim_ascii().to_string(),
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::InvalidArgument { function, expected } => (
             format!("Wrong argument type passed to {}()", function),
-            format!("The {}() function expected {} but was given something else.", function, expected),
+            format!(
+                "The {}() function expected {} but was given something else.",
+                function, expected
+            ),
         ),
         RunnerError::UnknownFunction(function) => (
             format!("Unknown function {}()", function),
-            format!("The function {}() is undefined. This should have been caught during the linking phase!", function),
+            format!(
+                r#"
+The function {}() is undefined. This should have been caught during the
+linking phase!
+                "#,
+                function
+            )
+            .trim_ascii()
+            .to_string(),
         ),
-        RunnerError::FunctionArityMismatch { function, expected, actual } => (
+        RunnerError::FunctionArityMismatch {
+            function,
+            expected,
+            actual,
+        } => (
             format!("Wrong number of arguments to {}()", function),
-            format!("The function {}() expects {} but {} given.", function, expected, actual),
+            format!(
+                "The function {}() expects {} but {} given.",
+                function, expected, actual
+            ),
         ),
         RunnerError::ExecError(error) => (
             "Could not run external command".to_string(),
-            format!("Launching or reading from the external command failed: {}.", error),
+            format!(
+                "Launching or reading from the external command failed: {}.",
+                error
+            ),
         ),
         RunnerError::CommandFailed(code) => (
             format!("External command exited with status {}", code),
@@ -1241,7 +1350,15 @@ you can iterate over.
         ),
         RunnerError::IncompatibleCombination { left, right } => (
             format!("Cannot combine {} with {}", left, right),
-            format!("Combining Values requires compatible kinds; a {} and a {} can't be added together.", left, right),
+            format!(
+                r#"
+Combining Values requires compatible kinds; a {} and a {} can't be added
+together.
+                "#,
+                left, right
+            )
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::TerminalRequired => (
             "Running interactively requires a terminal".to_string(),
@@ -1250,11 +1367,18 @@ An interactive run writes its prompts to the terminal and reads user input
 direclty, so its output can't be redirected to a file or pipe. Use `technique
 run` in a terminal, or use `--mode=automatic` to run on auto; you can then
 safely redirect the output.
-            "#.trim_ascii().to_string(),
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
         RunnerError::UserQuit => (
             "Interrupted".to_string(),
-            "The user quit before the procedure was completed. Use `technique resume <id>` to continue.".to_string(),
+            r#"
+The user quit before the procedure was completed. Use `technique resume
+<id>` to continue.
+            "#
+            .trim_ascii()
+            .to_string(),
         ),
     }
 }

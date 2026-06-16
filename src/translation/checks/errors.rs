@@ -37,6 +37,78 @@ make_coffee :
 }
 
 #[test]
+fn procedure_arity_mismatch() {
+    // observe's arity is 1 (one signature input). A bare `<observe>` would
+    // defer it, but a written argument list must match exactly — two arguments
+    // is a mismatch.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <observe>(a, b)
+}
+
+observe : Situation -> Context
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::ProcedureArityMismatch {
+        procedure,
+        expected,
+        actual,
+    } = &errors[0]
+    else {
+        panic!("expected ProcedureArityMismatch, got {:?}", errors[0]);
+    };
+    assert_eq!(procedure.value, "observe");
+    assert_eq!(*expected, 1);
+    assert_eq!(*actual, 2);
+    assert_eq!(
+        procedure
+            .span
+            .offset,
+        source
+            .find("observe")
+            .expect("observe in source"),
+        "span points at the invocation"
+    );
+}
+
+#[test]
+fn signature_parameter_mismatch() {
+    // The parameter list names two inputs but the signature requires only
+    // one, so the declaration disagrees with itself.
+    let source = r#"
+% technique v1
+
+brew(beans, water) : Beans -> Coffee
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("translate should fail");
+
+    assert_eq!(errors.len(), 1);
+    let TranslationError::SignatureParameterMismatch {
+        procedure,
+        parameters,
+        requires,
+    } = &errors[0]
+    else {
+        panic!("expected SignatureParameterMismatch, got {:?}", errors[0]);
+    };
+    assert_eq!(procedure.value, "brew");
+    assert_eq!(*parameters, 2);
+    assert_eq!(*requires, 1);
+}
+
+#[test]
 fn bound_repeat() {
     let source = r#"
 % technique v1

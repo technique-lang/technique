@@ -308,7 +308,7 @@ helper :
         .count();
     let begins = pfftt
         .lines()
-        .filter(|line| line.contains("/main:/helper:/1 Begin"))
+        .filter(|line| line.contains("/helper:/1 Begin"))
         .count();
     assert_eq!(invokes, 2, "both call sites should invoke helper");
     assert_eq!(begins, 2, "helper's body should run on both calls");
@@ -644,6 +644,185 @@ test :
 }
 
 #[test]
+fn hole_argument_acquired_at_entry() {
+    // main invokes cycle with `?`, declining to supply the Situation. The
+    // operator is asked for `s` once, when cycle is entered, and the bound
+    // value serves both reads in the body.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s ~ x }
+2.  Second { s ~ y }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("hole-at-entry");
+    // acquire (for `?`) pops first at entry, then the two step completions.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("the situation".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        acquired,
+        vec![(Some("s"), Some("Situation"))],
+        "asked once, at entry, for s : Situation"
+    );
+}
+
+#[test]
+fn quit_while_acquiring_stops_the_run() {
+    // Ctrl-C at the implicit-argument prompt quits the run rather than
+    // accepting an empty value: the walk stops and a Stop event is recorded,
+    // and the callee's body never runs.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("quit-acquire");
+    let prompt = Mock::with_answers([UserInput::Quit]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(outcome, Outcome::Stopped);
+
+    let pfftt = fixture.pfftt_contents();
+    assert!(
+        pfftt
+            .lines()
+            .any(|line| line.contains(" / Stop")),
+        "a Stop lifecycle event is recorded at the root"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("/cycle:/1 Begin")),
+        "the callee's body must not run after the quit"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("Invoke")),
+        "declining at the prompt records no Invoke — the call never began"
+    );
+}
+
+#[test]
+fn skip_while_acquiring_records_the_skipped_invocation() {
+    // Skip at the implicit-argument prompt skips the invocation: a Skip is
+    // recorded at the callee's path (not silently swallowed) with no Invoke,
+    // and the callee's body never runs.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <cycle>(?)
+}
+
+cycle(s) : Situation -> Done
+
+1.  First { s }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("skip-acquire");
+    let prompt = Mock::with_answers([UserInput::Skip]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    assert!(
+        pfftt
+            .lines()
+            .any(|line| line.contains("/cycle: Skip")),
+        "the skipped invocation is recorded at the callee's path"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("Invoke")),
+        "a declined call records no Invoke"
+    );
+    assert!(
+        !pfftt
+            .lines()
+            .any(|line| line.contains("/cycle:/1 Begin")),
+        "the callee's body never runs"
+    );
+}
+
+#[test]
 fn resolved_invoke_descends_into_subroutine() {
     let source = r#"
 % technique v1
@@ -688,10 +867,10 @@ helper :
             }
         })
         .collect();
-    // The Step inside `helper` was reached and prompted, with the full
-    // enclosing hierarchy in the FQN: the entry `main` frame, the
-    // invoked `helper` frame, then the step.
-    assert_eq!(step_fqns, vec!["/main:/helper:/1"]);
+    // The Step inside `helper` was reached and prompted. `helper` is a
+    // top-level procedure, so its lexical address is its own root — the
+    // call from `main` does not nest it under the call site.
+    assert_eq!(step_fqns, vec!["/helper:/1"]);
 }
 
 #[test]
@@ -789,7 +968,8 @@ greet(name) :
         })
         .collect();
     // The step renders from its source paragraph, showing the template.
-    assert_eq!(steps, vec![("/main:/greet:/1", "1.  Hello { name }")]);
+    // `greet` is a top-level procedure, addressed at its own root.
+    assert_eq!(steps, vec![("/greet:/1", "1.  Hello { name }")]);
 }
 
 #[test]
@@ -827,41 +1007,6 @@ peek :
         panic!("expected UnboundVariable from the isolated frame");
     };
     assert_eq!(name, "secret");
-}
-
-#[test]
-fn invoke_arity_mismatch_errors() {
-    let source = r#"
-% technique v1
-
-main :
-{
-    <greet>("a", "b")
-}
-
-greet(name) :
-
-1.  Hi
-        "#
-    .trim_ascii();
-    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let mut fixture = StoreFixture::new("invoke-arity");
-    let prompt = Mock::with_answers([]);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        prompt,
-        Library::stub(),
-    );
-    let env = Environment::new();
-    let Err(RunnerError::ParameterArityMismatch { expected, actual }) = runner.run(env) else {
-        panic!("expected ParameterArityMismatch");
-    };
-    assert_eq!(expected, 1);
-    assert_eq!(actual, 2);
 }
 
 #[test]
@@ -1621,6 +1766,96 @@ greet(name) :
 }
 
 #[test]
+fn entry_procedure_description_displayed_intact() {
+    let source = r#"
+% technique v1
+
+make_coffee :
+
+Brew using { 42 ~ water } then serve it hot.
+
+1.  Pour
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("entry-description-intact");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    // The description renders from its source paragraph: the binding hoisted
+    // into the implicit step 0 still runs, but the prose is shown whole, with
+    // the binding syntax as-written.
+    let prompt = runner.into_driver();
+    let displayed: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Display(content) = e {
+                Some(content.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(displayed.contains(&"Brew using { 42 ~ water } then serve it hot."));
+}
+
+#[test]
+fn metadata_header_displayed_as_prelude() {
+    let source = r#"
+% technique v1
+! MIT; © 2026 ACME
+& procedure
+
+make_coffee :
+
+1.  Pour
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("metadata-prelude");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    // The header is shown once, before the entry procedure's declaration.
+    let prompt = runner.into_driver();
+    let first = prompt
+        .events()
+        .iter()
+        .find_map(|e| {
+            if let Event::Display(content) = e {
+                Some(content.as_str())
+            } else {
+                None
+            }
+        })
+        .expect("a Display event");
+    assert_eq!(first, "% technique v1\n! MIT; © 2026 ACME\n& procedure");
+}
+
+#[test]
 fn step_with_responses_prompts_choices_and_records() {
     let source = r#"
 % technique v1
@@ -1848,6 +2083,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         let invoke = Operation::Invoke(Invocable {
             target: SubroutineRef::Deferred(external),
             arguments: Vec::new(),
+            elided: true,
         });
         anonymous_with_body(Operation::Sequence(vec![invoke]))
     }

@@ -111,7 +111,10 @@ fn link_operation<'i>(
                 link_operation(item, library, problems);
             }
         }
-        Operation::Variable(_) | Operation::Number(_) | Operation::Multiline(_, _) => {}
+        Operation::Variable(_)
+        | Operation::Number(_)
+        | Operation::Multiline(_, _)
+        | Operation::Hole => {}
     }
 }
 
