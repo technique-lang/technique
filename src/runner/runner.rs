@@ -31,7 +31,10 @@ use crate::value::Value;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
-    Skipped,
+    /// Settled without effectful substantiation. Carries the value the body
+    /// still computed so block semantics keep propagating it, though the
+    /// recorded state drops it: a Skip records no value.
+    Skipped(Value),
     Failed(Failure),
     Stopped,
 }
@@ -112,6 +115,10 @@ pub struct Runner<'i, D: Driver> {
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
+    /// Monotonic count of effectful actions (an `exec` and the like) that have
+    /// run. A Step or scope is substantiated — settled `Done` rather than
+    /// `Skip` by an unattended driver — when this rises across its body.
+    actions: usize,
 }
 
 impl<'i, D: Driver> Runner<'i, D> {
@@ -130,6 +137,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
+            actions: 0,
         }
     }
 
@@ -220,6 +228,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .display(&description);
             }
         }
+        let actions_before = self.actions;
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
         // with a final sign-off prompt at its path. A Quit or error walk skips
@@ -229,9 +238,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
+            let effectful = self.actions > actions_before;
             let sealed = match result {
                 Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                Ok(outcome) => self.seal_scope(&qualified, outcome),
+                Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
                 Err(error) => Err(error),
             };
             self.path
@@ -314,9 +324,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 executable,
                                 Some(&[chosen]),
                             )?;
+                            // An effectful command ran to completion: this is the
+                            // evidence that substantiates the enclosing Step.
+                            self.actions += 1;
                             Ok(Outcome::Done(value))
                         }
-                        UserInput::Skip => Ok(Outcome::Skipped),
+                        UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
                         UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
                         UserInput::Quit => self.record_stop(),
                     }
@@ -564,10 +577,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
                     // sign-off, leaving the procedure unfinished.
+                    let actions_before = self.actions;
                     let result = self.walk(&mut local, &subroutine.body);
+                    let effectful = self.actions > actions_before;
                     let sealed = match result {
                         Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&lexical, outcome),
+                        Ok(outcome) => self.seal_scope(&lexical, outcome, effectful),
                         Err(error) => Err(error),
                     };
                     self.path
@@ -738,9 +753,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 _ => self.walk(env, op)?,
             };
             match outcome {
-                Outcome::Done(value) => last = value,
+                // Both a Done and an unsubstantiated Skip carry the value the
+                // member computed; block semantics propagate the last one.
+                Outcome::Done(value) | Outcome::Skipped(value) => last = value,
                 Outcome::Stopped => return Ok(Outcome::Stopped),
-                Outcome::Skipped | Outcome::Failed(_) => {}
+                Outcome::Failed(_) => {}
             }
         }
         Ok(Outcome::Done(last))
@@ -766,15 +783,17 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .pop();
             return Ok(Outcome::Done(Value::Unitus));
         }
+        let actions_before = self.actions;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
+        let effectful = self.actions > actions_before;
         // A section is a structural scope: the operator signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
         match result {
             Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-            Ok(outcome) => self.seal_scope(&qualified, outcome),
+            Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
             Err(error) => Err(error),
         }
     }
@@ -885,6 +904,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &step_text);
 
+        let actions_before = self.actions;
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
@@ -908,9 +928,13 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
+        let effectful = self.actions > actions_before;
+        // Hold the computed value aside: an unattended Skip still propagates it
+        // for block semantics, but `ask` consumes the original into its verdict.
+        let propagate = produced.clone();
         let input = self
             .driver
-            .ask(qualified, &choices, produced);
+            .ask(qualified, &choices, produced, effectful);
 
         // Quit halts the walk; this step's Begin stands without a matching
         // outcome, so resume re-runs it.
@@ -918,7 +942,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             return self.record_stop();
         }
 
-        let outcome = outcome_from(input);
+        let outcome = match input {
+            UserInput::Skip => Outcome::Skipped(propagate),
+            other => outcome_from(other),
+        };
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -932,21 +959,30 @@ impl<'i, D: Driver> Runner<'i, D> {
 
     /// Sign off a completed structural scope — a Section at its close, or the
     /// whole run at the entry procedure.
-    fn seal_scope(&mut self, qualified: &str, outcome: Outcome) -> Result<Outcome, RunnerError> {
+    fn seal_scope(
+        &mut self,
+        qualified: &str,
+        outcome: Outcome,
+        effectful: bool,
+    ) -> Result<Outcome, RunnerError> {
         let produced = match outcome {
-            Outcome::Done(value) => value,
+            Outcome::Done(value) | Outcome::Skipped(value) => value,
             _ => Value::Unitus,
         };
+        let propagate = produced.clone();
         let run_id = self
             .appender
             .run_id();
         let input = self
             .driver
-            .seal(qualified, produced);
+            .seal(qualified, produced, effectful);
         if let UserInput::Quit = input {
             return self.record_stop();
         }
-        let outcome = outcome_from(input);
+        let outcome = match input {
+            UserInput::Skip => Outcome::Skipped(propagate),
+            other => outcome_from(other),
+        };
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -1018,7 +1054,7 @@ fn describe_execute(function: &str) -> String {
 fn outcome_from(input: UserInput) -> Outcome {
     match input {
         UserInput::Done(value) => Outcome::Done(value),
-        UserInput::Skip => Outcome::Skipped,
+        UserInput::Skip => Outcome::Skipped(Value::Unitus),
         UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
         UserInput::Quit => Outcome::Stopped,
     }
@@ -1036,7 +1072,7 @@ fn record_state(outcome: &Outcome) -> State {
             State::Done(Some(RecordValue::Literal(text.clone())))
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
-        Outcome::Skipped => State::Skip,
+        Outcome::Skipped(_) => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) => {
             if reason.is_empty() {
                 // The operator failed the step without giving a reason; record

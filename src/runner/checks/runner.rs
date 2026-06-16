@@ -1109,6 +1109,53 @@ test :
 }
 
 #[test]
+fn automatic_substantiates_only_effectful_steps() {
+    // Under the automatic driver an effectful step (an exec that ran) settles
+    // Done ✓; a pure-prose sibling settles Skip ⊘. The enclosing procedure
+    // seals Done because at least one step beneath it did effectful work.
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Run it { exec("true") }
+
+2.  Just read this step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    let mut library = Library::core();
+    library.extend(Library::system());
+    crate::linking::link(&mut program, &library).expect("linked");
+
+    let mut fixture = StoreFixture::new("automatic-substantiation");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        library,
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Done(_) => {}
+        other => panic!("expected Done, got {:?}", other),
+    }
+    let trace = String::from_utf8(
+        runner
+            .into_driver()
+            .into_output(),
+    )
+    .expect("utf8");
+    assert!(trace.contains("→ /check:/1 ✓"));
+    assert!(trace.contains("→ /check:/2 ⊘"));
+    assert!(trace.contains("↙ /check: ✓"));
+}
+
+#[test]
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 
@@ -1977,7 +2024,8 @@ test :
 #[test]
 fn automatic_driver_records_body_value() {
     // A value-bearing body under the automatic driver: no operator, no canned
-    // answers; the step's outcome is the body's computed value, recorded.
+    // answers. The body's computed value propagates as the run's outcome, but
+    // with no effectful work the step itself records Skip rather than Done.
     let mut fixture = StoreFixture::new("automatic-records-value");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
@@ -2009,12 +2057,9 @@ fn automatic_driver_records_body_value() {
         })
         .collect();
     let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(
-        record.state,
-        State::Done(Some(RecordValue::Literal("probe output".to_string())))
-    );
+    assert_eq!(record.state, State::Skip);
 
-    // A pure-prose step (empty body) records () — nothing was computed.
+    // A pure-prose step (empty body) also records Skip — nothing effectful ran.
     let mut fixture = StoreFixture::new("automatic-empty-body");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
@@ -2042,12 +2087,13 @@ fn automatic_driver_records_body_value() {
         })
         .collect();
     let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+    assert_eq!(record.state, State::Skip);
 }
 
 #[test]
-fn multiline_body_value_records_unit_but_still_propagates() {
-    // A step whose body computes multi-line text (raw exec output) records ()
+fn multiline_body_value_skips_but_still_propagates() {
+    // A step whose body computes multi-line text still propagates that value as
+    // the outcome, but records Skip since no effectful work substantiated it.
     let mut fixture = StoreFixture::new("multiline-records-unit");
     let body = Operation::Sequence(vec![step(
         Ordinal::Dependent("1"),
@@ -2078,7 +2124,7 @@ fn multiline_body_value_records_unit_but_still_propagates() {
         })
         .collect();
     let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Done(Some(RecordValue::Unit)));
+    assert_eq!(record.state, State::Skip);
 }
 
 #[test]
@@ -2113,18 +2159,15 @@ fn sequence_value_is_last_member() {
         Outcome::Done(Value::Literali("second".to_string()))
     );
 
-    // Both steps ran, recording their own value in order (a trailing scope
-    // seal records Unit, not a Literal, so it is excluded).
+    // Both steps ran, but neither did effectful work, so each records Skip even
+    // though the last member's value is what the sequence propagates.
     let pfftt = fixture.pfftt_contents();
-    let dones: Vec<String> = pfftt
+    let skips = pfftt
         .lines()
         .filter_map(|line| parse_record(line).ok())
-        .filter_map(|record| match record.state {
-            State::Done(Some(RecordValue::Literal(text))) => Some(text),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(dones, vec!["first".to_string(), "second".to_string()]);
+        .filter(|record| record.state == State::Skip)
+        .count();
+    assert_eq!(skips, 2);
 }
 
 #[test]

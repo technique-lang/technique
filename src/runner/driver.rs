@@ -68,8 +68,16 @@ pub trait Driver {
     /// response values, yielding `Done(Literali(choice))`. Skip, fail, and
     /// quit are available either way. `produced` is consumed: the driver
     /// either moves it into the returned `Done` or discards it. `qualified` is
-    /// the step's Qualified Name, repeated on the live prompt line.
-    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput;
+    /// the step's Qualified Name, repeated on the live prompt line. `effectful`
+    /// is whether the body did effectful work (an `exec` ran in its subtree):
+    /// an unattended driver settles `Done` only when it did, otherwise `Skip`.
+    fn ask(
+        &mut self,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        effectful: bool,
+    ) -> UserInput;
 
     /// Settle an external invocation this run cannot perform (a `<uri>` call
     /// into another document or system). `Console` prompts the operator to
@@ -93,8 +101,10 @@ pub trait Driver {
     /// Prompt the operator to sign off a completed structural scope — a Section
     /// at its close, or the whole run at the entry procedure's close. Like
     /// `ask` but with no response choices, settling to the `↙` close marker;
-    /// `produced` is the scope's value, offered for acceptance.
-    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput;
+    /// `produced` is the scope's value, offered for acceptance. `effectful` is
+    /// whether the scope's subtree did effectful work; an unattended driver
+    /// signs off `Done` only when it did, otherwise `Skip`.
+    fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput;
 
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
     /// abandon the call, Quit stops the run.
@@ -162,7 +172,13 @@ impl<W: Write> Driver for Console<W> {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value) -> UserInput {
+    fn ask(
+        &mut self,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        _effectful: bool,
+    ) -> UserInput {
         prompt(&mut self.output, qualified, "→", choices, produced)
     }
 
@@ -174,7 +190,7 @@ impl<W: Write> Driver for Console<W> {
         prompt_command(&mut self.output, qualified, script)
     }
 
-    fn seal(&mut self, qualified: &str, produced: Value) -> UserInput {
+    fn seal(&mut self, qualified: &str, produced: Value, _effectful: bool) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
     }
 
@@ -368,6 +384,14 @@ fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
 /// Render a named scope's `↘` descent line.
 fn render_enter<W: Write>(out: &mut W, qualified: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
+}
+
+/// Render a settled record line: the settle marker (`→` step, `↙` scope
+/// close), the Qualified Name, and the verdict glyph (`✓` done, `⊘` skip).
+/// The plain form of the line Console scrolls into its record on settling a
+/// prompt, so an automatic trace carries the same outcomes.
+fn render_settle<W: Write>(out: &mut W, settle: &str, qualified: &str, glyph: &str) {
+    let _ = writeln!(out, "{} {} {}", settle, qualified, glyph);
 }
 
 /// Render a Section heading: its numeral and title.
@@ -932,6 +956,12 @@ impl<W: Write> Automatic<W> {
     pub fn with_handle(output: W) -> Self {
         Automatic { output }
     }
+
+    /// Recover the written trace after a run, for tests asserting on the
+    /// settled glyphs the automatic driver emitted.
+    pub fn into_output(self) -> W {
+        self.output
+    }
 }
 
 impl<W: Write> Driver for Automatic<W> {
@@ -961,11 +991,24 @@ impl<W: Write> Driver for Automatic<W> {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
-        UserInput::Done(produced)
+    fn ask(
+        &mut self,
+        qualified: &str,
+        _choices: &[&str],
+        produced: Value,
+        effectful: bool,
+    ) -> UserInput {
+        if effectful {
+            render_settle(&mut self.output, "→", qualified, "✓");
+            UserInput::Done(produced)
+        } else {
+            render_settle(&mut self.output, "→", qualified, "⊘");
+            UserInput::Skip
+        }
     }
 
-    fn external(&mut self, _qualified: &str) -> UserInput {
+    fn external(&mut self, qualified: &str) -> UserInput {
+        render_settle(&mut self.output, "→", qualified, "⊘");
         UserInput::Skip
     }
 
@@ -974,8 +1017,14 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
-    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
-        UserInput::Done(produced)
+    fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput {
+        if effectful {
+            render_settle(&mut self.output, "↙", qualified, "✓");
+            UserInput::Done(produced)
+        } else {
+            render_settle(&mut self.output, "↙", qualified, "⊘");
+            UserInput::Skip
+        }
     }
 
     fn acquire(
@@ -1019,7 +1068,13 @@ impl Driver for Headless {
 
     fn announce(&mut self, _message: &str) {}
 
-    fn ask(&mut self, _qualified: &str, _choices: &[&str], produced: Value) -> UserInput {
+    fn ask(
+        &mut self,
+        _qualified: &str,
+        _choices: &[&str],
+        produced: Value,
+        _effectful: bool,
+    ) -> UserInput {
         self.results += 1;
         UserInput::Done(produced)
     }
@@ -1035,7 +1090,7 @@ impl Driver for Headless {
 
     fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
 
-    fn seal(&mut self, _qualified: &str, produced: Value) -> UserInput {
+    fn seal(&mut self, _qualified: &str, produced: Value, _effectful: bool) -> UserInput {
         self.results += 1;
         UserInput::Done(produced)
     }
@@ -1165,7 +1220,13 @@ impl Driver for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(&mut self, qualified: &str, choices: &[&str], _produced: Value) -> UserInput {
+    fn ask(
+        &mut self,
+        qualified: &str,
+        choices: &[&str],
+        _produced: Value,
+        _effectful: bool,
+    ) -> UserInput {
         self.events
             .push(Event::Ask {
                 qualified: qualified.to_string(),
@@ -1206,7 +1267,7 @@ impl Driver for Mock {
     /// rather than draining the `ask` answer queue — the structural-scope
     /// close is orthogonal to the step verdicts a test drives. A test
     /// asserting sign-off behaviour inspects the recorded `Seal` event.
-    fn seal(&mut self, qualified: &str, _produced: Value) -> UserInput {
+    fn seal(&mut self, qualified: &str, _produced: Value, _effectful: bool) -> UserInput {
         self.events
             .push(Event::Seal {
                 qualified: qualified.to_string(),

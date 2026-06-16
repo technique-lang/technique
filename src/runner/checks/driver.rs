@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::runner::driver::{draw, Console, Driver, Event, Interaction, Mock, UserInput};
+use crate::runner::driver::{
+    draw, Automatic, Console, Driver, Event, Interaction, Mock, UserInput,
+};
 use crate::value::{Numeric, Value};
 
 #[test]
@@ -11,18 +13,18 @@ fn mock_returns_canned_answers_in_order() {
         UserInput::Quit,
     ]);
     assert_eq!(
-        p.ask("/I/1", &[], Value::Unitus),
+        p.ask("/I/1", &[], Value::Unitus, true),
         UserInput::Done(Value::Unitus)
     );
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Skip);
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus), UserInput::Quit);
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Skip);
+    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Quit);
 }
 
 #[test]
 fn mock_records_step_and_ask_events() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     p.step("/local_network:I/1", "Check the cable.");
-    let _ = p.ask("/local_network:I/1", &[], Value::Unitus);
+    let _ = p.ask("/local_network:I/1", &[], Value::Unitus, true);
     assert_eq!(
         p.events(),
         &[
@@ -41,7 +43,7 @@ fn mock_records_step_and_ask_events() {
 #[test]
 fn mock_records_offered_choices() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
-    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus);
+    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus, true);
     assert_eq!(
         p.events(),
         &[Event::Ask {
@@ -71,7 +73,7 @@ fn mock_records_enter_and_announce() {
 #[should_panic(expected = "Mock::ask called with no canned answers remaining")]
 fn mock_ask_without_answers_panics() {
     let mut p = Mock::new();
-    let _ = p.ask("I/1", &[], Value::Unitus);
+    let _ = p.ask("I/1", &[], Value::Unitus, true);
 }
 
 #[test]
@@ -82,6 +84,27 @@ fn console_step_writes_fqn_and_description() {
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ local_network:I/1"));
     assert!(written.contains("    Check the cable."));
+}
+
+#[test]
+fn automatic_settles_done_when_effectful_skip_otherwise() {
+    // An effectful step (an exec ran in its body) is taken as Done and marked
+    // with the ✓ glyph; a step with no effectful work is Skip, marked ⊘.
+    let mut output: Vec<u8> = Vec::new();
+    let mut p = Automatic::with_handle(&mut output);
+    let done = p.ask("/I/1", &[], Value::Literali("ran".to_string()), true);
+    let skip = p.ask("/I/2", &[], Value::Unitus, false);
+    let sealed = p.seal("/I", Value::Unitus, true);
+    let skipped_seal = p.seal("/II", Value::Unitus, false);
+    assert_eq!(done, UserInput::Done(Value::Literali("ran".to_string())));
+    assert_eq!(skip, UserInput::Skip);
+    assert_eq!(sealed, UserInput::Done(Value::Unitus));
+    assert_eq!(skipped_seal, UserInput::Skip);
+    let written = String::from_utf8(output).expect("utf8");
+    assert!(written.contains("→ /I/1 ✓"));
+    assert!(written.contains("→ /I/2 ⊘"));
+    assert!(written.contains("↙ /I ✓"));
+    assert!(written.contains("↙ /II ⊘"));
 }
 
 #[test]
