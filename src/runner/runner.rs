@@ -680,19 +680,11 @@ impl<'i, D: Driver> Runner<'i, D> {
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
-        self.driver
-            .announce(&describe_loop(names, over));
         match over {
             None => {
                 let mut number = 1;
                 loop {
-                    self.path
-                        .push(PathSegment::Iteration(number));
-                    let result = self.walk(env, body);
-                    self.path
-                        .pop();
-
-                    if let Outcome::Stopped = result? {
+                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                     number += 1;
@@ -718,19 +710,45 @@ impl<'i, D: Driver> Runner<'i, D> {
                     super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
-                    self.path
-                        .push(PathSegment::Iteration(number));
-                    let result = self.walk(env, body);
-                    self.path
-                        .pop();
-
-                    if let Outcome::Stopped = result? {
+                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                 }
                 Ok(Outcome::Done(Value::Unitus))
             }
         }
+    }
+
+    /// Walk one pass of a loop body within its `[number]` iteration scope,
+    /// bracketing it with `↘`/`↙` chrome. The iteration is a display scope;
+    /// the PFFTT records it through the child paths the body emits.
+    fn walk_iteration(
+        &mut self,
+        env: &mut Environment,
+        number: usize,
+        body: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        self.path
+            .push(PathSegment::Iteration(number));
+        let qualified = self
+            .path
+            .render();
+        self.driver
+            .enter(&qualified);
+        let result = self.walk(env, body);
+        let verdict = match &result {
+            Ok(Outcome::Done(_)) => Some(UserInput::Done(Value::Unitus)),
+            Ok(Outcome::Skipped(_)) => Some(UserInput::Skip),
+            Ok(Outcome::Failed(Failure::Aborted(reason))) => Some(UserInput::Fail(reason.clone())),
+            _ => None,
+        };
+        if let Some(verdict) = verdict {
+            self.driver
+                .settle("↙", &qualified, &verdict);
+        }
+        self.path
+            .pop();
+        result
     }
 
     fn walk_sequence(
@@ -1034,21 +1052,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&suspend)?;
         Ok(Outcome::Stopped)
-    }
-}
-
-fn describe_loop(
-    names: &[crate::language::Identifier<'_>],
-    over: Option<&Operation<'_>>,
-) -> String {
-    let joined: Vec<&str> = names
-        .iter()
-        .map(|n| n.value)
-        .collect();
-    match over {
-        None => "repeat".to_string(),
-        Some(_) if joined.is_empty() => "foreach".to_string(),
-        Some(_) => format!("foreach {}", joined.join(", ")),
     }
 }
 
