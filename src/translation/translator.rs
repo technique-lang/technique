@@ -299,14 +299,26 @@ impl<'i> Translator<'i> {
                         }
                     }
                     language::Technique::Procedures(procedures) => {
-                        // A section whose body declares procedures descends
-                        // into the first, its entry point.
+                        // Descend into the first procedure, the section's entry
+                        // point, unless the title already invoked it.
                         if let Some(procedure) = procedures.first() {
-                            body_ops.push(Operation::Invoke(Invocable {
-                                target: SubroutineRef::Unresolved(procedure.name),
-                                arguments: Vec::new(),
-                                elided: true,
-                            }));
+                            let invoked = body_ops
+                                .iter()
+                                .any(|op| {
+                                    if let Operation::Invoke(invocable) = op {
+                                        invocable.target
+                                            == SubroutineRef::Unresolved(procedure.name)
+                                    } else {
+                                        false
+                                    }
+                                });
+                            if !invoked {
+                                body_ops.push(Operation::Invoke(Invocable {
+                                    target: SubroutineRef::Unresolved(procedure.name),
+                                    arguments: Vec::new(),
+                                    elided: true,
+                                }));
+                            }
                         }
                     }
                     language::Technique::Empty => {}

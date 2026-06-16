@@ -647,6 +647,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                     return self.record_stop();
                 }
 
+                self.driver
+                    .settle("→", &qualified, &input);
                 let outcome = outcome_from(input);
                 self.appender
                     .append(&Record {
@@ -942,6 +944,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             return self.record_stop();
         }
 
+        self.driver
+            .settle("→", qualified, &input);
         let outcome = match input {
             UserInput::Skip => Outcome::Skipped(propagate),
             other => outcome_from(other),
@@ -979,6 +983,8 @@ impl<'i, D: Driver> Runner<'i, D> {
         if let UserInput::Quit = input {
             return self.record_stop();
         }
+        self.driver
+            .settle("↙", qualified, &input);
         let outcome = match input {
             UserInput::Skip => Outcome::Skipped(propagate),
             other => outcome_from(other),

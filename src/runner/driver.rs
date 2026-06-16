@@ -106,6 +106,12 @@ pub trait Driver {
     /// signs off `Done` only when it did, otherwise `Skip`.
     fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput;
 
+    /// Render the settled verdict line for a step or scope close: the `marker`
+    /// (`→` step, `↙` scope close), Qualified Name, and the verdict's glyph.
+    /// The walker calls this after `ask` / `seal` / `external` returns; Quit
+    /// renders nothing.
+    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
+
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
     /// abandon the call, Quit stops the run.
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput;
@@ -194,6 +200,24 @@ impl<W: Write> Driver for Console<W> {
         prompt(&mut self.output, qualified, "↙", &[], produced)
     }
 
+    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        let glyph = match verdict {
+            UserInput::Done(_) => "✓".green(),
+            UserInput::Skip => "⊘".yellow(),
+            UserInput::Fail(_) => "✗".red(),
+            UserInput::Quit => return,
+        };
+        let _ = writeln!(
+            self.output,
+            "{} {}",
+            format!("{} {}", marker, qualified).dark_grey(),
+            glyph
+        );
+        let _ = self
+            .output
+            .flush();
+    }
+
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         let label = format!(
             "{}({} : {})",
@@ -209,12 +233,9 @@ impl<W: Write> Driver for Console<W> {
     }
 }
 
-/// Run one interactive prompt and settle it. The live `▶` line is drawn and
-/// re-drawn as keys arrive; on settle it is replaced by a `settle` verdict line
-/// (`→` for a step, `↙` for a scope close) in dark grey with a trailing verdict
-/// glyph (`✓` done, `⊘` skip, `✗` fail), which scrolls up into the record —
-/// except Quit, which leaves the scope unfinished (resume re-runs it) and just
-/// clears the row.
+/// Run one interactive prompt and return the operator's verdict. The live `▶`
+/// line is drawn and re-drawn as keys arrive; on settle the row is cleared, and
+/// the walker renders the verdict line via `settle`.
 fn prompt<W: Write>(
     out: &mut W,
     qualified: &str,
@@ -228,37 +249,7 @@ fn prompt<W: Write>(
         settle,
         Interaction::begin(choices, produced),
     );
-    let col = settle
-        .chars()
-        .count() as u16
-        + 1
-        + qualified
-            .chars()
-            .count() as u16
-        + 1;
-    match &result {
-        UserInput::Done(_) => {
-            let _ = queue!(out, cursor::MoveToColumn(col));
-            let _ = write!(out, "{}", "✓".green());
-            let _ = queue!(out, Clear(ClearType::UntilNewLine));
-            let _ = writeln!(out);
-        }
-        UserInput::Skip => {
-            let _ = queue!(out, cursor::MoveToColumn(col));
-            let _ = write!(out, "{}", "⊘".yellow());
-            let _ = queue!(out, Clear(ClearType::UntilNewLine));
-            let _ = writeln!(out);
-        }
-        UserInput::Fail(_) => {
-            let _ = queue!(out, cursor::MoveToColumn(col));
-            let _ = write!(out, "{}", "✗".red());
-            let _ = queue!(out, Clear(ClearType::UntilNewLine));
-            let _ = writeln!(out);
-        }
-        UserInput::Quit => {
-            let _ = writeln!(out);
-        }
-    }
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
     let _ = out.flush();
     result
 }
@@ -384,14 +375,6 @@ fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
 /// Render a named scope's `↘` descent line.
 fn render_enter<W: Write>(out: &mut W, qualified: &str) {
     let _ = writeln!(out, "↘ {}", qualified);
-}
-
-/// Render a settled record line: the settle marker (`→` step, `↙` scope
-/// close), the Qualified Name, and the verdict glyph (`✓` done, `⊘` skip).
-/// The plain form of the line Console scrolls into its record on settling a
-/// prompt, so an automatic trace carries the same outcomes.
-fn render_settle<W: Write>(out: &mut W, settle: &str, qualified: &str, glyph: &str) {
-    let _ = writeln!(out, "{} {} {}", settle, qualified, glyph);
 }
 
 /// Render a Section heading: its numeral and title.
@@ -993,22 +976,19 @@ impl<W: Write> Driver for Automatic<W> {
 
     fn ask(
         &mut self,
-        qualified: &str,
+        _qualified: &str,
         _choices: &[&str],
         produced: Value,
         effectful: bool,
     ) -> UserInput {
         if effectful {
-            render_settle(&mut self.output, "→", qualified, "✓");
             UserInput::Done(produced)
         } else {
-            render_settle(&mut self.output, "→", qualified, "⊘");
             UserInput::Skip
         }
     }
 
-    fn external(&mut self, qualified: &str) -> UserInput {
-        render_settle(&mut self.output, "→", qualified, "⊘");
+    fn external(&mut self, _qualified: &str) -> UserInput {
         UserInput::Skip
     }
 
@@ -1017,14 +997,22 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
-    fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput {
+    fn seal(&mut self, _qualified: &str, produced: Value, effectful: bool) -> UserInput {
         if effectful {
-            render_settle(&mut self.output, "↙", qualified, "✓");
             UserInput::Done(produced)
         } else {
-            render_settle(&mut self.output, "↙", qualified, "⊘");
             UserInput::Skip
         }
+    }
+
+    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        let glyph = match verdict {
+            UserInput::Done(_) => "✓",
+            UserInput::Skip => "⊘",
+            UserInput::Fail(_) => "✗",
+            UserInput::Quit => return,
+        };
+        let _ = writeln!(self.output, "{} {} {}", marker, qualified, glyph);
     }
 
     fn acquire(
@@ -1094,6 +1082,8 @@ impl Driver for Headless {
         self.results += 1;
         UserInput::Done(produced)
     }
+
+    fn settle(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
 
     fn acquire(
         &mut self,
@@ -1274,6 +1264,8 @@ impl Driver for Mock {
             });
         UserInput::Done(Value::Unitus)
     }
+
+    fn settle(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
 
     fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         self.events

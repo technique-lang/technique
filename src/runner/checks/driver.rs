@@ -88,23 +88,50 @@ fn console_step_writes_fqn_and_description() {
 
 #[test]
 fn automatic_settles_done_when_effectful_skip_otherwise() {
-    // An effectful step (an exec ran in its body) is taken as Done and marked
-    // with the ✓ glyph; a step with no effectful work is Skip, marked ⊘.
+    // An effectful step (an exec ran in its body) settles Done; a step with no
+    // effectful work settles Skip. The verdict itself carries no output —
+    // `settle` renders the line.
+    let mut p = Automatic::with_handle(Vec::new());
+    assert_eq!(
+        p.ask("/I/1", &[], Value::Literali("ran".to_string()), true),
+        UserInput::Done(Value::Literali("ran".to_string()))
+    );
+    assert_eq!(p.ask("/I/2", &[], Value::Unitus, false), UserInput::Skip);
+    assert_eq!(
+        p.seal("/I", Value::Unitus, true),
+        UserInput::Done(Value::Unitus)
+    );
+    assert_eq!(p.seal("/II", Value::Unitus, false), UserInput::Skip);
+}
+
+#[test]
+fn automatic_settle_renders_verdict_glyph() {
+    // settle scrolls the plain verdict line into the trace, the unattended
+    // analog of the line Console leaves: `→ ✓` done, `→ ⊘` skip, `↙ ✓` sign-off.
     let mut output: Vec<u8> = Vec::new();
     let mut p = Automatic::with_handle(&mut output);
-    let done = p.ask("/I/1", &[], Value::Literali("ran".to_string()), true);
-    let skip = p.ask("/I/2", &[], Value::Unitus, false);
-    let sealed = p.seal("/I", Value::Unitus, true);
-    let skipped_seal = p.seal("/II", Value::Unitus, false);
-    assert_eq!(done, UserInput::Done(Value::Literali("ran".to_string())));
-    assert_eq!(skip, UserInput::Skip);
-    assert_eq!(sealed, UserInput::Done(Value::Unitus));
-    assert_eq!(skipped_seal, UserInput::Skip);
+    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.settle("→", "/I/2", &UserInput::Skip);
+    p.settle("↙", "/I", &UserInput::Done(Value::Unitus));
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ /I/1 ✓"));
     assert!(written.contains("→ /I/2 ⊘"));
     assert!(written.contains("↙ /I ✓"));
-    assert!(written.contains("↙ /II ⊘"));
+}
+
+#[test]
+fn console_settle_writes_verdict_line() {
+    // Console renders the same verdict line from settle (styled); the path and
+    // glyph survive the ANSI wrapping.
+    let mut output: Vec<u8> = Vec::new();
+    let mut p = Console::with_output(&mut output);
+    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.settle("↙", "/I", &UserInput::Skip);
+    let written = String::from_utf8(output).expect("utf8");
+    assert!(written.contains("→ /I/1"));
+    assert!(written.contains("✓"));
+    assert!(written.contains("↙ /I"));
+    assert!(written.contains("⊘"));
 }
 
 #[test]
