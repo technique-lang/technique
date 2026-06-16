@@ -87,10 +87,12 @@ pub enum RunnerError {
         right: &'static str,
     },
     ParameterArityMismatch {
-        expected: usize,
+        procedure: String,
+        parameters: Vec<String>,
         actual: usize,
     },
     ParameterUnexpected {
+        procedure: String,
         actual: usize,
     },
     TerminalRequired,
@@ -176,8 +178,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            self.driver
-                .enter(&qualified);
+            let params = entry
+                .parameters
+                .unwrap_or(&[]);
+            if params.is_empty() {
+                self.driver
+                    .enter(&qualified);
+            } else {
+                let echo = render_argument_echo(name, params, &env);
+                self.driver
+                    .enter(&echo);
+            }
             let declaration = crate::formatting::formatter::render_declaration(
                 name,
                 entry.parameters,
@@ -396,11 +407,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // A bare call defers every argument and is exempt; a written
                 // argument list must match arity exactly.
                 if !invocable.elided {
+                    let procedure = subroutine
+                        .name
+                        .as_ref()
+                        .map(|n| n.value)
+                        .unwrap_or("the procedure")
+                        .to_string();
                     if expected == 0 && actual > 0 {
-                        return Err(RunnerError::ParameterUnexpected { actual });
+                        return Err(RunnerError::ParameterUnexpected { procedure, actual });
                     }
                     if expected != actual {
-                        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+                        return Err(RunnerError::ParameterArityMismatch {
+                            procedure,
+                            parameters: describe_parameters(params, subroutine.signature),
+                            actual,
+                        });
                     }
                 }
                 let mut local = Environment::new();
@@ -1031,6 +1052,58 @@ fn record_state(outcome: &Outcome) -> State {
     }
 }
 
+/// Render the entry procedure's call with its supplied arguments bound to each
+/// parameter in `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`,
+/// so the run opens by showing what each command-line argument became.
+fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
+    let bindings: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let value = match env.lookup(p.value) {
+                Some(Value::Literali(text)) => text.clone(),
+                Some(other) => other.to_string(),
+                None => String::new(),
+            };
+            format!("{} ~ {}", value, p.value)
+        })
+        .collect();
+    format!("{}({})", name, bindings.join(", "))
+}
+
+/// Describe a procedure's expected parameters as `name : Type` fragments for
+/// an arity error: the declared parameter name joined to its forma when the
+/// signature supplies one, falling back to whichever is known.
+fn describe_parameters(
+    params: &[language::Identifier],
+    signature: Option<&language::Signature>,
+) -> Vec<String> {
+    let formae = signature
+        .map(|s| {
+            s.requires
+                .formae()
+        })
+        .unwrap_or_default();
+    let count = params
+        .len()
+        .max(formae.len());
+    (0..count)
+        .map(|i| {
+            let name = params
+                .get(i)
+                .map(|p| p.value);
+            let forma = formae
+                .get(i)
+                .map(|f| f.value);
+            match (name, forma) {
+                (Some(n), Some(t)) => format!("{} : {}", n, t),
+                (Some(n), None) => n.to_string(),
+                (None, Some(t)) => t.to_string(),
+                (None, None) => "?".to_string(),
+            }
+        })
+        .collect()
+}
+
 /// Build an `Environment` seeded with the entry procedure's parameters
 /// bound to the supplied CLI arguments.
 pub(super) fn bind_parameters(
@@ -1046,11 +1119,21 @@ pub(super) fn bind_parameters(
         .unwrap_or(&[]);
     let expected = params.len();
     let actual = arguments.len();
+    let procedure = entry
+        .name
+        .as_ref()
+        .map(|n| n.value)
+        .unwrap_or("the entry procedure")
+        .to_string();
     if expected == 0 && actual > 0 {
-        return Err(RunnerError::ParameterUnexpected { actual });
+        return Err(RunnerError::ParameterUnexpected { procedure, actual });
     }
     if expected != actual {
-        return Err(RunnerError::ParameterArityMismatch { expected, actual });
+        return Err(RunnerError::ParameterArityMismatch {
+            procedure,
+            parameters: describe_parameters(params, entry.signature),
+            actual,
+        });
     }
     let mut env = Environment::new();
     for (param, argument) in params

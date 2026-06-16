@@ -1270,10 +1270,17 @@ function being called to return a tuple of the same size.
             .trim_ascii()
             .to_string(),
         ),
-        RunnerError::ParameterArityMismatch { expected, actual } => (
+        RunnerError::ParameterArityMismatch {
+            procedure,
+            parameters,
+            actual,
+        } => (
             format!(
-                "Wrong number of arguments: procedure expects {} but {} given",
-                expected, actual
+                "Wrong number of arguments: {} expects {} ({}) but {} given",
+                procedure,
+                parameters.len(),
+                parameters.join(", "),
+                actual
             ),
             r#"
 Arguments after the filename are passed as the parameters for the entry
@@ -1282,15 +1289,18 @@ procedure at the top of the Technique document.
             .trim_ascii()
             .to_string(),
         ),
-        RunnerError::ParameterUnexpected { actual } => (
+        RunnerError::ParameterUnexpected { procedure, actual } => (
             format!(
-                "Unexpected arguments: procedure takes no parameters but {} given",
-                actual
+                "Unexpected arguments: {} takes no parameters but {} given",
+                procedure, actual
             ),
-            r#"
-Arguments were supplied on the command-line but the entry procedure at the top
-of the document doesn't take any parameters.
-            "#
+            format!(
+                r#"
+Arguments were supplied on the command-line but {} doesn't take any
+parameters.
+                "#,
+                procedure
+            )
             .trim_ascii()
             .to_string(),
         ),

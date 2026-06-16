@@ -11,7 +11,7 @@ use crate::program::{
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
-use crate::runner::runner::{bind_parameters, Outcome, Runner, RunnerError};
+use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
 use crate::runner::state::{
     parse_record, Appender, InvokeTarget, State, Store, Value as RecordValue,
 };
@@ -1675,13 +1675,20 @@ connectivity_check(e, s) :
         Some(&Value::Literali("192.168.1.5".to_string()))
     );
 
-    // Too few arguments: ParameterArityMismatch.
+    // Too few arguments: ParameterArityMismatch naming the procedure and
+    // its parameters.
     let args = ["foo".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected arity error");
-    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+    let RunnerError::ParameterArityMismatch {
+        procedure,
+        parameters,
+        actual,
+    } = error
+    else {
         panic!("expected ParameterArityMismatch, got {:?}", error);
     };
-    assert_eq!(expected, 2);
+    assert_eq!(procedure, "connectivity_check");
+    assert_eq!(parameters, vec!["e".to_string(), "s".to_string()]);
     assert_eq!(actual, 1);
 
     // Too many arguments: also ParameterArityMismatch.
@@ -1691,11 +1698,38 @@ connectivity_check(e, s) :
         "extra".to_string(),
     ];
     let error = bind_parameters(&program, &args).expect_err("expected arity error");
-    let RunnerError::ParameterArityMismatch { expected, actual } = error else {
+    let RunnerError::ParameterArityMismatch {
+        parameters, actual, ..
+    } = error
+    else {
         panic!("expected ParameterArityMismatch, got {:?}", error);
     };
-    assert_eq!(expected, 2);
+    assert_eq!(parameters.len(), 2);
     assert_eq!(actual, 3);
+
+    // A signature names each parameter's forma: the error describes them as
+    // `name : Type` so the user sees what each argument is expected to be.
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) : LocalEnvironment, TargetService -> NetworkHealth
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let error = bind_parameters(&program, &[]).expect_err("expected arity error");
+    let RunnerError::ParameterArityMismatch { parameters, .. } = error else {
+        panic!("expected ParameterArityMismatch, got {:?}", error);
+    };
+    assert_eq!(
+        parameters,
+        vec![
+            "e : LocalEnvironment".to_string(),
+            "s : TargetService".to_string()
+        ]
+    );
 
     // Procedure declares no parameters but args supplied: ParameterUnexpected.
     let source = r#"
@@ -1710,9 +1744,10 @@ test :
     let program = translate(&document).expect("translate");
     let args = ["unwanted".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected unexpected error");
-    let RunnerError::ParameterUnexpected { actual } = error else {
+    let RunnerError::ParameterUnexpected { procedure, actual } = error else {
         panic!("expected ParameterUnexpected, got {:?}", error);
     };
+    assert_eq!(procedure, "test");
     assert_eq!(actual, 1);
 
     // No parameters and no args: empty environment, no error.
@@ -1720,6 +1755,30 @@ test :
     assert!(env
         .lookup("anything")
         .is_none());
+}
+
+#[test]
+fn argument_echo_binds_each_parameter() {
+    let source = r#"
+% technique v1
+
+connectivity_check(e, s) :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+    let args = ["[]".to_string(), "0".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    let params = program
+        .subroutines
+        .first()
+        .unwrap()
+        .parameters
+        .unwrap();
+    let echo = render_argument_echo("connectivity_check", params, &env);
+    assert_eq!(echo, "connectivity_check([] ~ e, 0 ~ s)");
 }
 
 #[test]
