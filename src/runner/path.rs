@@ -67,6 +67,34 @@ impl<'i> QualifiedPath<'i> {
     }
 }
 
+/// Trim a rendered PFFTT path to the live-prompt form: drop the leading `/`,
+/// and the entry procedure's `name:` head when a section immediately follows.
+pub fn display_path(qualified: &str) -> String {
+    let body = qualified
+        .strip_prefix('/')
+        .unwrap_or(qualified);
+    let mut parts: Vec<&str> = body
+        .split('/')
+        .collect();
+    if parts.len() >= 2 && parts[0].ends_with(':') && is_section_component(parts[1]) {
+        parts.remove(0);
+    }
+    parts.join("/")
+}
+
+/// Leading token, not the whole component: an acquire label can glue an
+/// ` <invocation>` annotation after the numeral.
+fn is_section_component(part: &str) -> bool {
+    let token = part
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+    !token.is_empty()
+        && token
+            .bytes()
+            .all(|b| b"IVXLCDM".contains(&b))
+}
+
 /// Render a segment slice as a PFFTT absolute path, always rooted at `/`.
 pub fn render_path(segments: &[PathSegment]) -> String {
     let pieces: Vec<String> = segments

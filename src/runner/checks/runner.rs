@@ -1150,9 +1150,9 @@ check :
             .into_output(),
     )
     .expect("utf8");
-    assert!(trace.contains("→ /check:/1 ✓"));
-    assert!(trace.contains("→ /check:/2 ⊘"));
-    assert!(trace.contains("↙ /check: ✓"));
+    assert!(trace.contains("→ check:/1 ✓"));
+    assert!(trace.contains("→ check:/2 ⊘"));
+    assert!(trace.contains("↙ check: ✓"));
 }
 
 #[test]

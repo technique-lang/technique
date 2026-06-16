@@ -1,5 +1,5 @@
 use crate::language::{Attribute, Identifier, Span};
-use crate::runner::path::{PathSegment, QualifiedPath};
+use crate::runner::path::{display_path, PathSegment, QualifiedPath};
 
 #[test]
 fn empty_stack_renders_root() {
@@ -117,6 +117,49 @@ fn procedure_segment() {
     stack.push(PathSegment::Procedure("inner"));
     stack.push(PathSegment::DependentStep("2"));
     assert_eq!(stack.render(), "/outer:/1/inner:/2");
+}
+
+#[test]
+fn display_drops_entry_head_before_a_section() {
+    // The entry procedure naming the whole run is invariant on every prompt
+    // line, so within a section it is dropped and the numeral anchors instead.
+    assert_eq!(
+        display_path("/connectivity_check:/VI/check_aws_health:/7"),
+        "VI/check_aws_health:/7"
+    );
+}
+
+#[test]
+fn display_keeps_entry_head_before_a_step() {
+    // A flat entry with steps and no section keeps its name: there is no
+    // numeral to anchor the line, only the leading slash is dropped.
+    assert_eq!(
+        display_path("/connectivity_check:/1"),
+        "connectivity_check:/1"
+    );
+    assert_eq!(
+        display_path("/activate_crisis_management:/-1"),
+        "activate_crisis_management:/-1"
+    );
+}
+
+#[test]
+fn display_trims_entry_head_on_acquire_label() {
+    // The acquire prompt glues an ` <invocation>` annotation onto the
+    // call-site path; the entry head is still dropped, the numeral and
+    // annotation kept.
+    assert_eq!(
+        display_path("/connectivity_check:/VII <service_endpoint>"),
+        "VII <service_endpoint>"
+    );
+}
+
+#[test]
+fn display_drops_leading_slash_for_anonymous_paths() {
+    // An anonymous technique has no procedure head to drop; the leading slash
+    // still goes so the form matches the others.
+    assert_eq!(display_path("/I/1"), "I/1");
+    assert_eq!(display_path("/I"), "I");
 }
 
 #[test]

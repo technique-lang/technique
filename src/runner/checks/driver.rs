@@ -114,9 +114,9 @@ fn automatic_settle_renders_verdict_glyph() {
     p.settle("→", "/I/2", &UserInput::Skip);
     p.settle("↙", "/I", &UserInput::Done(Value::Unitus));
     let written = String::from_utf8(output).expect("utf8");
-    assert!(written.contains("→ /I/1 ✓"));
-    assert!(written.contains("→ /I/2 ⊘"));
-    assert!(written.contains("↙ /I ✓"));
+    assert!(written.contains("→ I/1 ✓"));
+    assert!(written.contains("→ I/2 ⊘"));
+    assert!(written.contains("↙ I ✓"));
 }
 
 #[test]
@@ -128,9 +128,9 @@ fn console_settle_writes_verdict_line() {
     p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
     p.settle("↙", "/I", &UserInput::Skip);
     let written = String::from_utf8(output).expect("utf8");
-    assert!(written.contains("→ /I/1"));
+    assert!(written.contains("→ I/1"));
     assert!(written.contains("✓"));
-    assert!(written.contains("↙ /I"));
+    assert!(written.contains("↙ I"));
     assert!(written.contains("⊘"));
 }
 

@@ -17,6 +17,7 @@ use crossterm::style::{Attribute, SetAttribute, Stylize};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
+use super::path::display_path;
 use crate::formatting::{Identity, Render};
 use crate::highlighting::Terminal;
 use crate::value::Value;
@@ -150,6 +151,7 @@ impl<W: Write> Console<W> {
 
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
+        let fqn = display_path(fqn);
         let _ = writeln!(self.output, "{}", format!("→ {}", fqn).dark_grey());
         let _ = writeln!(self.output);
         write_indented(&mut self.output, description);
@@ -157,6 +159,7 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn enter(&mut self, qualified: &str) {
+        let qualified = display_path(qualified);
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
         let _ = writeln!(self.output);
     }
@@ -167,6 +170,7 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let qualified = display_path(qualified);
         let renderer = self.renderer();
         let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
         let _ = writeln!(self.output);
@@ -201,6 +205,7 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        let qualified = display_path(qualified);
         let glyph = match verdict {
             UserInput::Done(_) => "✓".green(),
             UserInput::Skip => "⊘".yellow(),
@@ -221,7 +226,7 @@ impl<W: Write> Driver for Console<W> {
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         let label = format!(
             "{}({} : {})",
-            qualified,
+            display_path(qualified),
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
@@ -243,9 +248,10 @@ fn prompt<W: Write>(
     choices: &[&str],
     produced: Value,
 ) -> UserInput {
+    let qualified = display_path(qualified);
     let result = interact(
         out,
-        qualified,
+        &qualified,
         settle,
         Interaction::begin(choices, produced),
     );
@@ -260,10 +266,11 @@ fn prompt<W: Write>(
 /// `Done` no settle line is printed — the command's output follows immediately
 /// and the step's own verdict prompt judges the result.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
+    let qualified = display_path(qualified);
     let field = edit(script.to_string(), Value::Literali(script.to_string()));
     let result = interact(
         out,
-        qualified,
+        &qualified,
         "→",
         Interaction {
             field,
@@ -949,11 +956,11 @@ impl<W: Write> Automatic<W> {
 
 impl<W: Write> Driver for Automatic<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        render_step(&mut self.output, fqn, description);
+        render_step(&mut self.output, &display_path(fqn), description);
     }
 
     fn enter(&mut self, qualified: &str) {
-        render_enter(&mut self.output, qualified);
+        render_enter(&mut self.output, &display_path(qualified));
         let _ = writeln!(self.output);
     }
 
@@ -963,6 +970,7 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        let qualified = display_path(qualified);
         let renderer = self.renderer();
         let _ = writeln!(self.output, "↘ {}", qualified);
         let _ = writeln!(self.output);
@@ -1006,6 +1014,7 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        let qualified = display_path(qualified);
         let glyph = match verdict {
             UserInput::Done(_) => "✓",
             UserInput::Skip => "⊘",
