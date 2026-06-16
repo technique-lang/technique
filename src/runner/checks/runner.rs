@@ -2158,7 +2158,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .filter(|record| record.path == "/<https://example.com/probe>")
         .map(|record| record.state)
         .collect();
-    assert_eq!(settled, vec![State::Skip]);
+    assert_eq!(settled, vec![State::Begin, State::Skip]);
 
     // Under an automatic run there is no operator to attest the external work
     // and nothing executed it, so it records Skip rather than a fabricated Done.
@@ -2181,5 +2181,5 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .filter(|record| record.path == "/<https://example.com/probe>")
         .map(|record| record.state)
         .collect();
-    assert_eq!(settled, vec![State::Skip]);
+    assert_eq!(settled, vec![State::Begin, State::Skip]);
 }
