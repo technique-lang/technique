@@ -88,9 +88,6 @@ fn console_step_writes_fqn_and_description() {
 
 #[test]
 fn automatic_settles_done_when_effectful_skip_otherwise() {
-    // An effectful step (an exec ran in its body) settles Done; a step with no
-    // effectful work settles Skip. The verdict itself carries no output —
-    // `settle` renders the line.
     let mut p = Automatic::with_handle(Vec::new());
     assert_eq!(
         p.ask("/I/1", &[], Value::Literali("ran".to_string()), true),
@@ -106,8 +103,6 @@ fn automatic_settles_done_when_effectful_skip_otherwise() {
 
 #[test]
 fn automatic_settle_renders_verdict_glyph() {
-    // settle scrolls the plain verdict line into the trace, the unattended
-    // analog of the line Console leaves: `→ ✓` done, `→ ⊘` skip, `↙ ✓` sign-off.
     let mut output: Vec<u8> = Vec::new();
     let mut p = Automatic::with_handle(&mut output);
     p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
@@ -121,8 +116,6 @@ fn automatic_settle_renders_verdict_glyph() {
 
 #[test]
 fn console_settle_writes_verdict_line() {
-    // Console renders the same verdict line from settle (styled); the path and
-    // glyph survive the ANSI wrapping.
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
     p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
@@ -191,10 +184,12 @@ fn esc_edit_seeds_buffer_and_backspace_trims() {
 }
 
 #[test]
-fn edited_quanticle_stays_a_quanticle() {
+fn quanticle_edit_roundtrips() {
+    let quanticle = || Value::Quanticle(Numeric::Integral(42));
+
     // Editing a numeric value and changing it keeps it numeric: 42 -> 43 is
     // re-parsed back to a Quanticle, not flattened to text.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
@@ -206,26 +201,20 @@ fn edited_quanticle_stays_a_quanticle() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(Value::Quanticle(Numeric::Integral(43))))
     );
-}
 
-#[test]
-fn unedited_quanticle_returns_verbatim() {
     // Entering and leaving the edit without a change returns the original
     // numeric value untouched.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Quanticle(Numeric::Integral(42))))
+        Some(UserInput::Done(quanticle()))
     );
-}
 
-#[test]
-fn edited_quanticle_rejects_non_numeric() {
     // A numeric value edited into something that is not a number is not
     // accepted: Enter stays in the edit so it can be corrected.
-    let mut it = Interaction::begin(&[], Value::Quanticle(Numeric::Integral(42)));
+    let mut it = Interaction::begin(&[], quanticle());
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
@@ -400,13 +389,13 @@ fn choices_esc_opens_menu() {
 }
 
 #[test]
-fn complex_value_is_read_only() {
+fn read_only_values_accept_intact() {
+    // A tablet and multi-line text are both read-only: typing is ignored.
     let tablet = Value::Tabularum(vec![(
         "name".to_string(),
         Value::Literali("eth0".to_string()),
     )]);
     let mut it = Interaction::begin(&[], tablet.clone());
-    // Typing into a frozen value does nothing; Enter accepts it intact.
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)),
         None
@@ -415,12 +404,7 @@ fn complex_value_is_read_only() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(tablet))
     );
-}
 
-#[test]
-fn multiline_scalar_is_read_only() {
-    // A step whose body computed multi-line text (e.g. captured exec output)
-    // is not editable inline; it is accepted intact, like a complex value.
     let dump = Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string());
     let mut it = Interaction::begin(&[], dump.clone());
     assert_eq!(

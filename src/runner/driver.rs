@@ -70,8 +70,8 @@ pub trait Driver {
     /// quit are available either way. `produced` is consumed: the driver
     /// either moves it into the returned `Done` or discards it. `qualified` is
     /// the step's Qualified Name, repeated on the live prompt line. `effectful`
-    /// is whether the body did effectful work (an `exec` ran in its subtree):
-    /// an unattended driver settles `Done` only when it did, otherwise `Skip`.
+    /// is whether the body ran an `exec`; an unattended driver settles `Done`
+    /// only when it did, otherwise `Skip`.
     fn ask(
         &mut self,
         qualified: &str,
@@ -102,15 +102,13 @@ pub trait Driver {
     /// Prompt the operator to sign off a completed structural scope — a Section
     /// at its close, or the whole run at the entry procedure's close. Like
     /// `ask` but with no response choices, settling to the `↙` close marker;
-    /// `produced` is the scope's value, offered for acceptance. `effectful` is
-    /// whether the scope's subtree did effectful work; an unattended driver
-    /// signs off `Done` only when it did, otherwise `Skip`.
+    /// `produced` is the scope's value, offered for acceptance; `effectful`
+    /// governs an unattended driver's `Done`/`Skip` sign-off as in `ask`.
     fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput;
 
-    /// Render the settled verdict line for a step or scope close: the `marker`
+    /// Render the settled verdict line for a step or scope close: `marker`
     /// (`→` step, `↙` scope close), Qualified Name, and the verdict's glyph.
-    /// The walker calls this after `ask` / `seal` / `external` returns; Quit
-    /// renders nothing.
+    /// Quit renders nothing.
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
 
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
@@ -224,9 +222,8 @@ impl<W: Write> Driver for Console<W> {
     }
 }
 
-/// Run one interactive prompt and return the operator's verdict. The live `▶`
-/// line is drawn and re-drawn as keys arrive; on settle the row is cleared, and
-/// the walker renders the verdict line via `settle`.
+/// Run one interactive prompt and return the user's verdict, clearing the
+/// live `▶` row on settle.
 fn prompt<W: Write>(
     out: &mut W,
     qualified: &str,
@@ -959,8 +956,6 @@ impl<W: Write> Automatic<W> {
         }
     }
 
-    /// Recover the written trace after a run, for tests asserting on the
-    /// settled glyphs the automatic driver emitted.
     pub fn into_output(self) -> W {
         self.output
     }

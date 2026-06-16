@@ -1110,9 +1110,8 @@ test :
 
 #[test]
 fn automatic_substantiates_only_effectful_steps() {
-    // Under the automatic driver an effectful step (an exec that ran) settles
-    // Done ✓; a pure-prose sibling settles Skip ⊘. The enclosing procedure
-    // seals Done because at least one step beneath it did effectful work.
+    // An exec step settles Done; a pure-prose sibling Skip; the procedure
+    // seals Done since one step beneath it was effectful.
     let source = r#"
 % technique v1
 
@@ -1722,8 +1721,7 @@ connectivity_check(e, s) :
         Some(&Value::Literali("192.168.1.5".to_string()))
     );
 
-    // Too few arguments: ParameterArityMismatch naming the procedure and
-    // its parameters.
+    // Too few arguments: ParameterArityMismatch names procedure and parameters.
     let args = ["foo".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected arity error");
     let RunnerError::ParameterArityMismatch {
@@ -1754,8 +1752,7 @@ connectivity_check(e, s) :
     assert_eq!(parameters.len(), 2);
     assert_eq!(actual, 3);
 
-    // A signature names each parameter's forma: the error describes them as
-    // `name : Type` so the user sees what each argument is expected to be.
+    // With a signature, parameters are described as `name : Type`.
     let source = r#"
 % technique v1
 
@@ -2023,109 +2020,65 @@ test :
 }
 
 #[test]
-fn automatic_driver_records_body_value() {
-    // A value-bearing body under the automatic driver: no operator, no canned
-    // answers. The body's computed value propagates as the run's outcome, but
-    // with no effectful work the step itself records Skip rather than Done.
-    let mut fixture = StoreFixture::new("automatic-records-value");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
+fn automatic_propagates_body_value_but_records_skip() {
+    // Under the automatic driver the body value propagates as the outcome,
+    // but with no effectful work the step records Skip.
+    fn skip_of(label: &str, body: Operation<'static>) -> (Outcome, State) {
+        let mut fixture = StoreFixture::new(label);
+        let program = anonymous_with_body(Operation::Sequence(vec![step(
+            Ordinal::Dependent("1"),
+            body,
+        )]));
+        let mut runner = Runner::new(
+            &program,
+            fixture.take_appender(),
+            HashSet::new(),
+            Automatic::with_handle(Vec::new()),
+            Library::stub(),
+        );
+        let outcome = runner
+            .run(Environment::new())
+            .expect("run");
+        let pfftt = fixture.pfftt_contents();
+        let lines: Vec<&str> = pfftt
+            .lines()
+            .filter(|line| {
+                !line
+                    .trim()
+                    .is_empty()
+            })
+            .collect();
+        let state = parse_record(lines[2])
+            .expect("parse record")
+            .state;
+        (outcome, state)
+    }
+
+    // A single-line value propagates as the outcome; the step records Skip.
+    let (outcome, state) = skip_of(
+        "automatic-records-value",
         Operation::String(vec![Fragment::Text("probe output")]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
     );
-    let env = Environment::new();
-    let outcome = runner
-        .run(env)
-        .expect("run");
     assert_eq!(
         outcome,
         Outcome::Done(Value::Literali("probe output".to_string()))
     );
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Skip);
+    assert_eq!(state, State::Skip);
 
-    // A pure-prose step (empty body) also records Skip — nothing effectful ran.
-    let mut fixture = StoreFixture::new("automatic-empty-body");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
-    );
-    let env = Environment::new();
-    runner
-        .run(env)
-        .expect("run");
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Skip);
-}
-
-#[test]
-fn multiline_body_value_skips_but_still_propagates() {
-    // A step whose body computes multi-line text still propagates that value as
-    // the outcome, but records Skip since no effectful work substantiated it.
-    let mut fixture = StoreFixture::new("multiline-records-unit");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
+    // Multi-line text propagates intact and still records Skip.
+    let (outcome, state) = skip_of(
+        "multiline-records-unit",
         Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
-    )]);
-    let program = anonymous_with_body(body);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashSet::new(),
-        Automatic::with_handle(Vec::new()),
-        Library::stub(),
     );
-    let outcome = runner
-        .run(Environment::new())
-        .expect("run");
     assert_eq!(
         outcome,
         Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
     );
-    let pfftt = fixture.pfftt_contents();
-    let lines: Vec<&str> = pfftt
-        .lines()
-        .filter(|line| {
-            !line
-                .trim()
-                .is_empty()
-        })
-        .collect();
-    let record = parse_record(lines[2]).expect("parse record");
-    assert_eq!(record.state, State::Skip);
+    assert_eq!(state, State::Skip);
+
+    // A pure-prose step (empty body) also records Skip — nothing effectful ran.
+    let (_, state) = skip_of("automatic-empty-body", Operation::Sequence(vec![]));
+    assert_eq!(state, State::Skip);
 }
 
 #[test]
@@ -2160,8 +2113,7 @@ fn sequence_value_is_last_member() {
         Outcome::Done(Value::Literali("second".to_string()))
     );
 
-    // Both steps ran, but neither did effectful work, so each records Skip even
-    // though the last member's value is what the sequence propagates.
+    // Neither step is effectful, so each records Skip.
     let pfftt = fixture.pfftt_contents();
     let skips = pfftt
         .lines()

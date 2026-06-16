@@ -32,9 +32,7 @@ use crate::value::Value;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
-    /// Settled without effectful substantiation. Carries the value the body
-    /// still computed so block semantics keep propagating it, though the
-    /// recorded state drops it: a Skip records no value.
+    /// Carries the body's computed value for block semantics; recorded as no value.
     Skipped(Value),
     Failed(Failure),
     Stopped,
@@ -116,9 +114,8 @@ pub struct Runner<'i, D: Driver> {
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
-    /// Monotonic count of effectful actions (an `exec` and the like) that have
-    /// run. A Step or scope is substantiated — settled `Done` rather than
-    /// `Skip` by an unattended driver — when this rises across its body.
+    /// Count of `exec` actions run; a rise across a step or scope's body
+    /// substantiates it for an unattended driver.
     actions: usize,
 }
 
@@ -326,8 +323,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 executable,
                                 Some(&[chosen]),
                             )?;
-                            // An effectful command ran to completion: this is the
-                            // evidence that substantiates the enclosing Step.
                             self.actions += 1;
                             Ok(Outcome::Done(value))
                         }
@@ -692,8 +687,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// Walk one pass of a loop body within its `[number]` iteration scope,
-    /// bracketing it with `↘`/`↙` chrome. The iteration is a display scope;
-    /// the PFFTT records it through the child paths the body emits.
+    /// bracketing it with `↘`/`↙` chrome.
     fn walk_iteration(
         &mut self,
         env: &mut Environment,
@@ -745,8 +739,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                 _ => self.walk(env, op)?,
             };
             match outcome {
-                // Both a Done and an unsubstantiated Skip carry the value the
-                // member computed; block semantics propagate the last one.
                 Outcome::Done(value) | Outcome::Skipped(value) => last = value,
                 Outcome::Stopped => return Ok(Outcome::Stopped),
                 Outcome::Failed(_) => {}
@@ -922,8 +914,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .map(|r| r.value)
             .collect();
         let effectful = self.actions > actions_before;
-        // Hold the computed value aside: an unattended Skip still propagates it
-        // for block semantics, but `ask` consumes the original into its verdict.
+        // `ask` consumes `produced`; keep a copy for a Skip to propagate.
         let propagate = produced.clone();
         let input = self
             .driver
@@ -1130,9 +1121,8 @@ fn record_state(outcome: &Outcome) -> State {
     }
 }
 
-/// Render the entry procedure's call with its supplied arguments bound to each
-/// parameter in `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`,
-/// so the run opens by showing what each command-line argument became.
+/// Render the entry call with arguments bound to each parameter in
+/// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
 fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
     let bindings: Vec<String> = params
         .iter()
@@ -1149,8 +1139,7 @@ fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Envir
 }
 
 /// Describe a procedure's expected parameters as `name : Type` fragments for
-/// an arity error: the declared parameter name joined to its forma when the
-/// signature supplies one, falling back to whichever is known.
+/// an arity error, falling back to whichever of name or forma is known.
 fn describe_parameters(
     params: &[language::Identifier],
     signature: Option<&language::Signature>,

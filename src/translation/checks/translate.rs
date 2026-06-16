@@ -1832,11 +1832,8 @@ choose :
 
 #[test]
 fn section_title_invocation_hoists_into_body() {
-    // A `<call>` in a section title is an executable Descriptive: it
-    // hoists into Section.body and passes through the resolve pass like any
-    // other Invoke. When the body also declares that procedure, the title's
-    // `<init>` is the explicit entry point, so the auto-descent is
-    // suppressed and `init` runs once, not twice.
+    // A `<call>` in a section title hoists into the body as the explicit
+    // entry, suppressing the auto-descent so `init` runs once, not twice.
     let source = r#"
 % technique v1
 
@@ -1890,8 +1887,7 @@ init : () -> ()
 
 #[test]
 fn section_title_non_invoke_keeps_descent() {
-    // A title executable that is not an invocation of the entry (here a
-    // value-read) must not suppress the descent into the section's procedure.
+    // A title executable that is not an entry invocation keeps the descent.
     let source = r#"
 % technique v1
 
