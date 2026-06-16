@@ -46,8 +46,8 @@ pub struct Record {
 
 /// A lifecycle or step-outcome event; the keyword written into each PFFTT
 /// record line. `Start`, `Stop`, and `Resume` are run-lifecycle events emitted
-/// at the root path `/`; `Begin` marks the moment work starts on a step (paired
-/// with the eventual `Done`, `Skip`, or `Fail`). `Stop` records a deliberate
+/// at the root path `/`; `Begin` marks entry into a step or scope (paired with the
+/// eventual `Done`, `Skip`, or `Fail` at the same path). `Stop` records a deliberate
 /// quit — the run stays resumable, and the record distinguishes the quit from a
 /// crash (which records nothing).
 /// `Invoke` records dispatch into another procedure (the return is

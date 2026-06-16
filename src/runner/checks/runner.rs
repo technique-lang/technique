@@ -2014,7 +2014,8 @@ test :
                 .is_empty()
         })
         .collect();
-    let record = parse_record(lines[2]).expect("parse record");
+    // Start, the entry `Begin`, the step `Begin`, then the step's outcome.
+    let record = parse_record(lines[3]).expect("parse record");
     assert_eq!(
         record.state,
         State::Done(Some(RecordValue::Literal("Yes".to_string())))
@@ -2259,7 +2260,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .filter(|record| record.path == "/<https://example.com/probe>")
         .map(|record| record.state)
         .collect();
-    assert_eq!(settled, vec![State::Skip]);
+    assert_eq!(settled, vec![State::Begin, State::Skip]);
 
     // Under an automatic run there is no operator to attest the external work
     // and nothing executed it, so it records Skip rather than a fabricated Done.
@@ -2282,5 +2283,5 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .filter(|record| record.path == "/<https://example.com/probe>")
         .map(|record| record.state)
         .collect();
-    assert_eq!(settled, vec![State::Skip]);
+    assert_eq!(settled, vec![State::Begin, State::Skip]);
 }

@@ -14,7 +14,8 @@ use super::state::{
 };
 use crate::language;
 use crate::program::{
-    Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, SubroutineRef,
+    Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, Subroutine,
+    SubroutineRef,
 };
 use crate::value::Value;
 
@@ -186,6 +187,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
+            self.begin_scope(&qualified)?;
             let params = entry
                 .parameters
                 .unwrap_or(&[]);
@@ -536,43 +538,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                             state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
                         })?;
 
+                    self.begin_scope(&lexical)?;
+
                     let saved = self
                         .path
                         .replace(lexical_segments);
-                    self.driver
-                        .enter(&lexical);
-
-                    let declaration = crate::formatting::formatter::render_declaration(
-                        name,
-                        subroutine.parameters,
-                        subroutine.signature,
-                        self.driver
-                            .renderer(),
-                    );
-                    self.driver
-                        .display(&declaration);
-
-                    if let Some(t) = subroutine.title {
-                        let title_text = crate::formatting::formatter::render_title(
-                            t,
-                            self.driver
-                                .renderer(),
-                        );
-                        self.driver
-                            .display(&title_text);
-                    }
-                    if !subroutine
-                        .description
-                        .is_empty()
-                    {
-                        let description = crate::formatting::formatter::render_description(
-                            subroutine.description,
-                            self.driver
-                                .renderer(),
-                        );
-                        self.driver
-                            .display(&description);
-                    }
+                    self.announce_procedure(subroutine, name, &lexical);
 
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
@@ -636,6 +607,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     return Ok(Outcome::Done(Value::Unitus));
                 }
 
+                self.begin_scope(&qualified)?;
                 self.driver
                     .announce(&format!("<{}>", ext.value));
                 let input = self
@@ -804,6 +776,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             return Ok(Outcome::Done(Value::Unitus));
         }
         let actions_before = self.actions;
+        self.begin_scope(&qualified)?;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
@@ -977,6 +950,66 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&record)?;
         Ok(outcome)
+    }
+
+    /// Show a named procedure's heading on descent: the driver's `↘` enter line
+    /// followed by the procedure's declaration, title, and description. Shared by
+    /// the entry procedure and every invoked one.
+    fn announce_procedure(
+        &mut self,
+        subroutine: &'i Subroutine<'i>,
+        name: &'i str,
+        qualified: &str,
+    ) {
+        self.driver
+            .enter(qualified);
+        let declaration = crate::formatting::formatter::render_declaration(
+            name,
+            subroutine.parameters,
+            subroutine.signature,
+            self.driver
+                .renderer(),
+        );
+        self.driver
+            .display(&declaration);
+        if let Some(t) = subroutine.title {
+            let title_text = crate::formatting::formatter::render_title(
+                t,
+                self.driver
+                    .renderer(),
+            );
+            self.driver
+                .display(&title_text);
+        }
+        if !subroutine
+            .description
+            .is_empty()
+        {
+            let description = crate::formatting::formatter::render_description(
+                subroutine.description,
+                self.driver
+                    .renderer(),
+            );
+            self.driver
+                .display(&description);
+        }
+    }
+
+    /// Open a structural scope — the entry procedure, a Section, or an invoked
+    /// procedure — pairing with the `Done` its `seal_scope` records on close, so
+    /// every scope's address is bracketed `Begin`…`Done` just as a step's is.
+    fn begin_scope(&mut self, qualified: &str) -> Result<(), RunnerError> {
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: State::Begin,
+            })?;
+        Ok(())
     }
 
     /// Sign off a completed structural scope — a Section at its close, or the
