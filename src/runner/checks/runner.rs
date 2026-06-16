@@ -1825,7 +1825,7 @@ connectivity_check(e, s) :
         .parameters
         .unwrap();
     let echo = render_argument_echo("connectivity_check", params, &env);
-    assert_eq!(echo, "connectivity_check([] ~ e, 0 ~ s)");
+    assert_eq!(echo, "connectivity_check: ([] ~ e, 0 ~ s)");
 }
 
 #[test]

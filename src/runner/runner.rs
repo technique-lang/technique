@@ -1109,7 +1109,7 @@ fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Envir
             format!("{} ~ {}", value, p.value)
         })
         .collect();
-    format!("{}({})", name, bindings.join(", "))
+    format!("{}: ({})", name, bindings.join(", "))
 }
 
 /// Describe a procedure's expected parameters as `name : Type` fragments for
