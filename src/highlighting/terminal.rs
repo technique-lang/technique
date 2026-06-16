@@ -95,6 +95,18 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(153, 153, 153))
                 .bold()
                 .to_string(),
+            Syntax::Marker => content
+                .color(owo_colors::Rgb(0x55, 0x57, 0x53))
+                .to_string(),
+            Syntax::Done => content
+                .color(owo_colors::Rgb(0x4e, 0x9a, 0x06))
+                .to_string(),
+            Syntax::Skip => content
+                .color(owo_colors::Rgb(0xc4, 0xa0, 0x00))
+                .to_string(),
+            Syntax::Fail => content
+                .color(owo_colors::Rgb(0xcc, 0x00, 0x00))
+                .to_string(),
             Syntax::BlockBegin | Syntax::BlockEnd => String::new(),
         }
     }

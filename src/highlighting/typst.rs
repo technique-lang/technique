@@ -38,6 +38,10 @@ impl Render for Typst {
             Syntax::Language => markup("fill: rgb(0xc4, 0xa0, 0x00), weight: \"bold\"", &content),
             Syntax::Attribute => markup("weight: \"bold\"", &content),
             Syntax::Structure => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
+            Syntax::Marker => markup("fill: rgb(0x55, 0x57, 0x53)", &content),
+            Syntax::Done => markup("fill: rgb(0x4e, 0x9a, 0x06)", &content),
+            Syntax::Skip => markup("fill: rgb(0xc4, 0xa0, 0x00)", &content),
+            Syntax::Fail => markup("fill: rgb(0xcc, 0x00, 0x00)", &content),
             Syntax::BlockBegin | Syntax::BlockEnd => String::new(),
         }
     }

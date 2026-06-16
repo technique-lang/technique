@@ -18,7 +18,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use crossterm::{cursor, queue};
 
 use super::path::display_path;
-use crate::formatting::{Identity, Render};
+use crate::formatting::{Identity, Render, Syntax};
 use crate::highlighting::Terminal;
 use crate::value::Value;
 
@@ -118,8 +118,7 @@ pub trait Driver {
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput;
 
     /// The syntax renderer for highlighting source fragments shown to the
-    /// user. `Console` returns the ANSI `Terminal` renderer; non-interactive
-    /// drivers return `Identity` (no markup).
+    /// user — the ANSI `Terminal` when colouring, otherwise `Identity`.
     fn renderer(&self) -> &'static dyn Render;
 }
 
@@ -151,16 +150,13 @@ impl<W: Write> Console<W> {
 
 impl<W: Write> Driver for Console<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        let fqn = display_path(fqn);
-        let _ = writeln!(self.output, "{}", format!("→ {}", fqn).dark_grey());
-        let _ = writeln!(self.output);
-        write_indented(&mut self.output, description);
-        let _ = writeln!(self.output);
+        let renderer = self.renderer();
+        render_step(&mut self.output, &display_path(fqn), description, renderer);
     }
 
     fn enter(&mut self, qualified: &str) {
-        let qualified = display_path(qualified);
-        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
+        let renderer = self.renderer();
+        render_enter(&mut self.output, &display_path(qualified), renderer);
         let _ = writeln!(self.output);
     }
 
@@ -172,7 +168,7 @@ impl<W: Write> Driver for Console<W> {
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         let qualified = display_path(qualified);
         let renderer = self.renderer();
-        let _ = writeln!(self.output, "{}", format!("↘ {}", qualified).dark_grey());
+        write_marker_line(&mut self.output, &format!("↘ {}", qualified), renderer);
         let _ = writeln!(self.output);
         render_section(&mut self.output, numeral, title, renderer);
         let _ = writeln!(self.output);
@@ -206,18 +202,8 @@ impl<W: Write> Driver for Console<W> {
 
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
         let qualified = display_path(qualified);
-        let glyph = match verdict {
-            UserInput::Done(_) => "✓".green(),
-            UserInput::Skip => "⊘".yellow(),
-            UserInput::Fail(_) => "✗".red(),
-            UserInput::Quit => return,
-        };
-        let _ = writeln!(
-            self.output,
-            "{} {}",
-            format!("{} {}", marker, qualified).dark_grey(),
-            glyph
-        );
+        let renderer = self.renderer();
+        render_settle(&mut self.output, marker, &qualified, verdict, renderer);
         let _ = self
             .output
             .flush();
@@ -371,17 +357,38 @@ fn write_indented<W: Write>(out: &mut W, text: &str) {
     }
 }
 
+fn write_marker_line<W: Write>(out: &mut W, text: &str, renderer: &dyn Render) {
+    let _ = writeln!(out, "{}", renderer.style(Syntax::Marker, text));
+}
+
 /// Render a step's `→` line and description.
-fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str) {
-    let _ = writeln!(out, "→ {}", fqn);
+fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str, renderer: &dyn Render) {
+    write_marker_line(out, &format!("→ {}", fqn), renderer);
     let _ = writeln!(out);
     write_indented(out, description);
     let _ = writeln!(out);
 }
 
 /// Render a named scope's `↘` descent line.
-fn render_enter<W: Write>(out: &mut W, qualified: &str) {
-    let _ = writeln!(out, "↘ {}", qualified);
+fn render_enter<W: Write>(out: &mut W, qualified: &str, renderer: &dyn Render) {
+    write_marker_line(out, &format!("↘ {}", qualified), renderer);
+}
+
+fn render_settle<W: Write>(
+    out: &mut W,
+    marker: &str,
+    qualified: &str,
+    verdict: &UserInput,
+    renderer: &dyn Render,
+) {
+    let (glyph, syntax) = match verdict {
+        UserInput::Done(_) => ("✓", Syntax::Done),
+        UserInput::Skip => ("⊘", Syntax::Skip),
+        UserInput::Fail(_) => ("✗", Syntax::Fail),
+        UserInput::Quit => return,
+    };
+    let path = renderer.style(Syntax::Marker, &format!("{} {}", marker, qualified));
+    let _ = writeln!(out, "{} {}", path, renderer.style(syntax, glyph));
 }
 
 /// Render a Section heading: its numeral and title.
@@ -931,12 +938,14 @@ fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
 /// or first failure. A pure-prose step (empty body value) records ().
 pub struct Automatic<W: Write> {
     output: W,
+    renderer: &'static dyn Render,
 }
 
 impl Automatic<io::Stdout> {
-    pub fn new() -> Self {
+    pub fn new(colour: bool) -> Self {
         Automatic {
             output: io::stdout(),
+            renderer: if colour { &Terminal } else { &Identity },
         }
     }
 }
@@ -944,7 +953,10 @@ impl Automatic<io::Stdout> {
 #[cfg(test)]
 impl<W: Write> Automatic<W> {
     pub fn with_handle(output: W) -> Self {
-        Automatic { output }
+        Automatic {
+            output,
+            renderer: &Identity,
+        }
     }
 
     /// Recover the written trace after a run, for tests asserting on the
@@ -956,11 +968,16 @@ impl<W: Write> Automatic<W> {
 
 impl<W: Write> Driver for Automatic<W> {
     fn step(&mut self, fqn: &str, description: &str) {
-        render_step(&mut self.output, &display_path(fqn), description);
+        render_step(
+            &mut self.output,
+            &display_path(fqn),
+            description,
+            self.renderer,
+        );
     }
 
     fn enter(&mut self, qualified: &str) {
-        render_enter(&mut self.output, &display_path(qualified));
+        render_enter(&mut self.output, &display_path(qualified), self.renderer);
         let _ = writeln!(self.output);
     }
 
@@ -971,10 +988,9 @@ impl<W: Write> Driver for Automatic<W> {
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         let qualified = display_path(qualified);
-        let renderer = self.renderer();
-        let _ = writeln!(self.output, "↘ {}", qualified);
+        write_marker_line(&mut self.output, &format!("↘ {}", qualified), self.renderer);
         let _ = writeln!(self.output);
-        render_section(&mut self.output, numeral, title, renderer);
+        render_section(&mut self.output, numeral, title, self.renderer);
         let _ = writeln!(self.output);
     }
 
@@ -1015,13 +1031,7 @@ impl<W: Write> Driver for Automatic<W> {
 
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
         let qualified = display_path(qualified);
-        let glyph = match verdict {
-            UserInput::Done(_) => "✓",
-            UserInput::Skip => "⊘",
-            UserInput::Fail(_) => "✗",
-            UserInput::Quit => return,
-        };
-        let _ = writeln!(self.output, "{} {} {}", marker, qualified, glyph);
+        render_settle(&mut self.output, marker, &qualified, verdict, self.renderer);
     }
 
     fn acquire(
@@ -1034,7 +1044,7 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn renderer(&self) -> &'static dyn Render {
-        &Identity
+        self.renderer
     }
 }
 

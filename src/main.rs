@@ -311,6 +311,13 @@ fn main() {
                         .help("Whether to walk the procedure interactively, prompting the operator at each step, or automatically, taking each step's computed value and running to completion or first failure."),
                 )
                 .arg(
+                    Arg::new("raw-control-chars")
+                        .short('R')
+                        .long("raw-control-chars")
+                        .action(ArgAction::SetTrue)
+                        .help("Emit ANSI escape codes for syntax highlighting even if output is redirected to a pipe or file when running in automatic mode."),
+                )
+                .arg(
                     Arg::new("arguments")
                         .num_args(0..)
                         .action(ArgAction::Append)
@@ -706,6 +713,14 @@ fn main() {
                 _ => Mode::Interactive,
             };
 
+            let raw_output = *submatches
+                .get_one::<bool>("raw-control-chars")
+                .unwrap(); // flags are always present since SetTrue implies default_value
+
+            debug!(raw_output);
+
+            let colour = raw_output || std::io::stdout().is_terminal();
+
             let filename = Path::new(filename);
             let content = match parsing::load(&filename) {
                 Ok(data) => data,
@@ -796,7 +811,7 @@ fn main() {
                 std::process::exit(1);
             }
 
-            match runner::start(mode, filename, &program, &arguments, library) {
+            match runner::start(mode, colour, filename, &program, &arguments, library) {
                 Ok((run_id, Outcome::Stopped)) => {
                     eprintln!(
                         "stopped; resume with `technique resume {}`",

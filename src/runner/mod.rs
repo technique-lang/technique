@@ -35,6 +35,7 @@ const STORE_ROOT: &str = ".store";
 /// parameters before the beginning the walk.
 pub fn start<'i>(
     mode: Mode,
+    colour: bool,
     document: &Path,
     program: &'i Program<'i>,
     arguments: &[String],
@@ -55,8 +56,13 @@ pub fn start<'i>(
             runner.run(env)?
         }
         Mode::Automatic => {
-            let mut runner =
-                Runner::new(program, appender, HashSet::new(), Automatic::new(), library);
+            let mut runner = Runner::new(
+                program,
+                appender,
+                HashSet::new(),
+                Automatic::new(colour),
+                library,
+            );
             runner.run(env)?
         }
     };
