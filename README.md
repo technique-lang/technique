@@ -18,7 +18,9 @@ outcomes.
 
 ## Usage
 
-The _technique_ program has three subcommands:
+The _technique_ program has a number of subcommands in three main groups:
+
+### Compiler
 
 - _check_ \
   Validate the syntax, structure, and types in a Technique document.
@@ -27,10 +29,21 @@ The _technique_ program has three subcommands:
   Format the code in the given Technique document, embellished with ANSI
   syntax highlighting if run in a terminal.
 
+### Rendering PDF Documents 
+
 - _render_ \
   Render the Technique document into a printable PDF. This uses the Typst
   typestting language and so requires the _typst_ compiler be installed and on
   `PATH`.
+
+### Executing Procedures
+
+- _run_ \
+  Execute the procedure defined in a Technique document. The program can be
+  run interactively or used as a scripting language.
+
+- _resume_ \
+  Resume a previously interrupted run of a Technique.
 
 ## Contents
 
