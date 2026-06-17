@@ -23,7 +23,7 @@ pub use library::{Builtin, Library, Native};
 pub use runner::{Outcome, Runner, RunnerError};
 pub use state::{Appender, RecordError, RunId};
 
-use driver::{Automatic, Console};
+use driver::{Automatic, Console, Transcript};
 use runner::{bind_parameters, now_iso8601};
 use state::{construct_state_path, Record, State, Store};
 
@@ -67,6 +67,36 @@ pub fn start<'i>(
         }
     };
     Ok((run_id, outcome))
+}
+
+/// Walk the program with the mode's driver wrapped in a `Transcript`, which
+/// streams the value trace to stderr while the wrapped driver runs as usual.
+/// Records nothing. Backs `run --output=native`, orthogonal to `--mode`.
+pub fn inspect<'i>(
+    mode: Mode,
+    colour: bool,
+    program: &'i Program<'i>,
+    arguments: &[String],
+    library: Library,
+) -> Result<Outcome, RunnerError> {
+    let env = bind_parameters(program, arguments)?;
+    match mode {
+        Mode::Interactive => {
+            if !std::io::stdout().is_terminal() {
+                return Err(RunnerError::TerminalRequired);
+            }
+            let driver = Transcript::new(Console::new());
+            let mut runner =
+                Runner::new(program, Appender::sink(), HashSet::new(), driver, library);
+            runner.run(env)
+        }
+        Mode::Automatic => {
+            let driver = Transcript::new(Automatic::new(colour));
+            let mut runner =
+                Runner::new(program, Appender::sink(), HashSet::new(), driver, library);
+            runner.run(env)
+        }
+    }
 }
 
 /// Read the opening `Start` record of an existing run, returning the

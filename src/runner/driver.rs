@@ -46,7 +46,7 @@ pub enum UserInput {
 
 /// What the walker uses to drive a run. Implementations are the interactive
 /// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
-/// and the test `Mock`.
+/// the debugging `Transcript`, and the test `Mock`.
 pub trait Driver {
     /// Show the step's Qualified Name and rendered description.
     /// The implementation displays them; it does not block waiting for
@@ -1083,6 +1083,180 @@ impl<W: Write> Driver for Automatic<W> {
     }
 }
 
+#[derive(Debug)]
+#[allow(dead_code)] // fields are read only via Debug
+enum Trace {
+    Enter {
+        path: String,
+    },
+    Leave {
+        path: String,
+        outcome: Disposition,
+        result: Value,
+    },
+    Execute {
+        path: String,
+        script: String,
+    },
+    Acquire {
+        path: String,
+        name: Option<String>,
+        forma: Option<String>,
+        supplied: Value,
+    },
+    External {
+        path: String,
+    },
+}
+
+#[derive(Debug)]
+#[allow(dead_code)] // read only via Debug
+enum Disposition {
+    Done,
+    Skip,
+    Fail(String),
+    Stop,
+}
+
+/// A driver for debugging that prints each value-bearing callback as a
+/// `Trace`, delegating decisions about outcomes to the inner wrapped driver.
+pub struct Transcript<D, W> {
+    inner: D,
+    output: W,
+}
+
+impl<D> Transcript<D, io::Stdout> {
+    pub fn new(inner: D) -> Self {
+        Transcript {
+            inner,
+            output: io::stdout(),
+        }
+    }
+}
+
+impl<D, W: Write> Transcript<D, W> {
+    fn emit(&mut self, trace: Trace) {
+        let _ = writeln!(self.output, "{:#?}", trace);
+    }
+
+    fn trace_outcome(&mut self, path: &str, produced: Value, outcome: &UserInput) {
+        let outcome = match outcome {
+            UserInput::Done(_) => Disposition::Done,
+            UserInput::Skip => Disposition::Skip,
+            UserInput::Fail(reason) => Disposition::Fail(reason.clone()),
+            UserInput::Quit => Disposition::Stop,
+        };
+        self.emit(Trace::Leave {
+            path: path.to_string(),
+            outcome,
+            result: produced,
+        });
+    }
+}
+
+impl<D: Driver, W: Write> Driver for Transcript<D, W> {
+    fn step(&mut self, qualified: &str, description: &str) {
+        self.emit(Trace::Enter {
+            path: qualified.to_string(),
+        });
+        self.inner
+            .step(qualified, description);
+    }
+
+    fn enter(&mut self, qualified: &str) {
+        self.emit(Trace::Enter {
+            path: qualified.to_string(),
+        });
+        self.inner
+            .enter(qualified);
+    }
+
+    fn display(&mut self, content: &str) {
+        self.inner
+            .display(content);
+    }
+
+    fn announce(&mut self, message: &str) {
+        self.inner
+            .announce(message);
+    }
+
+    fn ask(
+        &mut self,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        effectful: bool,
+    ) -> UserInput {
+        let outcome = self
+            .inner
+            .ask(qualified, choices, produced.clone(), effectful);
+        self.trace_outcome(qualified, produced, &outcome);
+        outcome
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        self.emit(Trace::External {
+            path: qualified.to_string(),
+        });
+        self.inner
+            .external(qualified)
+    }
+
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        self.emit(Trace::Execute {
+            path: qualified.to_string(),
+            script: script.to_string(),
+        });
+        self.inner
+            .command(qualified, script)
+    }
+
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        self.emit(Trace::Enter {
+            path: qualified.to_string(),
+        });
+        self.inner
+            .section(qualified, numeral, title);
+    }
+
+    fn seal(&mut self, qualified: &str, produced: Value, effectful: bool) -> UserInput {
+        let outcome = self
+            .inner
+            .seal(qualified, produced.clone(), effectful);
+        self.trace_outcome(qualified, produced, &outcome);
+        outcome
+    }
+
+    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        self.inner
+            .settle(marker, qualified, verdict);
+    }
+
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+        let outcome = self
+            .inner
+            .acquire(qualified, name, forma);
+        let supplied = if let UserInput::Done(value) = &outcome {
+            value.clone()
+        } else {
+            Value::Unitus
+        };
+        self.emit(Trace::Acquire {
+            path: qualified.to_string(),
+            name: name.map(|n| n.to_string()),
+            forma: forma.map(|f| f.to_string()),
+            supplied,
+        });
+        outcome
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        self.inner
+            .renderer()
+    }
+}
+
 /// No-operator, no-output driver: takes each step and scope's computed value as
 /// its result, emitting nothing, and counts the results it settles — one per
 /// step and per structural-scope close. Lets a Technique be run without a
@@ -1163,8 +1337,8 @@ pub struct Mock {
     events: Vec<Event>,
 }
 
-/// One thing the walker showed (or attempted to show). Tests use this
-/// to inspect ordering and content of the walker's user-facing output.
+/// What the walker showed (or attempted to show). Tests use this to inspect
+/// ordering and content of the walker's user-facing output.
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {

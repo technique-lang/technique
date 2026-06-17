@@ -27,6 +27,7 @@ enum Output {
     Terminal,
     Native,
     Silent,
+    Store,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -173,7 +174,6 @@ fn main() {
                 )
                 .arg(
                     Arg::new("output")
-                        .short('o')
                         .long("output")
                         .value_name("type")
                         .value_parser(["native", "none"])
@@ -233,16 +233,6 @@ fn main() {
                 the procedure into the intended layout suitable to the \
                 domain of your application.")
                 .arg(
-                    Arg::new("output")
-                        .short('o')
-                        .long("output")
-                        .value_name("type")
-                        .value_parser(["pdf", "typst"])
-                        .default_value("pdf")
-                        .action(ArgAction::Set)
-                        .help("Whether to write PDF to a file on disk, or print the Typst markup that would be used to create that PDF (for debugging)."),
-                )
-                .arg(
                     Arg::new("domain")
                         .short('d')
                         .long("domain")
@@ -269,10 +259,18 @@ fn main() {
                 )
                 .arg(
                     Arg::new("keep")
-                        .short('k')
                         .long("keep")
                         .action(ArgAction::SetTrue)
                         .help("Keep the generated intermediate files in place after rendering. This allows you to do iterative development of the template and styling with the Typst compiler without having to regenerate the input document every time. The intermediate pieces are written as hidden files in the same directory as the source document."),
+                )
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .value_name("type")
+                        .value_parser(["pdf", "typst"])
+                        .default_value("pdf")
+                        .action(ArgAction::Set)
+                        .help("Whether to write PDF to a file on disk, or print the Typst markup that would be used to create that PDF (for debugging)."),
                 )
                 .arg(
                     Arg::new("filename")
@@ -309,6 +307,14 @@ fn main() {
                         .default_value("interactive")
                         .action(ArgAction::Set)
                         .help("Whether to walk the procedure interactively, prompting the operator at each step, or automatically, taking each step's computed value and running to completion or first failure."),
+                )
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .value_parser(["pfftt", "native"])
+                        .default_value("pfftt")
+                        .action(ArgAction::Set)
+                        .help("Whether to write the recorded trace to disk in PFFTT format, as is the default, or to instead print a diagnostic trace of the steps as the are completed (for debugging)."),
                 )
                 .arg(
                     Arg::new("raw-control-chars")
@@ -418,6 +424,7 @@ fn main() {
                         println!("{:#?}", technique);
                     }
                     Output::Silent => {}
+                    _ => {}
                 }
                 std::process::exit(0);
             }
@@ -450,6 +457,7 @@ fn main() {
                         println!("{:#?}", program);
                     }
                     Output::Silent => {}
+                    _ => {}
                 }
                 std::process::exit(0);
             }
@@ -490,6 +498,7 @@ fn main() {
                         println!("{:#?}", program);
                     }
                     Output::Silent => {}
+                    _ => {}
                 }
                 std::process::exit(0);
             }
@@ -705,6 +714,17 @@ fn main() {
 
             debug!(?arguments);
 
+            let output = submatches
+                .get_one::<String>("output")
+                .unwrap();
+            let output = match output.as_str() {
+                "native" => Output::Native,
+                "pfftt" => Output::Store,
+                _ => panic!("Unrecognized --output value"),
+            };
+
+            debug!(?output);
+
             let mode = match submatches
                 .get_one::<String>("mode")
                 .map(String::as_str)
@@ -809,6 +829,16 @@ fn main() {
                     );
                 }
                 std::process::exit(1);
+            }
+
+            if let Output::Native = output {
+                match runner::inspect(mode, colour, &program, &arguments, library) {
+                    Ok(_) => std::process::exit(0),
+                    Err(error) => {
+                        eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                        std::process::exit(1);
+                    }
+                }
             }
 
             match runner::start(mode, colour, filename, &program, &arguments, library) {
