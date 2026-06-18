@@ -25,17 +25,8 @@ pub use procedure::Procedure;
 pub use recipe::Recipe;
 pub use source::Source;
 
-use crate::runner::Builtin;
-
-/// The runtime facet of a domain: the domain-specific host functions it
-/// contributes to the interpreter's function table, on top of `Library::core`
-/// and the `Library::system` layer. Orthogonal to a domain's rendering
-/// projection (the `Template` trait).
-pub trait Domain {
-    fn functions(&self) -> Vec<Builtin> {
-        Vec::new()
-    }
-}
+/// A known domain, selected by name for the renderer and the runtime.
+pub trait Domain {}
 
 /// Select a domain by name, for both the renderer and the runtime.
 /// `None` if the name matches no known domain — the caller reports that as an

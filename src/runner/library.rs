@@ -101,8 +101,22 @@ impl Library {
         ]
     }
 
+    /// Interactions with a web browser (or rather, instructions that a user
+    /// do these interactions in their web browser).
+    pub fn browser() -> Vec<Builtin> {
+        ["click", "select", "deselect", "scroll", "type", "task"]
+            .into_iter()
+            .map(|name| Builtin {
+                name,
+                arity: 1,
+                nature: Nature::Action,
+                function: interact,
+            })
+            .collect()
+    }
+
     /// Add functions to the table, after the core builtins — the system layer
-    /// or a domain's own host functions.
+    /// or an injected library's host functions.
     pub fn extend(&mut self, builtins: impl IntoIterator<Item = Builtin>) {
         self.functions
             .extend(builtins);
@@ -149,6 +163,18 @@ impl Library {
             });
         }
         (builtin.function)(context, args)
+    }
+}
+
+/// Resolve a named library to the host functions it contributes, or `None`
+/// if the name matches no known library. The orthogonal counterpart to a
+/// document's domain: a library is selected with `--library` regardless of
+/// which domain the Technique declares.
+pub fn library_for(name: &str) -> Option<Vec<Builtin>> {
+    match name {
+        "system" => Some(Library::system()),
+        "browser" => Some(Library::browser()),
+        _ => None,
     }
 }
 
@@ -271,6 +297,12 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 /// external state, hence part of the system layer rather than `core`.
 fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Literali(super::runner::now_iso8601()))
+}
+
+/// A browser-library action: the operator performs the UI manipulation when
+/// the runner commands the step, so the call settles to unit.
+fn interact(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+    Ok(Value::Unitus)
 }
 
 fn as_integer(function: &'static str, value: &Value) -> Result<i64, RunnerError> {

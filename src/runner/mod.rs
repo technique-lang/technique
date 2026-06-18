@@ -19,7 +19,7 @@ mod state;
 pub use context::Context;
 pub use driver::{Headless, Mode};
 pub use evaluator::Environment;
-pub use library::{Builtin, Library, Native};
+pub use library::{library_for, Builtin, Library, Native};
 pub use runner::{Outcome, Runner, RunnerError};
 pub use state::{Appender, RecordError, RunId};
 

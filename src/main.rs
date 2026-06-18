@@ -8,12 +8,11 @@ use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
-use technique::domain::{self, Domain};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
 use technique::parsing;
-use technique::runner::{self, Library, Mode, Outcome, RunId};
+use technique::runner::{self, Builtin, Library, Mode, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -119,15 +118,25 @@ impl TypedValueParser for PaperSizeParser {
     }
 }
 
-/// Resolve a domain name to its handle.
-fn select_domain(name: &str) -> &'static dyn Domain {
-    match domain::domain_for(name) {
-        Some(domain) => domain,
-        None => {
-            eprintln!("{}: unrecognized domain \"{}\"", "error".bright_red(), name);
-            std::process::exit(1);
+/// Resolve the `--library` selections to the host functions they contribute.
+fn select_libraries(matches: &clap::ArgMatches) -> Vec<Builtin> {
+    let mut builtins = Vec::new();
+    if let Some(names) = matches.get_many::<String>("library") {
+        for name in names {
+            match runner::library_for(name) {
+                Some(functions) => builtins.extend(functions),
+                None => {
+                    eprintln!(
+                        "{}: unrecognized library \"{}\"",
+                        "error".bright_red(),
+                        name
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
     }
+    builtins
 }
 
 fn main() {
@@ -193,6 +202,18 @@ fn main() {
                             parsing, where the input is parsed from the surface language to an internal abstract syntax tree; \
                             translation, which resolves names, checks references, and ensures the input is valid Technique; then finally \
                             linking, which ensures functions being called are available, checks parameters being passed, and provides the context to the execution environment.")
+                )
+                .arg(
+                    Arg::new("library")
+                        .short('l')
+                        .long("library")
+                        .value_name("name")
+                        .value_parser(["system", "browser"])
+                        .value_delimiter(',')
+                        .action(ArgAction::Append)
+                        .default_value("system")
+                        .help("Inject one or more libraries into the runtime so that references to functions from those libraries can be resolved. \
+                            Multiple libraries can be specified, separated by commas. The `core` library is always loaded."),
                 )
                 .arg(
                     Arg::new("filename")
@@ -294,12 +315,16 @@ fn main() {
                         .help("The file containing the Technique document to run."),
                 )
                 .arg(
-                    Arg::new("domain")
-                        .short('d')
-                        .long("domain")
-                        .value_parser(["checklist", "nasa-esa-iss", "procedure", "recipe", "source"])
-                        .action(ArgAction::Set)
-                        .help("The kind of procedure this Technique document represents. By default the value specified in the input document's metadata will be used, falling back to source if unspecified."),
+                    Arg::new("library")
+                        .short('l')
+                        .long("library")
+                        .value_name("name")
+                        .value_parser(["system", "browser"])
+                        .value_delimiter(',')
+                        .action(ArgAction::Append)
+                        .default_value("system")
+                        .help("Inject one or more libraries into the runtime so that references to functions from those libraries can be resolved. \
+                            Multiple libraries can be specified, separated by commas. The `core` library is always loaded."),
                 )
                 .arg(
                     Arg::new("mode")
@@ -455,16 +480,10 @@ fn main() {
             }
 
             // Check validates against the functions a run would resolve
-            // against: core and system, plus the document's declared domain.
-            let name = technique
-                .header
-                .as_ref()
-                .and_then(|m| m.domain)
-                .unwrap_or("source");
-            let domain = select_domain(name);
+            // against: the always-present core, plus the selected libraries
+            // (system by default).
             let mut library = Library::core();
-            library.extend(Library::system());
-            library.extend(domain.functions());
+            library.extend(select_libraries(submatches));
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -775,26 +794,11 @@ fn main() {
                 }
             };
 
-            // Add domain-specific host functions to the Library based on
-            // whether the document or command-line indicate the domain being
-            // used. FUTURE the `core` and `system` functions are added here
-            // regardless, in time we should make that more configurable.
-
-            let name = submatches
-                .get_one::<String>("domain")
-                .map(String::as_str)
-                .or_else(|| {
-                    technique
-                        .header
-                        .as_ref()
-                        .and_then(|m| m.domain)
-                })
-                .unwrap_or("source");
-            let domain = select_domain(name);
-
+            // The runner resolves against the always-present core, plus the
+            // libraries selected with --library (system by default),
+            // independent of the document's domain.
             let mut library = Library::core();
-            library.extend(Library::system());
-            library.extend(domain.functions());
+            library.extend(select_libraries(submatches));
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
