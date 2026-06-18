@@ -106,7 +106,7 @@ fn create_writes_start_record_at_head() {
             .clone(),
     );
     let (run_id, run_dir) = store
-        .create(&document, started)
+        .create(&document, started, &[])
         .expect("create");
 
     let pfftt = run_dir.join("NetworkProbe.pfftt");
@@ -132,14 +132,38 @@ fn create_and_open_round_trips_document_path() {
             .clone(),
     );
     let (run_id, _) = store
-        .create(&document, started)
+        .create(&document, started, &[])
         .expect("create");
-    let (read_document, completed, _) = store
+    let (read_document, libraries, completed, _) = store
         .open(run_id)
         .expect("open");
 
     assert_eq!(read_document, document);
+    assert!(libraries.is_empty());
     assert!(completed.is_empty());
+}
+
+#[test]
+fn create_and_open_round_trips_libraries() {
+    let dir = TempDir::new("create-open-libraries");
+
+    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
+    let started = "2026-05-14T12:34:56Z".to_string();
+    let selected = vec!["system".to_string(), "browser".to_string()];
+
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let (run_id, _) = store
+        .create(&document, started, &selected)
+        .expect("create");
+    let (read_document, libraries, _, _) = store
+        .open(run_id)
+        .expect("open");
+
+    assert_eq!(read_document, document);
+    assert_eq!(libraries, selected);
 }
 
 #[test]
@@ -183,7 +207,7 @@ fn open_replays_done_skip_fail_into_completed() {
         dir.path
             .clone(),
     );
-    let (document, completed, _) = store
+    let (document, _, completed, _) = store
         .open(RunId(1))
         .expect("open");
 
@@ -238,7 +262,7 @@ fn open_skips_resume_and_begin_during_replay() {
         dir.path
             .clone(),
     );
-    let (_, completed, _) = store
+    let (_, _, completed, _) = store
         .open(RunId(1))
         .expect("open");
 

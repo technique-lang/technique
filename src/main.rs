@@ -118,25 +118,40 @@ impl TypedValueParser for PaperSizeParser {
     }
 }
 
-/// Resolve the `--library` selections to the host functions they contribute.
-fn select_libraries(matches: &clap::ArgMatches) -> Vec<Builtin> {
+/// The `--library` names selected on the command line.
+fn library_names(matches: &clap::ArgMatches) -> Vec<String> {
+    matches
+        .get_many::<String>("library")
+        .map(|names| {
+            names
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Resolve library names to the host functions they contribute.
+fn resolve_libraries(names: &[String]) -> Vec<Builtin> {
     let mut builtins = Vec::new();
-    if let Some(names) = matches.get_many::<String>("library") {
-        for name in names {
-            match runner::library_for(name) {
-                Some(functions) => builtins.extend(functions),
-                None => {
-                    eprintln!(
-                        "{}: unrecognized library \"{}\"",
-                        "error".bright_red(),
-                        name
-                    );
-                    std::process::exit(1);
-                }
+    for name in names {
+        match runner::library_for(name) {
+            Some(functions) => builtins.extend(functions),
+            None => {
+                eprintln!(
+                    "{}: unrecognized library \"{}\"",
+                    "error".bright_red(),
+                    name
+                );
+                std::process::exit(1);
             }
         }
     }
     builtins
+}
+
+/// Resolve the `--library` selections to the host functions they contribute.
+fn select_libraries(matches: &clap::ArgMatches) -> Vec<Builtin> {
+    resolve_libraries(&library_names(matches))
 }
 
 fn main() {
@@ -796,9 +811,12 @@ fn main() {
 
             // The runner resolves against the always-present core, plus the
             // libraries selected with --library (system by default),
-            // independent of the document's domain.
+            // independent of the document's domain. The selected names are
+            // recorded in the run's Start record so `resume` can rebuild the
+            // same library.
+            let names = library_names(submatches);
             let mut library = Library::core();
-            library.extend(select_libraries(submatches));
+            library.extend(resolve_libraries(&names));
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()
@@ -815,7 +833,9 @@ fn main() {
                 std::process::exit(1);
             }
 
-            match runner::start(mode, colour, filename, &program, &arguments, library) {
+            match runner::start(
+                mode, colour, filename, &program, &arguments, library, &names,
+            ) {
                 Ok((run_id, Outcome::Stopped)) => {
                     eprintln!(
                         "stopped; resume with `technique resume {}`",
@@ -845,8 +865,8 @@ fn main() {
                 }
             };
 
-            let filename = match runner::locate(run_id) {
-                Ok(path) => path,
+            let (filename, names) = match runner::locate(run_id) {
+                Ok(located) => located,
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
@@ -901,12 +921,11 @@ fn main() {
                 }
             };
 
-            // TODO it is slightly problematic that we have to reconstruct the
-            // Library here and at present are hard-coding the functions being
-            // brought into scope.
-
+            // Rebuild the library from the names recorded in the run's Start
+            // record so resume resolves against the same functions as the
+            // original run.
             let mut library = Library::core();
-            library.extend(Library::system());
+            library.extend(resolve_libraries(&names));
             if let Err(errors) = linking::link(&mut program, &library) {
                 for (i, error) in errors
                     .iter()

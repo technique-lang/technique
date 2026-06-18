@@ -153,6 +153,7 @@ impl Store {
         &self,
         document: &Path,
         started: String,
+        libraries: &[String],
     ) -> Result<(RunId, PathBuf), RunnerError> {
         let absolute = std::path::absolute(document).map_err(|error| RunnerError::StoreError {
             path: document.to_path_buf(),
@@ -160,13 +161,16 @@ impl Store {
         })?;
         let (run_id, run_dir) = self.allocate()?;
         let pfftt = construct_state_path(&run_dir, &absolute);
+        let mut uri = format!("file://{}", absolute.display());
+        if !libraries.is_empty() {
+            uri.push_str("?library=");
+            uri.push_str(&libraries.join(","));
+        }
         let record = Record {
             recorded: started,
             run_id,
             path: "/".to_string(),
-            state: State::Start {
-                uri: format!("file://{}", absolute.display()),
-            },
+            state: State::Start { uri },
         };
         std::fs::write(&pfftt, format_record(&record))
             .map_err(|error| RunnerError::StoreError { path: pfftt, error })?;
@@ -174,10 +178,13 @@ impl Store {
     }
 
     /// Open an existing run. Parses the leading `Start` record to recover
-    /// the source document, then replays `Done` / `Skip` / `Fail` records
-    /// into a set of completed step paths. `Stop` and `Resume` records
-    /// are passed over.
-    pub fn open(&self, run_id: RunId) -> Result<(PathBuf, HashSet<String>, PathBuf), RunnerError> {
+    /// the source document and the libraries it was run with, then replays
+    /// `Done` / `Skip` / `Fail` records into a set of completed step paths.
+    /// `Stop` and `Resume` records are passed over.
+    pub fn open(
+        &self,
+        run_id: RunId,
+    ) -> Result<(PathBuf, Vec<String>, HashSet<String>, PathBuf), RunnerError> {
         let run_dir = self
             .base
             .join(run_id.render());
@@ -203,13 +210,8 @@ impl Store {
             .ok_or(RunnerError::StartMissing(run_id))?;
         let head =
             parse_record(first).map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
-        let document = match head.state {
-            State::Start { uri, .. } => {
-                let stripped = uri
-                    .strip_prefix("file://")
-                    .unwrap_or(&uri);
-                PathBuf::from(stripped)
-            }
+        let (document, libraries) = match head.state {
+            State::Start { uri, .. } => parse_run_uri(&uri),
             _ => return Err(RunnerError::StartMissing(run_id)),
         };
 
@@ -229,7 +231,7 @@ impl Store {
                 | State::Begin => {}
             }
         }
-        Ok((document, completed, run_dir))
+        Ok((document, libraries, completed, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return
@@ -264,6 +266,32 @@ impl Store {
         }
         Ok(RunId(max + 1))
     }
+}
+
+// Recover the source document's file path and the libraries that were
+// selected from a Start URI of the form
+// 
+// file://{path}?library=a,b
+
+// written by `create` records. The query string parameters are optional.
+fn parse_run_uri(uri: &str) -> (PathBuf, Vec<String>) {
+    let (location, query) = match uri.split_once('?') {
+        Some((location, query)) => (location, Some(query)),
+        None => (uri, None),
+    };
+    let path = location
+        .strip_prefix("file://")
+        .unwrap_or(location);
+    let libraries = query
+        .and_then(|query| query.strip_prefix("library="))
+        .map(|names| {
+            names
+                .split(',')
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    (PathBuf::from(path), libraries)
 }
 
 // Compute the on-disk PFFTT file path for a run, named using the source
