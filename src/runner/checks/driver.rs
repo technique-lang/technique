@@ -87,7 +87,7 @@ fn console_step_writes_fqn_and_description() {
 }
 
 #[test]
-fn automatic_settles_done_when_effectful_skip_otherwise() {
+fn automatic_settles_done_when_computable_skip_otherwise() {
     let mut p = Automatic::with_handle(Vec::new());
     assert_eq!(
         p.ask("/I/1", &[], Value::Literali("ran".to_string()), true),

@@ -114,9 +114,6 @@ pub struct Runner<'i, D: Driver> {
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
-    /// Count of `exec` actions run; a rise across a step or scope's body
-    /// substantiates it for an unattended driver.
-    actions: usize,
 }
 
 impl<'i, D: Driver> Runner<'i, D> {
@@ -135,7 +132,6 @@ impl<'i, D: Driver> Runner<'i, D> {
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
-            actions: 0,
         }
     }
 
@@ -227,7 +223,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .display(&description);
             }
         }
-        let actions_before = self.actions;
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
         // with a final sign-off prompt at its path. A Quit or error walk skips
@@ -237,10 +232,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            let effectful = self.actions > actions_before;
+            let computable = computable(&entry.body);
             let sealed = match result {
                 Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
+                Ok(outcome) => self.seal_scope(&qualified, outcome, computable),
                 Err(error) => Err(error),
             };
             self.path
@@ -323,7 +318,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 executable,
                                 Some(&[chosen]),
                             )?;
-                            self.actions += 1;
                             Ok(Outcome::Done(value))
                         }
                         UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
@@ -543,12 +537,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
                     // sign-off, leaving the procedure unfinished.
-                    let actions_before = self.actions;
                     let result = self.walk(&mut local, &subroutine.body);
-                    let effectful = self.actions > actions_before;
+                    let computable = computable(&subroutine.body);
                     let sealed = match result {
                         Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&lexical, outcome, effectful),
+                        Ok(outcome) => self.seal_scope(&lexical, outcome, computable),
                         Err(error) => Err(error),
                     };
                     self.path
@@ -767,18 +760,17 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .pop();
             return Ok(Outcome::Done(Value::Unitus));
         }
-        let actions_before = self.actions;
         self.begin_scope(&qualified)?;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
-        let effectful = self.actions > actions_before;
-        // A section is a structural scope: the operator signs it off at its
+        let computable = computable(body);
+        // A section is a structural scope: the user signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
         match result {
             Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-            Ok(outcome) => self.seal_scope(&qualified, outcome, effectful),
+            Ok(outcome) => self.seal_scope(&qualified, outcome, computable),
             Err(error) => Err(error),
         }
     }
@@ -889,7 +881,6 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &step_text);
 
-        let actions_before = self.actions;
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
@@ -913,12 +904,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
-        let effectful = self.actions > actions_before;
+        let computable = computable(body);
         // `ask` consumes `produced`; keep a copy for a Skip to propagate.
         let propagate = produced.clone();
         let input = self
             .driver
-            .ask(qualified, &choices, produced, effectful);
+            .ask(qualified, &choices, produced, computable);
 
         // Quit halts the walk; this step's Begin stands without a matching
         // outcome, so resume re-runs it.
@@ -1009,7 +1000,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         qualified: &str,
         outcome: Outcome,
-        effectful: bool,
+        computable: bool,
     ) -> Result<Outcome, RunnerError> {
         let produced = match outcome {
             Outcome::Done(value) | Outcome::Skipped(value) => value,
@@ -1021,7 +1012,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .run_id();
         let input = self
             .driver
-            .seal(qualified, produced, effectful);
+            .seal(qualified, produced, computable);
         if let UserInput::Quit = input {
             return self.record_stop();
         }
@@ -1081,6 +1072,21 @@ impl<'i, D: Driver> Runner<'i, D> {
 
 fn describe_execute(function: &str) -> String {
     format!("{}()", function)
+}
+
+/// This is true when a body holds work to perform (that can be evaluated); a
+/// step whose definition is purely descriptive prose can and will have a
+/// Result, but is not computable.
+fn computable(op: &Operation) -> bool {
+    match op {
+        // A pure-prose body is not computable (this is fine!).
+        Operation::Sequence(ops) if ops.is_empty() => false,
+        Operation::Sequence(ops) => ops
+            .iter()
+            .any(computable),
+        Operation::Step { body, .. } | Operation::Section { body, .. } => computable(body),
+        _ => true,
+    }
 }
 
 /// Lift a `UserInput` from the prompt into the runner's `Outcome`.
