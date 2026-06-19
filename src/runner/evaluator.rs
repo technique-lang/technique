@@ -176,6 +176,52 @@ pub fn evaluate<'i>(
     }
 }
 
+/// Reduce a value to the elements a `foreach` iterates. A list yields its
+/// members; `Unit` (the absence of a value) is empty; a string acquired at a
+/// prompt may be a `[a, b]` literal, which parses into its elements, else it
+/// is a one-element list; a bare quantity widens likewise. A tablet, tuple,
+/// or future is not iterable.
+pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
+    match value {
+        Value::Arraeum(items) => Ok(items),
+        Value::Unitus => Ok(Vec::new()),
+        Value::Literali(text) => match parse_list_literal(&text) {
+            Some(items) => Ok(items),
+            None => Ok(vec![Value::Literali(text)]),
+        },
+        value @ Value::Quanticle(_) => Ok(vec![value]),
+        _ => Err(RunnerError::NotIterable),
+    }
+}
+
+/// Parse a `[ "a", b, ... ]` literal into its elements, each a string with
+/// any surrounding quotes stripped. Returns `None` for text that is not
+/// bracketed. Commas inside element text are not supported.
+fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
+    let inner = text
+        .trim()
+        .strip_prefix('[')?
+        .strip_suffix(']')?;
+    if inner
+        .trim()
+        .is_empty()
+    {
+        return Some(Vec::new());
+    }
+    let items = inner
+        .split(',')
+        .map(|element| {
+            let element = element.trim();
+            let unquoted = element
+                .strip_prefix('"')
+                .and_then(|e| e.strip_suffix('"'))
+                .unwrap_or(element);
+            Value::Literali(unquoted.to_string())
+        })
+        .collect();
+    Some(items)
+}
+
 /// Bind names to a value, shared by `Bind` evaluation and `foreach`
 /// iteration. One name takes the whole value; multiple names destructure a
 /// `Parametriq` of matching arity.

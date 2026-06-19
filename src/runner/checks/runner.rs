@@ -2297,3 +2297,72 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .collect();
     assert_eq!(settled, vec![State::Begin, State::Skip]);
 }
+
+#[test]
+fn descriptive_binding_acquires_list_for_foreach() {
+    // A descriptive `~ items` binding has no executable value, so the operator
+    // is asked to supply it. They enter a `[ … ]` literal, which coerces to a
+    // list, and the following foreach walks its body once per element.
+    let source = r#"
+% technique v1
+
+cleanup :
+
+    1.  enumerate things ~ items
+    2.  { foreach item in items }
+        -   handle { item }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("descriptive-binding-acquire");
+    // The acquire for `items` pops first, then the step and substep verdicts.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali(r#"["east", "west"]"#.to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<Option<&str>> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| {
+            if let Event::Acquire { name, .. } = event {
+                Some(
+                    name.as_ref()
+                        .map(String::as_str),
+                )
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![Some("items")]);
+
+    let substeps = prompt
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Step { description, .. } = event {
+                description.contains("handle")
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(substeps, 2);
+}

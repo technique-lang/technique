@@ -350,8 +350,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                     Ok(Outcome::Done(value))
                 }
             }
-            Operation::Bind { .. }
-            | Operation::Variable(_)
+            Operation::Bind { names, value } => self.walk_bind(env, names, value),
+            Operation::Variable(_)
             | Operation::Number(_)
             | Operation::String(_)
             | Operation::Multiline(_, _)
@@ -637,6 +637,58 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
+    /// Establish a binding. A descriptive binding of an action in a
+    /// prose-only paragraph, for example
+    ///
+    /// ```technique
+    ///     4.  Enumerate all the geographies ~ regions
+    /// ```
+    ///
+    /// carries no computable; the value of regions will be the result the
+    /// user enters, acquired from the driver.
+    ///
+    /// A binding whose value is an invocation or inline code block is
+    /// computable and is invoked or evaluated first.
+    fn walk_bind(
+        &mut self,
+        env: &mut Environment,
+        names: &'i [language::Identifier<'i>],
+        value: &'i Operation<'i>,
+    ) -> Result<Outcome, RunnerError> {
+        let descriptive = if let Operation::Sequence(ops) = value {
+            ops.is_empty()
+        } else {
+            false
+        };
+        if descriptive {
+            let qualified = self
+                .path
+                .render();
+            let name = names
+                .first()
+                .map(|n| n.value);
+            match self
+                .driver
+                .acquire(&qualified, name, None)
+            {
+                UserInput::Done(value) => {
+                    super::evaluator::bind_names(env, names, value)?;
+                    Ok(Outcome::Done(Value::Unitus))
+                }
+                UserInput::Skip => {
+                    super::evaluator::bind_names(env, names, Value::Unitus)?;
+                    Ok(Outcome::Skipped(Value::Unitus))
+                }
+                UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
+                UserInput::Quit => self.record_stop(),
+            }
+        } else {
+            let value = super::evaluator::evaluate(&self.library, &self.context, env, value)?;
+            super::evaluator::bind_names(env, names, value)?;
+            Ok(Outcome::Done(Value::Unitus))
+        }
+    }
+
     /// Evaluate a control structure. A `foreach` evalutates its body once for
     /// each element of the input collection, binding the loop name(s) to each
     /// element in turn and pushing an `Iteration` scope segment. The
@@ -664,18 +716,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
             }
             Some(expr) => {
-                let items =
-                    match super::evaluator::evaluate(&self.library, &self.context, env, expr)? {
-                        Value::Arraeum(items) => items,
-                        // A scalar in list context is a singleton list.
-                        value @ (Value::Literali(_) | Value::Quanticle(_)) => vec![value],
-                        // Unit is the absence of a value, so there is nothing
-                        // to iterate: the body runs zero times.
-                        Value::Unitus => Vec::new(),
-                        // A tablet is a record, not a sequence, so it does not
-                        // iterate directly.
-                        _ => return Err(RunnerError::NotIterable),
-                    };
+                let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
+                let items = super::evaluator::coerce_to_list(value)?;
                 for (i, item) in items
                     .into_iter()
                     .enumerate()
