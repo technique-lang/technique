@@ -270,7 +270,7 @@ impl Store {
 
 // Recover the source document's file path and the libraries that were
 // selected from a Start URI of the form
-// 
+//
 // file://{path}?library=a,b
 
 // written by `create` records. The query string parameters are optional.
