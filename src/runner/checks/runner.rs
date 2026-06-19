@@ -34,7 +34,7 @@ impl StoreFixture {
         let store = Store::new(base.clone());
         let document = PathBuf::from("/tmp/Test.tq");
         let (run_id, run_dir) = store
-            .create(&document, "2026-05-16T00:00:00Z".to_string())
+            .create(&document, "2026-05-16T00:00:00Z".to_string(), &[])
             .expect("create");
         let pfftt = crate::runner::state::construct_state_path(&run_dir, &document);
         let appender = Appender::open(pfftt, run_id).expect("open appender");
