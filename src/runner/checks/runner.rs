@@ -1155,6 +1155,62 @@ check :
 }
 
 #[test]
+fn automatic_failing_exec_fails_step_and_continues() {
+    // A non-zero exec exit settles its step Fail; the walk continues to the
+    // sibling below rather than aborting the run.
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Run a failing command { exec("exit 3") }
+
+2.  This step is still reached
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    let mut library = Library::core();
+    library.extend(Library::system());
+    crate::linking::link(&mut program, &library).expect("linked");
+
+    let mut fixture = StoreFixture::new("automatic-failing-exec");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        library,
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Done(_) => {}
+        other => panic!("expected Done, got {:?}", other),
+    }
+
+    let pfftt = fixture.pfftt_contents();
+    let records: Vec<_> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .collect();
+    let step_one_failed = records
+        .iter()
+        .any(|r| {
+            if let State::Fail(_) = r.state {
+                r.path == "/check:/1"
+            } else {
+                false
+            }
+        });
+    assert!(step_one_failed, "step 1 should record Fail");
+    assert!(records
+        .iter()
+        .any(|r| r.path == "/check:/2"));
+}
+
+#[test]
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 

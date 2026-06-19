@@ -35,6 +35,9 @@ pub enum Outcome {
     /// Carries the body's computed value for block semantics; recorded as no value.
     Skipped(Value),
     Failed(Failure),
+    /// A failure thrown mid-body (a failed exec); propagates up to the
+    /// enclosing step, which catches it and settles as Fail.
+    Throw(Failure),
     Stopped,
 }
 
@@ -311,17 +314,27 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .command(&qualified, &script)
                     {
                         UserInput::Done(chosen) => {
-                            let value = super::evaluator::dispatch(
+                            match super::evaluator::dispatch(
                                 &self.library,
                                 &self.context,
                                 env,
                                 executable,
                                 Some(&[chosen]),
-                            )?;
-                            Ok(Outcome::Done(value))
+                            ) {
+                                Ok(value) => Ok(Outcome::Done(value)),
+                                // A non-zero exit throws to fail the step rather
+                                // than aborting the run; the walk continues.
+                                Err(RunnerError::CommandFailed(code)) => {
+                                    Ok(Outcome::Throw(Failure::Aborted(format!(
+                                        "External command exited with status {}",
+                                        code
+                                    ))))
+                                }
+                                Err(other) => Err(other),
+                            }
                         }
                         UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
-                        UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
+                        UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
                         UserInput::Quit => self.record_stop(),
                     }
                 } else {
@@ -734,6 +747,10 @@ impl<'i, D: Driver> Runner<'i, D> {
             match outcome {
                 Outcome::Done(value) | Outcome::Skipped(value) => last = value,
                 Outcome::Stopped => return Ok(Outcome::Stopped),
+                // A Throw is a hard failure mid-body; it propagates up to the
+                // enclosing step. A plain Fail is a step's recorded verdict and
+                // the sequence continues to its siblings.
+                Outcome::Throw(failure) => return Ok(Outcome::Throw(failure)),
                 Outcome::Failed(_) => {}
             }
         }
@@ -884,10 +901,14 @@ impl<'i, D: Driver> Runner<'i, D> {
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
             Outcome::Done(value) => value,
-            // The body declined its exec command beat (Skip / Fail), which
-            // settles the step: there is no result to judge, so record the
-            // outcome and return without the verdict prompt.
+            // The body settled itself — a declined command beat (Skip / Fail)
+            // or a thrown exec failure, which catches here as a Fail. Record
+            // and show its verdict without an acceptance prompt.
             settled => {
+                let settled = match settled {
+                    Outcome::Throw(failure) => Outcome::Failed(failure),
+                    other => other,
+                };
                 let record = Record {
                     recorded: now_iso8601(),
                     run_id,
@@ -896,6 +917,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                 };
                 self.appender
                     .append(&record)?;
+                let verdict = match &settled {
+                    Outcome::Skipped(_) => UserInput::Skip,
+                    Outcome::Failed(Failure::Aborted(reason)) => UserInput::Fail(reason.clone()),
+                    _ => unreachable!("only Skip and Fail reach the settled branch"),
+                };
+                self.driver
+                    .settle("→", qualified, &verdict);
                 return Ok(settled);
             }
         };
@@ -1112,10 +1140,10 @@ fn record_state(outcome: &Outcome) -> State {
         }
         Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
         Outcome::Skipped(_) => State::Skip,
-        Outcome::Failed(Failure::Aborted(reason)) => {
+        Outcome::Failed(Failure::Aborted(reason)) | Outcome::Throw(Failure::Aborted(reason)) => {
             if reason.is_empty() {
-                // The operator failed the step without giving a reason; record
-                // the failure with no reason rather than an empty-string one.
+                // The user failed the step without giving a reason; record the
+                // failure with no reason rather than an empty-string one.
                 State::Fail(None)
             } else {
                 State::Fail(Some(super::state::fail_reason(reason)))

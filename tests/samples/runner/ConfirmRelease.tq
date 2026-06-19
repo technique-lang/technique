@@ -1,0 +1,8 @@
+% technique v1
+
+confirm_release :
+
+# Confirm the release tag
+
+    1.  Suggested release tag { "v1.0" }
+    2.  Proceed once the tag above is correct
