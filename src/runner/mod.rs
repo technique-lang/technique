@@ -19,7 +19,7 @@ mod state;
 pub use context::Context;
 pub use driver::{Headless, Mode};
 pub use evaluator::Environment;
-pub use library::{Builtin, Library, Native};
+pub use library::{library_for, Builtin, Library, Native};
 pub use runner::{Outcome, Runner, RunnerError};
 pub use state::{Appender, RecordError, RunId};
 
@@ -40,10 +40,11 @@ pub fn start<'i>(
     program: &'i Program<'i>,
     arguments: &[String],
     library: Library,
+    libraries: &[String],
 ) -> Result<(RunId, Outcome), RunnerError> {
     let env = bind_parameters(program, arguments)?;
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (run_id, run_dir) = store.create(document, now_iso8601())?;
+    let (run_id, run_dir) = store.create(document, now_iso8601(), libraries)?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
     let outcome = match mode {
@@ -69,13 +70,13 @@ pub fn start<'i>(
     Ok((run_id, outcome))
 }
 
-/// Read the opening `Start` record of an existing run, returning the
-/// source document path so the caller can load and re-translate it
-/// before resuming.
-pub fn locate(run_id: RunId) -> Result<PathBuf, RunnerError> {
+/// Read the opening `Start` record of an existing run, returning the source
+/// document path and the libraries it was run with so the caller can load,
+/// re-translate, and re-link it before resuming.
+pub fn locate(run_id: RunId) -> Result<(PathBuf, Vec<String>), RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, _, _) = store.open(run_id)?;
-    Ok(document)
+    let (document, libraries, _, _) = store.open(run_id)?;
+    Ok((document, libraries))
 }
 
 /// Open an existing run and walk the given program, short-circuiting
@@ -90,7 +91,7 @@ pub fn resume<'i>(
         return Err(RunnerError::TerminalRequired);
     }
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, completed, run_dir) = store.open(run_id)?;
+    let (document, _, completed, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);
     let mut appender = Appender::open(pfftt, run_id)?;
     let record = Record {

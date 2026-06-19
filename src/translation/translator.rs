@@ -342,9 +342,7 @@ impl<'i> Translator<'i> {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
                 self.translate_descriptions(&mut body_ops, description);
-                for sub in subscopes {
-                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
-                }
+                self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
@@ -361,9 +359,7 @@ impl<'i> Translator<'i> {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
                 self.translate_descriptions(&mut body_ops, description);
-                for sub in subscopes {
-                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
-                }
+                self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
@@ -440,6 +436,36 @@ impl<'i> Translator<'i> {
                 })
             }
             _ => None,
+        }
+    }
+
+    // Subscopes form the body of a trailing inline `foreach`, else they follow
+    // the description as siblings.
+    fn attach_subscopes(
+        &mut self,
+        body_ops: &mut Vec<Operation<'i>>,
+        responses: &mut Vec<&'i language::Response<'i>>,
+        subscopes: &'i [language::Scope<'i>],
+        attrs: &[&'i [language::Attribute<'i>]],
+    ) {
+        if let Some(Operation::Loop {
+            over: Some(_),
+            body,
+            responses: loop_responses,
+            ..
+        }) = body_ops.last_mut()
+        {
+            if let Operation::Sequence(loop_body) = body.as_mut() {
+                if loop_body.is_empty() {
+                    for sub in subscopes {
+                        self.append_attributes(loop_body, loop_responses, sub, attrs);
+                    }
+                    return;
+                }
+            }
+        }
+        for sub in subscopes {
+            self.append_attributes(body_ops, responses, sub, attrs);
         }
     }
 
