@@ -1,7 +1,9 @@
 2026-06-14T05:58:08.700Z 000001 / Start file://tests/samples/runner/ConfirmRelease.tq
 2026-06-14T05:58:08.700Z 000001 /confirm_release: Begin
 2026-06-14T05:58:08.700Z 000001 /confirm_release:/1 Begin
-2026-06-14T05:58:08.700Z 000001 /confirm_release:/1 Done "v1.0"
+2026-06-14T05:58:08.700Z 000001 /confirm_release:/1 Done "v2.0"
 2026-06-14T05:58:08.700Z 000001 /confirm_release:/2 Begin
+2026-06-14T05:58:08.700Z 000001 /confirm_release:/2 Execute exec()
+2026-06-14T05:58:08.700Z 000001 /confirm_release:/2 Execute exec()
 2026-06-14T05:58:08.700Z 000001 /confirm_release:/2 Done ()
 2026-06-14T05:58:08.700Z 000001 /confirm_release: Done ()

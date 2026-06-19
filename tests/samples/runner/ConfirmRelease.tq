@@ -4,5 +4,6 @@ confirm_release :
 
 # Confirm the release tag
 
-    1.  Suggested release tag { "v1.0" }
-    2.  Proceed once the tag above is correct
+    1.  Suggested release tag { "v1.0" } and then { "v2.0" }
+    2.  Proceed once the tag above is correct with
+        { exec("echo 1") } then { exec("echo 2") }

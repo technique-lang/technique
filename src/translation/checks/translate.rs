@@ -1665,11 +1665,9 @@ delete_rds_instance :
     let Operation::Sequence(step_body) = body.as_ref() else {
         panic!("expected Step body Sequence");
     };
-    // The CodeBlock translates to a Sequence pushed into the Step body.
-    let Operation::Sequence(block_ops) = &step_body[0] else {
-        panic!("expected CodeBlock Sequence, got {:?}", step_body[0]);
-    };
-    let names: Vec<&str> = block_ops
+    // A plain code block is inline: its expressions hoist directly into the
+    // Step body, one Execute per call.
+    let names: Vec<&str> = step_body
         .iter()
         .map(|op| match op {
             Operation::Execute(executable) => {

@@ -765,6 +765,8 @@ impl<'i> Formatter<'i> {
                 Descriptive::CodeInline(expr) => match expr {
                     _ if is_tablet_list_expr(expr) => {
                         line.flush();
+                        self.append_char('\n');
+                        self.indent();
                         self.add_fragment_reference(Syntax::Structure, "{");
                         self.append_char('\n');
                         self.increase(4);
@@ -772,8 +774,9 @@ impl<'i> Formatter<'i> {
                         self.append_expression(expr);
                         self.append_char('\n');
                         self.decrease(4);
+                        self.indent();
+                        self.add_fragment_reference(Syntax::Structure, "}");
                         line = self.builder();
-                        line.add_word(Syntax::Structure, "}");
                     }
                     Expression::Multiline(_, _, _) => {
                         line.flush();
