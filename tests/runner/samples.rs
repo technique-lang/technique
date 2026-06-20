@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -71,7 +71,7 @@ fn ensure_run() {
         let mut runner = Runner::new(
             &program,
             Appender::memory(),
-            HashSet::new(),
+            HashMap::new(),
             Headless::new(),
             library,
         );

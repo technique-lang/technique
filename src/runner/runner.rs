@@ -1,6 +1,6 @@
 //! Interactive walker over a translated Program.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
@@ -9,9 +9,7 @@ use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
-use super::state::{
-    Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
-};
+use super::state::{Appender, InvokeTarget, Record, RecordError, RunId, State};
 use crate::language;
 use crate::program::{
     Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, Subroutine,
@@ -107,12 +105,12 @@ pub enum RunnerError {
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
 /// the position in the document via a `QualifiedPath` stack, carries an
 /// `Environment` with known result values. Holds the set of step FQNs already
-/// completed in a *prior* run — the resume snapshotplus an append handle to
+/// completed in a *prior* run — the resume snapshot plus an append handle to
 /// write results and the prompt the operator interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
-    completed: HashSet<String>,
+    completed: HashMap<String, Value>,
     driver: D,
     path: QualifiedPath<'i>,
     library: Library,
@@ -123,7 +121,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
-        completed: HashSet<String>,
+        completed: HashMap<String, Value>,
         driver: D,
         library: Library,
     ) -> Self {
@@ -460,7 +458,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let lexical = super::path::render_path(&lexical_segments);
                     if self
                         .completed
-                        .contains(&lexical)
+                        .contains_key(&lexical)
                     {
                         return Ok(Outcome::Done(Value::Unitus));
                     }
@@ -601,7 +599,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .render();
                 if self
                     .completed
-                    .contains(&qualified)
+                    .contains_key(&qualified)
                 {
                     self.path
                         .pop();
@@ -672,8 +670,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .acquire(&qualified, name, None)
             {
                 UserInput::Done(value) => {
-                    super::evaluator::bind_names(env, names, value)?;
-                    Ok(Outcome::Done(Value::Unitus))
+                    super::evaluator::bind_names(env, names, value.clone())?;
+                    Ok(Outcome::Done(value))
                 }
                 UserInput::Skip => {
                     super::evaluator::bind_names(env, names, Value::Unitus)?;
@@ -684,8 +682,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
         } else {
             let value = super::evaluator::evaluate(&self.library, &self.context, env, value)?;
-            super::evaluator::bind_names(env, names, value)?;
-            Ok(Outcome::Done(Value::Unitus))
+            super::evaluator::bind_names(env, names, value.clone())?;
+            Ok(Outcome::Done(value))
         }
     }
 
@@ -813,7 +811,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .render();
         if self
             .completed
-            .contains(&qualified)
+            .contains_key(&qualified)
         {
             self.path
                 .pop();
@@ -909,11 +907,23 @@ impl<'i, D: Driver> Runner<'i, D> {
         source: &'i language::Scope<'i>,
         responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
-        if self
+        if let Some(value) = self
             .completed
-            .contains(qualified)
+            .get(qualified)
         {
-            return Ok(Outcome::Done(Value::Unitus));
+            let value = value.clone();
+            // A replayed step does not re-run its body, so we re-establish
+            // any results it made by re-binding the step's names to their
+            // recorded values. A step that nests further work (a `foreach`
+            // loop, substeps) is re-walked instead: if its descendants are
+            // all completed too, they short-circuit without re-prompting
+            // while re-hydrating bindings made inside the loop body.
+            if nests_work(body) {
+                self.walk(env, body)?;
+            } else if let Some(names) = binding_names(body) {
+                super::evaluator::bind_names(env, names, value.clone())?;
+            }
+            return Ok(Outcome::Done(value));
         }
 
         // Mark the start of work on this step before walking its body,
@@ -1170,17 +1180,12 @@ fn outcome_from(input: UserInput) -> Outcome {
 }
 
 /// Project the runner's in-memory `Outcome` into the on-disk `State` for the
-/// PFFTT file. A single-line input (a chosen response or whatever the user
-/// typed) records as a literal string. Multi-line literals (raw exec output)
-/// record as unit. The in-memory `Outcome` still carries the full value, so a
-/// value bound with `~` remains available in scope regardless. Quit is
-/// unreachable here: the caller filters it out before recording.
+/// PFFTT file. A `Done` records its full value (serialized by the state codec),
+/// so a value bound with `~` rehydrates on resume. Quit is unreachable here:
+/// the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
-        Outcome::Done(Value::Literali(text)) if !text.contains('\n') => {
-            State::Done(Some(RecordValue::Literal(text.clone())))
-        }
-        Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
+        Outcome::Done(value) => State::Done(Some(value.clone())),
         Outcome::Skipped(_) => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) | Outcome::Throw(Failure::Aborted(reason)) => {
             if reason.is_empty() {
@@ -1194,6 +1199,33 @@ fn record_state(outcome: &Outcome) -> State {
         Outcome::Stopped => {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
         }
+    }
+}
+
+/// The names a step body binds, if any: the first `Bind` reached without
+/// descending through a nested step, loop, or section. Used on resume to
+/// rebind a replayed step's value into the environment.
+fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>]> {
+    match op {
+        Operation::Bind { names, .. } => Some(names),
+        Operation::Sequence(ops) => ops
+            .iter()
+            .find_map(binding_names),
+        _ => None,
+    }
+}
+
+/// Whether a step body nests further executable scopes — a `foreach`/`repeat`
+/// loop or substeps — as opposed to being a leaf of prose, a binding, or a
+/// call. A completed step that nests work is re-walked on resume so bindings
+/// made inside it rehydrate; a leaf is restored from its recorded value alone.
+fn nests_work(op: &Operation) -> bool {
+    match op {
+        Operation::Loop { .. } | Operation::Step { .. } => true,
+        Operation::Sequence(ops) => ops
+            .iter()
+            .any(nests_work),
+        _ => false,
     }
 }
 
