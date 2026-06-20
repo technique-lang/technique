@@ -4,7 +4,7 @@ use crate::runner::runner::RunnerError;
 use crate::value::Value;
 use crate::runner::state::{
     fail_reason, format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State,
-    Store,
+    Store, Supplied,
 };
 
 // A scratch directory under the system temp dir, cleaned up on drop so panics
@@ -135,7 +135,7 @@ fn create_and_open_round_trips_document_path() {
     let (run_id, _) = store
         .create(&document, started, &[])
         .expect("create");
-    let (read_document, libraries, completed, _) = store
+    let (read_document, libraries, completed, _, _) = store
         .open(run_id)
         .expect("open");
 
@@ -159,7 +159,7 @@ fn create_and_open_round_trips_libraries() {
     let (run_id, _) = store
         .create(&document, started, &selected)
         .expect("create");
-    let (read_document, libraries, _, _) = store
+    let (read_document, libraries, _, _, _) = store
         .open(run_id)
         .expect("open");
 
@@ -208,7 +208,7 @@ fn open_replays_done_skip_fail_into_completed() {
         dir.path
             .clone(),
     );
-    let (document, _, completed, _) = store
+    let (document, _, completed, _, _) = store
         .open(RunId(1))
         .expect("open");
 
@@ -263,7 +263,7 @@ fn open_skips_resume_and_begin_during_replay() {
         dir.path
             .clone(),
     );
-    let (_, _, completed, _) = store
+    let (_, _, completed, _, _) = store
         .open(RunId(1))
         .expect("open");
 
@@ -586,6 +586,24 @@ fn record_round_trips_through_format_and_parse() {
                 "reason".to_string(),
                 Value::Literali("unreachable".to_string()),
             )]))),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:06Z".to_string(),
+            run_id: RunId(1),
+            path: "/decommission:".to_string(),
+            state: State::Input(vec![
+                Supplied {
+                    value: Value::Literali("acme-corp".to_string()),
+                    name: Some("authority".to_string()),
+                },
+                Supplied {
+                    value: Value::Arraeum(vec![
+                        Value::Literali("east".to_string()),
+                        Value::Literali("west".to_string()),
+                    ]),
+                    name: None,
+                },
+            ]),
         },
     ];
 

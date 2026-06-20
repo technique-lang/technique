@@ -108,7 +108,7 @@ pub fn inspect<'i>(
 /// re-translate, and re-link it before resuming.
 pub fn locate(run_id: RunId) -> Result<(PathBuf, Vec<String>), RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, libraries, _, _) = store.open(run_id)?;
+    let (document, libraries, _, _, _) = store.open(run_id)?;
     Ok((document, libraries))
 }
 
@@ -124,7 +124,7 @@ pub fn resume<'i>(
         return Err(RunnerError::TerminalRequired);
     }
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, _, completed, run_dir) = store.open(run_id)?;
+    let (document, _, completed, inputs, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);
     let mut appender = Appender::open(pfftt, run_id)?;
     let record = Record {
@@ -134,7 +134,8 @@ pub fn resume<'i>(
         state: State::Resume,
     };
     appender.append(&record)?;
-    let mut runner = Runner::new(program, appender, completed, Console::new(), library);
+    let mut runner =
+        Runner::new(program, appender, completed, Console::new(), library).with_inputs(inputs);
     let env = Environment::new();
     runner.run(env)
 }

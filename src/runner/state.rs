@@ -54,6 +54,8 @@ pub struct Record {
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` records a host-function call from inside a step body.
+/// `Input` records the values supplied to a procedure so a resume can restore
+/// the state without re-prompting for information already entered.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
@@ -62,10 +64,21 @@ pub enum State {
     Resume,
     Invoke(InvokeTarget),
     Execute { function: String },
+    Input(Vec<Supplied>),
     Begin,
     Done(Option<value::Value>),
     Skip,
     Fail(Option<value::Value>),
+}
+
+/// One value supplied to a procedure's parameter: bound to a named parameter
+/// (recorded as `value ~ name`), or positional when the parameter is unnamed
+/// (recorded as a bare `value`).
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Supplied {
+    pub value: value::Value,
+    pub name: Option<String>,
 }
 
 /// The target of an `Invoke`: either a named procedure (rendered as
@@ -174,7 +187,16 @@ impl Store {
     pub fn open(
         &self,
         run_id: RunId,
-    ) -> Result<(PathBuf, Vec<String>, HashMap<String, value::Value>, PathBuf), RunnerError> {
+    ) -> Result<
+        (
+            PathBuf,
+            Vec<String>,
+            HashMap<String, value::Value>,
+            HashMap<String, Vec<Supplied>>,
+            PathBuf,
+        ),
+        RunnerError,
+    > {
         let run_dir = self
             .base
             .join(run_id.render());
@@ -206,6 +228,7 @@ impl Store {
         };
 
         let mut completed = HashMap::new();
+        let mut inputs: HashMap<String, Vec<Supplied>> = HashMap::new();
         for line in lines {
             let record = parse_record(line)
                 .map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
@@ -216,6 +239,9 @@ impl Store {
                 State::Skip | State::Fail(_) => {
                     completed.insert(record.path, value::Value::Unitus);
                 }
+                State::Input(supplied) => {
+                    inputs.insert(record.path, supplied);
+                }
                 State::Start { .. }
                 | State::Stop
                 | State::Resume
@@ -224,7 +250,7 @@ impl Store {
                 | State::Begin => {}
             }
         }
-        Ok((document, libraries, completed, run_dir))
+        Ok((document, libraries, completed, inputs, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return
@@ -454,6 +480,10 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str(function);
             out.push_str("()");
         }
+        State::Input(supplied) => {
+            out.push_str("Input ");
+            format_supplied(out, supplied);
+        }
         State::Begin => out.push_str("Begin"),
         State::Done(value) => {
             out.push_str("Done");
@@ -471,6 +501,62 @@ fn format_state(out: &mut String, state: &State) {
             }
         }
     }
+}
+
+// Format a procedure's supplied inputs as `( value ~ name, value, … )`: each
+// value serialized by the value codec, a named parameter followed by `~ name`,
+// an unnamed one left bare.
+fn format_supplied(out: &mut String, supplied: &[Supplied]) {
+    out.push('(');
+    for (i, item) in supplied
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push(' ');
+        out.push_str(&serialize_value(&item.value));
+        if let Some(name) = &item.name {
+            out.push_str(" ~ ");
+            out.push_str(name);
+        }
+    }
+    out.push_str(" )");
+}
+
+// Reverse `format_supplied`: parse `( value ~ name, value, … )` into the
+// supplied inputs. Each top-level item is a codec value optionally followed by
+// a top-level ` ~ ` and the parameter name.
+fn parse_supplied(text: &str) -> Result<Vec<Supplied>, RecordError> {
+    let inner = text
+        .trim()
+        .strip_prefix('(')
+        .and_then(|t| t.strip_suffix(')'))
+        .ok_or(RecordError::MalformedState)?
+        .trim();
+    if inner.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for part in split_top_level(inner, ',')? {
+        let part = part.trim();
+        let supplied = match split_once_top_level_tilde(part) {
+            Some((value, name)) => Supplied {
+                value: deserialize_value(value.trim())?,
+                name: Some(
+                    name.trim()
+                        .to_string(),
+                ),
+            },
+            None => Supplied {
+                value: deserialize_value(part)?,
+                name: None,
+            },
+        };
+        out.push(supplied);
+    }
+    Ok(out)
 }
 
 // Escape a literal so it occupies a single record line: backslash and quote
@@ -605,6 +691,10 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
             Ok(State::Execute {
                 function: name.to_string(),
             })
+        }
+        "Input" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            Ok(State::Input(parse_supplied(payload)?))
         }
         "Begin" => {
             if rest.is_some() {
@@ -892,6 +982,43 @@ fn split_once_top_level_equals(text: &str) -> Option<(&str, &str)> {
             ']' | ')' | '}' => depth -= 1,
             ' ' if depth == 0
                 && bytes.get(i + 1) == Some(&b'=')
+                && bytes.get(i + 2) == Some(&b' ') =>
+            {
+                return Some((&text[..i], &text[i + 3..]));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+// Split `text` once at the first top-level ` ~ ` separator (the binding
+// operator joining a supplied value to its parameter name).
+fn split_once_top_level_tilde(text: &str) -> Option<(&str, &str)> {
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_quote = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if in_quote {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => in_quote = true,
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ' ' if depth == 0
+                && bytes.get(i + 1) == Some(&b'~')
                 && bytes.get(i + 2) == Some(&b' ') =>
             {
                 return Some((&text[..i], &text[i + 3..]));

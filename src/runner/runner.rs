@@ -9,7 +9,7 @@ use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
-use super::state::{Appender, InvokeTarget, Record, RecordError, RunId, State};
+use super::state::{Appender, InvokeTarget, Record, RecordError, RunId, State, Supplied};
 use crate::language;
 use crate::program::{
     Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, Subroutine,
@@ -26,7 +26,6 @@ use crate::value::Value;
 /// quit was already recorded as a `State::Stop` lifecycle event, so this
 /// carries no payload — a `technique resume` picks up from the first step
 /// with no recorded outcome.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
@@ -40,7 +39,6 @@ pub enum Outcome {
 }
 
 /// Why a Step failed.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
     Aborted(String),
@@ -49,7 +47,6 @@ pub enum Failure {
 /// Anything that can go wrong while preparing or running a Technique.
 /// Variants are populated as the implementing steps land; the formatter
 /// in `crate::problem` knows how to render each one.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum RunnerError {
     NoSuchRun(RunId),
@@ -111,6 +108,7 @@ pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
     completed: HashMap<String, Value>,
+    inputs: HashMap<String, Vec<Supplied>>,
     driver: D,
     path: QualifiedPath<'i>,
     library: Library,
@@ -129,11 +127,20 @@ impl<'i, D: Driver> Runner<'i, D> {
             program,
             appender,
             completed,
+            inputs: HashMap::new(),
             driver,
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
         }
+    }
+
+    /// Seed the runner with the inputs recorded by a prior run — the values
+    /// supplied to the entry procedure and to each invocation — so a resume
+    /// restores them rather than re-prompting. Empty on a fresh run.
+    pub fn with_inputs(mut self, inputs: HashMap<String, Vec<Supplied>>) -> Self {
+        self.inputs = inputs;
+        self
     }
 
     /// Consume the runner and return the inner driver after a run completes.
@@ -185,6 +192,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             let params = entry
                 .parameters
                 .unwrap_or(&[]);
+            self.restore_or_record_inputs(&mut env, &qualified, params)?;
             if params.is_empty() {
                 self.driver
                     .enter(&qualified);
@@ -477,6 +485,17 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .formae()
                         })
                         .unwrap_or_default();
+                    // A prior run's recorded inputs for this callee: an
+                    // argument the operator was prompted for (an elided call
+                    // or a `?` hole) is restored from here on resume instead
+                    // of re-acquiring. An argument the author supplied as a
+                    // part of the source document is always re-evaluated
+                    // instead, so a loop variable still varies.
+                    let recorded = self
+                        .inputs
+                        .get(&lexical)
+                        .cloned();
+                    let mut supplied: Vec<Supplied> = Vec::new();
                     if invocable.elided {
                         for i in 0..subroutine.arity() {
                             let bind = params
@@ -485,16 +504,28 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let forma = formae
                                 .get(i)
                                 .map(|f| f.value);
-                            let value = match self
-                                .driver
-                                .acquire(&invoked, bind, forma)
+                            let value = match recorded
+                                .as_ref()
+                                .and_then(|r| r.get(i))
                             {
-                                UserInput::Done(value) => value,
-                                other => return self.abandon(&lexical, other),
+                                Some(s) => s
+                                    .value
+                                    .clone(),
+                                None => match self
+                                    .driver
+                                    .acquire(&invoked, bind, forma)
+                                {
+                                    UserInput::Done(value) => value,
+                                    other => return self.abandon(&lexical, other),
+                                },
                             };
                             if let Some(bind) = bind {
-                                local.extend(bind.to_string(), value);
+                                local.extend(bind.to_string(), value.clone());
                             }
+                            supplied.push(Supplied {
+                                value,
+                                name: bind.map(|b| b.to_string()),
+                            });
                         }
                     } else {
                         for (i, arg) in invocable
@@ -506,22 +537,36 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .get(i)
                                 .map(|p| p.value);
                             let value = if let Operation::Hole = arg {
-                                let forma = formae
-                                    .get(i)
-                                    .map(|f| f.value);
-                                match self
-                                    .driver
-                                    .acquire(&invoked, bind, forma)
+                                match recorded
+                                    .as_ref()
+                                    .and_then(|r| r.get(i))
                                 {
-                                    UserInput::Done(value) => value,
-                                    other => return self.abandon(&lexical, other),
+                                    Some(s) => s
+                                        .value
+                                        .clone(),
+                                    None => {
+                                        let forma = formae
+                                            .get(i)
+                                            .map(|f| f.value);
+                                        match self
+                                            .driver
+                                            .acquire(&invoked, bind, forma)
+                                        {
+                                            UserInput::Done(value) => value,
+                                            other => return self.abandon(&lexical, other),
+                                        }
+                                    }
                                 }
                             } else {
                                 super::evaluator::evaluate(&self.library, &self.context, env, arg)?
                             };
                             if let Some(bind) = bind {
-                                local.extend(bind.to_string(), value);
+                                local.extend(bind.to_string(), value.clone());
                             }
+                            supplied.push(Supplied {
+                                value,
+                                name: bind.map(|b| b.to_string()),
+                            });
                         }
                     }
 
@@ -539,6 +584,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                         })?;
 
                     self.begin_scope(&lexical)?;
+
+                    // Record the inputs supplied to this invocation, unless they
+                    // were restored from a prior run (already in the trail).
+                    if recorded.is_none() {
+                        self.record_inputs(&lexical, supplied)?;
+                    }
 
                     let saved = self
                         .path
@@ -1072,6 +1123,67 @@ impl<'i, D: Driver> Runner<'i, D> {
                 state: State::Begin,
             })?;
         Ok(())
+    }
+
+    /// Record the values supplied to a procedure's parameters at its own path,
+    /// so a resume restores them rather than re-prompting. A procedure with no
+    /// parameters records nothing.
+    fn record_inputs(
+        &mut self,
+        qualified: &str,
+        supplied: Vec<Supplied>,
+    ) -> Result<(), RunnerError> {
+        if supplied.is_empty() {
+            return Ok(());
+        }
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: State::Input(supplied),
+            })
+    }
+
+    /// At a procedure's entry, restore its parameter bindings from a prior
+    /// run's recorded inputs if present (resume), otherwise record the inputs
+    /// it was called with (a fresh run). Used for the entry procedure, whose
+    /// arguments come from the command line.
+    fn restore_or_record_inputs(
+        &mut self,
+        env: &mut Environment,
+        qualified: &str,
+        params: &[language::Identifier<'i>],
+    ) -> Result<(), RunnerError> {
+        if let Some(supplied) = self
+            .inputs
+            .get(qualified)
+            .cloned()
+        {
+            for item in supplied {
+                if let Some(name) = item.name {
+                    env.extend(name, item.value);
+                }
+            }
+            return Ok(());
+        }
+        let supplied = params
+            .iter()
+            .map(|p| Supplied {
+                value: env
+                    .lookup(p.value)
+                    .cloned()
+                    .unwrap_or(Value::Unitus),
+                name: Some(
+                    p.value
+                        .to_string(),
+                ),
+            })
+            .collect();
+        self.record_inputs(qualified, supplied)
     }
 
     /// Sign off a completed structural scope — a Section at its close, or the

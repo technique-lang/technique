@@ -13,7 +13,7 @@ use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
 use crate::runner::state::{
-    parse_record, Appender, InvokeTarget, State, Store,
+    parse_record, Appender, InvokeTarget, State, Store, Supplied,
 };
 use crate::translation::translate;
 use crate::value::Value;
@@ -2430,4 +2430,112 @@ cleanup :
     } else {
         false
     });
+}
+
+// An elided invocation `<hail>` acquires its parameter `name` from the
+// operator. The argument it was called with is recorded as an `Input` at the
+// callee's path so a resume can restore it.
+const ACQUIRE_INPUT_SOURCE: &str = r#"
+% technique v1
+
+greet :
+
+    1.  <hail>
+
+hail(name) : Text -> ()
+
+    1.  Say { name }
+"#;
+
+#[test]
+fn invoke_records_supplied_input() {
+    let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    // The operator supplies "World" at the acquire prompt; the rest are step
+    // and scope sign-offs.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("World".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let trail = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        trail.contains("/hail: Input ( \"World\" ~ name )"),
+        "trail was:\n{}",
+        trail
+    );
+}
+
+#[test]
+fn resume_restores_invoke_input_without_reprompting() {
+    let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    // The prior run recorded the argument acquired for `<hail>`. Resume with
+    // that input preloaded: the acquire must not fire, and `name` is bound from
+    // the record (so `{ name }` evaluates rather than raising UnboundVariable).
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "/hail:".to_string(),
+        vec![Supplied {
+            value: Value::Literali("World".to_string()),
+            name: Some("name".to_string()),
+        }],
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    )
+    .with_inputs(inputs);
+    let outcome = runner
+        .run(Environment::new())
+        .expect("resume runs without re-acquiring");
+    assert!(if let Outcome::Done(_) = outcome {
+        true
+    } else {
+        false
+    });
+
+    let prompt = runner.into_driver();
+    let acquired = prompt
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Acquire { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(acquired, 0);
 }
