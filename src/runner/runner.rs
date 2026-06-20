@@ -188,11 +188,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            self.begin_scope(&qualified)?;
             let params = entry
                 .parameters
                 .unwrap_or(&[]);
             self.restore_or_record_inputs(&mut env, &qualified, params)?;
+            self.begin_scope(&qualified)?;
             if params.is_empty() {
                 self.driver
                     .enter(&qualified);
@@ -485,17 +485,20 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .formae()
                         })
                         .unwrap_or_default();
-                    // A prior run's recorded inputs for this callee: an
-                    // argument the operator was prompted for (an elided call
-                    // or a `?` hole) is restored from here on resume instead
-                    // of re-acquiring. An argument the author supplied as a
-                    // part of the source document is always re-evaluated
-                    // instead, so a loop variable still varies.
+
+                    // A prior run's recorded inputs for this callee. A
+                    // prompted argument (an elided call or a `?` hole) is
+                    // restored from here on resume, in prompted order, rather
+                    // than re-acquired. An argument the author supplied as a
+                    // source expression is re-evaluated, so a loop variable
+                    // still varies — and, being re-derivable, does not need
+                    // to be recorded.
                     let recorded = self
                         .inputs
                         .get(&lexical)
                         .cloned();
-                    let mut supplied: Vec<Supplied> = Vec::new();
+                    let mut prompted: Vec<Supplied> = Vec::new();
+                    let mut taken = 0usize;
                     if invocable.elided {
                         for i in 0..subroutine.arity() {
                             let bind = params
@@ -506,7 +509,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .map(|f| f.value);
                             let value = match recorded
                                 .as_ref()
-                                .and_then(|r| r.get(i))
+                                .and_then(|r| r.get(taken))
                             {
                                 Some(s) => s
                                     .value
@@ -519,10 +522,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     other => return self.abandon(&lexical, other),
                                 },
                             };
+                            taken += 1;
                             if let Some(bind) = bind {
                                 local.extend(bind.to_string(), value.clone());
                             }
-                            supplied.push(Supplied {
+                            prompted.push(Supplied {
                                 value,
                                 name: bind.map(|b| b.to_string()),
                             });
@@ -536,10 +540,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let bind = params
                                 .get(i)
                                 .map(|p| p.value);
-                            let value = if let Operation::Hole = arg {
-                                match recorded
+                            if let Operation::Hole = arg {
+                                let value = match recorded
                                     .as_ref()
-                                    .and_then(|r| r.get(i))
+                                    .and_then(|r| r.get(taken))
                                 {
                                     Some(s) => s
                                         .value
@@ -556,22 +560,33 @@ impl<'i, D: Driver> Runner<'i, D> {
                                             other => return self.abandon(&lexical, other),
                                         }
                                     }
+                                };
+                                taken += 1;
+                                if let Some(bind) = bind {
+                                    local.extend(bind.to_string(), value.clone());
                                 }
+                                prompted.push(Supplied {
+                                    value,
+                                    name: bind.map(|b| b.to_string()),
+                                });
                             } else {
-                                super::evaluator::evaluate(&self.library, &self.context, env, arg)?
-                            };
-                            if let Some(bind) = bind {
-                                local.extend(bind.to_string(), value.clone());
+                                let value = super::evaluator::evaluate(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    arg,
+                                )?;
+                                if let Some(bind) = bind {
+                                    local.extend(bind.to_string(), value);
+                                }
                             }
-                            supplied.push(Supplied {
-                                value,
-                                name: bind.map(|b| b.to_string()),
-                            });
                         }
                     }
 
-                    // Record the Invoke at the call site, then descend onto the
-                    // callee's lexical address, restored on return.
+                    // Record the dispatch once the arguments are in hand —
+                    // declining at the prompt above returns before this, so a
+                    // declined call records no Invoke. Recorded at answer-time,
+                    // so the gap from the previous event is the operator wait.
                     let run_id = self
                         .appender
                         .run_id();
@@ -583,13 +598,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                             state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
                         })?;
 
-                    self.begin_scope(&lexical)?;
-
-                    // Record the inputs supplied to this invocation, unless they
-                    // were restored from a prior run (already in the trail).
+                    // Record the prompted inputs (answered just now) before
+                    // Begin, unless they were restored from a prior run (already
+                    // in the trail).
                     if recorded.is_none() {
-                        self.record_inputs(&lexical, supplied)?;
+                        self.record_inputs(&lexical, prompted)?;
                     }
+
+                    self.begin_scope(&lexical)?;
 
                     let saved = self
                         .path
