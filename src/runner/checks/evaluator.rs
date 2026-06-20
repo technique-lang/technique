@@ -1,7 +1,7 @@
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
-use crate::runner::evaluator::{combine, evaluate, Environment};
+use crate::runner::evaluator::{coerce_to_list, combine, evaluate, Environment};
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value;
@@ -378,4 +378,69 @@ fn combine_cross_kind_errors() {
     };
     assert_eq!(left, "quantity");
     assert_eq!(right, "string");
+}
+
+#[test]
+fn coerce_list_passthrough_and_widening() {
+    // A list yields its members unchanged.
+    let list = value::Value::Arraeum(vec![
+        value::Value::Literali("a".to_string()),
+        value::Value::Literali("b".to_string()),
+    ]);
+    assert_eq!(
+        coerce_to_list(list).expect("coerced"),
+        vec![
+            value::Value::Literali("a".to_string()),
+            value::Value::Literali("b".to_string()),
+        ]
+    );
+
+    // Unit is the empty list; a bare scalar widens to a singleton.
+    assert_eq!(
+        coerce_to_list(value::Value::Unitus).expect("coerced"),
+        Vec::<value::Value>::new()
+    );
+    assert_eq!(
+        coerce_to_list(value::Value::Literali("solo".to_string())).expect("coerced"),
+        vec![value::Value::Literali("solo".to_string())]
+    );
+}
+
+#[test]
+fn coerce_parses_bracketed_literal() {
+    // A `[ … ]` literal acquired at a prompt parses into its elements, quoted
+    // or bare; empty brackets are the empty list.
+    let quoted =
+        coerce_to_list(value::Value::Literali(r#"["east", "west"]"#.to_string())).expect("coerced");
+    assert_eq!(
+        quoted,
+        vec![
+            value::Value::Literali("east".to_string()),
+            value::Value::Literali("west".to_string()),
+        ]
+    );
+
+    let bare = coerce_to_list(value::Value::Literali("[east, west]".to_string())).expect("coerced");
+    assert_eq!(
+        bare,
+        vec![
+            value::Value::Literali("east".to_string()),
+            value::Value::Literali("west".to_string()),
+        ]
+    );
+
+    let empty = coerce_to_list(value::Value::Literali("[]".to_string())).expect("coerced");
+    assert_eq!(empty, Vec::<value::Value>::new());
+}
+
+#[test]
+fn coerce_rejects_tablet() {
+    let tablet = value::Value::Tabularum(vec![(
+        "k".to_string(),
+        value::Value::Literali("v".to_string()),
+    )]);
+    match coerce_to_list(tablet) {
+        Err(RunnerError::NotIterable) => {}
+        other => panic!("expected NotIterable, got {:?}", other),
+    }
 }

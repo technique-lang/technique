@@ -2364,7 +2364,7 @@ impl<'i> Parser<'i> {
                     || is_enum_response(line)
                     || malformed_step_pattern(line)
                     || malformed_response_pattern(line)
-                    || is_code_block(line)
+                    || is_loop_block_line(line)
             },
             |outer| {
                 let mut results = vec![];
@@ -3183,6 +3183,21 @@ fn is_code_block(content: &str) -> bool {
     let re = regex!(r"^\s*\{");
 
     re.is_match(content)
+}
+
+/// Does this line open a control-structure code block (`{ foreach ... }` or
+/// `{ repeat ... }`)? Only a control structure owns the substeps below it and
+/// so opens a scope; otherwise a plain expression block (literal value,
+/// function call, tablet etc) is inline.
+fn is_loop_block_line(content: &str) -> bool {
+    if let Some(rest) = content
+        .trim_ascii_start()
+        .strip_prefix('{')
+    {
+        is_foreach_keyword(rest) || is_repeat_keyword(rest)
+    } else {
+        false
+    }
 }
 
 /// Is this code block is a control structure (`foreach` or `repeat`) which

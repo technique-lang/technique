@@ -1109,9 +1109,9 @@ test :
 }
 
 #[test]
-fn automatic_substantiates_only_effectful_steps() {
-    // An exec step settles Done; a pure-prose sibling Skip; the procedure
-    // seals Done since one step beneath it was effectful.
+fn automatic_settles_computable_steps_done_prose_skip() {
+    // An exec step settles Done; a pure-prose sibling Skips; the procedure
+    // seals Done since one step beneath it was computable.
     let source = r#"
 % technique v1
 
@@ -1152,6 +1152,62 @@ check :
     assert!(trace.contains("→ check:/1 ✓"));
     assert!(trace.contains("→ check:/2 ⊘"));
     assert!(trace.contains("↙ check: ✓"));
+}
+
+#[test]
+fn automatic_failing_exec_fails_step_and_continues() {
+    // A non-zero exec exit settles its step Fail; the walk continues to the
+    // sibling below rather than aborting the run.
+    let source = r#"
+% technique v1
+
+check :
+
+1.  Run a failing command { exec("exit 3") }
+
+2.  This step is still reached
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    let mut library = Library::core();
+    library.extend(Library::system());
+    crate::linking::link(&mut program, &library).expect("linked");
+
+    let mut fixture = StoreFixture::new("automatic-failing-exec");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        Automatic::with_handle(Vec::new()),
+        library,
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Done(_) => {}
+        other => panic!("expected Done, got {:?}", other),
+    }
+
+    let pfftt = fixture.pfftt_contents();
+    let records: Vec<_> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .collect();
+    let step_one_failed = records
+        .iter()
+        .any(|r| {
+            if let State::Fail(_) = r.state {
+                r.path == "/check:/1"
+            } else {
+                false
+            }
+        });
+    assert!(step_one_failed, "step 1 should record Fail");
+    assert!(records
+        .iter()
+        .any(|r| r.path == "/check:/2"));
 }
 
 #[test]
@@ -2020,10 +2076,8 @@ test :
 }
 
 #[test]
-fn automatic_propagates_body_value_but_records_skip() {
-    // Under the automatic driver the body value propagates as the outcome,
-    // but with no effectful work the step records Skip.
-    fn skip_of(label: &str, body: Operation<'static>) -> (Outcome, State) {
+fn automatic_records_done_for_computable_step_skip_for_prose() {
+    fn record_of(label: &str, body: Operation<'static>) -> (Outcome, State) {
         let mut fixture = StoreFixture::new(label);
         let program = anonymous_with_body(Operation::Sequence(vec![step(
             Ordinal::Dependent("1"),
@@ -2054,8 +2108,8 @@ fn automatic_propagates_body_value_but_records_skip() {
         (outcome, state)
     }
 
-    // A single-line value propagates as the outcome; the step records Skip.
-    let (outcome, state) = skip_of(
+    // A single-line value computes and records Done with the literal.
+    let (outcome, state) = record_of(
         "automatic-records-value",
         Operation::String(vec![Fragment::Text("probe output")]),
     );
@@ -2063,10 +2117,13 @@ fn automatic_propagates_body_value_but_records_skip() {
         outcome,
         Outcome::Done(Value::Literali("probe output".to_string()))
     );
-    assert_eq!(state, State::Skip);
+    assert_eq!(
+        state,
+        State::Done(Some(RecordValue::Literal("probe output".to_string())))
+    );
 
-    // Multi-line text propagates intact and still records Skip.
-    let (outcome, state) = skip_of(
+    // Multi-line text propagates intact; the record projects it to Unit.
+    let (outcome, state) = record_of(
         "multiline-records-unit",
         Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
     );
@@ -2074,18 +2131,16 @@ fn automatic_propagates_body_value_but_records_skip() {
         outcome,
         Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
     );
-    assert_eq!(state, State::Skip);
+    assert_eq!(state, State::Done(Some(RecordValue::Unit)));
 
-    // A pure-prose step (empty body) also records Skip — nothing effectful ran.
-    let (_, state) = skip_of("automatic-empty-body", Operation::Sequence(vec![]));
+    // A pure-prose step (empty body) has nothing to compute and records Skip.
+    let (_, state) = record_of("automatic-empty-body", Operation::Sequence(vec![]));
     assert_eq!(state, State::Skip);
 }
 
 #[test]
 fn sequence_value_is_last_member() {
-    // Block semantics: a multi-member body sequence runs each step in order
-    // and takes the LAST member's value, not the first and not a fold. Both
-    // steps run (each records its own value), but the run returns "second".
+    // A body sequence takes the last member's value, not the first or a fold.
     let mut fixture = StoreFixture::new("sequence-last-member");
     let body = Operation::Sequence(vec![
         step(
@@ -2113,14 +2168,19 @@ fn sequence_value_is_last_member() {
         Outcome::Done(Value::Literali("second".to_string()))
     );
 
-    // Neither step is effectful, so each records Skip.
     let pfftt = fixture.pfftt_contents();
-    let skips = pfftt
+    let dones = pfftt
         .lines()
         .filter_map(|line| parse_record(line).ok())
-        .filter(|record| record.state == State::Skip)
+        .filter(|record| {
+            if let State::Done(_) = record.state {
+                true
+            } else {
+                false
+            }
+        })
         .count();
-    assert_eq!(skips, 2);
+    assert_eq!(dones, 2);
 }
 
 #[test]
@@ -2236,4 +2296,73 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .map(|record| record.state)
         .collect();
     assert_eq!(settled, vec![State::Begin, State::Skip]);
+}
+
+#[test]
+fn descriptive_binding_acquires_list_for_foreach() {
+    // A descriptive `~ items` binding has no executable value, so the operator
+    // is asked to supply it. They enter a `[ … ]` literal, which coerces to a
+    // list, and the following foreach walks its body once per element.
+    let source = r#"
+% technique v1
+
+cleanup :
+
+    1.  enumerate things ~ items
+    2.  { foreach item in items }
+        -   handle { item }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let mut fixture = StoreFixture::new("descriptive-binding-acquire");
+    // The acquire for `items` pops first, then the step and substep verdicts.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali(r#"["east", "west"]"#.to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashSet::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<Option<&str>> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| {
+            if let Event::Acquire { name, .. } = event {
+                Some(
+                    name.as_ref()
+                        .map(String::as_str),
+                )
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![Some("items")]);
+
+    let substeps = prompt
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Step { description, .. } = event {
+                description.contains("handle")
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(substeps, 2);
 }

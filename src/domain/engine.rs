@@ -174,6 +174,13 @@ impl<'i> Scope<'i> {
         }
     }
 
+    /// Returns tablet pairs from an inline code block in a step's description,
+    /// the folded-inline counterpart of `tablet()`.
+    pub fn inline_tablet(&self) -> Option<Vec<&Pair<'i>>> {
+        self.description()
+            .find_map(|paragraph| paragraph.tablet())
+    }
+
     /// Returns true if this scope represents a step (dependent or parallel).
     pub fn is_step(&self) -> bool {
         match self {
@@ -383,6 +390,29 @@ impl<'i> Paragraph<'i> {
             Self::extract_invocations(&mut targets, d);
         }
         targets
+    }
+
+    /// Returns tablet pairs if a `CodeInline` in this paragraph is a single
+    /// list whose elements are all labelled values.
+    pub fn tablet(&self) -> Option<Vec<&Pair<'i>>> {
+        for d in &self.0 {
+            if let Descriptive::CodeInline(Expression::List(elements, _)) = d {
+                let pairs: Vec<&Pair<'i>> = elements
+                    .iter()
+                    .filter_map(|element| {
+                        if let Expression::Pair(pair, _) = element {
+                            Some(pair.as_ref())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if !pairs.is_empty() && pairs.len() == elements.len() {
+                    return Some(pairs);
+                }
+            }
+        }
+        None
     }
 
     /// Returns rendered code inline expressions from this paragraph.

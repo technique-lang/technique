@@ -52,7 +52,7 @@ fn ensure_run() {
             }
         };
 
-        let program = match translation::translate(&document) {
+        let mut program = match translation::translate(&document) {
             Ok(program) => program,
             Err(e) => {
                 println!("File {:?} failed to translate: {:?}", file, e);
@@ -63,6 +63,11 @@ fn ensure_run() {
 
         let mut library = Library::core();
         library.extend(Library::system());
+        if let Err(e) = technique::linking::link(&mut program, &library) {
+            println!("File {:?} failed to link: {:?}", file, e);
+            failures.push(file.clone());
+            continue;
+        }
         let mut runner = Runner::new(
             &program,
             Appender::memory(),

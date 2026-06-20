@@ -138,19 +138,17 @@ fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, pla
         return;
     }
 
-    // Steps may contain tablet children
+    // A step's tablet folds into its description as inline code
     if scope.is_step() {
-        for child in scope.children() {
-            if let Some(pairs) = child.tablet() {
-                for pair in pairs {
-                    items.push(Ingredient {
-                        label: pair
-                            .label
-                            .to_string(),
-                        quantity: format_value(&pair.value),
-                        source: place.map(String::from),
-                    });
-                }
+        if let Some(pairs) = scope.inline_tablet() {
+            for pair in pairs {
+                items.push(Ingredient {
+                    label: pair
+                        .label
+                        .to_string(),
+                    quantity: format_value(&pair.value),
+                    source: place.map(String::from),
+                });
             }
         }
     }
