@@ -12,6 +12,7 @@ use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
 use technique::parsing;
+use technique::resolution;
 use technique::runner::{self, Builtin, Library, Mode, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
@@ -33,6 +34,7 @@ enum Output {
 enum Phase {
     Parsing,
     Translation,
+    Resolution,
     Linking,
 }
 
@@ -209,13 +211,14 @@ fn main() {
                     Arg::new("until")
                         .long("until")
                         .value_name("phase")
-                        .value_parser(["parsing", "translation", "linking"])
+                        .value_parser(["parsing", "translation", "resolution", "linking"])
                         .default_value("linking")
                         .action(ArgAction::Set)
                         .help("Stop compilation early, after the given phase is complete. \
                             Use this in conjunction with the --output option so that the result can be inspected. The phases are: \
                             parsing, where the input is parsed from the surface language to an internal abstract syntax tree; \
-                            translation, which resolves names, checks references, and ensures the input is valid Technique; then finally \
+                            translation, which lowers the tree to the internal program representation; \
+                            resolution, which ensures procedures and variables are declared and in scope; then finally \
                             linking, which ensures functions being called are available, checks parameters being passed, and provides the context to the execution environment.")
                 )
                 .arg(
@@ -415,6 +418,7 @@ fn main() {
             let until = match until.as_str() {
                 "parsing" => Phase::Parsing,
                 "translation" => Phase::Translation,
+                "resolution" => Phase::Resolution,
                 "linking" => Phase::Linking,
                 _ => panic!("Unrecognized --until value"),
             };
@@ -489,6 +493,36 @@ fn main() {
             };
 
             if let Phase::Translation = until {
+                match output {
+                    Output::Terminal => {
+                        eprintln!("{}", "ok".bright_green());
+                    }
+                    Output::Native => {
+                        println!("{:#?}", program);
+                    }
+                    Output::Silent => {}
+                    _ => {}
+                }
+                std::process::exit(0);
+            }
+
+            if let Err(errors) = resolution::resolve(&mut program) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::full_resolution_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
+
+            if let Phase::Resolution = until {
                 match output {
                     Output::Terminal => {
                         eprintln!("{}", "ok".bright_green());
@@ -829,6 +863,22 @@ fn main() {
                 }
             };
 
+            if let Err(errors) = resolution::resolve(&mut program) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::concise_resolution_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
+
             // The runner resolves against the always-present core, plus the
             // libraries selected with --library (system by default),
             // independent of the document's domain. The selected names are
@@ -950,6 +1000,22 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
+            if let Err(errors) = resolution::resolve(&mut program) {
+                for (i, error) in errors
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        eprintln!();
+                    }
+                    eprintln!(
+                        "{}",
+                        problem::concise_resolution_error(&error, &filename, &content, &Terminal)
+                    );
+                }
+                std::process::exit(1);
+            }
 
             // Rebuild the library from the names recorded in the run's Start
             // record so resume resolves against the same functions as the

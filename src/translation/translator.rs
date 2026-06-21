@@ -37,7 +37,6 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
                 .push(wrapper);
         }
         translator.collect_technique(body);
-        translator.resolve_references();
     }
 
     if translator
@@ -60,16 +59,6 @@ pub enum TranslationError<'i> {
     InterleavedDescription {
         procedure: language::Identifier<'i>,
         at: Span,
-    },
-    /// A local procedure invocation `<name>(...)` whose `name` doesn't
-    /// match any procedure declared in this document is an error.
-    UnresolvedProcedure(language::Identifier<'i>),
-    /// A procedure invocation `<name>(...)` whose argument count doesn't match
-    /// the arity of the procedure it resolves to.
-    ProcedureArityMismatch {
-        procedure: language::Identifier<'i>,
-        expected: usize,
-        actual: usize,
     },
     /// A procedure declaring both a parameter list and a signature whose
     /// required inputs disagree in count. The names must correspond one-to-one
@@ -100,8 +89,6 @@ impl<'i> TranslationError<'i> {
             TranslationError::DuplicateProcedure(id) => id.span,
             TranslationError::DuplicateTitle { at, .. } => *at,
             TranslationError::InterleavedDescription { at, .. } => *at,
-            TranslationError::UnresolvedProcedure(id) => id.span,
-            TranslationError::ProcedureArityMismatch { procedure, .. } => procedure.span,
             TranslationError::SignatureParameterMismatch { procedure, .. } => procedure.span,
             TranslationError::BoundRepeat { at } => *at,
             TranslationError::HeterogenousList { at } => *at,
@@ -668,114 +655,6 @@ impl<'i> Translator<'i> {
                 }
             }
             language::Scope::ResponseBlock { .. } => {}
-        }
-    }
-
-    // Pass 3: walk the translated subroutines, resolving every Invoke
-    // target. Local procedure references that match a name registered by
-    // Pass 1 become Resolved(SubroutineId); unmatched local references
-    // are errors.
-    fn resolve_references(&mut self) {
-        // Arity of every declared subroutine, indexed by SubroutineId, so an
-        // Invoke's argument count can be checked against the procedure it
-        // resolves to.
-        let arities: Vec<usize> = self
-            .program
-            .subroutines
-            .iter()
-            .map(Subroutine::arity)
-            .collect();
-        for subroutine in &mut self
-            .program
-            .subroutines
-        {
-            Self::resolve_operation(
-                &mut subroutine.body,
-                &self.known,
-                &arities,
-                &mut self.problems,
-            );
-        }
-    }
-
-    fn resolve_operation(
-        op: &mut Operation<'i>,
-        known: &HashMap<&'i str, SubroutineId>,
-        arities: &[usize],
-        problems: &mut Vec<TranslationError<'i>>,
-    ) {
-        match op {
-            Operation::Invoke(invocable) => {
-                if let SubroutineRef::Unresolved(id) = &invocable.target {
-                    match known.get(id.value) {
-                        Some(sub_id) => {
-                            // A bare call (`<thing>`) defers all arguments, so
-                            // it is exempt; a parenthesised list must match the
-                            // procedure's arity exactly.
-                            let expected = arities[sub_id.0];
-                            let actual = invocable
-                                .arguments
-                                .len();
-                            if !invocable.elided && expected != actual {
-                                problems.push(TranslationError::ProcedureArityMismatch {
-                                    procedure: *id,
-                                    expected,
-                                    actual,
-                                });
-                            }
-                            invocable.target = SubroutineRef::Resolved(*sub_id);
-                        }
-                        None => problems.push(TranslationError::UnresolvedProcedure(*id)),
-                    }
-                }
-                for arg in &mut invocable.arguments {
-                    Self::resolve_operation(arg, known, arities, problems);
-                }
-            }
-            Operation::Sequence(ops) => {
-                for op in ops {
-                    Self::resolve_operation(op, known, arities, problems);
-                }
-            }
-            Operation::Section { body, .. } => {
-                Self::resolve_operation(body, known, arities, problems)
-            }
-            Operation::Step { body, .. } => Self::resolve_operation(body, known, arities, problems),
-            Operation::Loop { over, body, .. } => {
-                if let Some(over) = over {
-                    Self::resolve_operation(over, known, arities, problems);
-                }
-                Self::resolve_operation(body, known, arities, problems);
-            }
-            Operation::Bind { value, .. } => {
-                Self::resolve_operation(value, known, arities, problems)
-            }
-            Operation::Execute(executable) => {
-                for arg in &mut executable.arguments {
-                    Self::resolve_operation(arg, known, arities, problems);
-                }
-            }
-            Operation::String(fragments) => {
-                for fragment in fragments {
-                    if let Fragment::Interpolation(op) = fragment {
-                        Self::resolve_operation(op, known, arities, problems);
-                    }
-                }
-            }
-            Operation::Tablet(entries) => {
-                for entry in entries {
-                    Self::resolve_operation(&mut entry.value, known, arities, problems);
-                }
-            }
-            Operation::List(items) => {
-                for item in items {
-                    Self::resolve_operation(item, known, arities, problems);
-                }
-            }
-            Operation::Variable(_)
-            | Operation::Number(_)
-            | Operation::Multiline(_, _)
-            | Operation::Hole => {}
         }
     }
 

@@ -8,6 +8,7 @@ use crate::program::{
     Executable, ExecutableRef, Fragment, Invocable, Operation, Ordinal, Program, Subroutine,
     SubroutineRef,
 };
+use crate::resolution::resolve;
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
@@ -286,7 +287,8 @@ helper :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("double-invoke");
     let mut runner = Runner::new(
@@ -603,7 +605,8 @@ test :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("bind-then-interpolate");
     let prompt = Mock::with_answers([
@@ -663,7 +666,8 @@ cycle(s) : Situation -> Done
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("hole-at-entry");
     // acquire (for `?`) pops first at entry, then the two step completions.
@@ -728,7 +732,8 @@ cycle(s) : Situation -> Done
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("quit-acquire");
     let prompt = Mock::with_answers([UserInput::Quit]);
@@ -785,7 +790,8 @@ cycle(s) : Situation -> Done
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("skip-acquire");
     let prompt = Mock::with_answers([UserInput::Skip]);
@@ -838,7 +844,8 @@ helper :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("invoke-descent");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -873,6 +880,61 @@ helper :
 }
 
 #[test]
+fn bound_invoke_descends_into_subroutine() {
+    // A bound invocation `<helper>() ~ result` must still descend into the
+    // callee, not evaluate to Unit. The binding is the regression: a bare
+    // `<helper>()` always descended, but wrapping it in a `~` bind once
+    // settled the step without entering the procedure.
+    let source = r#"
+% technique v1
+
+main :
+
+1.  <helper>() ~ result
+
+helper :
+
+1.  helper step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("bound-invoke-descent");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let step_fqns: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Step { qualified, .. } = e {
+                Some(qualified.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    // `main:/1` is presented, then its bound body descends into `helper`,
+    // reaching the step inside it — previously skipped entirely.
+    assert_eq!(step_fqns, vec!["/main:/1", "/helper:/1"]);
+}
+
+#[test]
 fn section_holding_procedure_descends() {
     let source = r#"
 % technique v1
@@ -887,7 +949,8 @@ inner :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("section-holding-procedure");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -938,7 +1001,8 @@ greet(name) :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("invoke-args");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -972,43 +1036,6 @@ greet(name) :
 }
 
 #[test]
-fn invoke_does_not_leak_caller_bindings() {
-    let source = r#"
-% technique v1
-
-main :
-{
-    <peek>()
-}
-
-peek :
-
-1.  Value is { secret }
-        "#
-    .trim_ascii();
-    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let mut fixture = StoreFixture::new("invoke-isolation");
-    // `secret` lives in the caller's (entry) frame; the callee `peek` runs
-    // in a fresh frame and must not see it.
-    let mut env = Environment::new();
-    env.extend("secret".to_string(), Value::Literali("99".to_string()));
-    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    let mut runner = Runner::new(
-        &program,
-        fixture.take_appender(),
-        HashMap::new(),
-        prompt,
-        Library::stub(),
-    );
-    let Err(RunnerError::UnboundVariable(name)) = runner.run(env) else {
-        panic!("expected UnboundVariable from the isolated frame");
-    };
-    assert_eq!(name, "secret");
-}
-
-#[test]
 fn execute_announces_function_call() {
     let source = r#"
 % technique v1
@@ -1020,6 +1047,7 @@ test :
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
     let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
     crate::linking::link(&mut program, &Library::stub()).expect("linked");
 
     let mut fixture = StoreFixture::new("execute-announce");
@@ -1063,6 +1091,7 @@ test :
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
     let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
     crate::linking::link(&mut program, &Library::stub()).expect("linked");
 
     let mut fixture = StoreFixture::new("exec-command");
@@ -1123,6 +1152,7 @@ check :
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
     let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
     let mut library = Library::core();
     library.extend(Library::system());
     crate::linking::link(&mut program, &library).expect("linked");
@@ -1169,6 +1199,7 @@ check :
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
     let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
     let mut library = Library::core();
     library.extend(Library::system());
     crate::linking::link(&mut program, &library).expect("linked");
@@ -1767,7 +1798,8 @@ connectivity_check(e, s) :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
     let args = ["foo".to_string(), "192.168.1.5".to_string()];
     let env = bind_parameters(&program, &args).expect("bind");
     assert_eq!(env.lookup("e"), Some(&Value::Literali("foo".to_string())));
@@ -1817,7 +1849,8 @@ connectivity_check(e, s) : LocalEnvironment, TargetService -> NetworkHealth
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
     let error = bind_parameters(&program, &[]).expect_err("expected arity error");
     let RunnerError::ParameterArityMismatch { parameters, .. } = error else {
         panic!("expected ParameterArityMismatch, got {:?}", error);
@@ -1840,7 +1873,8 @@ test :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
     let args = ["unwanted".to_string()];
     let error = bind_parameters(&program, &args).expect_err("expected unexpected error");
     let RunnerError::ParameterUnexpected { procedure, actual } = error else {
@@ -1867,7 +1901,8 @@ connectivity_check(e, s) :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
     let args = ["[]".to_string(), "0".to_string()];
     let env = bind_parameters(&program, &args).expect("bind");
     let params = program
@@ -1891,7 +1926,8 @@ greet(name) :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("entry-param-interpolate");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -1936,7 +1972,8 @@ Brew using { 42 ~ water } then serve it hot.
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("entry-description-intact");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -1982,7 +2019,8 @@ make_coffee :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("metadata-prelude");
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
@@ -2025,7 +2063,8 @@ test :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("step-responses");
     let prompt = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
@@ -2319,7 +2358,8 @@ cleanup :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("descriptive-binding-acquire");
     // The acquire for `items` pops first, then the step and substep verdicts.
@@ -2392,7 +2432,8 @@ cleanup :
         "#
     .trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     // The prior run completed steps 1 and 2 (and 2's two iterations); only
     // step 3 remains. `items` was acquired as a two-element list; `seen` was
@@ -2451,7 +2492,8 @@ hail(name) : Text -> ()
 fn invoke_records_supplied_input() {
     let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     // The operator supplies "World" at the acquire prompt; the rest are step
     // and scope sign-offs.
@@ -2488,7 +2530,8 @@ fn invoke_records_supplied_input() {
 fn resume_restores_invoke_input_without_reprompting() {
     let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
-    let program = translate(&document).expect("translate");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
 
     // The prior run recorded the argument acquired for `<hail>`. Resume with
     // that input preloaded: the acquire must not fire, and `name` is bound from

@@ -1,7 +1,7 @@
 use crate::problem::Present;
 use technique::{
     formatting::Render, language::*, linking::LinkingError, parsing::ParsingError,
-    runner::RunnerError, translation::TranslationError,
+    resolution::ResolutionError, runner::RunnerError, translation::TranslationError,
 };
 
 /// Generate problem and detail messages for parsing errors using AST construction
@@ -1049,33 +1049,6 @@ title and before any steps or code blocks.
             .trim_ascii()
             .to_string(),
         ),
-        TranslationError::UnresolvedProcedure(Identifier { value: name, .. }) => (
-            format!("Unresolved procedure '{}'", name),
-            r#"
-A `<name>` invocation must refer to a procedure declared in this
-document. Built-in functions use the `name(...)` form (without angle
-brackets).
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
-        TranslationError::ProcedureArityMismatch {
-            procedure: Identifier { value: name, .. },
-            expected,
-            actual,
-        } => (
-            format!(
-                "Wrong number of arguments to <{}>. Expected {}, but called with {}",
-                name, expected, actual
-            ),
-            r#"
-A parenthesised argument list must supply one argument for each input the
-signature requires (or, absent a signature, each declared parameter). Omit
-the parentheses entirely to defer every argument.
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
         TranslationError::SignatureParameterMismatch {
             procedure: Identifier { value: name, .. },
             parameters,
@@ -1108,6 +1081,54 @@ cannot be bound to a variable.
 A `[...]` literal must be either a Tablet (every entry in the list a
 `"label" = value` pair) or a List (entries are actual values in
 sequence), not a mix of the two.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+    }
+}
+
+/// Generate problem and detail messages for errors occurring when a program's
+/// internal references and variable scoping are resolved.
+pub fn generate_resolution_error<'i>(
+    error: &ResolutionError<'i>,
+    _renderer: &dyn Render,
+) -> (String, String) {
+    match error {
+        ResolutionError::UnresolvedProcedure(Identifier { value: name, .. }) => (
+            format!("Unresolved procedure '{}'", name),
+            r#"
+A `<name>` invocation must refer to a procedure declared in this
+document. Built-in functions use the `name(...)` form (without angle
+brackets).
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+        ResolutionError::ProcedureArityMismatch {
+            procedure: Identifier { value: name, .. },
+            expected,
+            actual,
+        } => (
+            format!(
+                "Wrong number of arguments to <{}>. Expected {}, but called with {}",
+                name, expected, actual
+            ),
+            r#"
+A parenthesised argument list must supply one argument for each input the
+signature requires (or, absent a signature, each declared parameter). Omit
+the parentheses entirely to defer every argument.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+        ResolutionError::UnboundVariable {
+            variable: Identifier { value: name, .. },
+        } => (
+            format!("Unbound variable {}", name),
+            r#"
+The variable names nothing in scope: neither a parameter of the procedure nor a
+result bound by a binding or loop within it.
             "#
             .trim_ascii()
             .to_string(),
