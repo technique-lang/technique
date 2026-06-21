@@ -53,7 +53,8 @@ pub struct Record {
 /// crash (which records nothing).
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
-/// `Execute` records a host-function call from inside a step body.
+/// `Execute` and `Return` bracket an effectful host call (a `Command` or
+/// `Action`) with the value it returned; Pure builtins are not recorded.
 /// `Input` records the values supplied to a procedure so a resume can restore
 /// the state without re-prompting for information already entered.
 #[allow(dead_code)]

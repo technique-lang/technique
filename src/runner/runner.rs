@@ -288,16 +288,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let run_id = self
                     .appender
                     .run_id();
-                let record = Record {
-                    recorded: now_iso8601(),
-                    run_id,
-                    path: qualified.clone(),
-                    state: State::Execute {
-                        function: function.clone(),
-                    },
-                };
-                self.appender
-                    .append(&record)?;
                 // A `Command` builtin (e.g. `exec`) is executed by the host;
                 // the user vets it: show the editable script and run it only on
                 // their say-so. An `Action` (e.g. `click`) is a physical
@@ -311,6 +301,23 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .nature(*id),
                     _ => Nature::Pure,
                 };
+                // Pure builtins record nothing; only effectful calls are traced.
+                let effectful = if let Nature::Pure = nature {
+                    false
+                } else {
+                    true
+                };
+                if effectful {
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: qualified.clone(),
+                            state: State::Execute {
+                                function: function.clone(),
+                            },
+                        })?;
+                }
                 let outcome = match nature {
                     Nature::Command => {
                         let script = self.script_text(env, executable)?;
@@ -378,10 +385,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                         Ok(Outcome::Done(value))
                     }
                 }?;
-                // Close the Execute with a paired Return record carrying the
-                // value the function returned.
-                if let Outcome::Stopped = outcome {
+                // Pair the Execute with a Return carrying its value; a stopped
+                // run leaves the enter unpaired.
+                let stopped = if let Outcome::Stopped = outcome {
+                    true
                 } else {
+                    false
+                };
+                if effectful && !stopped {
                     let returned = if let Outcome::Done(value) = &outcome {
                         Some(value.clone())
                     } else {
