@@ -466,8 +466,13 @@ impl<'i> Translator<'i> {
         for paragraph in paragraphs {
             let language::Paragraph(descriptives, _) = paragraph;
             for descriptive in descriptives {
-                if let Some(op) = self.executable_from_descriptive(descriptive) {
-                    ops.push(op);
+                match self.executable_from_descriptive(descriptive) {
+                    // A multi-statement code block hoists its statements
+                    // directly into the body, one operation per call, rather
+                    // than nesting them in a Sequence.
+                    Some(Operation::Sequence(inner)) => ops.extend(inner),
+                    Some(op) => ops.push(op),
+                    None => {}
                 }
             }
         }
@@ -509,22 +514,18 @@ impl<'i> Translator<'i> {
     ) -> Option<Fragment<'i>> {
         match descriptive {
             language::Descriptive::Text(text) => Some(Fragment::Text(text)),
-            language::Descriptive::CodeInline(expr) => match expr {
-                language::Expression::Variable(..)
-                | language::Expression::Number(..)
-                | language::Expression::String(..)
-                | language::Expression::Multiline(..)
-                | language::Expression::Pair(..)
-                | language::Expression::List(..) => {
+            language::Descriptive::CodeInline(exprs) => match exprs.as_slice() {
+                [expr @ language::Expression::Variable(..)]
+                | [expr @ language::Expression::Number(..)]
+                | [expr @ language::Expression::String(..)]
+                | [expr @ language::Expression::Multiline(..)]
+                | [expr @ language::Expression::Pair(..)]
+                | [expr @ language::Expression::List(..)] => {
                     Some(Fragment::Interpolation(self.translate_expression(expr)))
                 }
-                language::Expression::Repeat(..)
-                | language::Expression::Foreach(..)
-                | language::Expression::Application(..)
-                | language::Expression::Execution(..)
-                | language::Expression::Binding(..)
-                | language::Expression::Hole(..)
-                | language::Expression::Separator => None,
+                // A multi-statement block, or any executable single statement,
+                // shows no inline fragment — it is hoisted into the body.
+                _ => None,
             },
             language::Descriptive::Application(_) => None,
             language::Descriptive::Binding(inner, _) => self.fragment_from_descriptive(inner),
@@ -544,7 +545,25 @@ impl<'i> Translator<'i> {
     ) -> Option<Operation<'i>> {
         match descriptive {
             language::Descriptive::Text(_) => None,
-            language::Descriptive::CodeInline(expr) => Some(self.translate_expression(expr)),
+            language::Descriptive::CodeInline(exprs) => {
+                // The `;` separators are punctuation, not work; skip them.
+                let mut ops: Vec<Operation<'i>> = exprs
+                    .iter()
+                    .filter(|expr| {
+                        if let language::Expression::Separator = expr {
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                    .map(|expr| self.translate_expression(expr))
+                    .collect();
+                match ops.len() {
+                    0 => None,
+                    1 => ops.pop(),
+                    _ => Some(Operation::Sequence(ops)),
+                }
+            }
             language::Descriptive::Application(invocation) => {
                 Some(Operation::Invoke(self.translate_invocation(invocation)))
             }

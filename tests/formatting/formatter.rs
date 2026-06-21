@@ -267,7 +267,7 @@ vibe_coding :
                             ordinal: "1",
                             description: vec![Paragraph::new(vec![
                                 Descriptive::Text("To take the action, we must:"),
-                                Descriptive::CodeInline(Expression::Execution(
+                                Descriptive::CodeInline(vec![Expression::Execution(
                                     Function {
                                         target: Identifier::new("exec"),
                                         parameters: vec![Expression::Multiline(
@@ -277,7 +277,7 @@ vibe_coding :
                                         )],
                                     },
                                     Span::default(),
-                                )),
+                                )]),
                             ])],
                             subscopes: vec![],
                             span: Span::default(),

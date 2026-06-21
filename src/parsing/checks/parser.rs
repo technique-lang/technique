@@ -2620,7 +2620,10 @@ This is { exec(a,
 
     // Second element should be the multiline code inline
     match &descriptives[1] {
-        Descriptive::CodeInline(Expression::Execution(func, _)) => {
+        Descriptive::CodeInline(exprs) => {
+            let [Expression::Execution(func, _)] = exprs.as_slice() else {
+                panic!("Second element should be code inline with function execution");
+            };
             assert_eq!(
                 func.target
                     .value,
@@ -2667,7 +2670,11 @@ fn code_inline_binding() {
     match &descriptives[1] {
         Descriptive::Binding(bound, names) => {
             match bound.as_ref() {
-                Descriptive::CodeInline(Expression::Variable(Identifier { value, .. }, _)) => {
+                Descriptive::CodeInline(exprs) => {
+                    let [Expression::Variable(Identifier { value, .. }, _)] = exprs.as_slice()
+                    else {
+                        panic!("Bound part should be a code inline variable");
+                    };
                     assert_eq!(*value, "item")
                 }
                 _ => panic!("Bound part should be a code inline variable"),

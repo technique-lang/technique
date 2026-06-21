@@ -396,7 +396,10 @@ impl<'i> Paragraph<'i> {
     /// list whose elements are all labelled values.
     pub fn tablet(&self) -> Option<Vec<&Pair<'i>>> {
         for d in &self.0 {
-            if let Descriptive::CodeInline(Expression::List(elements, _)) = d {
+            if let Descriptive::CodeInline(exprs) = d {
+                let [Expression::List(elements, _)] = exprs.as_slice() else {
+                    continue;
+                };
                 let pairs: Vec<&Pair<'i>> = elements
                     .iter()
                     .filter_map(|element| {
@@ -421,10 +424,12 @@ impl<'i> Paragraph<'i> {
     pub fn code_inlines(&self) -> Vec<(String, Vec<String>)> {
         let mut results = Vec::new();
         for d in &self.0 {
-            if let Descriptive::CodeInline(expr) = d {
-                let (text, body) = render_expression_parts(expr);
-                if !text.is_empty() {
-                    results.push((text, body));
+            if let Descriptive::CodeInline(exprs) = d {
+                for expr in exprs {
+                    let (text, body) = render_expression_parts(expr);
+                    if !text.is_empty() {
+                        results.push((text, body));
+                    }
                 }
             }
         }
@@ -451,7 +456,11 @@ impl<'i> Paragraph<'i> {
     fn descriptive_content(descriptive: &Descriptive<'i>) -> String {
         match descriptive {
             Descriptive::Application(inv) => Self::invocation_name(inv).to_string(),
-            Descriptive::CodeInline(expr) => Self::expression_content(expr),
+            Descriptive::CodeInline(exprs) => exprs
+                .iter()
+                .map(Self::expression_content)
+                .find(|content| !content.is_empty())
+                .unwrap_or_default(),
             Descriptive::Binding(inner, _) => Self::descriptive_content(inner),
             _ => String::new(),
         }
@@ -491,8 +500,10 @@ impl<'i> Paragraph<'i> {
             Descriptive::Application(inv) => {
                 targets.push(Self::invocation_name(inv));
             }
-            Descriptive::CodeInline(expr) => {
-                Self::extract_expression_invocations(targets, expr);
+            Descriptive::CodeInline(exprs) => {
+                for expr in exprs {
+                    Self::extract_expression_invocations(targets, expr);
+                }
             }
             Descriptive::Binding(inner, _) => {
                 Self::extract_invocations(targets, inner);
@@ -640,13 +651,13 @@ mod check {
     // CodeInline with repeat: { repeat <incident_action_cycle> }
     #[test]
     fn repeat_expression() {
-        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Repeat(
+        let p = Paragraph::new(vec![Descriptive::CodeInline(vec![Expression::Repeat(
             Box::new(Expression::Application(
                 local("incident_action_cycle"),
                 Span::default(),
             )),
             Span::default(),
-        ))]);
+        )])]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["incident_action_cycle"]);
         assert_eq!(p.content(), "repeat incident_action_cycle");
@@ -667,11 +678,11 @@ mod check {
     // CodeInline with foreach: { foreach design in designs }
     #[test]
     fn foreach_expression() {
-        let p = Paragraph::new(vec![Descriptive::CodeInline(Expression::Foreach(
+        let p = Paragraph::new(vec![Descriptive::CodeInline(vec![Expression::Foreach(
             vec![Identifier::new("design")],
             Box::new(Expression::Application(local("implement"), Span::default())),
             Span::default(),
-        ))]);
+        )])]);
         assert_eq!(p.text(), "");
         assert_eq!(p.invocations(), vec!["implement"]);
         assert_eq!(p.content(), "foreach implement");

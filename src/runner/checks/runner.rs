@@ -1422,10 +1422,10 @@ fn foreach_walks_body_once_per_list_element() {
     // foreach item in items: a substep whose description interpolates the
     // iteration variable, so each walk reveals which element it saw.
     let source_paragraphs = vec![language::Paragraph::new(vec![
-        language::Descriptive::CodeInline(language::Expression::Variable(
+        language::Descriptive::CodeInline(vec![language::Expression::Variable(
             Identifier::new("item"),
             language::Span::default(),
-        )),
+        )]),
     ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
@@ -1506,10 +1506,10 @@ fn foreach_over_seq_builtin_runs() {
         .expect("seq registered");
 
     let source_paragraphs = vec![language::Paragraph::new(vec![
-        language::Descriptive::CodeInline(language::Expression::Variable(
+        language::Descriptive::CodeInline(vec![language::Expression::Variable(
             Identifier::new("n"),
             language::Span::default(),
-        )),
+        )]),
     ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
@@ -1587,15 +1587,15 @@ fn foreach_destructures_tuple_elements() {
     // foreach (first, second) in pairs: two names destructure each
     // tuple-shaped element positionally.
     let source_paragraphs = vec![language::Paragraph::new(vec![
-        language::Descriptive::CodeInline(language::Expression::Variable(
+        language::Descriptive::CodeInline(vec![language::Expression::Variable(
             Identifier::new("first"),
             language::Span::default(),
-        )),
+        )]),
         language::Descriptive::Text("/"),
-        language::Descriptive::CodeInline(language::Expression::Variable(
+        language::Descriptive::CodeInline(vec![language::Expression::Variable(
             Identifier::new("second"),
             language::Span::default(),
-        )),
+        )]),
     ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),
@@ -1671,10 +1671,10 @@ fn foreach_widens_primitive_to_singleton() {
     // foreach item in source, where `source` is a bare scalar: it widens
     // to a one-element list and the body walks exactly once.
     let source_paragraphs = vec![language::Paragraph::new(vec![
-        language::Descriptive::CodeInline(language::Expression::Variable(
+        language::Descriptive::CodeInline(vec![language::Expression::Variable(
             Identifier::new("item"),
             language::Span::default(),
-        )),
+        )]),
     ])];
     let substep = Operation::Step {
         ordinal: Ordinal::Dependent("a"),

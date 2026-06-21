@@ -307,7 +307,9 @@ fn builtin_suffix_from_paragraph(para: &language::Paragraph) -> Option<String> {
 
 fn builtin_from_descriptive(d: &language::Descriptive) -> Option<String> {
     match d {
-        language::Descriptive::CodeInline(expr) => builtin_from_expression(expr),
+        language::Descriptive::CodeInline(exprs) => exprs
+            .iter()
+            .find_map(builtin_from_expression),
         language::Descriptive::Application(inv) => builtin_from_invocation(inv),
         language::Descriptive::Binding(inner, _) => builtin_from_descriptive(inner),
         _ => None,
