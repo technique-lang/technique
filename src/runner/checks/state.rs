@@ -517,6 +517,12 @@ fn record_round_trips_through_format_and_parse() {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
             path: "/a:1".to_string(),
+            state: State::Return(Some(Value::Literali("2".to_string()))),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:00Z".to_string(),
+            run_id: RunId(1),
+            path: "/a:1".to_string(),
             state: State::Invoke(InvokeTarget::Procedure("helper".to_string())),
         },
         Record {

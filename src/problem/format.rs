@@ -1,12 +1,12 @@
 use super::messages::{
-    generate_error_message, generate_linking_error, generate_runner_error,
-    generate_translation_error,
+    generate_error_message, generate_linking_error, generate_resolution_error,
+    generate_runner_error, generate_translation_error,
 };
 use owo_colors::OwoColorize;
 use std::path::Path;
 use technique::{
     formatting::Render, language::LoadingError, linking::LinkingError, parsing::ParsingError,
-    runner::RunnerError, translation::TranslationError,
+    resolution::ResolutionError, runner::RunnerError, translation::TranslationError,
 };
 
 /// Render an error with full source context: a header line, the offending
@@ -100,6 +100,18 @@ pub fn full_translation_error<'i>(
     full_error(problem, details, filename, source, span.offset, span.length)
 }
 
+/// Format a resolution error with full details including source code context
+pub fn full_resolution_error<'i>(
+    error: &ResolutionError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, details) = generate_resolution_error(error, renderer);
+    let span = error.span();
+    full_error(problem, details, filename, source, span.offset, span.length)
+}
+
 /// Format a linking error with full details including source code context
 pub fn full_linking_error<'i>(
     error: &LinkingError<'i>,
@@ -145,6 +157,33 @@ pub fn concise_translation_error<'i>(
     renderer: &impl Render,
 ) -> String {
     let (problem, _) = generate_translation_error(error, renderer);
+    let input = generate_filename(filename);
+    let offset = error
+        .span()
+        .offset;
+    let i = calculate_line_number(source, offset);
+    let j = calculate_column_number(source, offset);
+    let line = i + 1;
+    let column = j + 1;
+
+    format!(
+        "{}: {}:{}:{} {}",
+        "error".bright_red(),
+        input,
+        line,
+        column,
+        problem.bold(),
+    )
+}
+
+/// Format a resolution error with concise single-line output.
+pub fn concise_resolution_error<'i>(
+    error: &ResolutionError<'i>,
+    filename: &'i Path,
+    source: &'i str,
+    renderer: &impl Render,
+) -> String {
+    let (problem, _) = generate_resolution_error(error, renderer);
     let input = generate_filename(filename);
     let offset = error
         .span()

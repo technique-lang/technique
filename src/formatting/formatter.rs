@@ -436,6 +436,26 @@ impl<'i> Formatter<'i> {
         }
     }
 
+    /// Render a `;`-separated code block inline: `{ a; b }`, with `;` for
+    /// each of the separators.
+    fn render_inline_block(&self, exprs: &'i [Expression]) -> Vec<(Syntax, Cow<'i, str>)> {
+        let mut sub = self.subformatter();
+        sub.add_fragment_reference(Syntax::Structure, "{");
+        sub.add_fragment_reference(Syntax::Neutral, " ");
+        for expr in exprs {
+            if let Expression::Separator = expr {
+                sub.add_fragment_reference(Syntax::Structure, ";");
+                sub.add_fragment_reference(Syntax::Neutral, " ");
+            } else {
+                sub.append_expression(expr);
+            }
+        }
+        sub.add_fragment_reference(Syntax::Neutral, " ");
+        sub.add_fragment_reference(Syntax::Structure, "}");
+        sub.flush_current();
+        sub.fragments
+    }
+
     fn render_string_interpolation(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
         let mut sub = self.subformatter();
         sub.add_fragment_reference(Syntax::Structure, "{");
@@ -464,11 +484,23 @@ impl<'i> Formatter<'i> {
 
         match inner_descriptive {
             Descriptive::Text(text) => sub.append_breakable(Syntax::Description, text),
-            Descriptive::CodeInline(expr) => {
+            Descriptive::CodeInline(exprs) => {
                 sub.add_fragment_reference(Syntax::Structure, "{");
-                sub.add_fragment_reference(Syntax::Neutral, " ");
-                sub.append_expression(expr);
-                sub.add_fragment_reference(Syntax::Neutral, " ");
+                if let [expr] = exprs.as_slice() {
+                    sub.add_fragment_reference(Syntax::Neutral, " ");
+                    sub.append_expression(expr);
+                    sub.add_fragment_reference(Syntax::Neutral, " ");
+                } else {
+                    sub.add_fragment_reference(Syntax::Newline, "\n");
+                    sub.increase(4);
+                    for expr in exprs {
+                        sub.indent();
+                        sub.append_expression(expr);
+                        sub.add_fragment_reference(Syntax::Newline, "\n");
+                    }
+                    sub.decrease(4);
+                    sub.indent();
+                }
                 sub.add_fragment_reference(Syntax::Structure, "}");
             }
             Descriptive::Application(invocation) => {
@@ -762,67 +794,117 @@ impl<'i> Formatter<'i> {
                 Descriptive::Text(text) => {
                     line.add_breakable(syntax, text);
                 }
-                Descriptive::CodeInline(expr) => match expr {
-                    _ if is_tablet_list_expr(expr) => {
-                        line.flush();
-                        self.append_char('\n');
-                        self.indent();
-                        self.add_fragment_reference(Syntax::Structure, "{");
-                        self.append_char('\n');
-                        self.increase(4);
-                        self.indent();
-                        self.append_expression(expr);
-                        self.append_char('\n');
-                        self.decrease(4);
-                        self.indent();
-                        self.add_fragment_reference(Syntax::Structure, "}");
-                        line = self.builder();
-                    }
-                    Expression::Multiline(_, _, _) => {
-                        line.flush();
-                        self.add_fragment_reference(Syntax::Structure, "{");
-                        self.increase(4);
-                        self.append_expression(expr);
-                        self.decrease(4);
-                        self.append_char('\n');
-                        self.indent();
-                        line = self.builder();
-                        line.add_word(Syntax::Structure, "}");
-                    }
-                    _ => match expr {
-                        Expression::Execution(func, _)
-                            if func
-                                .parameters
-                                .iter()
-                                .any(|p| {
-                                    if let Expression::Multiline(_, _, _) = p {
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }) =>
-                        {
+                Descriptive::CodeInline(exprs) if exprs.len() == 1 => {
+                    let expr = &exprs[0];
+                    match expr {
+                        _ if is_tablet_list_expr(expr) => {
                             line.flush();
-                            self.add_fragment_reference(Syntax::Neutral, " ");
+                            self.append_char('\n');
+                            self.indent();
                             self.add_fragment_reference(Syntax::Structure, "{");
-                            self.add_fragment_reference(Syntax::Neutral, " ");
+                            self.append_char('\n');
+                            self.increase(4);
+                            self.indent();
                             self.append_expression(expr);
-                            self.add_fragment_reference(Syntax::Neutral, " ");
+                            self.append_char('\n');
+                            self.decrease(4);
+                            self.indent();
+                            // Put `}` into the fresh line builder (not as a raw
+                            // fragment) so any trailing prose gets its separating space.
                             line = self.builder();
                             line.add_word(Syntax::Structure, "}");
                         }
-                        _ => {
-                            // Add space before inline code if line is not empty
-                            if !line
-                                .current
-                                .is_empty()
-                            {
-                                line.add_atomic(syntax, " ");
-                            }
-                            line.add_inline_code(expr);
+                        Expression::Multiline(_, _, _) => {
+                            line.flush();
+                            self.add_fragment_reference(Syntax::Structure, "{");
+                            self.increase(4);
+                            self.append_expression(expr);
+                            self.decrease(4);
+                            self.append_char('\n');
+                            self.indent();
+                            line = self.builder();
+                            line.add_word(Syntax::Structure, "}");
                         }
-                    },
-                },
+                        _ => match expr {
+                            Expression::Execution(func, _)
+                                if func
+                                    .parameters
+                                    .iter()
+                                    .any(|p| {
+                                        if let Expression::Multiline(_, _, _) = p {
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }) =>
+                            {
+                                line.flush();
+                                self.add_fragment_reference(Syntax::Neutral, " ");
+                                self.add_fragment_reference(Syntax::Structure, "{");
+                                self.add_fragment_reference(Syntax::Neutral, " ");
+                                self.append_expression(expr);
+                                self.add_fragment_reference(Syntax::Neutral, " ");
+                                line = self.builder();
+                                line.add_word(Syntax::Structure, "}");
+                            }
+                            _ => {
+                                // Add space before inline code if line is not empty
+                                if !line
+                                    .current
+                                    .is_empty()
+                                {
+                                    line.add_atomic(syntax, " ");
+                                }
+                                line.add_inline_code(expr);
+                            }
+                        },
+                    }
+                }
+                Descriptive::CodeInline(exprs) => {
+                    let has_separator = exprs
+                        .iter()
+                        .any(|e| {
+                            if let Expression::Separator = e {
+                                true
+                            } else {
+                                false
+                            }
+                        });
+                    if has_separator {
+                        // `;`-separated statements stay inline — `{ a; b }` —
+                        // preserving the separators the author wrote, the way
+                        // the `Scope::CodeBlock` inline form does.
+                        if !line
+                            .current
+                            .is_empty()
+                        {
+                            line.add_atomic(syntax, " ");
+                        }
+                        line.add_inline_block(exprs);
+                    } else {
+                        // Newline-separated statements render over several
+                        // lines, mirroring the multi-line `Scope::CodeBlock`
+                        // form (but remaining a `Descriptive::CodeInline`).
+                        line.flush();
+                        self.append_char('\n');
+                        self.indent();
+                        self.add_fragment_reference(Syntax::Structure, "{");
+                        self.append_char('\n');
+                        self.increase(4);
+                        for expr in exprs {
+                            self.indent();
+                            self.append_expression(expr);
+                            self.append_char('\n');
+                        }
+                        self.decrease(4);
+                        self.indent();
+                        // Put `}` into the fresh line builder (not as a raw
+                        // fragment) so any trailing prose gets its separating
+                        // space.
+                        line = self.builder();
+                        line.add_word(Syntax::Structure, "}");
+                    }
+                }
                 Descriptive::Application(invocation) => {
                     // Add space before application if line is not empty
                     if !line
@@ -1472,6 +1554,15 @@ impl<'a, 'i> Line<'a, 'i> {
         let fragments = self
             .output
             .render_inline_code(expr);
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
+    }
+
+    fn add_inline_block(&mut self, exprs: &'i [Expression]) {
+        let fragments = self
+            .output
+            .render_inline_block(exprs);
         for (syntax, content) in fragments {
             self.add_no_wrap(syntax, content);
         }

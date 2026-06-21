@@ -37,50 +37,6 @@ make_coffee :
 }
 
 #[test]
-fn procedure_arity_mismatch() {
-    // observe's arity is 1 (one signature input). A bare `<observe>` would
-    // defer it, but a written argument list must match exactly — two arguments
-    // is a mismatch.
-    let source = r#"
-% technique v1
-
-main :
-
-{
-    <observe>(a, b)
-}
-
-observe : Situation -> Context
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let errors = translate(&document).expect_err("translate should fail");
-
-    assert_eq!(errors.len(), 1);
-    let TranslationError::ProcedureArityMismatch {
-        procedure,
-        expected,
-        actual,
-    } = &errors[0]
-    else {
-        panic!("expected ProcedureArityMismatch, got {:?}", errors[0]);
-    };
-    assert_eq!(procedure.value, "observe");
-    assert_eq!(*expected, 1);
-    assert_eq!(*actual, 2);
-    assert_eq!(
-        procedure
-            .span
-            .offset,
-        source
-            .find("observe")
-            .expect("observe in source"),
-        "span points at the invocation"
-    );
-}
-
-#[test]
 fn signature_parameter_mismatch() {
     // The parameter list names two inputs but the signature requires only
     // one, so the declaration disagrees with itself.
@@ -268,62 +224,6 @@ This text is past the body.
         .find("This text is past the body.")
         .expect("description in source");
     assert_eq!(at.offset, expected);
-}
-
-#[test]
-fn unresolved_procedure_invocation() {
-    let source = r#"
-% technique v1
-
-main :
-
-{
-    <does_not_exist>(x)
-}
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let errors = translate(&document).expect_err("translate should fail");
-
-    assert_eq!(errors.len(), 1);
-    let TranslationError::UnresolvedProcedure(id) = &errors[0] else {
-        panic!("expected UnresolvedProcedure, got {:?}", errors[0]);
-    };
-    assert_eq!(id.value, "does_not_exist");
-    let expected = source
-        .find("does_not_exist")
-        .expect("identifier in source");
-    assert_eq!(
-        id.span
-            .offset,
-        expected,
-        "span points at the offending identifier"
-    );
-}
-
-#[test]
-fn unresolved_procedure_in_section_title() {
-    // After section title hoisting, an `<Application>` embedded in the
-    // title goes through the resolve pass. This ensures section titles
-    // can't silently reference nonexistent procedures.
-    let source = r#"
-% technique v1
-
-main :
-
-I. Lead with <does_not_exist>
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let errors = translate(&document).expect_err("translate should fail");
-
-    assert_eq!(errors.len(), 1);
-    let TranslationError::UnresolvedProcedure(id) = &errors[0] else {
-        panic!("expected UnresolvedProcedure, got {:?}", errors[0]);
-    };
-    assert_eq!(id.value, "does_not_exist");
 }
 
 #[test]

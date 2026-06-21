@@ -14,17 +14,24 @@ use crate::value::{Numeric, Value};
 /// it.
 pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
-/// Whether a builtin is a pure function that computes a value or whether it
-/// is an action which performs a side-effect in the real world.
+/// How a builtin is presented to the user. `Pure` computes a value and just
+/// runs. `Command` is executed by the host environment; the user vets it on an
+/// editable prompt before it runs (`exec`). `Action` is a physical interaction
+/// the user performs themselves (`click`, `select`): shown read-only to
+/// confirm, never edited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nature {
     Pure,
+    Command,
     Action,
 }
 
 /// A function in the Library's table
 pub struct Builtin {
     pub name: &'static str,
+    /// The imperative verb an `Action` shows the user, e.g. `Click`. `None` for
+    /// `Pure`/`Command` entries, which are never presented this way.
+    pub display: Option<&'static str>,
     pub arity: usize,
     pub nature: Nature,
     pub function: Native,
@@ -48,30 +55,35 @@ impl Library {
             functions: vec![
                 Builtin {
                     name: "seq",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: seq,
                 },
                 Builtin {
                     name: "zip",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: zip,
                 },
                 Builtin {
                     name: "values",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: values,
                 },
                 Builtin {
                     name: "labels",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: labels,
                 },
                 Builtin {
                     name: "pairs",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: pairs,
@@ -88,12 +100,14 @@ impl Library {
         vec![
             Builtin {
                 name: "exec",
+                display: None,
                 arity: 1,
-                nature: Nature::Action,
+                nature: Nature::Command,
                 function: exec,
             },
             Builtin {
                 name: "now",
+                display: None,
                 arity: 0,
                 nature: Nature::Pure,
                 function: now,
@@ -104,15 +118,24 @@ impl Library {
     /// Interactions with a web browser (or rather, instructions that a user
     /// do these interactions in their web browser).
     pub fn browser() -> Vec<Builtin> {
-        ["click", "select", "deselect", "scroll", "type", "task"]
-            .into_iter()
-            .map(|name| Builtin {
-                name,
-                arity: 1,
-                nature: Nature::Action,
-                function: interact,
-            })
-            .collect()
+        [
+            ("click", "Click"),
+            ("select", "Select"),
+            ("deselect", "De-select"),
+            ("scroll", "Scroll to"),
+            ("navigate", "Navigate to"),
+            ("type", "Type"),
+            ("task", "Task"),
+        ]
+        .into_iter()
+        .map(|(name, display)| Builtin {
+            name,
+            display: Some(display),
+            arity: 1,
+            nature: Nature::Action,
+            function: interact,
+        })
+        .collect()
     }
 
     /// Add functions to the table, after the core builtins — the system layer
@@ -140,8 +163,13 @@ impl Library {
         self.functions[id.0].name
     }
 
-    /// Whether the function at `id` is a commanded `Action` or a `Pure`
-    /// computation.
+    /// The imperative verb the `Action` at `id` shows the user, if any.
+    pub fn display(&self, id: ExecutableId) -> Option<&'static str> {
+        self.functions[id.0].display
+    }
+
+    /// How the function at `id` is presented: `Pure`, host `Command`, or
+    /// physical `Action`.
     pub fn nature(&self, id: ExecutableId) -> Nature {
         self.functions[id.0].nature
     }
@@ -304,8 +332,8 @@ fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Literali(super::runner::now_iso8601()))
 }
 
-/// A browser-library action: the operator performs the UI manipulation when
-/// the runner commands the step, so the call settles to unit.
+/// A browser-library action: the user performs the UI manipulation when the
+/// runner presents the step, so the call settles to unit.
 fn interact(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Unitus)
 }
@@ -356,72 +384,84 @@ impl Library {
             functions: vec![
                 Builtin {
                     name: "seq",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "zip",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "exec",
+                    display: None,
                     arity: 1,
-                    nature: Nature::Action,
+                    nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {
                     name: "cmd",
+                    display: None,
                     arity: 1,
-                    nature: Nature::Action,
+                    nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {
                     name: "now",
+                    display: None,
                     arity: 0,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "uuid",
+                    display: None,
                     arity: 0,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "timer",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "journal",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "click",
+                    display: Some("Click"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "navigate",
+                    display: Some("Navigate"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "select",
+                    display: Some("Select"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "deselect",
+                    display: Some("Deselect"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,

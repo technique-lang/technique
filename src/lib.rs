@@ -6,6 +6,7 @@ pub mod linking;
 pub mod parsing;
 pub mod program;
 pub(crate) mod regex;
+pub mod resolution;
 pub mod runner;
 pub mod templating;
 pub mod translation;

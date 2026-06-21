@@ -95,6 +95,15 @@ pub trait Driver {
     /// unconditionally, returning `Done` without prompting.
     fn command(&mut self, qualified: &str, script: &str) -> UserInput;
 
+    /// Present a physical `Action` (a `browser`-library call like
+    /// `click("Actions")`) the user performs themselves: show the imperative
+    /// `verb` and its `label` read-only on the prompt line and settle on the
+    /// user's verdict. `Done` means they did it, leaving a compact `{name}()`
+    /// trace; Skip / Fail decline and settle the step; Quit stops. Unlike
+    /// `command` there is no edit buffer. `Automatic` returns `Done` without
+    /// prompting.
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput;
+
     /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
     /// the section's sign-off closes with) followed by its prose heading —
     /// numeral and title, e.g. `II. Check internet connectivity`.
@@ -195,6 +204,10 @@ impl<W: Write> Driver for Console<W> {
         prompt_command(&mut self.output, qualified, script)
     }
 
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+        prompt_action(&mut self.output, qualified, name, verb, label)
+    }
+
     fn seal(&mut self, qualified: &str, produced: Value, _computable: bool) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
     }
@@ -233,13 +246,33 @@ fn prompt<W: Write>(
     produced: Value,
 ) -> UserInput {
     let qualified = display_path(qualified);
-    let result = interact(
-        out,
-        &qualified,
-        settle,
-        Interaction::begin(choices, produced),
-    );
+    let result = interact(out, Interaction::begin(choices, produced), |o, i| {
+        draw(o, &qualified, settle, i)
+    });
     let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = out.flush();
+    result
+}
+
+/// Present a read-only action on the live prompt line — `» {path} {verb} {label} ▶`
+/// — and settle on the user's verdict. On Done it leaves a compact dark-grey
+/// trace `» {path} {name}()`; Skip / Fail / Quit clear the line for the step's
+/// own settle to follow.
+fn prompt_action<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    name: &str,
+    verb: &str,
+    label: &str,
+) -> UserInput {
+    let qualified = display_path(qualified);
+    let result = interact(out, Interaction::begin(&[], Value::Unitus), |o, i| {
+        draw_action(o, &qualified, verb, label, i)
+    });
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    if let UserInput::Done(_) = &result {
+        let _ = writeln!(out, "{}", format!("» {} {}()", qualified, name).dark_grey());
+    }
     let _ = out.flush();
     result
 }
@@ -254,13 +287,12 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
     let field = edit(script.to_string(), Value::Literali(script.to_string()));
     let result = interact(
         out,
-        &qualified,
-        "→",
         Interaction {
             field,
             menu: None,
             reason: None,
         },
+        |o, i| draw(o, &qualified, "→", i),
     );
     let col = "→"
         .chars()
@@ -298,13 +330,12 @@ fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> UserInput {
     let field = edit(String::new(), Value::Literali(String::new()));
     let result = interact(
         out,
-        label,
-        "↘",
         Interaction {
             field,
             menu: None,
             reason: None,
         },
+        |o, i| draw(o, label, "↘", i),
     );
     let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
     let _ = out.flush();
@@ -316,9 +347,8 @@ fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> UserInput {
 /// caller writes whatever record line it wants afterward.
 fn interact<W: Write>(
     out: &mut W,
-    qualified: &str,
-    settle: &str,
     mut interaction: Interaction,
+    mut render: impl FnMut(&mut W, &Interaction) -> io::Result<()>,
 ) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
@@ -328,7 +358,7 @@ fn interact<W: Write>(
         return UserInput::Quit;
     }
     let result = loop {
-        if draw(out, qualified, settle, &interaction).is_err() {
+        if render(out, &interaction).is_err() {
             break UserInput::Quit;
         }
         match event::read() {
@@ -444,6 +474,31 @@ fn prompt_prefix_width(qualified: &str, settle: &str) -> u16 {
         + qualified
             .chars()
             .count() as u16
+        + 1 // space before prompt symbol
+        + PROMPT_SYMBOL
+            .chars()
+            .count() as u16
+        + 1 // space after prompt symbol
+}
+
+/// Columns spanned by the action prompt prefix: `» {path} {verb} {label} ▶ `.
+fn action_prefix_width(qualified: &str, verb: &str, label: &str) -> u16 {
+    let mut width = 1 // »
+        + 1 // space
+        + qualified
+            .chars()
+            .count() as u16
+        + 1 // space
+        + verb
+            .chars()
+            .count() as u16;
+    if !label.is_empty() {
+        width += 1 // space
+            + label
+                .chars()
+                .count() as u16;
+    }
+    width
         + 1 // space before prompt symbol
         + PROMPT_SYMBOL
             .chars()
@@ -767,8 +822,41 @@ fn draw<W: Write>(
         format!("{} {}", settle, qualified).dark_grey(),
         PROMPT_SYMBOL.blue(),
     )?;
+    let cursor_col = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col)
+}
 
-    // Where the cursor lands; a value of `None` hides it.
+/// Draw the read-only action prompt line: `» {path} {verb} {label} ▶`, the verb
+/// in light brown, the marker and path dark grey like the trace lines above.
+fn draw_action<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    verb: &str,
+    label: &str,
+    interaction: &Interaction,
+) -> io::Result<()> {
+    queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+    write!(out, "{} ", format!("» {}", qualified).dark_grey())?;
+    queue!(out, SetForegroundColor(LIGHT_BROWN))?;
+    write!(out, "{}", verb)?;
+    queue!(out, ResetColor)?;
+    if !label.is_empty() {
+        write!(out, " {}", label)?;
+    }
+    write!(out, " {} ", PROMPT_SYMBOL.blue())?;
+    let prefix = action_prefix_width(qualified, verb, label);
+    let cursor_col = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col)
+}
+
+/// Render the interaction state after the prompt prefix — the Esc menu, the
+/// fail-reason buffer, or the field's content — returning the cursor column
+/// (`None` hides it). Shared by the step/command prompt and the action prompt.
+fn draw_tail<W: Write>(
+    out: &mut W,
+    interaction: &Interaction,
+    prefix: u16,
+) -> io::Result<Option<u16>> {
     let mut cursor_col: Option<u16> = None;
     match interaction.menu {
         Some(active) => match &interaction.reason {
@@ -808,7 +896,11 @@ fn draw<W: Write>(
             }
         },
     }
+    Ok(cursor_col)
+}
 
+/// Position (or hide) the cursor after a prompt line is drawn, then flush.
+fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>) -> io::Result<()> {
     match cursor_col {
         Some(col) => queue!(out, cursor::Show, cursor::MoveToColumn(col))?,
         None => queue!(out, cursor::Hide)?,
@@ -829,6 +921,13 @@ const RESPONSE_ACTIVE: Color = Color::Rgb {
     r: 0x8f,
     g: 0x59,
     b: 0x02,
+};
+
+/// Light brown for an Action's verb, softer than the Response orange.
+const LIGHT_BROWN: Color = Color::Rgb {
+    r: 0xc8,
+    g: 0x96,
+    b: 0x4b,
 };
 
 /// Render a horizontal row of Response options in the formatter's orange, the
@@ -1055,6 +1154,16 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
+    fn action(&mut self, _qualified: &str, _name: &str, verb: &str, label: &str) -> UserInput {
+        let text = if label.is_empty() {
+            format!("» {}", verb)
+        } else {
+            format!("» {} {}", verb, label)
+        };
+        write_indented(&mut self.output, &text);
+        UserInput::Done(Value::Unitus)
+    }
+
     fn seal(&mut self, _qualified: &str, produced: Value, computable: bool) -> UserInput {
         if computable {
             UserInput::Done(produced)
@@ -1211,6 +1320,17 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .command(qualified, script)
     }
 
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+        self.emit(Trace::Execute {
+            path: qualified.to_string(),
+            script: format!("{} {}", verb, label)
+                .trim_end()
+                .to_string(),
+        });
+        self.inner
+            .action(qualified, name, verb, label)
+    }
+
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.emit(Trace::Enter {
             path: qualified.to_string(),
@@ -1303,6 +1423,10 @@ impl Driver for Headless {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
+    fn action(&mut self, _qualified: &str, _name: &str, _verb: &str, _label: &str) -> UserInput {
+        UserInput::Done(Value::Unitus)
+    }
+
     fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
 
     fn seal(&mut self, _qualified: &str, produced: Value, _computable: bool) -> UserInput {
@@ -1358,6 +1482,12 @@ pub enum Event {
     Command {
         qualified: String,
         script: String,
+    },
+    Action {
+        qualified: String,
+        name: String,
+        verb: String,
+        label: String,
     },
     Ask {
         qualified: String,
@@ -1476,6 +1606,20 @@ impl Driver for Mock {
             .push(Event::Command {
                 qualified: qualified.to_string(),
                 script: script.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
+    }
+
+    /// Records the action beat and auto-confirms the run (`Done`) without
+    /// draining the answer queue — like `command`, the action gate is
+    /// orthogonal to the step verdicts a test drives.
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+        self.events
+            .push(Event::Action {
+                qualified: qualified.to_string(),
+                name: name.to_string(),
+                verb: verb.to_string(),
+                label: label.to_string(),
             });
         UserInput::Done(Value::Unitus)
     }

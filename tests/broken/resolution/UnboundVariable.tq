@@ -1,0 +1,5 @@
+% technique v1
+
+select_account : Authority -> Account
+
+    1.  specify Account ID { account_number } here

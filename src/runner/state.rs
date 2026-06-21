@@ -53,7 +53,8 @@ pub struct Record {
 /// crash (which records nothing).
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
-/// `Execute` records a host-function call from inside a step body.
+/// `Execute` and `Return` bracket an effectful host call (a `Command` or
+/// `Action`) with the value it returned; Pure builtins are not recorded.
 /// `Input` records the values supplied to a procedure so a resume can restore
 /// the state without re-prompting for information already entered.
 #[allow(dead_code)]
@@ -64,6 +65,7 @@ pub enum State {
     Resume,
     Invoke(InvokeTarget),
     Execute { function: String },
+    Return(Option<value::Value>),
     Input(Vec<Supplied>),
     Begin,
     Done(Option<value::Value>),
@@ -247,6 +249,7 @@ impl Store {
                 | State::Resume
                 | State::Invoke(_)
                 | State::Execute { .. }
+                | State::Return(_)
                 | State::Begin => {}
             }
         }
@@ -480,6 +483,13 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str(function);
             out.push_str("()");
         }
+        State::Return(value) => {
+            out.push_str("Return");
+            if let Some(v) = value {
+                out.push(' ');
+                out.push_str(&serialize_value(v));
+            }
+        }
         State::Input(supplied) => {
             out.push_str("Input ");
             format_supplied(out, supplied);
@@ -692,6 +702,7 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
                 function: name.to_string(),
             })
         }
+        "Return" => Ok(State::Return(parse_optional_value(rest)?)),
         "Input" => {
             let payload = rest.ok_or(RecordError::MalformedState)?;
             Ok(State::Input(parse_supplied(payload)?))

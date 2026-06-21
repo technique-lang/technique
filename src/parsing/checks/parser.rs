@@ -2620,7 +2620,10 @@ This is { exec(a,
 
     // Second element should be the multiline code inline
     match &descriptives[1] {
-        Descriptive::CodeInline(Expression::Execution(func, _)) => {
+        Descriptive::CodeInline(exprs) => {
+            let [Expression::Execution(func, _)] = exprs.as_slice() else {
+                panic!("Second element should be code inline with function execution");
+            };
             assert_eq!(
                 func.target
                     .value,
@@ -2667,7 +2670,11 @@ fn code_inline_binding() {
     match &descriptives[1] {
         Descriptive::Binding(bound, names) => {
             match bound.as_ref() {
-                Descriptive::CodeInline(Expression::Variable(Identifier { value, .. }, _)) => {
+                Descriptive::CodeInline(exprs) => {
+                    let [Expression::Variable(Identifier { value, .. }, _)] = exprs.as_slice()
+                    else {
+                        panic!("Bound part should be a code inline variable");
+                    };
                     assert_eq!(*value, "item")
                 }
                 _ => panic!("Bound part should be a code inline variable"),
@@ -2677,4 +2684,41 @@ fn code_inline_binding() {
         }
         _ => panic!("Second element should be a binding"),
     }
+}
+
+#[test]
+fn descriptive_binding_parenthesised_tuple() {
+    let mut input = Parser::new();
+    input.initialize("Lookup details ~ (account_number, account_name)\n");
+    let paragraphs = input
+        .read_descriptive()
+        .unwrap();
+
+    let descriptives = &paragraphs[0].0;
+    match descriptives
+        .last()
+        .unwrap()
+    {
+        Descriptive::Binding(bound, names) => {
+            match bound.as_ref() {
+                Descriptive::Text(text) => assert_eq!(*text, "Lookup details"),
+                _ => panic!("Bound part should be text"),
+            }
+            assert_eq!(names.len(), 2);
+            assert_eq!(names[0].value, "account_number");
+            assert_eq!(names[1].value, "account_name");
+        }
+        _ => panic!("Last element should be a tuple binding"),
+    }
+}
+
+#[test]
+fn descriptive_binding_naked_tuple_requires_parentheses() {
+    let mut input = Parser::new();
+    input.initialize("Lookup details ~ account_number, account_name\n");
+    let result = input.read_descriptive();
+
+    let Err(ParsingError::MissingParenthesis(_)) = result else {
+        panic!("expected MissingParenthesis, got {:?}", result);
+    };
 }

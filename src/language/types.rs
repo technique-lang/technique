@@ -250,7 +250,7 @@ impl<'i> Paragraph<'i> {
 #[derive(Eq, Debug, PartialEq)]
 pub enum Descriptive<'i> {
     Text(&'i str),
-    CodeInline(Expression<'i>),
+    CodeInline(Vec<Expression<'i>>),
     Application(Invocation<'i>),
     Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
 }

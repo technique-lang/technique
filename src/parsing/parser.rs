@@ -1709,6 +1709,30 @@ impl<'i> Parser<'i> {
         }
     }
 
+    /// Read the target of a descriptive binding after `~`: a single identifier
+    /// or a parenthesised list `(a, b, ...)`. A bare comma-separated list
+    /// without parentheses is the common mistake, reported as
+    /// MissingParenthesis rather than left as trailing text.
+    fn read_binding_identifiers(&mut self) -> Result<Vec<Identifier<'i>>, ParsingError> {
+        if self
+            .source
+            .starts_with('(')
+        {
+            self.read_identifiers()
+        } else {
+            let start = self.offset;
+            let name = self.read_identifier()?;
+            self.trim_whitespace();
+            if self
+                .source
+                .starts_with(',')
+            {
+                return Err(ParsingError::MissingParenthesis(Span::new(start, 0)));
+            }
+            Ok(vec![name])
+        }
+    }
+
     fn read_repeat_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         // Parse "repeat <expression>"
         let start = self.offset;
@@ -1860,7 +1884,7 @@ impl<'i> Parser<'i> {
 
         let content = self.source;
 
-        let possible = match content.find([' ', '\t', '\n', '(', '{', ',', '"']) {
+        let possible = match content.find([' ', '\t', '\n', '(', '{', ',', '"', ';']) {
             None => content,
             Some(i) => &content[0..i],
         };
@@ -2376,18 +2400,18 @@ impl<'i> Parser<'i> {
                     }
 
                     if is_code_block(outer.source) {
-                        // standalone CodeBlock wrapped in a Paragraph
-
-                        // FIXME this needs to be promoted to a Scope::CodeBlock? Or better yet shouldnt' be here?
+                        // A standalone `{ ... }` block in a step becomes one
+                        // CodeInline holding all its statements, including any
+                        // `;` separators the author wrote inline; the formatter
+                        // renders `;`-separated statements inline and
+                        // newline-separated statements as a block.
                         let para_start = outer.offset;
                         let expressions = outer.read_code_block()?;
                         let para_span = outer.span_since(para_start);
-                        for expr in expressions {
-                            if let Expression::Separator = expr {
-                                continue;
-                            }
-                            results.push(Paragraph(vec![Descriptive::CodeInline(expr)], para_span));
-                        }
+                        results.push(Paragraph(
+                            vec![Descriptive::CodeInline(expressions)],
+                            para_span,
+                        ));
                     } else {
                         // Paragraph container
                         let para_start = outer.offset;
@@ -2402,40 +2426,17 @@ impl<'i> Parser<'i> {
 
                                 if c == '{' {
                                     let expressions = parser.read_code_block()?;
-                                    let mut inlines = vec![];
-                                    for expr in expressions {
-                                        if let Expression::Separator = expr {
-                                            continue;
-                                        }
-                                        inlines.push(Descriptive::CodeInline(expr));
-                                    }
-
                                     parser.trim_whitespace();
                                     if parser.peek_next_char() == Some('~') {
                                         parser.advance(1);
                                         parser.trim_whitespace();
-                                        let start_pos = parser.offset;
-                                        let variable = parser.read_identifier()?;
-
-                                        parser.trim_whitespace();
-                                        if parser
-                                            .source
-                                            .starts_with(',')
-                                        {
-                                            return Err(ParsingError::MissingParenthesis(
-                                                Span::new(start_pos, 0),
-                                            ));
-                                        }
-
-                                        if let Some(last) = inlines.pop() {
-                                            content.extend(inlines);
-                                            content.push(Descriptive::Binding(
-                                                Box::new(last),
-                                                vec![variable],
-                                            ));
-                                        }
+                                        let variables = parser.read_binding_identifiers()?;
+                                        content.push(Descriptive::Binding(
+                                            Box::new(Descriptive::CodeInline(expressions)),
+                                            variables,
+                                        ));
                                     } else {
-                                        content.extend(inlines);
+                                        content.push(Descriptive::CodeInline(expressions));
                                     }
                                 } else if parser
                                     .source
@@ -2452,23 +2453,11 @@ impl<'i> Parser<'i> {
                                     if parser.peek_next_char() == Some('~') {
                                         parser.advance(1);
                                         parser.trim_whitespace();
-                                        let start_pos = parser.offset;
-                                        let variable = parser.read_identifier()?;
-
-                                        // Check for malformed tuple binding (missing parentheses)
-                                        parser.trim_whitespace();
-                                        if parser
-                                            .source
-                                            .starts_with(',')
-                                        {
-                                            return Err(ParsingError::MissingParenthesis(
-                                                Span::new(start_pos, 0),
-                                            ));
-                                        }
+                                        let variables = parser.read_binding_identifiers()?;
 
                                         content.push(Descriptive::Binding(
                                             Box::new(Descriptive::Application(invocation)),
-                                            vec![variable],
+                                            variables,
                                         ));
                                     } else {
                                         content.push(Descriptive::Application(invocation));
@@ -2492,22 +2481,11 @@ impl<'i> Parser<'i> {
                                     } else if parser.peek_next_char() == Some('~') {
                                         parser.advance(1);
                                         parser.trim_whitespace();
-                                        let start_pos = parser.offset;
-                                        let variable = parser.read_identifier()?;
-
-                                        parser.trim_whitespace();
-                                        if parser
-                                            .source
-                                            .starts_with(',')
-                                        {
-                                            return Err(ParsingError::MissingParenthesis(
-                                                Span::new(start_pos, 0),
-                                            ));
-                                        }
+                                        let variables = parser.read_binding_identifiers()?;
 
                                         content.push(Descriptive::Binding(
                                             Box::new(Descriptive::Text(text)),
-                                            vec![variable],
+                                            variables,
                                         ));
                                     } else {
                                         content.push(Descriptive::Text(text));
@@ -3262,7 +3240,12 @@ fn is_repeat_keyword(content: &str) -> bool {
 }
 
 fn is_function(content: &str) -> bool {
-    let re = regex!(r"^\s*.+?\(");
+    // The head before `(` must not cross a `;` statement separator. A greedy
+    // `.+?` matched across one — `b ; three(` looked like a call named
+    // "b ; three" — so a bare variable preceding a later call wrongly errored.
+    // Excluding `;` from the head still catches a malformed name like
+    // `re peat(` (no separator), leaving its error reporting unchanged.
+    let re = regex!(r"^\s*[^;(]*\(");
 
     re.is_match(content)
 }

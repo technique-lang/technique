@@ -288,73 +288,125 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let run_id = self
                     .appender
                     .run_id();
-                let record = Record {
-                    recorded: now_iso8601(),
-                    run_id,
-                    path: qualified.clone(),
-                    state: State::Execute {
-                        function: function.clone(),
-                    },
-                };
-                self.appender
-                    .append(&record)?;
-                // An `Action` builtin (e.g. `exec`, `click`) is a command the
-                // user must command: show the script and run it only on their
-                // say-so. Skip or Fail declines the run and settles the step;
-                // Quit stops.
-                //
-                // `Pure` builtins (coercions, reading the clock) just announce
+                // A `Command` builtin (e.g. `exec`) is executed by the host;
+                // the user vets it: show the editable script and run it only on
+                // their say-so. An `Action` (e.g. `click`) is a physical
+                // interaction the user performs themselves: show the call
+                // read-only to confirm. Either way Skip or Fail declines and
+                // settles the step; Quit stops. `Pure` builtins just announce
                 // and run.
-                let is_action = match &executable.target {
-                    ExecutableRef::Resolved(id) => {
-                        self.library
-                            .nature(*id)
-                            == Nature::Action
-                    }
-                    _ => false,
+                let nature = match &executable.target {
+                    ExecutableRef::Resolved(id) => self
+                        .library
+                        .nature(*id),
+                    _ => Nature::Pure,
                 };
-                if is_action {
-                    let script = self.script_text(env, executable)?;
-                    match self
-                        .driver
-                        .command(&qualified, &script)
-                    {
-                        UserInput::Done(chosen) => {
-                            match super::evaluator::dispatch(
-                                &self.library,
-                                &self.context,
-                                env,
-                                executable,
-                                Some(&[chosen]),
-                            ) {
-                                Ok(value) => Ok(Outcome::Done(value)),
-                                // A non-zero exit throws to fail the step rather
-                                // than aborting the run; the walk continues.
-                                Err(RunnerError::CommandFailed(code)) => {
-                                    Ok(Outcome::Throw(Failure::Aborted(format!(
-                                        "External command exited with status {}",
-                                        code
-                                    ))))
-                                }
-                                Err(other) => Err(other),
-                            }
-                        }
-                        UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
-                        UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
-                        UserInput::Quit => self.record_stop(),
-                    }
+                // Pure builtins record nothing; only effectful calls are traced.
+                let effectful = if let Nature::Pure = nature {
+                    false
                 } else {
-                    self.driver
-                        .announce(&describe_execute(&function));
-                    let value = super::evaluator::dispatch(
-                        &self.library,
-                        &self.context,
-                        env,
-                        executable,
-                        None,
-                    )?;
-                    Ok(Outcome::Done(value))
+                    true
+                };
+                if effectful {
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: qualified.clone(),
+                            state: State::Execute {
+                                function: function.clone(),
+                            },
+                        })?;
                 }
+                let outcome = match nature {
+                    Nature::Command => {
+                        let script = self.script_text(env, executable)?;
+                        match self
+                            .driver
+                            .command(&qualified, &script)
+                        {
+                            UserInput::Done(chosen) => {
+                                match super::evaluator::dispatch(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    executable,
+                                    Some(&[chosen]),
+                                ) {
+                                    Ok(value) => Ok(Outcome::Done(value)),
+                                    // A non-zero exit throws to fail the step
+                                    // rather than aborting the run; the walk
+                                    // continues.
+                                    Err(RunnerError::CommandFailed(code)) => {
+                                        Ok(Outcome::Throw(Failure::Aborted(format!(
+                                            "External command exited with status {}",
+                                            code
+                                        ))))
+                                    }
+                                    Err(other) => Err(other),
+                                }
+                            }
+                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
+                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Quit => self.record_stop(),
+                        }
+                    }
+                    Nature::Action => {
+                        let (verb, label) = self.action_parts(env, executable)?;
+                        match self
+                            .driver
+                            .action(&qualified, &function, &verb, &label)
+                        {
+                            UserInput::Done(_) => {
+                                let value = super::evaluator::dispatch(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    executable,
+                                    None,
+                                )?;
+                                Ok(Outcome::Done(value))
+                            }
+                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
+                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Quit => self.record_stop(),
+                        }
+                    }
+                    Nature::Pure => {
+                        self.driver
+                            .announce(&describe_execute(&function));
+                        let value = super::evaluator::dispatch(
+                            &self.library,
+                            &self.context,
+                            env,
+                            executable,
+                            None,
+                        )?;
+                        Ok(Outcome::Done(value))
+                    }
+                }?;
+                // Pair the Execute with a Return carrying its value; a stopped
+                // run leaves the enter unpaired.
+                let stopped = if let Outcome::Stopped = outcome {
+                    true
+                } else {
+                    false
+                };
+                if effectful && !stopped {
+                    let returned = if let Outcome::Done(value) = &outcome {
+                        Some(value.clone())
+                    } else {
+                        None
+                    };
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: qualified.clone(),
+                            state: State::Return(returned),
+                        })?;
+                }
+                Ok(outcome)
             }
             Operation::Bind { names, value } => self.walk_bind(env, names, value),
             Operation::Variable(_)
@@ -403,6 +455,37 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
             None => Ok(String::new()),
         }
+    }
+
+    /// An action's parts for the user to confirm: its imperative verb (the
+    /// library's `display` name, e.g. `Click`) and the bare label its single
+    /// argument evaluates to, with string literals shown unquoted.
+    fn action_parts(
+        &mut self,
+        env: &mut Environment,
+        executable: &'i Executable<'i>,
+    ) -> Result<(String, String), RunnerError> {
+        let verb = match &executable.target {
+            ExecutableRef::Resolved(id) => self
+                .library
+                .display(*id)
+                .map(str::to_string)
+                .unwrap_or_else(|| self.executable_name(&executable.target)),
+            _ => self.executable_name(&executable.target),
+        };
+        let label = match executable
+            .arguments
+            .first()
+        {
+            Some(arg) => {
+                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
+                    Value::Literali(text) => text,
+                    other => other.to_string(),
+                }
+            }
+            None => String::new(),
+        };
+        Ok((verb, label))
     }
 
     fn walk_invoke(
@@ -726,31 +809,68 @@ impl<'i, D: Driver> Runner<'i, D> {
             false
         };
         if descriptive {
+            // A descriptive binding has no expression to compute its value, so
+            // each name is solicited from the user in turn. A tuple binding
+            // `text ~ (a, b)` prompts once per name and binds each; the step's
+            // value is the single value for one name, or a tuple of them.
             let qualified = self
                 .path
                 .render();
-            let name = names
-                .first()
-                .map(|n| n.value);
-            match self
-                .driver
-                .acquire(&qualified, name, None)
+            let mut acquired = Vec::with_capacity(names.len());
+            for name in names {
+                match self
+                    .driver
+                    .acquire(&qualified, Some(name.value), None)
+                {
+                    UserInput::Done(value) => acquired.push(value),
+                    UserInput::Skip => {
+                        for name in names {
+                            super::evaluator::bind_names(
+                                env,
+                                std::slice::from_ref(name),
+                                Value::Unitus,
+                            )?;
+                        }
+                        return Ok(Outcome::Skipped(Value::Unitus));
+                    }
+                    UserInput::Fail(reason) => {
+                        return Ok(Outcome::Failed(Failure::Aborted(reason)))
+                    }
+                    UserInput::Quit => return self.record_stop(),
+                }
+            }
+            for (name, value) in names
+                .iter()
+                .zip(&acquired)
             {
-                UserInput::Done(value) => {
+                super::evaluator::bind_names(env, std::slice::from_ref(name), value.clone())?;
+            }
+            let produced = if acquired.len() == 1 {
+                acquired
+                    .into_iter()
+                    .next()
+                    .unwrap()
+            } else {
+                Value::Parametriq(acquired)
+            };
+            Ok(Outcome::Done(produced))
+        } else {
+            // Walk rather than evaluate: the bound value may be an effectful
+            // spine operation — an `Invoke` that must descend into its callee
+            // interactively, an `Execute` that must be gated, a `Loop` — which
+            // the evaluator would mishandle as Unit. Walking a pure value is
+            // equivalent to evaluating it.
+            match self.walk(env, value)? {
+                Outcome::Done(value) => {
                     super::evaluator::bind_names(env, names, value.clone())?;
                     Ok(Outcome::Done(value))
                 }
-                UserInput::Skip => {
+                Outcome::Skipped(value) => {
                     super::evaluator::bind_names(env, names, Value::Unitus)?;
-                    Ok(Outcome::Skipped(Value::Unitus))
+                    Ok(Outcome::Skipped(value))
                 }
-                UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
-                UserInput::Quit => self.record_stop(),
+                other => Ok(other),
             }
-        } else {
-            let value = super::evaluator::evaluate(&self.library, &self.context, env, value)?;
-            super::evaluator::bind_names(env, names, value.clone())?;
-            Ok(Outcome::Done(value))
         }
     }
 

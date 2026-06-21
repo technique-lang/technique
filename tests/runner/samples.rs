@@ -61,6 +61,12 @@ fn ensure_run() {
             }
         };
 
+        if let Err(e) = technique::resolution::resolve(&mut program) {
+            println!("File {:?} failed to resolve: {:?}", file, e);
+            failures.push(file.clone());
+            continue;
+        }
+
         let mut library = Library::core();
         library.extend(Library::system());
         if let Err(e) = technique::linking::link(&mut program, &library) {
