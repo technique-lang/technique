@@ -95,6 +95,13 @@ pub trait Driver {
     /// unconditionally, returning `Done` without prompting.
     fn command(&mut self, qualified: &str, script: &str) -> UserInput;
 
+    /// Present a physical `Action` (a `browser`-library call like
+    /// `click("Actions")`) the user performs themselves: show `call` read-only
+    /// and settle on the user's verdict. `Done` means they did it; Skip / Fail
+    /// decline and settle the step; Quit stops. Unlike `command` there is no
+    /// edit buffer. `Automatic` returns `Done` without prompting.
+    fn action(&mut self, qualified: &str, call: &str) -> UserInput;
+
     /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
     /// the section's sign-off closes with) followed by its prose heading —
     /// numeral and title, e.g. `II. Check internet connectivity`.
@@ -193,6 +200,11 @@ impl<W: Write> Driver for Console<W> {
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
         prompt_command(&mut self.output, qualified, script)
+    }
+
+    fn action(&mut self, qualified: &str, call: &str) -> UserInput {
+        write_indented(&mut self.output, call);
+        prompt(&mut self.output, qualified, "→", &[], Value::Unitus)
     }
 
     fn seal(&mut self, qualified: &str, produced: Value, _computable: bool) -> UserInput {
@@ -1055,6 +1067,11 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
+    fn action(&mut self, _qualified: &str, call: &str) -> UserInput {
+        write_indented(&mut self.output, call);
+        UserInput::Done(Value::Unitus)
+    }
+
     fn seal(&mut self, _qualified: &str, produced: Value, computable: bool) -> UserInput {
         if computable {
             UserInput::Done(produced)
@@ -1211,6 +1228,15 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .command(qualified, script)
     }
 
+    fn action(&mut self, qualified: &str, call: &str) -> UserInput {
+        self.emit(Trace::Execute {
+            path: qualified.to_string(),
+            script: call.to_string(),
+        });
+        self.inner
+            .action(qualified, call)
+    }
+
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         self.emit(Trace::Enter {
             path: qualified.to_string(),
@@ -1303,6 +1329,10 @@ impl Driver for Headless {
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
+    fn action(&mut self, _qualified: &str, _call: &str) -> UserInput {
+        UserInput::Done(Value::Unitus)
+    }
+
     fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
 
     fn seal(&mut self, _qualified: &str, produced: Value, _computable: bool) -> UserInput {
@@ -1358,6 +1388,10 @@ pub enum Event {
     Command {
         qualified: String,
         script: String,
+    },
+    Action {
+        qualified: String,
+        call: String,
     },
     Ask {
         qualified: String,
@@ -1476,6 +1510,18 @@ impl Driver for Mock {
             .push(Event::Command {
                 qualified: qualified.to_string(),
                 script: script.to_string(),
+            });
+        UserInput::Done(Value::Unitus)
+    }
+
+    /// Records the action beat and auto-confirms the run (`Done`) without
+    /// draining the answer queue — like `command`, the action gate is
+    /// orthogonal to the step verdicts a test drives.
+    fn action(&mut self, qualified: &str, call: &str) -> UserInput {
+        self.events
+            .push(Event::Action {
+                qualified: qualified.to_string(),
+                call: call.to_string(),
             });
         UserInput::Done(Value::Unitus)
     }

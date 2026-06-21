@@ -1137,6 +1137,66 @@ test :
 }
 
 #[test]
+fn action_step_presents_call_read_only() {
+    let source = r#"
+% technique v1
+
+test :
+
+1.  Open the menu { click("Actions") }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
+    crate::linking::link(&mut program, &Library::stub()).expect("linked");
+
+    let mut fixture = StoreFixture::new("action-confirm");
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    // A `click` is an Action, not a Command: the whole call is presented
+    // read-only for the user to confirm, then the step's verdict prompt judges
+    // it. No Command beat appears.
+    let actions: Vec<(&str, &str)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Action { qualified, call } = e {
+                Some((qualified.as_str(), call.as_str()))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let commanded = prompt
+        .events()
+        .iter()
+        .any(|e| {
+            if let Event::Command { .. } = e {
+                true
+            } else {
+                false
+            }
+        });
+    assert_eq!(actions, vec![("/test:/1", "click(\"Actions\")")]);
+    assert!(
+        !commanded,
+        "an action must not route through the command gate"
+    );
+}
+
+#[test]
 fn automatic_settles_computable_steps_done_prose_skip() {
     // An exec step settles Done; a pure-prose sibling Skips; the procedure
     // seals Done since one step beneath it was computable.
@@ -2410,6 +2470,62 @@ cleanup :
         })
         .count();
     assert_eq!(substeps, 2);
+}
+
+#[test]
+fn descriptive_tuple_binding_acquires_each_name() {
+    // A descriptive `~ (a, b)` binding has no executable value, so each name is
+    // solicited in turn; the following step reads both, so the run only
+    // completes if both were bound.
+    let source = r#"
+% technique v1
+
+task :
+
+1.  Lookup account details ~ (account_number, account_name)
+2.  Use { account_number } and { account_name }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("descriptive-tuple-acquire");
+    // Two acquires (account_number, then account_name), then the two step
+    // verdicts.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("12345".to_string())),
+        UserInput::Done(Value::Literali("Acme".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<Option<&str>> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| {
+            if let Event::Acquire { name, .. } = event {
+                Some(
+                    name.as_ref()
+                        .map(String::as_str),
+                )
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![Some("account_number"), Some("account_name")]);
 }
 
 #[test]

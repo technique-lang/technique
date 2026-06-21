@@ -14,11 +14,15 @@ use crate::value::{Numeric, Value};
 /// it.
 pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
-/// Whether a builtin is a pure function that computes a value or whether it
-/// is an action which performs a side-effect in the real world.
+/// How a builtin is presented to the user. `Pure` computes a value and just
+/// runs. `Command` is executed by the host environment; the user vets it on an
+/// editable prompt before it runs (`exec`). `Action` is a physical interaction
+/// the user performs themselves (`click`, `select`): shown read-only to
+/// confirm, never edited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nature {
     Pure,
+    Command,
     Action,
 }
 
@@ -89,7 +93,7 @@ impl Library {
             Builtin {
                 name: "exec",
                 arity: 1,
-                nature: Nature::Action,
+                nature: Nature::Command,
                 function: exec,
             },
             Builtin {
@@ -140,8 +144,8 @@ impl Library {
         self.functions[id.0].name
     }
 
-    /// Whether the function at `id` is a commanded `Action` or a `Pure`
-    /// computation.
+    /// How the function at `id` is presented: `Pure`, host `Command`, or
+    /// physical `Action`.
     pub fn nature(&self, id: ExecutableId) -> Nature {
         self.functions[id.0].nature
     }
@@ -304,8 +308,8 @@ fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Literali(super::runner::now_iso8601()))
 }
 
-/// A browser-library action: the operator performs the UI manipulation when
-/// the runner commands the step, so the call settles to unit.
+/// A browser-library action: the user performs the UI manipulation when the
+/// runner presents the step, so the call settles to unit.
 fn interact(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Unitus)
 }
@@ -369,13 +373,13 @@ impl Library {
                 Builtin {
                     name: "exec",
                     arity: 1,
-                    nature: Nature::Action,
+                    nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {
                     name: "cmd",
                     arity: 1,
-                    nature: Nature::Action,
+                    nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {

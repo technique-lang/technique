@@ -298,62 +298,85 @@ impl<'i, D: Driver> Runner<'i, D> {
                 };
                 self.appender
                     .append(&record)?;
-                // An `Action` builtin (e.g. `exec`, `click`) is a command the
-                // user must command: show the script and run it only on their
-                // say-so. Skip or Fail declines the run and settles the step;
-                // Quit stops.
-                //
-                // `Pure` builtins (coercions, reading the clock) just announce
+                // A `Command` builtin (e.g. `exec`) is executed by the host;
+                // the user vets it: show the editable script and run it only on
+                // their say-so. An `Action` (e.g. `click`) is a physical
+                // interaction the user performs themselves: show the call
+                // read-only to confirm. Either way Skip or Fail declines and
+                // settles the step; Quit stops. `Pure` builtins just announce
                 // and run.
-                let is_action = match &executable.target {
-                    ExecutableRef::Resolved(id) => {
-                        self.library
-                            .nature(*id)
-                            == Nature::Action
-                    }
-                    _ => false,
+                let nature = match &executable.target {
+                    ExecutableRef::Resolved(id) => self
+                        .library
+                        .nature(*id),
+                    _ => Nature::Pure,
                 };
-                if is_action {
-                    let script = self.script_text(env, executable)?;
-                    match self
-                        .driver
-                        .command(&qualified, &script)
-                    {
-                        UserInput::Done(chosen) => {
-                            match super::evaluator::dispatch(
-                                &self.library,
-                                &self.context,
-                                env,
-                                executable,
-                                Some(&[chosen]),
-                            ) {
-                                Ok(value) => Ok(Outcome::Done(value)),
-                                // A non-zero exit throws to fail the step rather
-                                // than aborting the run; the walk continues.
-                                Err(RunnerError::CommandFailed(code)) => {
-                                    Ok(Outcome::Throw(Failure::Aborted(format!(
-                                        "External command exited with status {}",
-                                        code
-                                    ))))
+                match nature {
+                    Nature::Command => {
+                        let script = self.script_text(env, executable)?;
+                        match self
+                            .driver
+                            .command(&qualified, &script)
+                        {
+                            UserInput::Done(chosen) => {
+                                match super::evaluator::dispatch(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    executable,
+                                    Some(&[chosen]),
+                                ) {
+                                    Ok(value) => Ok(Outcome::Done(value)),
+                                    // A non-zero exit throws to fail the step
+                                    // rather than aborting the run; the walk
+                                    // continues.
+                                    Err(RunnerError::CommandFailed(code)) => {
+                                        Ok(Outcome::Throw(Failure::Aborted(format!(
+                                            "External command exited with status {}",
+                                            code
+                                        ))))
+                                    }
+                                    Err(other) => Err(other),
                                 }
-                                Err(other) => Err(other),
                             }
+                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
+                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Quit => self.record_stop(),
                         }
-                        UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
-                        UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
-                        UserInput::Quit => self.record_stop(),
                     }
-                } else {
-                    self.driver
-                        .announce(&describe_execute(&function));
-                    let value = super::evaluator::dispatch(
-                        &self.library,
-                        &self.context,
-                        env,
-                        executable,
-                        None,
-                    )?;
-                    Ok(Outcome::Done(value))
+                    Nature::Action => {
+                        let call = self.action_text(env, executable)?;
+                        match self
+                            .driver
+                            .action(&qualified, &call)
+                        {
+                            UserInput::Done(_) => {
+                                let value = super::evaluator::dispatch(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    executable,
+                                    None,
+                                )?;
+                                Ok(Outcome::Done(value))
+                            }
+                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
+                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Quit => self.record_stop(),
+                        }
+                    }
+                    Nature::Pure => {
+                        self.driver
+                            .announce(&describe_execute(&function));
+                        let value = super::evaluator::dispatch(
+                            &self.library,
+                            &self.context,
+                            env,
+                            executable,
+                            None,
+                        )?;
+                        Ok(Outcome::Done(value))
+                    }
                 }
             }
             Operation::Bind { names, value } => self.walk_bind(env, names, value),
@@ -403,6 +426,23 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
             None => Ok(String::new()),
         }
+    }
+
+    /// The action call rendered for the user to confirm — the function name
+    /// with its evaluated arguments, e.g. `click("Actions")` — not just the
+    /// first argument as `script_text` shows for an editable command.
+    fn action_text(
+        &mut self,
+        env: &mut Environment,
+        executable: &'i Executable<'i>,
+    ) -> Result<String, RunnerError> {
+        let name = self.executable_name(&executable.target);
+        let mut rendered = vec![];
+        for arg in &executable.arguments {
+            let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
+            rendered.push(value.to_string());
+        }
+        Ok(format!("{}({})", name, rendered.join(", ")))
     }
 
     fn walk_invoke(
