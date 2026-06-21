@@ -311,7 +311,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .nature(*id),
                     _ => Nature::Pure,
                 };
-                match nature {
+                let outcome = match nature {
                     Nature::Command => {
                         let script = self.script_text(env, executable)?;
                         match self
@@ -377,7 +377,25 @@ impl<'i, D: Driver> Runner<'i, D> {
                         )?;
                         Ok(Outcome::Done(value))
                     }
+                }?;
+                // Close the Execute with a paired Return record carrying the
+                // value the function returned.
+                if let Outcome::Stopped = outcome {
+                } else {
+                    let returned = if let Outcome::Done(value) = &outcome {
+                        Some(value.clone())
+                    } else {
+                        None
+                    };
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: qualified.clone(),
+                            state: State::Return(returned),
+                        })?;
                 }
+                Ok(outcome)
             }
             Operation::Bind { names, value } => self.walk_bind(env, names, value),
             Operation::Variable(_)
