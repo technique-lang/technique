@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use crate::runner::runner::RunnerError;
 use crate::runner::state::{
     fail_reason, format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State,
-    Store, Value,
+    Store, Supplied,
 };
+use crate::value::Value;
 
 // A scratch directory under the system temp dir, cleaned up on drop so panics
 // in a test do not leak it. Tests construct one per fixture they need.
@@ -134,7 +135,7 @@ fn create_and_open_round_trips_document_path() {
     let (run_id, _) = store
         .create(&document, started, &[])
         .expect("create");
-    let (read_document, libraries, completed, _) = store
+    let (read_document, libraries, completed, _, _) = store
         .open(run_id)
         .expect("open");
 
@@ -158,7 +159,7 @@ fn create_and_open_round_trips_libraries() {
     let (run_id, _) = store
         .create(&document, started, &selected)
         .expect("create");
-    let (read_document, libraries, _, _) = store
+    let (read_document, libraries, _, _, _) = store
         .open(run_id)
         .expect("open");
 
@@ -207,15 +208,15 @@ fn open_replays_done_skip_fail_into_completed() {
         dir.path
             .clone(),
     );
-    let (document, _, completed, _) = store
+    let (document, _, completed, _, _) = store
         .open(RunId(1))
         .expect("open");
 
     assert_eq!(document, Path::new("/foo/Test.tq"));
     assert_eq!(completed.len(), 3);
-    assert!(completed.contains("/test:1"));
-    assert!(completed.contains("/test:2"));
-    assert!(completed.contains("/test:3"));
+    assert!(completed.contains_key("/test:1"));
+    assert!(completed.contains_key("/test:2"));
+    assert!(completed.contains_key("/test:3"));
 }
 
 // Resume and Begin records in the middle of the file are lifecycle
@@ -248,7 +249,7 @@ fn open_skips_resume_and_begin_during_replay() {
         recorded: "2026-05-14T12:00:02Z".to_string(),
         run_id: RunId(1),
         path: "/test:1".to_string(),
-        state: State::Done(Some(Value::Unit)),
+        state: State::Done(Some(Value::Unitus)),
     }));
     file.push_str(&format_record(&Record {
         recorded: "2026-05-14T12:00:03Z".to_string(),
@@ -262,12 +263,12 @@ fn open_skips_resume_and_begin_during_replay() {
         dir.path
             .clone(),
     );
-    let (_, _, completed, _) = store
+    let (_, _, completed, _, _) = store
         .open(RunId(1))
         .expect("open");
 
     assert_eq!(completed.len(), 1);
-    assert!(completed.contains("/test:1"));
+    assert!(completed.contains_key("/test:1"));
 }
 
 #[test]
@@ -385,7 +386,7 @@ fn format_record_pins_on_disk_text() {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
         path: "/make_coffee:2".to_string(),
-        state: State::Done(Some(Value::Unit)),
+        state: State::Done(Some(Value::Unitus)),
     };
     assert_eq!(
         format_record(&record),
@@ -396,20 +397,21 @@ fn format_record_pins_on_disk_text() {
         recorded: "2026-05-17T00:29:15Z".to_string(),
         run_id: RunId(15003),
         path: "/local_network:3".to_string(),
-        state: State::Done(Some(Value::Tablet(
-            "[ address = \"192.168.1.1\" ]".to_string(),
-        ))),
+        state: State::Done(Some(Value::Tabularum(vec![(
+            "address".to_string(),
+            Value::Literali("192.168.1.1".to_string()),
+        )]))),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:29:15Z 015003 /local_network:3 Done [ address = \"192.168.1.1\" ]\n"
+        "2026-05-17T00:29:15Z 015003 /local_network:3 Done [ \"address\" = \"192.168.1.1\" ]\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
         path: "/before_anesthesia:2".to_string(),
-        state: State::Done(Some(Value::Literal("Not Applicable".to_string()))),
+        state: State::Done(Some(Value::Literali("Not Applicable".to_string()))),
     };
     assert_eq!(
         format_record(&record),
@@ -442,13 +444,14 @@ fn format_record_pins_on_disk_text() {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
         path: "/make_coffee:2".to_string(),
-        state: State::Fail(Some(Value::Tablet(
-            "[ reason = \"network unplugged\" ]".to_string(),
-        ))),
+        state: State::Fail(Some(Value::Tabularum(vec![(
+            "reason".to_string(),
+            Value::Literali("network unplugged".to_string()),
+        )]))),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ reason = \"network unplugged\" ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ \"reason\" = \"network unplugged\" ]\n"
     );
 }
 
@@ -463,7 +466,7 @@ fn fail_reason_escapes_and_stays_on_one_line() {
     let line = format_record(&record);
     assert_eq!(
         line,
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ reason = \"said \\\"unplug\\\"\\nthen left\" ]\n"
+        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ \"reason\" = \"said \\\"unplug\\\"\\nthen left\" ]\n"
     );
     assert_eq!(
         line.matches('\n')
@@ -532,27 +535,28 @@ fn record_round_trips_through_format_and_parse() {
             recorded: "2026-05-14T12:00:01Z".to_string(),
             run_id: RunId(1),
             path: "/a:2".to_string(),
-            state: State::Done(Some(Value::Unit)),
+            state: State::Done(Some(Value::Unitus)),
         },
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
             path: "/a:3".to_string(),
-            state: State::Done(Some(Value::Tablet(
-                "[ address = \"10.0.0.1\" ]".to_string(),
-            ))),
+            state: State::Done(Some(Value::Tabularum(vec![(
+                "address".to_string(),
+                Value::Literali("10.0.0.1".to_string()),
+            )]))),
         },
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
             path: "/a:7".to_string(),
-            state: State::Done(Some(Value::Literal("Not Applicable".to_string()))),
+            state: State::Done(Some(Value::Literali("Not Applicable".to_string()))),
         },
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
             path: "/a:8".to_string(),
-            state: State::Done(Some(Value::Literal(
+            state: State::Done(Some(Value::Literali(
                 "1: lo\n    inet 127.0.0.1/8\na quote \" and a slash \\".to_string(),
             ))),
         },
@@ -578,9 +582,28 @@ fn record_round_trips_through_format_and_parse() {
             recorded: "2026-05-14T12:00:05Z".to_string(),
             run_id: RunId(1),
             path: "/a:6".to_string(),
-            state: State::Fail(Some(Value::Tablet(
-                "[ reason = \"unreachable\" ]".to_string(),
-            ))),
+            state: State::Fail(Some(Value::Tabularum(vec![(
+                "reason".to_string(),
+                Value::Literali("unreachable".to_string()),
+            )]))),
+        },
+        Record {
+            recorded: "2026-05-14T12:00:06Z".to_string(),
+            run_id: RunId(1),
+            path: "/decommission:".to_string(),
+            state: State::Input(vec![
+                Supplied {
+                    value: Value::Literali("acme-corp".to_string()),
+                    name: Some("authority".to_string()),
+                },
+                Supplied {
+                    value: Value::Arraeum(vec![
+                        Value::Literali("east".to_string()),
+                        Value::Literali("west".to_string()),
+                    ]),
+                    name: None,
+                },
+            ]),
         },
     ];
 
@@ -601,7 +624,7 @@ fn multiline_literal_stays_on_one_record_line() {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
         path: "/a:1".to_string(),
-        state: State::Done(Some(Value::Literal("first\nsecond\nthird".to_string()))),
+        state: State::Done(Some(Value::Literali("first\nsecond\nthird".to_string()))),
     };
     let text = format_record(&record);
     assert_eq!(

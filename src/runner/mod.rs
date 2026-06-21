@@ -2,7 +2,7 @@
 //! prompting the operator and recording each completed step to a state store
 //! so a run can be resumed after interruption.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
@@ -47,20 +47,20 @@ pub fn start<'i>(
     let (run_id, run_dir) = store.create(document, now_iso8601(), libraries)?;
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
+    let completed = HashMap::new();
     let outcome = match mode {
         Mode::Interactive => {
             if !std::io::stdout().is_terminal() {
                 return Err(RunnerError::TerminalRequired);
             }
-            let mut runner =
-                Runner::new(program, appender, HashSet::new(), Console::new(), library);
+            let mut runner = Runner::new(program, appender, completed, Console::new(), library);
             runner.run(env)?
         }
         Mode::Automatic => {
             let mut runner = Runner::new(
                 program,
                 appender,
-                HashSet::new(),
+                completed,
                 Automatic::new(colour),
                 library,
             );
@@ -86,15 +86,17 @@ pub fn inspect<'i>(
             if !std::io::stdout().is_terminal() {
                 return Err(RunnerError::TerminalRequired);
             }
+            let appender = Appender::sink();
+            let completed = HashMap::new();
             let driver = Transcript::new(Console::new());
-            let mut runner =
-                Runner::new(program, Appender::sink(), HashSet::new(), driver, library);
+            let mut runner = Runner::new(program, appender, completed, driver, library);
             runner.run(env)
         }
         Mode::Automatic => {
+            let appender = Appender::sink();
+            let completed = HashMap::new();
             let driver = Transcript::new(Automatic::new(colour));
-            let mut runner =
-                Runner::new(program, Appender::sink(), HashSet::new(), driver, library);
+            let mut runner = Runner::new(program, appender, completed, driver, library);
             runner.run(env)
         }
     }
@@ -105,7 +107,7 @@ pub fn inspect<'i>(
 /// re-translate, and re-link it before resuming.
 pub fn locate(run_id: RunId) -> Result<(PathBuf, Vec<String>), RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, libraries, _, _) = store.open(run_id)?;
+    let (document, libraries, _, _, _) = store.open(run_id)?;
     Ok((document, libraries))
 }
 
@@ -121,7 +123,7 @@ pub fn resume<'i>(
         return Err(RunnerError::TerminalRequired);
     }
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, _, completed, run_dir) = store.open(run_id)?;
+    let (document, _, completed, inputs, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);
     let mut appender = Appender::open(pfftt, run_id)?;
     let record = Record {
@@ -131,7 +133,8 @@ pub fn resume<'i>(
         state: State::Resume,
     };
     appender.append(&record)?;
-    let mut runner = Runner::new(program, appender, completed, Console::new(), library);
+    let mut runner =
+        Runner::new(program, appender, completed, Console::new(), library).with_inputs(inputs);
     let env = Environment::new();
     runner.run(env)
 }

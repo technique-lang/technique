@@ -2647,3 +2647,34 @@ This is { exec(a,
         _ => panic!("Third element should be text"),
     }
 }
+
+#[test]
+fn code_inline_binding() {
+    let mut input = Parser::new();
+    input.initialize("inspect { item } ~ seen\n");
+    let paragraphs = input
+        .read_descriptive()
+        .unwrap();
+
+    let descriptives = &paragraphs[0].0;
+    assert_eq!(descriptives.len(), 2);
+
+    match &descriptives[0] {
+        Descriptive::Text(text) => assert_eq!(*text, "inspect"),
+        _ => panic!("First element should be text"),
+    }
+
+    match &descriptives[1] {
+        Descriptive::Binding(bound, names) => {
+            match bound.as_ref() {
+                Descriptive::CodeInline(Expression::Variable(Identifier { value, .. }, _)) => {
+                    assert_eq!(*value, "item")
+                }
+                _ => panic!("Bound part should be a code inline variable"),
+            }
+            assert_eq!(names.len(), 1);
+            assert_eq!(names[0].value, "seen");
+        }
+        _ => panic!("Second element should be a binding"),
+    }
+}

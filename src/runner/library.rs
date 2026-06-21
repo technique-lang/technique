@@ -239,7 +239,9 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 /// `exec(script)` — run a shell script, teeing its stdout through the Context
 /// to the operator as it streams while accumulating it as the return value.
 /// Output is held as bytes until the end so a chunk split mid-UTF-8 is
-/// harmless and only one String is allocated. A non-zero exit is an error.
+/// harmless and only one String is allocated. Trailing newlines are trimmed
+/// from the captured value (matching the usual experience when doing shell
+/// `$(...)` substitution). A non-zero exit is an error.
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -288,8 +290,11 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         ));
     }
 
+    let output = String::from_utf8_lossy(&captured);
     Ok(Value::Literali(
-        String::from_utf8_lossy(&captured).into_owned(),
+        output
+            .trim_end_matches(['\n', '\r'])
+            .to_string(),
     ))
 }
 

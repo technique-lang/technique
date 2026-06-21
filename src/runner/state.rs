@@ -1,10 +1,11 @@
 //! On-disk state store and run identifiers.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use super::runner::RunnerError;
+use crate::value;
 
 /// Monotonic identifier for a run. Conventionally rendered and stored as a
 /// six-digit zero-padded string.
@@ -36,7 +37,7 @@ pub enum RecordError {
 
 /// One record line on disk.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     pub recorded: String,
     pub run_id: RunId,
@@ -53,18 +54,31 @@ pub struct Record {
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` records a host-function call from inside a step body.
+/// `Input` records the values supplied to a procedure so a resume can restore
+/// the state without re-prompting for information already entered.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
     Stop,
     Resume,
     Invoke(InvokeTarget),
     Execute { function: String },
+    Input(Vec<Supplied>),
     Begin,
-    Done(Option<Value>),
+    Done(Option<value::Value>),
     Skip,
-    Fail(Option<Value>),
+    Fail(Option<value::Value>),
+}
+
+/// One value supplied to a procedure's parameter: bound to a named parameter
+/// (recorded as `value ~ name`), or positional when the parameter is unnamed
+/// (recorded as a bare `value`).
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Supplied {
+    pub value: value::Value,
+    pub name: Option<String>,
 }
 
 /// The target of an `Invoke`: either a named procedure (rendered as
@@ -74,19 +88,6 @@ pub enum State {
 pub enum InvokeTarget {
     Procedure(String),
     Uri(String),
-}
-
-/// A `Value` carried by a Done or Fail state. Three on-disk forms,
-/// handled by `format_value` / `parse_value` below: `unit` (`()`), a
-/// double-quoted `literal` (the form a chosen response records as), and a
-/// `tablet`; tablets currently round-trip as opaque text until tablet
-/// typing in the runner lands.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Value {
-    Unit,
-    Literal(String),
-    Tablet(String),
 }
 
 /// On-disk store of runs, rooted at some base directory (conventionally
@@ -177,14 +178,25 @@ impl Store {
         Ok((run_id, run_dir))
     }
 
-    /// Open an existing run. Parses the leading `Start` record to recover
-    /// the source document and the libraries it was run with, then replays
-    /// `Done` / `Skip` / `Fail` records into a set of completed step paths.
-    /// `Stop` and `Resume` records are passed over.
+    /// Open an existing run. Parses the leading `Start` record to recover the
+    /// source document and the libraries it was run with, then replays
+    /// records into a map of completed step paths to the value each recorded
+    /// (`Done` with its value, `Skip`/`Fail` mapping to `Unitus`), used to
+    /// rehydrate bindings on resume. `Stop` and `Resume` records are passed
+    /// over.
     pub fn open(
         &self,
         run_id: RunId,
-    ) -> Result<(PathBuf, Vec<String>, HashSet<String>, PathBuf), RunnerError> {
+    ) -> Result<
+        (
+            PathBuf,
+            Vec<String>,
+            HashMap<String, value::Value>,
+            HashMap<String, Vec<Supplied>>,
+            PathBuf,
+        ),
+        RunnerError,
+    > {
         let run_dir = self
             .base
             .join(run_id.render());
@@ -215,13 +227,20 @@ impl Store {
             _ => return Err(RunnerError::StartMissing(run_id)),
         };
 
-        let mut completed = HashSet::new();
+        let mut completed = HashMap::new();
+        let mut inputs: HashMap<String, Vec<Supplied>> = HashMap::new();
         for line in lines {
             let record = parse_record(line)
                 .map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
             match record.state {
-                State::Done(_) | State::Skip | State::Fail(_) => {
-                    completed.insert(record.path);
+                State::Done(value) => {
+                    completed.insert(record.path, value.unwrap_or(value::Value::Unitus));
+                }
+                State::Skip | State::Fail(_) => {
+                    completed.insert(record.path, value::Value::Unitus);
+                }
+                State::Input(supplied) => {
+                    inputs.insert(record.path, supplied);
                 }
                 State::Start { .. }
                 | State::Stop
@@ -231,7 +250,7 @@ impl Store {
                 | State::Begin => {}
             }
         }
-        Ok((document, libraries, completed, run_dir))
+        Ok((document, libraries, completed, inputs, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return
@@ -461,12 +480,16 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str(function);
             out.push_str("()");
         }
+        State::Input(supplied) => {
+            out.push_str("Input ");
+            format_supplied(out, supplied);
+        }
         State::Begin => out.push_str("Begin"),
         State::Done(value) => {
             out.push_str("Done");
             if let Some(v) = value {
                 out.push(' ');
-                format_value(out, v);
+                out.push_str(&serialize_value(v));
             }
         }
         State::Skip => out.push_str("Skip"),
@@ -474,22 +497,66 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str("Fail");
             if let Some(v) = value {
                 out.push(' ');
-                format_value(out, v);
+                out.push_str(&serialize_value(v));
             }
         }
     }
 }
 
-fn format_value(out: &mut String, value: &Value) {
-    match value {
-        Value::Unit => out.push_str("()"),
-        Value::Literal(text) => {
-            out.push('"');
-            escape_literal(out, text);
-            out.push('"');
+// Format a procedure's supplied inputs as `( value ~ name, value, … )`: each
+// value serialized by the value codec, a named parameter followed by `~ name`,
+// an unnamed one left bare.
+fn format_supplied(out: &mut String, supplied: &[Supplied]) {
+    out.push('(');
+    for (i, item) in supplied
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            out.push(',');
         }
-        Value::Tablet(text) => out.push_str(text),
+        out.push(' ');
+        out.push_str(&serialize_value(&item.value));
+        if let Some(name) = &item.name {
+            out.push_str(" ~ ");
+            out.push_str(name);
+        }
     }
+    out.push_str(" )");
+}
+
+// Reverse `format_supplied`: parse `( value ~ name, value, … )` into the
+// supplied inputs. Each top-level item is a codec value optionally followed by
+// a top-level ` ~ ` and the parameter name.
+fn parse_supplied(text: &str) -> Result<Vec<Supplied>, RecordError> {
+    let inner = text
+        .trim()
+        .strip_prefix('(')
+        .and_then(|t| t.strip_suffix(')'))
+        .ok_or(RecordError::MalformedState)?
+        .trim();
+    if inner.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for part in split_top_level(inner, ',')? {
+        let part = part.trim();
+        let supplied = match split_once_top_level_tilde(part) {
+            Some((value, name)) => Supplied {
+                value: deserialize_value(value.trim())?,
+                name: Some(
+                    name.trim()
+                        .to_string(),
+                ),
+            },
+            None => Supplied {
+                value: deserialize_value(part)?,
+                name: None,
+            },
+        };
+        out.push(supplied);
+    }
+    Ok(out)
 }
 
 // Escape a literal so it occupies a single record line: backslash and quote
@@ -530,14 +597,12 @@ fn unescape_literal(text: &str) -> Result<String, RecordError> {
 }
 
 // Build the `Value` recorded for a failed step: a single-entry tablet
-// `[ reason = "<reason>" ]`. The reason is operator free text, so it is
-// escaped exactly as a literal field is, keeping the record on one line and
-// proof against an embedded quote, backslash, or newline.
-pub(crate) fn fail_reason(reason: &str) -> Value {
-    let mut text = String::from("[ reason = \"");
-    escape_literal(&mut text, reason);
-    text.push_str("\" ]");
-    Value::Tablet(text)
+// `[ "reason" = "<reason>" ]` carrying the user's free-text reason.
+pub(crate) fn fail_reason(reason: &str) -> value::Value {
+    value::Value::Tabularum(vec![(
+        "reason".to_string(),
+        value::Value::Literali(reason.to_string()),
+    )])
 }
 
 // Parse a single PFFTT record line into a Record.
@@ -627,6 +692,10 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
                 function: name.to_string(),
             })
         }
+        "Input" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            Ok(State::Input(parse_supplied(payload)?))
+        }
         "Begin" => {
             if rest.is_some() {
                 return Err(RecordError::MalformedState);
@@ -645,25 +714,440 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
     }
 }
 
-fn parse_optional_value(rest: Option<&str>) -> Result<Option<Value>, RecordError> {
+fn parse_optional_value(rest: Option<&str>) -> Result<Option<value::Value>, RecordError> {
     match rest {
         None => Ok(None),
-        Some(text) => Ok(Some(parse_value(text)?)),
+        Some(text) => Ok(Some(deserialize_value(text)?)),
     }
 }
 
-fn parse_value(text: &str) -> Result<Value, RecordError> {
-    if text == "()" {
-        Ok(Value::Unit)
-    } else if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') {
-        Ok(Value::Literal(unescape_literal(&text[1..text.len() - 1])?))
-    } else if text.starts_with('[') && text.ends_with(']') {
-        Ok(Value::Tablet(text.to_string()))
-    } else {
-        Err(RecordError::MalformedState)
+// Single-line PFFTT text form for a runtime `value::Value`, so a completed
+// step's result survives in the trail and rehydrates on resume.
+//
+//   Unitus            -> ()
+//   Literali(s)       -> "<escaped>"
+//   Quanticle(n)      -> canonical numeric text (via formatting::render_numeric)
+//   Arraeum(items)    -> [item, item]       (empty: [])
+//   Tabularum(pairs)  -> ["label" = value]  (empty: [=], unambiguous vs [])
+//   Parametriq(vals)  -> (val, val)
+//   Futurae(name)     -> {name}
+pub(crate) fn serialize_value(value: &value::Value) -> String {
+    let mut out = String::new();
+    write_value(&mut out, value);
+    out
+}
+
+fn write_value(out: &mut String, value: &value::Value) {
+    match value {
+        value::Value::Unitus => out.push_str("()"),
+        value::Value::Literali(text) => {
+            out.push('"');
+            escape_literal(out, text);
+            out.push('"');
+        }
+        value::Value::Quanticle(numeric) => out.push_str(&render_value_numeric(numeric)),
+        value::Value::Futurae(name) => {
+            out.push('{');
+            out.push_str(name);
+            out.push('}');
+        }
+        value::Value::Arraeum(items) => {
+            if items.is_empty() {
+                out.push_str("[]");
+                return;
+            }
+            out.push_str("[ ");
+            for (i, item) in items
+                .iter()
+                .enumerate()
+            {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                write_value(out, item);
+            }
+            out.push_str(" ]");
+        }
+        value::Value::Tabularum(pairs) => {
+            if pairs.is_empty() {
+                out.push_str("[=]");
+                return;
+            }
+            out.push_str("[ ");
+            for (i, (label, item)) in pairs
+                .iter()
+                .enumerate()
+            {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push('"');
+                escape_literal(out, label);
+                out.push('"');
+                out.push_str(" = ");
+                write_value(out, item);
+            }
+            out.push_str(" ]");
+        }
+        value::Value::Parametriq(values) => {
+            out.push_str("( ");
+            for (i, item) in values
+                .iter()
+                .enumerate()
+            {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                write_value(out, item);
+            }
+            out.push_str(" )");
+        }
     }
+}
+
+// Render an owned value::Numeric by reconstructing the borrowed
+// language::Numeric and delegating to the shared number renderer.
+fn render_value_numeric(numeric: &value::Numeric) -> String {
+    match numeric {
+        value::Numeric::Integral(i) => {
+            let n = crate::language::Numeric::Integral(*i);
+            crate::formatting::render_numeric(&n, &crate::formatting::Identity)
+        }
+        value::Numeric::Scientific(q) => {
+            let qb = crate::language::Quantity {
+                mantissa: q.mantissa,
+                uncertainty: q.uncertainty,
+                magnitude: q.magnitude,
+                symbol: &q.symbol,
+            };
+            let n = crate::language::Numeric::Scientific(qb);
+            crate::formatting::render_numeric(&n, &crate::formatting::Identity)
+        }
+    }
+}
+
+pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(RecordError::MalformedState);
+    }
+    if text == "()" {
+        return Ok(value::Value::Unitus);
+    }
+    let first = text
+        .chars()
+        .next()
+        .unwrap();
+    match first {
+        '"' => {
+            if text.len() < 2 || !text.ends_with('"') {
+                return Err(RecordError::MalformedState);
+            }
+            let inner = &text[1..text.len() - 1];
+            Ok(value::Value::Literali(unescape_literal(inner)?))
+        }
+        '{' => {
+            if !text.ends_with('}') {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(value::Value::Futurae(text[1..text.len() - 1].to_string()))
+        }
+        '(' => {
+            if !text.ends_with(')') {
+                return Err(RecordError::MalformedState);
+            }
+            let inner = text[1..text.len() - 1].trim();
+            if inner.is_empty() {
+                return Ok(value::Value::Parametriq(Vec::new()));
+            }
+            let parts = split_top_level(inner, ',')?;
+            let mut values = Vec::with_capacity(parts.len());
+            for part in parts {
+                values.push(deserialize_value(part.trim())?);
+            }
+            Ok(value::Value::Parametriq(values))
+        }
+        '[' => {
+            if !text.ends_with(']') {
+                return Err(RecordError::MalformedState);
+            }
+            let inner = text[1..text.len() - 1].trim();
+            if inner.is_empty() {
+                return Ok(value::Value::Arraeum(Vec::new()));
+            }
+            if inner == "=" {
+                return Ok(value::Value::Tabularum(Vec::new()));
+            }
+            let parts = split_top_level(inner, ',')?;
+            // A bracket is a tablet if its first entry carries a top-level
+            // ` = `; otherwise it is a list.
+            if has_top_level_equals(parts[0]) {
+                let mut pairs = Vec::with_capacity(parts.len());
+                for part in parts {
+                    let (label, rest) =
+                        split_once_top_level_equals(part).ok_or(RecordError::MalformedState)?;
+                    let label = label.trim();
+                    if label.len() < 2 || !label.starts_with('"') || !label.ends_with('"') {
+                        return Err(RecordError::MalformedState);
+                    }
+                    let label = unescape_literal(&label[1..label.len() - 1])?;
+                    pairs.push((label, deserialize_value(rest.trim())?));
+                }
+                Ok(value::Value::Tabularum(pairs))
+            } else {
+                let mut items = Vec::with_capacity(parts.len());
+                for part in parts {
+                    items.push(deserialize_value(part.trim())?);
+                }
+                Ok(value::Value::Arraeum(items))
+            }
+        }
+        _ => {
+            let n = crate::parsing::parse_numeric(text).ok_or(RecordError::MalformedState)?;
+            Ok(value::Value::Quanticle(value::Numeric::from(&n)))
+        }
+    }
+}
+
+// Split `text` on `delim`, but only at top level: not inside double quotes
+// (honouring `\"` escapes), nor inside nested `[]`, `()`, or `{}`.
+fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
+    let mut parts = Vec::new();
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_quote = false;
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if in_quote {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => in_quote = true,
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            _ if c == delim && depth == 0 => {
+                parts.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if in_quote || depth != 0 {
+        return Err(RecordError::MalformedState);
+    }
+    parts.push(&text[start..]);
+    Ok(parts)
+}
+
+// True if `text` contains a top-level ` = ` separator (outside quotes/brackets).
+fn has_top_level_equals(text: &str) -> bool {
+    split_once_top_level_equals(text).is_some()
+}
+
+// Split `text` once at the first top-level ` = ` separator.
+fn split_once_top_level_equals(text: &str) -> Option<(&str, &str)> {
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_quote = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if in_quote {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => in_quote = true,
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ' ' if depth == 0
+                && bytes.get(i + 1) == Some(&b'=')
+                && bytes.get(i + 2) == Some(&b' ') =>
+            {
+                return Some((&text[..i], &text[i + 3..]));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+// Split `text` once at the first top-level ` ~ ` separator (the binding
+// operator joining a supplied value to its parameter name).
+fn split_once_top_level_tilde(text: &str) -> Option<(&str, &str)> {
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_quote = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if in_quote {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => in_quote = true,
+            '[' | '(' | '{' => depth += 1,
+            ']' | ')' | '}' => depth -= 1,
+            ' ' if depth == 0
+                && bytes.get(i + 1) == Some(&b'~')
+                && bytes.get(i + 2) == Some(&b' ') =>
+            {
+                return Some((&text[..i], &text[i + 3..]));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
 }
 
 #[cfg(test)]
 #[path = "checks/state.rs"]
 mod check;
+
+#[cfg(test)]
+mod codec_check {
+    use super::{deserialize_value, serialize_value};
+    use crate::language::Decimal;
+    use crate::value::{Numeric, Quantity, Value};
+
+    fn roundtrip(v: Value) {
+        let text = serialize_value(&v);
+        let back = deserialize_value(&text)
+            .unwrap_or_else(|e| panic!("deserialize failed for {:?}: {:?}", text, e));
+        assert_eq!(v, back, "round-trip mismatch via {:?}", text);
+    }
+
+    #[test]
+    fn primitives() {
+        roundtrip(Value::Unitus);
+        roundtrip(Value::Futurae("x".to_string()));
+        roundtrip(Value::Quanticle(Numeric::Integral(42)));
+        roundtrip(Value::Quanticle(Numeric::Integral(-7)));
+        roundtrip(Value::Quanticle(Numeric::Integral(0)));
+    }
+
+    #[test]
+    fn empty_collections_stay_distinct() {
+        roundtrip(Value::Arraeum(Vec::new()));
+        roundtrip(Value::Tabularum(Vec::new()));
+        assert_eq!(serialize_value(&Value::Arraeum(Vec::new())), "[]");
+        assert_eq!(serialize_value(&Value::Tabularum(Vec::new())), "[=]");
+        assert_eq!(deserialize_value("[]").unwrap(), Value::Arraeum(Vec::new()));
+        assert_eq!(
+            deserialize_value("[=]").unwrap(),
+            Value::Tabularum(Vec::new())
+        );
+    }
+
+    #[test]
+    fn nested_lists_and_tablets() {
+        roundtrip(Value::Arraeum(vec![
+            Value::Literali("a".to_string()),
+            Value::Literali("b".to_string()),
+        ]));
+        roundtrip(Value::Arraeum(vec![Value::Tabularum(vec![(
+            "k".to_string(),
+            Value::Literali("v".to_string()),
+        )])]));
+        roundtrip(Value::Tabularum(vec![
+            ("reason".to_string(), Value::Literali("boom".to_string())),
+            ("count".to_string(), Value::Quanticle(Numeric::Integral(3))),
+        ]));
+        roundtrip(Value::Parametriq(vec![
+            Value::Literali("a".to_string()),
+            Value::Quanticle(Numeric::Integral(42)),
+            Value::Unitus,
+        ]));
+    }
+
+    #[test]
+    fn literals_with_specials_do_not_break_splitter() {
+        roundtrip(Value::Literali(
+            "comma, equals = brack [ ] quote \" newline\nend".to_string(),
+        ));
+        roundtrip(Value::Arraeum(vec![
+            Value::Literali("a, b".to_string()),
+            Value::Literali("c = d".to_string()),
+            Value::Literali("[ ( {".to_string()),
+        ]));
+        roundtrip(Value::Tabularum(vec![(
+            "weird, key = ]".to_string(),
+            Value::Literali("v, w".to_string()),
+        )]));
+    }
+
+    #[test]
+    fn quantities() {
+        roundtrip(Value::Quanticle(Numeric::Scientific(Quantity {
+            mantissa: Decimal {
+                number: 149,
+                precision: 0,
+            },
+            uncertainty: None,
+            magnitude: None,
+            symbol: "kg".to_string(),
+        })));
+        roundtrip(Value::Quanticle(Numeric::Scientific(Quantity {
+            mantissa: Decimal {
+                number: 59722,
+                precision: 4,
+            },
+            uncertainty: Some(Decimal {
+                number: 6,
+                precision: 4,
+            }),
+            magnitude: Some(24),
+            symbol: "kg".to_string(),
+        })));
+    }
+
+    #[test]
+    fn deeply_nested_mixed() {
+        roundtrip(Value::Parametriq(vec![
+            Value::Tabularum(vec![
+                (
+                    "list".to_string(),
+                    Value::Arraeum(vec![
+                        Value::Quanticle(Numeric::Integral(1)),
+                        Value::Tabularum(vec![(
+                            "inner".to_string(),
+                            Value::Literali("deep, \"quoted\"".to_string()),
+                        )]),
+                    ]),
+                ),
+                ("future".to_string(), Value::Futurae("pending".to_string())),
+            ]),
+            Value::Unitus,
+            Value::Arraeum(Vec::new()),
+            Value::Tabularum(Vec::new()),
+        ]));
+    }
+}

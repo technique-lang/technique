@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::language;
@@ -12,9 +12,7 @@ use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
-use crate::runner::state::{
-    parse_record, Appender, InvokeTarget, State, Store, Value as RecordValue,
-};
+use crate::runner::state::{parse_record, Appender, InvokeTarget, State, Store, Supplied};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -133,7 +131,7 @@ fn step_outcomes_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -176,7 +174,7 @@ fn step_outcomes_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -207,7 +205,7 @@ fn step_outcomes_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -228,9 +226,10 @@ fn step_outcomes_recorded() {
     let record = parse_record(lines[2]).expect("parse record");
     assert_eq!(
         record.state,
-        State::Fail(Some(RecordValue::Tablet(
-            "[ reason = \"cable unplugged\" ]".to_string()
-        )))
+        State::Fail(Some(Value::Tabularum(vec![(
+            "reason".to_string(),
+            Value::Literali("cable unplugged".to_string()),
+        )])))
     );
 }
 
@@ -248,7 +247,7 @@ fn empty_fail_reason_records_none() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -293,7 +292,7 @@ helper :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Automatic::with_handle(Vec::new()),
         Library::stub(),
     );
@@ -330,7 +329,7 @@ fn two_steps_prompted_in_source_order() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -365,8 +364,8 @@ fn pre_completed_step_short_circuits() {
 
     // Pre-mark step 1 completed; the walker should skip its prompt
     // and only ask about step 2.
-    let mut completed = HashSet::new();
-    completed.insert("/1".to_string());
+    let mut completed = HashMap::new();
+    completed.insert("/1".to_string(), Value::Unitus);
 
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::new(
@@ -409,7 +408,7 @@ fn quit_propagates_and_stops_walking() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -469,7 +468,7 @@ fn section_walking() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -529,7 +528,7 @@ fn section_walking() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -568,7 +567,7 @@ fn parallel_step_index_starts_at_one() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -614,7 +613,7 @@ test :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -676,7 +675,7 @@ cycle(s) : Situation -> Done
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -736,7 +735,7 @@ cycle(s) : Situation -> Done
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -793,7 +792,7 @@ cycle(s) : Situation -> Done
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -846,7 +845,7 @@ helper :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -895,7 +894,7 @@ inner :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -946,7 +945,7 @@ greet(name) :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -999,7 +998,7 @@ peek :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1028,7 +1027,7 @@ test :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1071,7 +1070,7 @@ test :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1132,7 +1131,7 @@ check :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Automatic::with_handle(Vec::new()),
         library,
     );
@@ -1178,7 +1177,7 @@ check :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Automatic::with_handle(Vec::new()),
         library,
     );
@@ -1239,7 +1238,7 @@ fn loop_inside_step_produces_one_result() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1293,7 +1292,7 @@ fn repeat_loops_until_quit() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1364,7 +1363,7 @@ fn foreach_walks_body_once_per_list_element() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1446,7 +1445,7 @@ fn foreach_over_seq_builtin_runs() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         library,
     );
@@ -1540,7 +1539,7 @@ fn foreach_destructures_tuple_elements() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1603,7 +1602,7 @@ fn foreach_widens_primitive_to_singleton() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1653,7 +1652,7 @@ fn foreach_over_unit_iterates_nothing() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Mock::new(),
         Library::stub(),
     );
@@ -1706,7 +1705,7 @@ fn foreach_over_non_list_or_unbound_errors() {
     let mut runner = Runner::new(
         &program,
         tuple_fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Mock::new(),
         Library::stub(),
     );
@@ -1729,7 +1728,7 @@ fn foreach_over_non_list_or_unbound_errors() {
     let mut runner = Runner::new(
         &program,
         tablet_fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Mock::new(),
         Library::stub(),
     );
@@ -1743,7 +1742,7 @@ fn foreach_over_non_list_or_unbound_errors() {
     let mut runner = Runner::new(
         &program,
         unbound_fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Mock::new(),
         Library::stub(),
     );
@@ -1901,7 +1900,7 @@ greet(name) :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1944,7 +1943,7 @@ Brew using { 42 ~ water } then serve it hot.
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -1990,7 +1989,7 @@ make_coffee :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -2033,7 +2032,7 @@ test :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -2071,7 +2070,7 @@ test :
     let record = parse_record(lines[3]).expect("parse record");
     assert_eq!(
         record.state,
-        State::Done(Some(RecordValue::Literal("Yes".to_string())))
+        State::Done(Some(Value::Literali("Yes".to_string())))
     );
 }
 
@@ -2086,7 +2085,7 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
         let mut runner = Runner::new(
             &program,
             fixture.take_appender(),
-            HashSet::new(),
+            HashMap::new(),
             Automatic::with_handle(Vec::new()),
             Library::stub(),
         );
@@ -2119,19 +2118,25 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     );
     assert_eq!(
         state,
-        State::Done(Some(RecordValue::Literal("probe output".to_string())))
+        State::Done(Some(Value::Literali("probe output".to_string())))
     );
 
-    // Multi-line text propagates intact; the record projects it to Unit.
+    // Multi-line text propagates intact and records faithfully; the codec
+    // escapes the newlines so the value stays on one record line.
     let (outcome, state) = record_of(
-        "multiline-records-unit",
+        "multiline-records-value",
         Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
     );
     assert_eq!(
         outcome,
         Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
     );
-    assert_eq!(state, State::Done(Some(RecordValue::Unit)));
+    assert_eq!(
+        state,
+        State::Done(Some(Value::Literali(
+            "1: lo\n2: eth0\n3: wlan0".to_string()
+        )))
+    );
 
     // A pure-prose step (empty body) has nothing to compute and records Skip.
     let (_, state) = record_of("automatic-empty-body", Operation::Sequence(vec![]));
@@ -2156,7 +2161,7 @@ fn sequence_value_is_last_member() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Automatic::with_handle(Vec::new()),
         Library::stub(),
     );
@@ -2210,7 +2215,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -2245,7 +2250,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     )));
     assert!(records.contains(&(
         "/<https://example.com/probe>".to_string(),
-        State::Done(Some(RecordValue::Unit))
+        State::Done(Some(Value::Unitus))
     )));
 
     // The operator declines: Skip is recorded at the external's FQP. (The
@@ -2258,7 +2263,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -2281,7 +2286,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         Automatic::with_handle(Vec::new()),
         Library::stub(),
     );
@@ -2328,7 +2333,7 @@ cleanup :
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
-        HashSet::new(),
+        HashMap::new(),
         prompt,
         Library::stub(),
     );
@@ -2365,4 +2370,172 @@ cleanup :
         })
         .count();
     assert_eq!(substeps, 2);
+}
+
+#[test]
+fn resume_rehydrates_binding_made_inside_a_completed_loop() {
+    // The DeleteAccount resume bug: a completed `foreach` step binds a variable
+    // inside its loop body that a later `foreach` consumes. Skipping the
+    // completed step wholesale lost that binding; resume must re-walk it so the
+    // nested binding rehydrates from the recorded values, leaving the later
+    // loop with something to iterate rather than an UnboundVariable.
+    let source = r#"
+% technique v1
+
+cleanup :
+
+    1.  enumerate things ~ items
+    2.  { foreach item in items }
+        -   identify the active things ~ seen
+    3.  { foreach token in seen }
+        -   record { token }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    // The prior run completed steps 1 and 2 (and 2's two iterations); only
+    // step 3 remains. `items` was acquired as a two-element list; `seen` was
+    // bound once per iteration inside the loop.
+    let mut completed = HashMap::new();
+    completed.insert(
+        "/cleanup:/1".to_string(),
+        Value::Arraeum(vec![
+            Value::Literali("a".to_string()),
+            Value::Literali("b".to_string()),
+        ]),
+    );
+    completed.insert(
+        "/cleanup:/2/[1]/-1".to_string(),
+        Value::Literali("x".to_string()),
+    );
+    completed.insert(
+        "/cleanup:/2/[2]/-1".to_string(),
+        Value::Literali("y".to_string()),
+    );
+    completed.insert("/cleanup:/2".to_string(), Value::Unitus);
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        completed,
+        Automatic::new(false),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("resume must not raise UnboundVariable");
+    assert!(if let Outcome::Done(_) = outcome {
+        true
+    } else {
+        false
+    });
+}
+
+// An elided invocation `<hail>` acquires its parameter `name` from the
+// operator. The argument it was called with is recorded as an `Input` at the
+// callee's path so a resume can restore it.
+const ACQUIRE_INPUT_SOURCE: &str = r#"
+% technique v1
+
+greet :
+
+    1.  <hail>
+
+hail(name) : Text -> ()
+
+    1.  Say { name }
+"#;
+
+#[test]
+fn invoke_records_supplied_input() {
+    let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    // The operator supplies "World" at the acquire prompt; the rest are step
+    // and scope sign-offs.
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("World".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let trail = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        trail.contains("/hail: Input ( \"World\" ~ name )"),
+        "trail was:\n{}",
+        trail
+    );
+}
+
+#[test]
+fn resume_restores_invoke_input_without_reprompting() {
+    let source = ACQUIRE_INPUT_SOURCE.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    // The prior run recorded the argument acquired for `<hail>`. Resume with
+    // that input preloaded: the acquire must not fire, and `name` is bound from
+    // the record (so `{ name }` evaluates rather than raising UnboundVariable).
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "/hail:".to_string(),
+        vec![Supplied {
+            value: Value::Literali("World".to_string()),
+            name: Some("name".to_string()),
+        }],
+    );
+
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    )
+    .with_inputs(inputs);
+    let outcome = runner
+        .run(Environment::new())
+        .expect("resume runs without re-acquiring");
+    assert!(if let Outcome::Done(_) = outcome {
+        true
+    } else {
+        false
+    });
+
+    let prompt = runner.into_driver();
+    let acquired = prompt
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Acquire { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(acquired, 0);
 }

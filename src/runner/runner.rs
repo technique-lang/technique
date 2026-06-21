@@ -1,6 +1,6 @@
 //! Interactive walker over a translated Program.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
@@ -9,9 +9,7 @@ use super::driver::{Driver, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
-use super::state::{
-    Appender, InvokeTarget, Record, RecordError, RunId, State, Value as RecordValue,
-};
+use super::state::{Appender, InvokeTarget, Record, RecordError, RunId, State, Supplied};
 use crate::language;
 use crate::program::{
     Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, Subroutine,
@@ -28,7 +26,6 @@ use crate::value::Value;
 /// quit was already recorded as a `State::Stop` lifecycle event, so this
 /// carries no payload — a `technique resume` picks up from the first step
 /// with no recorded outcome.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
@@ -42,7 +39,6 @@ pub enum Outcome {
 }
 
 /// Why a Step failed.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
     Aborted(String),
@@ -51,7 +47,6 @@ pub enum Failure {
 /// Anything that can go wrong while preparing or running a Technique.
 /// Variants are populated as the implementing steps land; the formatter
 /// in `crate::problem` knows how to render each one.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum RunnerError {
     NoSuchRun(RunId),
@@ -107,12 +102,13 @@ pub enum RunnerError {
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
 /// the position in the document via a `QualifiedPath` stack, carries an
 /// `Environment` with known result values. Holds the set of step FQNs already
-/// completed in a *prior* run — the resume snapshotplus an append handle to
+/// completed in a *prior* run — the resume snapshot plus an append handle to
 /// write results and the prompt the operator interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
-    completed: HashSet<String>,
+    completed: HashMap<String, Value>,
+    inputs: HashMap<String, Vec<Supplied>>,
     driver: D,
     path: QualifiedPath<'i>,
     library: Library,
@@ -123,7 +119,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     pub fn new(
         program: &'i Program<'i>,
         appender: Appender,
-        completed: HashSet<String>,
+        completed: HashMap<String, Value>,
         driver: D,
         library: Library,
     ) -> Self {
@@ -131,11 +127,20 @@ impl<'i, D: Driver> Runner<'i, D> {
             program,
             appender,
             completed,
+            inputs: HashMap::new(),
             driver,
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
         }
+    }
+
+    /// Seed the runner with the inputs recorded by a prior run — the values
+    /// supplied to the entry procedure and to each invocation — so a resume
+    /// restores them rather than re-prompting. Empty on a fresh run.
+    pub fn with_inputs(mut self, inputs: HashMap<String, Vec<Supplied>>) -> Self {
+        self.inputs = inputs;
+        self
     }
 
     /// Consume the runner and return the inner driver after a run completes.
@@ -183,10 +188,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            self.begin_scope(&qualified)?;
             let params = entry
                 .parameters
                 .unwrap_or(&[]);
+            self.restore_or_record_inputs(&mut env, &qualified, params)?;
+            self.begin_scope(&qualified)?;
             if params.is_empty() {
                 self.driver
                     .enter(&qualified);
@@ -460,7 +466,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let lexical = super::path::render_path(&lexical_segments);
                     if self
                         .completed
-                        .contains(&lexical)
+                        .contains_key(&lexical)
                     {
                         return Ok(Outcome::Done(Value::Unitus));
                     }
@@ -479,6 +485,20 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .formae()
                         })
                         .unwrap_or_default();
+
+                    // A prior run's recorded inputs for this callee. A
+                    // prompted argument (an elided call or a `?` hole) is
+                    // restored from here on resume, in prompted order, rather
+                    // than re-acquired. An argument the author supplied as a
+                    // source expression is re-evaluated, so a loop variable
+                    // still varies — and, being re-derivable, does not need
+                    // to be recorded.
+                    let recorded = self
+                        .inputs
+                        .get(&lexical)
+                        .cloned();
+                    let mut prompted: Vec<Supplied> = Vec::new();
+                    let mut taken = 0usize;
                     if invocable.elided {
                         for i in 0..subroutine.arity() {
                             let bind = params
@@ -487,16 +507,29 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let forma = formae
                                 .get(i)
                                 .map(|f| f.value);
-                            let value = match self
-                                .driver
-                                .acquire(&invoked, bind, forma)
+                            let value = match recorded
+                                .as_ref()
+                                .and_then(|r| r.get(taken))
                             {
-                                UserInput::Done(value) => value,
-                                other => return self.abandon(&lexical, other),
+                                Some(s) => s
+                                    .value
+                                    .clone(),
+                                None => match self
+                                    .driver
+                                    .acquire(&invoked, bind, forma)
+                                {
+                                    UserInput::Done(value) => value,
+                                    other => return self.abandon(&lexical, other),
+                                },
                             };
+                            taken += 1;
                             if let Some(bind) = bind {
-                                local.extend(bind.to_string(), value);
+                                local.extend(bind.to_string(), value.clone());
                             }
+                            prompted.push(Supplied {
+                                value,
+                                name: bind.map(|b| b.to_string()),
+                            });
                         }
                     } else {
                         for (i, arg) in invocable
@@ -507,28 +540,53 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let bind = params
                                 .get(i)
                                 .map(|p| p.value);
-                            let value = if let Operation::Hole = arg {
-                                let forma = formae
-                                    .get(i)
-                                    .map(|f| f.value);
-                                match self
-                                    .driver
-                                    .acquire(&invoked, bind, forma)
+                            if let Operation::Hole = arg {
+                                let value = match recorded
+                                    .as_ref()
+                                    .and_then(|r| r.get(taken))
                                 {
-                                    UserInput::Done(value) => value,
-                                    other => return self.abandon(&lexical, other),
+                                    Some(s) => s
+                                        .value
+                                        .clone(),
+                                    None => {
+                                        let forma = formae
+                                            .get(i)
+                                            .map(|f| f.value);
+                                        match self
+                                            .driver
+                                            .acquire(&invoked, bind, forma)
+                                        {
+                                            UserInput::Done(value) => value,
+                                            other => return self.abandon(&lexical, other),
+                                        }
+                                    }
+                                };
+                                taken += 1;
+                                if let Some(bind) = bind {
+                                    local.extend(bind.to_string(), value.clone());
                                 }
+                                prompted.push(Supplied {
+                                    value,
+                                    name: bind.map(|b| b.to_string()),
+                                });
                             } else {
-                                super::evaluator::evaluate(&self.library, &self.context, env, arg)?
-                            };
-                            if let Some(bind) = bind {
-                                local.extend(bind.to_string(), value);
+                                let value = super::evaluator::evaluate(
+                                    &self.library,
+                                    &self.context,
+                                    env,
+                                    arg,
+                                )?;
+                                if let Some(bind) = bind {
+                                    local.extend(bind.to_string(), value);
+                                }
                             }
                         }
                     }
 
-                    // Record the Invoke at the call site, then descend onto the
-                    // callee's lexical address, restored on return.
+                    // Record the dispatch once the arguments are in hand —
+                    // declining at the prompt above returns before this, so a
+                    // declined call records no Invoke. Recorded at answer-time,
+                    // so the gap from the previous event is the operator wait.
                     let run_id = self
                         .appender
                         .run_id();
@@ -539,6 +597,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                             path: caller,
                             state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
                         })?;
+
+                    // Record the prompted inputs (answered just now) before
+                    // Begin, unless they were restored from a prior run (already
+                    // in the trail).
+                    if recorded.is_none() {
+                        self.record_inputs(&lexical, prompted)?;
+                    }
 
                     self.begin_scope(&lexical)?;
 
@@ -601,7 +666,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     .render();
                 if self
                     .completed
-                    .contains(&qualified)
+                    .contains_key(&qualified)
                 {
                     self.path
                         .pop();
@@ -672,8 +737,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .acquire(&qualified, name, None)
             {
                 UserInput::Done(value) => {
-                    super::evaluator::bind_names(env, names, value)?;
-                    Ok(Outcome::Done(Value::Unitus))
+                    super::evaluator::bind_names(env, names, value.clone())?;
+                    Ok(Outcome::Done(value))
                 }
                 UserInput::Skip => {
                     super::evaluator::bind_names(env, names, Value::Unitus)?;
@@ -684,8 +749,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
         } else {
             let value = super::evaluator::evaluate(&self.library, &self.context, env, value)?;
-            super::evaluator::bind_names(env, names, value)?;
-            Ok(Outcome::Done(Value::Unitus))
+            super::evaluator::bind_names(env, names, value.clone())?;
+            Ok(Outcome::Done(value))
         }
     }
 
@@ -813,7 +878,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .render();
         if self
             .completed
-            .contains(&qualified)
+            .contains_key(&qualified)
         {
             self.path
                 .pop();
@@ -909,11 +974,23 @@ impl<'i, D: Driver> Runner<'i, D> {
         source: &'i language::Scope<'i>,
         responses: &[&'i language::Response<'i>],
     ) -> Result<Outcome, RunnerError> {
-        if self
+        if let Some(value) = self
             .completed
-            .contains(qualified)
+            .get(qualified)
         {
-            return Ok(Outcome::Done(Value::Unitus));
+            let value = value.clone();
+            // A replayed step does not re-run its body, so we re-establish
+            // any results it made by re-binding the step's names to their
+            // recorded values. A step that nests further work (a `foreach`
+            // loop, substeps) is re-walked instead: if its descendants are
+            // all completed too, they short-circuit without re-prompting
+            // while re-hydrating bindings made inside the loop body.
+            if nests_work(body) {
+                self.walk(env, body)?;
+            } else if let Some(names) = binding_names(body) {
+                super::evaluator::bind_names(env, names, value.clone())?;
+            }
+            return Ok(Outcome::Done(value));
         }
 
         // Mark the start of work on this step before walking its body,
@@ -1064,6 +1141,67 @@ impl<'i, D: Driver> Runner<'i, D> {
         Ok(())
     }
 
+    /// Record the values supplied to a procedure's parameters at its own path,
+    /// so a resume restores them rather than re-prompting. A procedure with no
+    /// parameters records nothing.
+    fn record_inputs(
+        &mut self,
+        qualified: &str,
+        supplied: Vec<Supplied>,
+    ) -> Result<(), RunnerError> {
+        if supplied.is_empty() {
+            return Ok(());
+        }
+        let run_id = self
+            .appender
+            .run_id();
+        self.appender
+            .append(&Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: State::Input(supplied),
+            })
+    }
+
+    /// At a procedure's entry, restore its parameter bindings from a prior
+    /// run's recorded inputs if present (resume), otherwise record the inputs
+    /// it was called with (a fresh run). Used for the entry procedure, whose
+    /// arguments come from the command line.
+    fn restore_or_record_inputs(
+        &mut self,
+        env: &mut Environment,
+        qualified: &str,
+        params: &[language::Identifier<'i>],
+    ) -> Result<(), RunnerError> {
+        if let Some(supplied) = self
+            .inputs
+            .get(qualified)
+            .cloned()
+        {
+            for item in supplied {
+                if let Some(name) = item.name {
+                    env.extend(name, item.value);
+                }
+            }
+            return Ok(());
+        }
+        let supplied = params
+            .iter()
+            .map(|p| Supplied {
+                value: env
+                    .lookup(p.value)
+                    .cloned()
+                    .unwrap_or(Value::Unitus),
+                name: Some(
+                    p.value
+                        .to_string(),
+                ),
+            })
+            .collect();
+        self.record_inputs(qualified, supplied)
+    }
+
     /// Sign off a completed structural scope — a Section at its close, or the
     /// whole run at the entry procedure.
     fn seal_scope(
@@ -1170,17 +1308,12 @@ fn outcome_from(input: UserInput) -> Outcome {
 }
 
 /// Project the runner's in-memory `Outcome` into the on-disk `State` for the
-/// PFFTT file. A single-line input (a chosen response or whatever the user
-/// typed) records as a literal string. Multi-line literals (raw exec output)
-/// record as unit. The in-memory `Outcome` still carries the full value, so a
-/// value bound with `~` remains available in scope regardless. Quit is
-/// unreachable here: the caller filters it out before recording.
+/// PFFTT file. A `Done` records its full value (serialized by the state codec),
+/// so a value bound with `~` rehydrates on resume. Quit is unreachable here:
+/// the caller filters it out before recording.
 fn record_state(outcome: &Outcome) -> State {
     match outcome {
-        Outcome::Done(Value::Literali(text)) if !text.contains('\n') => {
-            State::Done(Some(RecordValue::Literal(text.clone())))
-        }
-        Outcome::Done(_) => State::Done(Some(RecordValue::Unit)),
+        Outcome::Done(value) => State::Done(Some(value.clone())),
         Outcome::Skipped(_) => State::Skip,
         Outcome::Failed(Failure::Aborted(reason)) | Outcome::Throw(Failure::Aborted(reason)) => {
             if reason.is_empty() {
@@ -1194,6 +1327,33 @@ fn record_state(outcome: &Outcome) -> State {
         Outcome::Stopped => {
             unreachable!("Stop is recorded as a lifecycle event, not a step result")
         }
+    }
+}
+
+/// The names a step body binds, if any: the first `Bind` reached without
+/// descending through a nested step, loop, or section. Used on resume to
+/// rebind a replayed step's value into the environment.
+fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>]> {
+    match op {
+        Operation::Bind { names, .. } => Some(names),
+        Operation::Sequence(ops) => ops
+            .iter()
+            .find_map(binding_names),
+        _ => None,
+    }
+}
+
+/// Whether a step body nests further executable scopes — a `foreach`/`repeat`
+/// loop or substeps — as opposed to being a leaf of prose, a binding, or a
+/// call. A completed step that nests work is re-walked on resume so bindings
+/// made inside it rehydrate; a leaf is restored from its recorded value alone.
+fn nests_work(op: &Operation) -> bool {
+    match op {
+        Operation::Loop { .. } | Operation::Step { .. } => true,
+        Operation::Sequence(ops) => ops
+            .iter()
+            .any(nests_work),
+        _ => false,
     }
 }
 
