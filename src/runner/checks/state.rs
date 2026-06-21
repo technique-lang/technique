@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use crate::runner::runner::RunnerError;
-use crate::value::Value;
 use crate::runner::state::{
     fail_reason, format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State,
     Store, Supplied,
 };
+use crate::value::Value;
 
 // A scratch directory under the system temp dir, cleaned up on drop so panics
 // in a test do not leak it. Tests construct one per fixture they need.

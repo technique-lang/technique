@@ -850,9 +850,7 @@ pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError>
             if !text.ends_with('}') {
                 return Err(RecordError::MalformedState);
             }
-            Ok(value::Value::Futurae(
-                text[1..text.len() - 1].to_string(),
-            ))
+            Ok(value::Value::Futurae(text[1..text.len() - 1].to_string()))
         }
         '(' => {
             if !text.ends_with(')') {
@@ -1062,10 +1060,7 @@ mod codec_check {
         roundtrip(Value::Tabularum(Vec::new()));
         assert_eq!(serialize_value(&Value::Arraeum(Vec::new())), "[]");
         assert_eq!(serialize_value(&Value::Tabularum(Vec::new())), "[=]");
-        assert_eq!(
-            deserialize_value("[]").unwrap(),
-            Value::Arraeum(Vec::new())
-        );
+        assert_eq!(deserialize_value("[]").unwrap(), Value::Arraeum(Vec::new()));
         assert_eq!(
             deserialize_value("[=]").unwrap(),
             Value::Tabularum(Vec::new())

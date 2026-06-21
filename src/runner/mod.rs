@@ -53,8 +53,7 @@ pub fn start<'i>(
             if !std::io::stdout().is_terminal() {
                 return Err(RunnerError::TerminalRequired);
             }
-            let mut runner =
-                Runner::new(program, appender, completed, Console::new(), library);
+            let mut runner = Runner::new(program, appender, completed, Console::new(), library);
             runner.run(env)?
         }
         Mode::Automatic => {

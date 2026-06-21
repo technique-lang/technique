@@ -12,9 +12,7 @@ use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
-use crate::runner::state::{
-    parse_record, Appender, InvokeTarget, State, Store, Supplied,
-};
+use crate::runner::state::{parse_record, Appender, InvokeTarget, State, Store, Supplied};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -2135,7 +2133,9 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     );
     assert_eq!(
         state,
-        State::Done(Some(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string())))
+        State::Done(Some(Value::Literali(
+            "1: lo\n2: eth0\n3: wlan0".to_string()
+        )))
     );
 
     // A pure-prose step (empty body) has nothing to compute and records Skip.
