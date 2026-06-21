@@ -726,31 +726,68 @@ impl<'i, D: Driver> Runner<'i, D> {
             false
         };
         if descriptive {
+            // A descriptive binding has no expression to compute its value, so
+            // each name is solicited from the user in turn. A tuple binding
+            // `text ~ (a, b)` prompts once per name and binds each; the step's
+            // value is the single value for one name, or a tuple of them.
             let qualified = self
                 .path
                 .render();
-            let name = names
-                .first()
-                .map(|n| n.value);
-            match self
-                .driver
-                .acquire(&qualified, name, None)
+            let mut acquired = Vec::with_capacity(names.len());
+            for name in names {
+                match self
+                    .driver
+                    .acquire(&qualified, Some(name.value), None)
+                {
+                    UserInput::Done(value) => acquired.push(value),
+                    UserInput::Skip => {
+                        for name in names {
+                            super::evaluator::bind_names(
+                                env,
+                                std::slice::from_ref(name),
+                                Value::Unitus,
+                            )?;
+                        }
+                        return Ok(Outcome::Skipped(Value::Unitus));
+                    }
+                    UserInput::Fail(reason) => {
+                        return Ok(Outcome::Failed(Failure::Aborted(reason)))
+                    }
+                    UserInput::Quit => return self.record_stop(),
+                }
+            }
+            for (name, value) in names
+                .iter()
+                .zip(&acquired)
             {
-                UserInput::Done(value) => {
+                super::evaluator::bind_names(env, std::slice::from_ref(name), value.clone())?;
+            }
+            let produced = if acquired.len() == 1 {
+                acquired
+                    .into_iter()
+                    .next()
+                    .unwrap()
+            } else {
+                Value::Parametriq(acquired)
+            };
+            Ok(Outcome::Done(produced))
+        } else {
+            // Walk rather than evaluate: the bound value may be an effectful
+            // spine operation — an `Invoke` that must descend into its callee
+            // interactively, an `Execute` that must be gated, a `Loop` — which
+            // the evaluator would mishandle as Unit. Walking a pure value is
+            // equivalent to evaluating it.
+            match self.walk(env, value)? {
+                Outcome::Done(value) => {
                     super::evaluator::bind_names(env, names, value.clone())?;
                     Ok(Outcome::Done(value))
                 }
-                UserInput::Skip => {
+                Outcome::Skipped(value) => {
                     super::evaluator::bind_names(env, names, Value::Unitus)?;
-                    Ok(Outcome::Skipped(Value::Unitus))
+                    Ok(Outcome::Skipped(value))
                 }
-                UserInput::Fail(reason) => Ok(Outcome::Failed(Failure::Aborted(reason))),
-                UserInput::Quit => self.record_stop(),
+                other => Ok(other),
             }
-        } else {
-            let value = super::evaluator::evaluate(&self.library, &self.context, env, value)?;
-            super::evaluator::bind_names(env, names, value.clone())?;
-            Ok(Outcome::Done(value))
         }
     }
 

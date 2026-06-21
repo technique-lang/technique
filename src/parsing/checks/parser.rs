@@ -2678,3 +2678,40 @@ fn code_inline_binding() {
         _ => panic!("Second element should be a binding"),
     }
 }
+
+#[test]
+fn descriptive_binding_parenthesised_tuple() {
+    let mut input = Parser::new();
+    input.initialize("Lookup details ~ (account_number, account_name)\n");
+    let paragraphs = input
+        .read_descriptive()
+        .unwrap();
+
+    let descriptives = &paragraphs[0].0;
+    match descriptives
+        .last()
+        .unwrap()
+    {
+        Descriptive::Binding(bound, names) => {
+            match bound.as_ref() {
+                Descriptive::Text(text) => assert_eq!(*text, "Lookup details"),
+                _ => panic!("Bound part should be text"),
+            }
+            assert_eq!(names.len(), 2);
+            assert_eq!(names[0].value, "account_number");
+            assert_eq!(names[1].value, "account_name");
+        }
+        _ => panic!("Last element should be a tuple binding"),
+    }
+}
+
+#[test]
+fn descriptive_binding_naked_tuple_requires_parentheses() {
+    let mut input = Parser::new();
+    input.initialize("Lookup details ~ account_number, account_name\n");
+    let result = input.read_descriptive();
+
+    let Err(ParsingError::MissingParenthesis(_)) = result else {
+        panic!("expected MissingParenthesis, got {:?}", result);
+    };
+}
