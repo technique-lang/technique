@@ -29,6 +29,9 @@ pub enum Nature {
 /// A function in the Library's table
 pub struct Builtin {
     pub name: &'static str,
+    /// The imperative verb an `Action` shows the user, e.g. `Click`. `None` for
+    /// `Pure`/`Command` entries, which are never presented this way.
+    pub display: Option<&'static str>,
     pub arity: usize,
     pub nature: Nature,
     pub function: Native,
@@ -52,30 +55,35 @@ impl Library {
             functions: vec![
                 Builtin {
                     name: "seq",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: seq,
                 },
                 Builtin {
                     name: "zip",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: zip,
                 },
                 Builtin {
                     name: "values",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: values,
                 },
                 Builtin {
                     name: "labels",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: labels,
                 },
                 Builtin {
                     name: "pairs",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: pairs,
@@ -92,12 +100,14 @@ impl Library {
         vec![
             Builtin {
                 name: "exec",
+                display: None,
                 arity: 1,
                 nature: Nature::Command,
                 function: exec,
             },
             Builtin {
                 name: "now",
+                display: None,
                 arity: 0,
                 nature: Nature::Pure,
                 function: now,
@@ -108,15 +118,24 @@ impl Library {
     /// Interactions with a web browser (or rather, instructions that a user
     /// do these interactions in their web browser).
     pub fn browser() -> Vec<Builtin> {
-        ["click", "select", "deselect", "scroll", "type", "task"]
-            .into_iter()
-            .map(|name| Builtin {
-                name,
-                arity: 1,
-                nature: Nature::Action,
-                function: interact,
-            })
-            .collect()
+        [
+            ("click", "Click"),
+            ("select", "Select"),
+            ("deselect", "De-select"),
+            ("scroll", "Scroll to"),
+            ("navigate", "Navigate to"),
+            ("type", "Type"),
+            ("task", "Task"),
+        ]
+        .into_iter()
+        .map(|(name, display)| Builtin {
+            name,
+            display: Some(display),
+            arity: 1,
+            nature: Nature::Action,
+            function: interact,
+        })
+        .collect()
     }
 
     /// Add functions to the table, after the core builtins — the system layer
@@ -142,6 +161,11 @@ impl Library {
     /// The name of the function at `id`.
     pub fn name(&self, id: ExecutableId) -> &'static str {
         self.functions[id.0].name
+    }
+
+    /// The imperative verb the `Action` at `id` shows the user, if any.
+    pub fn display(&self, id: ExecutableId) -> Option<&'static str> {
+        self.functions[id.0].display
     }
 
     /// How the function at `id` is presented: `Pure`, host `Command`, or
@@ -360,72 +384,84 @@ impl Library {
             functions: vec![
                 Builtin {
                     name: "seq",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "zip",
+                    display: None,
                     arity: 2,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "exec",
+                    display: None,
                     arity: 1,
                     nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {
                     name: "cmd",
+                    display: None,
                     arity: 1,
                     nature: Nature::Command,
                     function: unit,
                 },
                 Builtin {
                     name: "now",
+                    display: None,
                     arity: 0,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "uuid",
+                    display: None,
                     arity: 0,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "timer",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "journal",
+                    display: None,
                     arity: 1,
                     nature: Nature::Pure,
                     function: unit,
                 },
                 Builtin {
                     name: "click",
+                    display: Some("Click"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "navigate",
+                    display: Some("Navigate"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "select",
+                    display: Some("Select"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,
                 },
                 Builtin {
                     name: "deselect",
+                    display: Some("Deselect"),
                     arity: 1,
                     nature: Nature::Action,
                     function: unit,

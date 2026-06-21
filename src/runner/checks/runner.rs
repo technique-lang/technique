@@ -1165,15 +1165,26 @@ test :
         .expect("run");
 
     let prompt = runner.into_driver();
-    // A `click` is an Action, not a Command: the whole call is presented
-    // read-only for the user to confirm, then the step's verdict prompt judges
-    // it. No Command beat appears.
-    let actions: Vec<(&str, &str)> = prompt
+    // A `click` is an Action, not a Command: its imperative verb and bare
+    // label are presented read-only for the user to confirm, then the step's
+    // verdict prompt judges it. No Command beat appears.
+    let actions: Vec<(&str, &str, &str, &str)> = prompt
         .events()
         .iter()
         .filter_map(|e| {
-            if let Event::Action { qualified, call } = e {
-                Some((qualified.as_str(), call.as_str()))
+            if let Event::Action {
+                qualified,
+                name,
+                verb,
+                label,
+            } = e
+            {
+                Some((
+                    qualified.as_str(),
+                    name.as_str(),
+                    verb.as_str(),
+                    label.as_str(),
+                ))
             } else {
                 None
             }
@@ -1189,7 +1200,7 @@ test :
                 false
             }
         });
-    assert_eq!(actions, vec![("/test:/1", "click(\"Actions\")")]);
+    assert_eq!(actions, vec![("/test:/1", "click", "Click", "Actions")]);
     assert!(
         !commanded,
         "an action must not route through the command gate"

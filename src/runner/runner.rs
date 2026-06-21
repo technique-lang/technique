@@ -345,10 +345,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                     }
                     Nature::Action => {
-                        let call = self.action_text(env, executable)?;
+                        let (verb, label) = self.action_parts(env, executable)?;
                         match self
                             .driver
-                            .action(&qualified, &call)
+                            .action(&qualified, &function, &verb, &label)
                         {
                             UserInput::Done(_) => {
                                 let value = super::evaluator::dispatch(
@@ -428,21 +428,35 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
-    /// The action call rendered for the user to confirm — the function name
-    /// with its evaluated arguments, e.g. `click("Actions")` — not just the
-    /// first argument as `script_text` shows for an editable command.
-    fn action_text(
+    /// An action's parts for the user to confirm: its imperative verb (the
+    /// library's `display` name, e.g. `Click`) and the bare label its single
+    /// argument evaluates to, with string literals shown unquoted.
+    fn action_parts(
         &mut self,
         env: &mut Environment,
         executable: &'i Executable<'i>,
-    ) -> Result<String, RunnerError> {
-        let name = self.executable_name(&executable.target);
-        let mut rendered = vec![];
-        for arg in &executable.arguments {
-            let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
-            rendered.push(value.to_string());
-        }
-        Ok(format!("{}({})", name, rendered.join(", ")))
+    ) -> Result<(String, String), RunnerError> {
+        let verb = match &executable.target {
+            ExecutableRef::Resolved(id) => self
+                .library
+                .display(*id)
+                .map(str::to_string)
+                .unwrap_or_else(|| self.executable_name(&executable.target)),
+            _ => self.executable_name(&executable.target),
+        };
+        let label = match executable
+            .arguments
+            .first()
+        {
+            Some(arg) => {
+                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
+                    Value::Literali(text) => text,
+                    other => other.to_string(),
+                }
+            }
+            None => String::new(),
+        };
+        Ok((verb, label))
     }
 
     fn walk_invoke(
