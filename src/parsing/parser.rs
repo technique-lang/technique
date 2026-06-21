@@ -2402,11 +2402,40 @@ impl<'i> Parser<'i> {
 
                                 if c == '{' {
                                     let expressions = parser.read_code_block()?;
+                                    let mut inlines = vec![];
                                     for expr in expressions {
                                         if let Expression::Separator = expr {
                                             continue;
                                         }
-                                        content.push(Descriptive::CodeInline(expr));
+                                        inlines.push(Descriptive::CodeInline(expr));
+                                    }
+
+                                    parser.trim_whitespace();
+                                    if parser.peek_next_char() == Some('~') {
+                                        parser.advance(1);
+                                        parser.trim_whitespace();
+                                        let start_pos = parser.offset;
+                                        let variable = parser.read_identifier()?;
+
+                                        parser.trim_whitespace();
+                                        if parser
+                                            .source
+                                            .starts_with(',')
+                                        {
+                                            return Err(ParsingError::MissingParenthesis(
+                                                Span::new(start_pos, 0),
+                                            ));
+                                        }
+
+                                        if let Some(last) = inlines.pop() {
+                                            content.extend(inlines);
+                                            content.push(Descriptive::Binding(
+                                                Box::new(last),
+                                                vec![variable],
+                                            ));
+                                        }
+                                    } else {
+                                        content.extend(inlines);
                                     }
                                 } else if parser
                                     .source
