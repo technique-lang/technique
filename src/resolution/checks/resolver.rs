@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use crate::language;
 use crate::parsing;
 use crate::program::{ExecutableRef, Operation, SubroutineId, SubroutineRef};
 use crate::resolution::{resolve, ResolutionError};
@@ -359,4 +360,94 @@ settle(amount) : Owed -> Paid
     let mut program = translate(&document).expect("translate");
 
     resolve(&mut program).expect("resolve");
+}
+
+// Find the first single-name `Bind` whose name matches, returning its inferred
+// genus.
+fn inferred_for<'a>(op: &'a Operation<'a>, name: &str) -> Option<&'a Option<language::Genus<'a>>> {
+    match op {
+        Operation::Bind {
+            names, inferred, ..
+        } if names.len() == 1 && names[0].value == name => Some(inferred),
+        Operation::Bind { value, .. } | Operation::Step { body: value, .. } => {
+            inferred_for(value, name)
+        }
+        Operation::Sequence(ops) | Operation::List(ops) => ops
+            .iter()
+            .find_map(|op| inferred_for(op, name)),
+        Operation::Loop { over, body, .. } => over
+            .as_ref()
+            .and_then(|over| inferred_for(over, name))
+            .or_else(|| inferred_for(body, name)),
+        Operation::Section { body, .. } => inferred_for(body, name),
+        _ => None,
+    }
+}
+
+#[test]
+fn iterated_binding_is_inferred_list() {
+    // `regions` is bound by a descriptive step and then iterated by a foreach,
+    // so resolution marks it `[*]`.
+    let source = r#"
+% technique v1
+
+sweep :
+    1.  enumerate the regions ~ regions
+    2.  { foreach region in regions }
+        -   note { region }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let inferred =
+        inferred_for(&program.subroutines[0].body, "regions").expect("regions bind present");
+    assert_eq!(
+        inferred,
+        &Some(language::Genus::List(language::Forma::new("*")))
+    );
+}
+
+#[test]
+fn non_iterated_binding_stays_unknown() {
+    // `noted` is bound but never iterated, so its shape is left `None`.
+    let source = r#"
+% technique v1
+
+record :
+    1.  write it down ~ noted
+    2.  confirm { noted }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let inferred = inferred_for(&program.subroutines[0].body, "noted").expect("noted bind present");
+    assert_eq!(inferred, &None);
+}
+
+#[test]
+fn multi_name_binding_stays_unknown() {
+    // A tuple binding is never marked, even if one of its names is iterated:
+    // only single-name binds carry an inferred list shape.
+    let source = r#"
+% technique v1
+
+split :
+    1.  divide it ~ (regions, rest)
+    2.  { foreach region in regions }
+        -   note { region }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    // The tuple bind is skipped, so no single-name `regions` bind exists to mark.
+    assert!(inferred_for(&program.subroutines[0].body, "regions").is_none());
 }

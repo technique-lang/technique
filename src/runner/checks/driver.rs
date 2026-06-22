@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::runner::driver::{
-    draw, Automatic, Console, Driver, Event, Interaction, Mock, UserInput,
+    draw, edit, is_list_forma, Automatic, Console, Driver, Event, Interaction, Mock, UserInput,
 };
 use crate::value::{Numeric, Value};
 
@@ -494,4 +494,59 @@ fn render_choices_lists_options() {
     assert!(written.contains('▶'));
     assert!(written.contains("Yes"));
     assert!(written.contains("No"));
+}
+
+#[test]
+fn is_list_forma_recognises_brackets() {
+    assert!(is_list_forma(Some("[*]")));
+    assert!(is_list_forma(Some("[Region]")));
+    assert!(!is_list_forma(Some("Region")));
+    assert!(!is_list_forma(Some("()")));
+    assert!(!is_list_forma(None));
+}
+
+// A bracketed list field, as prompt_acquire seeds it for an iterated binding.
+fn list_prompt() -> Interaction {
+    Interaction {
+        field: edit(String::new(), Value::Literali(String::new()), true),
+        menu: None,
+        reason: None,
+    }
+}
+
+#[test]
+fn list_prompt_empty_submits_empty_list() {
+    // Enter on an untouched list field yields `[]`, which coerce_to_list reads
+    // as zero iterations.
+    let mut it = list_prompt();
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Done(Value::Literali("[]".to_string())))
+    );
+}
+
+#[test]
+fn list_prompt_wraps_typed_buffer() {
+    // Whatever the operator types is wrapped in brackets on submit, so the
+    // result parses through the existing list-literal path.
+    let mut it = list_prompt();
+    for c in "east, west".chars() {
+        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Done(Value::Literali("[east, west]".to_string())))
+    );
+}
+
+#[test]
+fn list_prompt_draws_bracketed_buffer() {
+    let mut it = list_prompt();
+    for c in "east".chars() {
+        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    let mut out: Vec<u8> = Vec::new();
+    draw(&mut out, "I/1", "↘", &it).expect("draw");
+    let written = String::from_utf8(out).expect("utf8");
+    assert!(written.contains("[east]"));
 }

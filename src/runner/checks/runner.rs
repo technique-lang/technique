@@ -1505,10 +1505,7 @@ fn foreach_walks_body_once_per_list_element() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        enters,
-        vec!["/[1] (\"first\" ~ item)", "/[2] (5 ~ item)"]
-    );
+    assert_eq!(enters, vec!["/[1] (\"first\" ~ item)", "/[2] (5 ~ item)"]);
 }
 
 #[test]
@@ -2743,4 +2740,123 @@ fn resume_restores_invoke_input_without_reprompting() {
         })
         .count();
     assert_eq!(acquired, 0);
+}
+
+#[test]
+fn iterated_binding_prompts_as_list() {
+    // `regions` is bound by a descriptive step and then iterated by a foreach,
+    // so resolution marks it `[*]` and the prompt carries that forma. An empty
+    // answer (`[]`) iterates zero times, so the substep never runs.
+    let source = r#"
+% technique v1
+
+sweep :
+
+1.  enumerate the regions ~ regions
+2.  { foreach region in regions }
+    -   note { region }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("iterated-binding");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("[]".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![(Some("regions"), Some("[*]"))]);
+}
+
+#[test]
+fn declared_list_parameter_prompts_bracketed() {
+    // A procedure declaring a single list parameter `[Region]` is invoked with
+    // a hole, so its argument is acquired at entry — and the forma renders
+    // bracketed so the driver offers list entry.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <sweep>(?)
+}
+
+sweep(regions) : [Region] -> ()
+
+1.  note { regions }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("declared-list-param");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("[]".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![(Some("regions"), Some("[Region]"))]);
 }

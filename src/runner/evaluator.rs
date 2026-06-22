@@ -153,7 +153,7 @@ pub fn evaluate<'i>(
             }
             Ok(Value::Arraeum(values))
         }
-        Operation::Bind { names, value } => {
+        Operation::Bind { names, value, .. } => {
             let v = evaluate(library, context, env, value)?;
             bind_names(env, names, v)?;
             Ok(Value::Unitus)

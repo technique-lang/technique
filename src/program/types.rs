@@ -151,6 +151,9 @@ pub enum Operation<'i> {
     Bind {
         names: &'i [language::Identifier<'i>],
         value: Box<Operation<'i>>,
+        /// Inferred shape of the bound value, set in resolution: a wildcard
+        /// list `[*]` when the name is iterated by a `foreach`, else `None`.
+        inferred: Option<language::Genus<'i>>,
     },
 }
 

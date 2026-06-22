@@ -408,7 +408,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
                 Ok(outcome)
             }
-            Operation::Bind { names, value } => self.walk_bind(env, names, value),
+            Operation::Bind {
+                names,
+                value,
+                inferred,
+            } => self.walk_bind(env, names, value, inferred.as_ref()),
             Operation::Variable(_)
             | Operation::Number(_)
             | Operation::String(_)
@@ -561,13 +565,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .render();
                     let invoked = format!("{} <{}>", caller, name);
 
-                    let formae = subroutine
-                        .signature
-                        .map(|s| {
-                            s.requires
-                                .formae()
-                        })
-                        .unwrap_or_default();
+                    let formae = render_parameter_formae(subroutine.signature);
 
                     // A prior run's recorded inputs for this callee. A
                     // prompted argument (an elided call or a `?` hole) is
@@ -589,7 +587,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .map(|p| p.value);
                             let forma = formae
                                 .get(i)
-                                .map(|f| f.value);
+                                .map(|s| s.as_str());
                             let value = match recorded
                                 .as_ref()
                                 .and_then(|r| r.get(taken))
@@ -634,7 +632,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     None => {
                                         let forma = formae
                                             .get(i)
-                                            .map(|f| f.value);
+                                            .map(|s| s.as_str());
                                         match self
                                             .driver
                                             .acquire(&invoked, bind, forma)
@@ -802,6 +800,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         env: &mut Environment,
         names: &'i [language::Identifier<'i>],
         value: &'i Operation<'i>,
+        inferred: Option<&'i language::Genus<'i>>,
     ) -> Result<Outcome, RunnerError> {
         let descriptive = if let Operation::Sequence(ops) = value {
             ops.is_empty()
@@ -816,11 +815,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
+            let rendered = inferred
+                .map(|genus| crate::formatting::render_genus(genus, &crate::formatting::Identity));
+            let forma = match &rendered {
+                Some(text) => Some(text.as_str()),
+                None => None,
+            };
             let mut acquired = Vec::with_capacity(names.len());
             for name in names {
                 match self
                     .driver
-                    .acquire(&qualified, Some(name.value), None)
+                    .acquire(&qualified, Some(name.value), forma)
                 {
                     UserInput::Done(value) => acquired.push(value),
                     UserInput::Skip => {
@@ -1532,6 +1537,29 @@ fn render_bindings(names: &[language::Identifier], env: &Environment) -> String 
         })
         .collect();
     bindings.join(", ")
+}
+
+/// Render each parameter's forma as a prompt display string. A single declared
+/// list parameter (`[Region]`) renders bracketed so the driver offers list
+/// entry; every other genus renders its bare element formae.
+fn render_parameter_formae(signature: Option<&language::Signature>) -> Vec<String> {
+    match signature.map(|s| &s.requires) {
+        Some(genus @ language::Genus::List(_)) => {
+            vec![crate::formatting::render_genus(
+                genus,
+                &crate::formatting::Identity,
+            )]
+        }
+        Some(genus) => genus
+            .formae()
+            .iter()
+            .map(|f| {
+                f.value
+                    .to_string()
+            })
+            .collect(),
+        None => Vec::new(),
+    }
 }
 
 /// Describe a procedure's expected parameters as `name : Type` fragments for

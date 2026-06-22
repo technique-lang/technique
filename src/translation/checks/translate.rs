@@ -842,7 +842,7 @@ run :
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Bind { names, value } = &ops[0] else {
+    let Operation::Bind { names, value, .. } = &ops[0] else {
         panic!("expected Bind, got {:?}", ops[0]);
     };
     assert_eq!(names.len(), 1);
@@ -1033,7 +1033,7 @@ run :
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 1);
-    let Operation::Bind { names, value } = &body_ops[0] else {
+    let Operation::Bind { names, value, .. } = &body_ops[0] else {
         panic!("expected Bind, got {:?}", body_ops[0]);
     };
     assert_eq!(names.len(), 1);
@@ -1071,7 +1071,7 @@ helper : () -> Result
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 1);
-    let Operation::Bind { names, value } = &body_ops[0] else {
+    let Operation::Bind { names, value, .. } = &body_ops[0] else {
         panic!("expected Bind");
     };
     assert_eq!(names[0].value, "outcome");

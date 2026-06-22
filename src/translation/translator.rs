@@ -575,6 +575,7 @@ impl<'i> Translator<'i> {
                 Some(Operation::Bind {
                     names: names.as_slice(),
                     value: Box::new(value),
+                    inferred: None,
                 })
             }
         }
@@ -790,6 +791,7 @@ impl<'i> Translator<'i> {
                 Operation::Bind {
                     names,
                     value: Box::new(self.translate_expression(value)),
+                    inferred: None,
                 }
             }
             language::Expression::Hole(_) => Operation::Hole,
