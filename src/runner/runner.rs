@@ -197,7 +197,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.driver
                     .enter(&qualified);
             } else {
-                let echo = render_argument_echo(name, params, &env);
+                let echo = render_argument_echo(&qualified, params, &env);
                 self.driver
                     .enter(&echo);
             }
@@ -691,7 +691,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let saved = self
                         .path
                         .replace(lexical_segments);
-                    self.announce_procedure(subroutine, name, &lexical);
+                    self.announce_procedure(subroutine, name, &lexical, &local);
 
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
@@ -1236,9 +1236,19 @@ impl<'i, D: Driver> Runner<'i, D> {
         subroutine: &'i Subroutine<'i>,
         name: &'i str,
         qualified: &str,
+        env: &Environment,
     ) {
-        self.driver
-            .enter(qualified);
+        let params = subroutine
+            .parameters
+            .unwrap_or(&[]);
+        if params.is_empty() {
+            self.driver
+                .enter(qualified);
+        } else {
+            let echo = render_argument_echo(qualified, params, env);
+            self.driver
+                .enter(&echo);
+        }
         let declaration = crate::formatting::formatter::render_declaration(
             name,
             subroutine.parameters,
@@ -1504,10 +1514,15 @@ fn nests_work(op: &Operation) -> bool {
     }
 }
 
-/// Render the entry call with arguments bound to each parameter in
-/// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
-fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
-    format!("{}: ({})", name, render_bindings(params, env))
+/// Render a procedure's qualified path with arguments bound to each parameter
+/// in `value ~ name` form, e.g. `connectivity_check: ([] ~ e, 0 ~ s)`. The
+/// qualified path already carries its trailing `:`.
+fn render_argument_echo(
+    qualified: &str,
+    params: &[language::Identifier],
+    env: &Environment,
+) -> String {
+    format!("{} ({})", qualified, render_bindings(params, env))
 }
 
 /// Append a loop iteration's bound variable(s) to its path in `value ~ name`
