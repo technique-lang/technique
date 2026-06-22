@@ -1449,12 +1449,14 @@ fn foreach_walks_body_once_per_list_element() {
         .subroutines
         .push(sub);
 
+    // A string and a number, so the echo pins both: a string value shows
+    // quoted, a number bare.
     let mut env = Environment::new();
     env.extend(
         "items".to_string(),
         Value::Arraeum(vec![
             Value::Literali("first".to_string()),
-            Value::Literali("second".to_string()),
+            Value::Quanticle(crate::value::Numeric::Integral(5)),
         ]),
     );
 
@@ -1491,6 +1493,21 @@ fn foreach_walks_body_once_per_list_element() {
     assert_eq!(
         steps,
         vec![("/[1]/a", "a.  { item }"), ("/[2]/a", "a.  { item }")]
+    );
+
+    // Each iteration's descent echoes the loop variable bound for that pass,
+    // in the same `value ~ name` form a procedure call's arguments use.
+    let enters: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Enter { qualified } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        enters,
+        vec!["/[1] (\"first\" ~ item)", "/[2] (5 ~ item)"]
     );
 }
 

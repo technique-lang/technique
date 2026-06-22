@@ -894,7 +894,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             None => {
                 let mut number = 1;
                 loop {
-                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
+                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                     number += 1;
@@ -923,7 +923,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
-                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
+                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                 }
@@ -933,10 +933,13 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// Walk one pass of a loop body within its `[number]` iteration scope,
-    /// bracketing it with `↘`/`↙` chrome.
+    /// bracketing it with `↘`/`↙` chrome. The `↘` line echoes the loop
+    /// variable(s) bound for this pass, in the same `value ~ name` form used
+    /// for a procedure call's arguments.
     fn walk_iteration(
         &mut self,
         env: &mut Environment,
+        names: &'i [language::Identifier<'i>],
         number: usize,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
@@ -945,8 +948,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         let qualified = self
             .path
             .render();
+        let echo = render_iteration_echo(&qualified, names, env);
         self.driver
-            .enter(&qualified);
+            .enter(&echo);
         let result = self.walk(env, body);
         let verdict = match &result {
             Ok(Outcome::Done(_)) => Some(UserInput::Done(Value::Unitus)),
@@ -1497,6 +1501,21 @@ fn nests_work(op: &Operation) -> bool {
 /// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
 fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
     format!("{}: ({})", name, render_bindings(params, env))
+}
+
+/// Append a loop iteration's bound variable(s) to its path in `value ~ name`
+/// form, e.g. `cleanup_ec2:/3/[1] ("i-1234" ~ instance)` — a string value
+/// shows quoted. A `repeat` with no iteration variable echoes the bare path.
+fn render_iteration_echo(
+    qualified: &str,
+    names: &[language::Identifier],
+    env: &Environment,
+) -> String {
+    if names.is_empty() {
+        qualified.to_string()
+    } else {
+        format!("{} ({})", qualified, render_bindings(names, env))
+    }
 }
 
 /// Comma-join a set of bindings in `value ~ name` form with each value read
