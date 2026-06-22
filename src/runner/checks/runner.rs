@@ -637,12 +637,10 @@ test :
             }
         })
         .collect();
-    // Both steps render from their source paragraphs: the binding syntax
-    // and the interpolation reference are shown as-written, with ordinals.
-    assert_eq!(
-        descriptions,
-        vec!["1.  { 42 ~ answer }", "2.  Result: { answer }"]
-    );
+    // Step 1's binding syntax shows as-written (the value isn't bound until
+    // its body walks). By step 2 `answer` is bound, so its interpolation
+    // renders the value in place of the variable name.
+    assert_eq!(descriptions, vec!["1.  { 42 ~ answer }", "2.  Result: 42"]);
 }
 
 #[test]
@@ -1030,9 +1028,10 @@ greet(name) :
             _ => None,
         })
         .collect();
-    // The step renders from its source paragraph, showing the template.
-    // `greet` is a top-level procedure, addressed at its own root.
-    assert_eq!(steps, vec![("/greet:/1", "1.  Hello { name }")]);
+    // `name` is bound to the invocation argument, so the step renders the
+    // value in place of the interpolation. `greet` is a top-level procedure,
+    // addressed at its own root.
+    assert_eq!(steps, vec![("/greet:/1", "1.  Hello \"World\"")]);
 }
 
 #[test]
@@ -1449,12 +1448,14 @@ fn foreach_walks_body_once_per_list_element() {
         .subroutines
         .push(sub);
 
+    // A string and a number, so the echo pins both: a string value shows
+    // quoted, a number bare.
     let mut env = Environment::new();
     env.extend(
         "items".to_string(),
         Value::Arraeum(vec![
             Value::Literali("first".to_string()),
-            Value::Literali("second".to_string()),
+            Value::Quanticle(crate::value::Numeric::Integral(5)),
         ]),
     );
 
@@ -1490,8 +1491,20 @@ fn foreach_walks_body_once_per_list_element() {
         .collect();
     assert_eq!(
         steps,
-        vec![("/[1]/a", "a.  { item }"), ("/[2]/a", "a.  { item }")]
+        vec![("/[1]/a", "a.  \"first\""), ("/[2]/a", "a.  5")]
     );
+
+    // Each iteration's descent echoes the loop variable bound for that pass,
+    // in the same `value ~ name` form a procedure call's arguments use.
+    let enters: Vec<&str> = prompt
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            Event::Enter { qualified } => Some(qualified.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(enters, vec!["/[1] (\"first\" ~ item)", "/[2] (5 ~ item)"]);
 }
 
 #[test]
@@ -1573,9 +1586,9 @@ fn foreach_over_seq_builtin_runs() {
     assert_eq!(
         steps,
         vec![
-            ("/[1]/a", "a.  { n }"),
-            ("/[2]/a", "a.  { n }"),
-            ("/[3]/a", "a.  { n }"),
+            ("/[1]/a", "a.  1"),
+            ("/[2]/a", "a.  2"),
+            ("/[3]/a", "a.  3"),
         ]
     );
 }
@@ -1658,10 +1671,7 @@ fn foreach_destructures_tuple_elements() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        steps,
-        vec!["a.  { first } / { second }", "a.  { first } / { second }"]
-    );
+    assert_eq!(steps, vec!["a.  \"a\" / \"b\"", "a.  \"c\" / \"d\""]);
 }
 
 #[test]
@@ -1724,7 +1734,7 @@ fn foreach_widens_primitive_to_singleton() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec![("/[1]/a", "a.  { item }")]);
+    assert_eq!(steps, vec![("/[1]/a", "a.  \"lonely\"")]);
 }
 
 #[test]
@@ -1774,12 +1784,14 @@ fn foreach_over_unit_iterates_nothing() {
 }
 
 #[test]
-fn foreach_over_non_list_or_unbound_errors() {
+fn foreach_over_non_list_errors_unbound_is_empty() {
     // foreach item in source, where `source` is supplied by the caller's
     // environment. A tuple or tablet source is `NotIterable` (lists iterate
     // and scalars widen, but a tablet is a record that must be projected via
-    // values()/labels()/pairs() first, and a tuple does neither); an unbound
-    // source propagates `UnboundVariable` rather than being swallowed.
+    // values()/labels()/pairs() first, and a tuple does neither). An unbound
+    // `source` iterates nothing rather than aborting: a statically undefined
+    // name is caught earlier by resolution, so a name unbound at runtime is one
+    // a zero-iteration or skipped loop never populated.
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
@@ -1839,7 +1851,8 @@ fn foreach_over_non_list_or_unbound_errors() {
         other => panic!("expected NotIterable, got {:?}", other),
     }
 
-    // An unbound `source` propagates the evaluation error.
+    // An unbound `source` iterates nothing: the run completes and the loop
+    // body never executes.
     let mut unbound_fixture = StoreFixture::new("foreach-unbound");
     let mut runner = Runner::new(
         &program,
@@ -1849,10 +1862,18 @@ fn foreach_over_non_list_or_unbound_errors() {
         Library::stub(),
     );
     let env = Environment::new();
-    match runner.run(env) {
-        Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
-        other => panic!("expected UnboundVariable, got {:?}", other),
-    }
+    runner
+        .run(env)
+        .expect("run");
+    let ran = runner
+        .into_driver()
+        .events()
+        .iter()
+        .any(|event| match event {
+            Event::Step { .. } => true,
+            _ => false,
+        });
+    assert!(!ran, "loop body must not run when source is unbound");
 }
 
 #[test]
@@ -1966,7 +1987,7 @@ fn argument_echo_binds_each_parameter() {
     let source = r#"
 % technique v1
 
-connectivity_check(e, s) :
+connectivity_check(e, s, address) :
 
 1.  step
         "#
@@ -1974,7 +1995,11 @@ connectivity_check(e, s) :
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
-    let args = ["[]".to_string(), "0".to_string()];
+    let args = [
+        "[]".to_string(),
+        "0".to_string(),
+        "10 Downing Street".to_string(),
+    ];
     let env = bind_parameters(&program, &args).expect("bind");
     let params = program
         .subroutines
@@ -1982,8 +2007,11 @@ connectivity_check(e, s) :
         .unwrap()
         .parameters
         .unwrap();
-    let echo = render_argument_echo("connectivity_check", params, &env);
-    assert_eq!(echo, "connectivity_check: ([] ~ e, 0 ~ s)");
+    let echo = render_argument_echo("connectivity_check:", params, &env);
+    assert_eq!(
+        echo,
+        "connectivity_check: ([] ~ e, 0 ~ s, \"10 Downing Street\" ~ address)"
+    );
 }
 
 #[test]
@@ -2027,7 +2055,7 @@ greet(name) :
             }
         })
         .collect();
-    assert_eq!(descriptions, vec!["1.  Hello { name }"]);
+    assert_eq!(descriptions, vec!["1.  Hello \"world\""]);
 }
 
 #[test]
@@ -2708,4 +2736,123 @@ fn resume_restores_invoke_input_without_reprompting() {
         })
         .count();
     assert_eq!(acquired, 0);
+}
+
+#[test]
+fn iterated_binding_prompts_as_list() {
+    // `regions` is bound by a descriptive step and then iterated by a foreach,
+    // so resolution marks it `[*]` and the prompt carries that forma. An empty
+    // answer (`[]`) iterates zero times, so the substep never runs.
+    let source = r#"
+% technique v1
+
+sweep :
+
+1.  enumerate the regions ~ regions
+2.  { foreach region in regions }
+    -   note { region }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("iterated-binding");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("[]".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![(Some("regions"), Some("[*]"))]);
+}
+
+#[test]
+fn declared_list_parameter_prompts_bracketed() {
+    // A procedure declaring a single list parameter `[Region]` is invoked with
+    // a hole, so its argument is acquired at entry — and the forma renders
+    // bracketed so the driver offers list entry.
+    let source = r#"
+% technique v1
+
+main :
+
+{
+    <sweep>(?)
+}
+
+sweep(regions) : [Region] -> ()
+
+1.  note { regions }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("declared-list-param");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("[]".to_string())),
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let prompt = runner.into_driver();
+    let acquired: Vec<(Option<&str>, Option<&str>)> = prompt
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { name, forma } = e {
+                Some((
+                    name.as_ref()
+                        .map(String::as_str),
+                    forma
+                        .as_ref()
+                        .map(String::as_str),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(acquired, vec![(Some("regions"), Some("[Region]"))]);
 }

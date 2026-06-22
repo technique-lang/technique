@@ -58,6 +58,7 @@ pub fn resolve<'i>(program: &mut Program<'i>) -> Result<(), Vec<ResolutionError<
     let mut problems = Vec::new();
     for subroutine in &mut program.subroutines {
         resolve_operation(&mut subroutine.body, &known, &arities, &mut problems);
+        infer_iterated(&mut subroutine.body);
     }
     for subroutine in &program.subroutines {
         check_bindings(subroutine, &mut problems);
@@ -147,6 +148,130 @@ fn resolve_operation<'i>(
     }
 }
 
+// Annotate each single-name `Bind` whose name is later iterated by a `foreach`
+// with an inferred `[*]` genus, so the runner can offer list entry when
+// prompting for it. Two passes: gather the names used as bare loop collections,
+// then mark the matching binds. The gathered set is scope-insensitive — a name
+// reused across procedures would mark every same-named single bind — so the
+// analysis is confined to one subroutine body, where names are normally unique.
+fn infer_iterated(body: &mut Operation) {
+    let mut iterated = HashSet::new();
+    gather_iterated(body, &mut iterated);
+    mark_iterated(body, &iterated);
+}
+
+fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
+    match op {
+        Operation::Loop { over, body, .. } => {
+            if let Some(over) = over {
+                if let Operation::Variable(id) = over.as_ref() {
+                    iterated.insert(id.value);
+                }
+                gather_iterated(over, iterated);
+            }
+            gather_iterated(body, iterated);
+        }
+        Operation::Bind { value, .. } => gather_iterated(value, iterated),
+        Operation::Sequence(ops) | Operation::List(ops) => {
+            for op in ops {
+                gather_iterated(op, iterated);
+            }
+        }
+        Operation::Section { title, body, .. } => {
+            if let Some(title) = title {
+                gather_iterated(title, iterated);
+            }
+            gather_iterated(body, iterated);
+        }
+        Operation::Step { body, .. } => gather_iterated(body, iterated),
+        Operation::Invoke(invocable) => {
+            for arg in &invocable.arguments {
+                gather_iterated(arg, iterated);
+            }
+        }
+        Operation::Execute(executable) => {
+            for arg in &executable.arguments {
+                gather_iterated(arg, iterated);
+            }
+        }
+        Operation::String(fragments) => {
+            for fragment in fragments {
+                if let Fragment::Interpolation(op) = fragment {
+                    gather_iterated(op, iterated);
+                }
+            }
+        }
+        Operation::Tablet(entries) => {
+            for entry in entries {
+                gather_iterated(&entry.value, iterated);
+            }
+        }
+        Operation::Variable(_)
+        | Operation::Number(_)
+        | Operation::Multiline(_, _)
+        | Operation::Hole => {}
+    }
+}
+
+fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
+    match op {
+        Operation::Bind {
+            names,
+            value,
+            inferred,
+        } => {
+            if names.len() == 1 && iterated.contains(names[0].value) {
+                *inferred = Some(language::Genus::List(language::Forma::new("*")));
+            }
+            mark_iterated(value, iterated);
+        }
+        Operation::Loop { over, body, .. } => {
+            if let Some(over) = over {
+                mark_iterated(over, iterated);
+            }
+            mark_iterated(body, iterated);
+        }
+        Operation::Sequence(ops) | Operation::List(ops) => {
+            for op in ops {
+                mark_iterated(op, iterated);
+            }
+        }
+        Operation::Section { title, body, .. } => {
+            if let Some(title) = title {
+                mark_iterated(title, iterated);
+            }
+            mark_iterated(body, iterated);
+        }
+        Operation::Step { body, .. } => mark_iterated(body, iterated),
+        Operation::Invoke(invocable) => {
+            for arg in &mut invocable.arguments {
+                mark_iterated(arg, iterated);
+            }
+        }
+        Operation::Execute(executable) => {
+            for arg in &mut executable.arguments {
+                mark_iterated(arg, iterated);
+            }
+        }
+        Operation::String(fragments) => {
+            for fragment in fragments {
+                if let Fragment::Interpolation(op) = fragment {
+                    mark_iterated(op, iterated);
+                }
+            }
+        }
+        Operation::Tablet(entries) => {
+            for entry in entries {
+                mark_iterated(&mut entry.value, iterated);
+            }
+        }
+        Operation::Variable(_)
+        | Operation::Number(_)
+        | Operation::Multiline(_, _)
+        | Operation::Hole => {}
+    }
+}
+
 // Flag any Variable read that names nothing yet in scope. Scope starts with
 // the subroutine's parameters and grows as the walk passes each `Bind`/`Loop`
 // in execution order — so a read is bound only if its name was bound by an
@@ -178,7 +303,7 @@ fn check_scope<'i>(
         // A binding's value is evaluated before its name is bound, so the
         // value is checked against the scope as it stands; only then do the
         // names come into scope for what follows.
-        Operation::Bind { names, value } => {
+        Operation::Bind { names, value, .. } => {
             check_scope(value, scope, problems);
             for name in *names {
                 scope.insert(name.value);

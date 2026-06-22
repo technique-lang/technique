@@ -48,10 +48,12 @@ pub enum UserInput {
 /// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
 /// the debugging `Transcript`, and the test `Mock`.
 pub trait Driver {
-    /// Show the step's Qualified Name and rendered description.
-    /// The implementation displays them; it does not block waiting for
-    /// input — the walker calls `ask` for that separately.
-    fn step(&mut self, qualified: &str, description: &str);
+    /// Show the step's Qualified Name and rendered description. `depth` is the
+    /// step's document nesting level (one-origin), indenting the description to
+    /// match while the `→` marker stays at the left margin. The implementation
+    /// displays them; it does not block waiting for input — the walker calls
+    /// `ask` for that separately.
+    fn step(&mut self, qualified: &str, description: &str, depth: usize);
 
     /// Announce descent into a named scope — a Section or an invoked
     /// subroutine — with its Qualified Name (the `↘` marker).
@@ -157,9 +159,15 @@ impl<W: Write> Console<W> {
 }
 
 impl<W: Write> Driver for Console<W> {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
         let renderer = self.renderer();
-        render_step(&mut self.output, &display_path(fqn), description, renderer);
+        render_step(
+            &mut self.output,
+            &display_path(fqn),
+            description,
+            depth,
+            renderer,
+        );
     }
 
     fn enter(&mut self, qualified: &str) {
@@ -228,7 +236,7 @@ impl<W: Write> Driver for Console<W> {
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
-        prompt_acquire(&mut self.output, &label)
+        prompt_acquire(&mut self.output, &label, is_list_forma(forma))
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -284,7 +292,11 @@ fn prompt_action<W: Write>(
 /// and the step's own verdict prompt judges the result.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
     let qualified = display_path(qualified);
-    let field = edit(script.to_string(), Value::Literali(script.to_string()));
+    let field = edit(
+        script.to_string(),
+        Value::Literali(script.to_string()),
+        false,
+    );
     let result = interact(
         out,
         Interaction {
@@ -326,8 +338,8 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
 /// Solicit a deferred input on the `▶` prompt line: `<Enter>` accepts the
 /// empty default, typing overrides it; the `<Esc>` menu and `<Ctrl-C>` abandon
 /// the call.
-fn prompt_acquire<W: Write>(out: &mut W, label: &str) -> UserInput {
-    let field = edit(String::new(), Value::Literali(String::new()));
+fn prompt_acquire<W: Write>(out: &mut W, label: &str, list: bool) -> UserInput {
+    let field = edit(String::new(), Value::Literali(String::new()), list);
     let result = interact(
         out,
         Interaction {
@@ -380,8 +392,16 @@ fn interact<W: Write>(
 /// Write text indented by four spaces, replicating the canonical source
 /// layout the code formatter emits.
 fn write_indented<W: Write>(out: &mut W, text: &str) {
+    write_indented_by(out, text, 1);
+}
+
+/// Write text indented by four spaces per `depth` level, so a step's prose
+/// sits at the same nesting it has in the source document. A `depth` of zero
+/// is treated as one — every step is indented at least one level.
+fn write_indented_by<W: Write>(out: &mut W, text: &str, depth: usize) {
+    let pad = " ".repeat(4 * depth.max(1));
     for line in text.lines() {
-        let _ = writeln!(out, "    {}", line);
+        let _ = writeln!(out, "{}{}", pad, line);
     }
 }
 
@@ -389,11 +409,18 @@ fn write_marker_line<W: Write>(out: &mut W, text: &str, renderer: &dyn Render) {
     let _ = writeln!(out, "{}", renderer.style(Syntax::Marker, text));
 }
 
-/// Render a step's `→` line and description.
-fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str, renderer: &dyn Render) {
+/// Render a step's `→` line and description. The marker stays at the left
+/// margin; the description is indented to its document nesting `depth`.
+fn render_step<W: Write>(
+    out: &mut W,
+    fqn: &str,
+    description: &str,
+    depth: usize,
+    renderer: &dyn Render,
+) {
     write_marker_line(out, &format!("→ {}", fqn), renderer);
     let _ = writeln!(out);
-    write_indented(out, description);
+    write_indented_by(out, description, depth);
     let _ = writeln!(out);
 }
 
@@ -523,6 +550,9 @@ enum Field {
         cursor: usize,
         edited: bool,
         original: Value,
+        /// A list field renders its buffer between `[` and `]` and submits the
+        /// buffer wrapped as `[buffer]`, so an empty answer yields `[]`.
+        bracketed: bool,
     },
     Frozen {
         produced: Value,
@@ -625,7 +655,7 @@ impl Interaction {
         if let Field::Frozen { produced } = &mut self.field {
             let taken = std::mem::replace(produced, Value::Unitus);
             match editable_seed(&taken) {
-                Some(seed) => self.field = edit(seed, taken),
+                Some(seed) => self.field = edit(seed, taken, false),
                 None => self.field = Field::Frozen { produced: taken },
             }
         }
@@ -749,9 +779,15 @@ impl Interaction {
                 cursor,
                 edited,
                 original,
+                bracketed,
             } => match code {
                 KeyCode::Enter => {
-                    if !*edited {
+                    if *bracketed {
+                        // A list field always submits its buffer wrapped, so an
+                        // empty answer is `[]` and `coerce_to_list` iterates it
+                        // zero times.
+                        Some(UserInput::Done(Value::Literali(format!("[{}]", buffer))))
+                    } else if !*edited {
                         // Unchanged: return the original value verbatim, with
                         // its type and exact value intact.
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
@@ -875,10 +911,22 @@ fn draw_tail<W: Write>(
             None => render_menu(out, interaction, active)?,
         },
         None => match &interaction.field {
-            Field::Edit { buffer, cursor, .. } => {
-                write!(out, "{}", buffer)?;
+            Field::Edit {
+                buffer,
+                cursor,
+                bracketed,
+                ..
+            } => {
+                let lead = if *bracketed {
+                    write!(out, "[{}]", buffer)?;
+                    1
+                } else {
+                    write!(out, "{}", buffer)?;
+                    0
+                };
                 cursor_col = Some(
                     prefix
+                        + lead
                         + buffer[..*cursor]
                             .chars()
                             .count() as u16,
@@ -1000,13 +1048,23 @@ fn editable_seed(produced: &Value) -> Option<String> {
 
 /// Build an editable field from a scalar's text, cursor at the end. The
 /// `original` value is returned verbatim if the buffer is accepted unedited.
-fn edit(buffer: String, original: Value) -> Field {
+fn edit(buffer: String, original: Value, bracketed: bool) -> Field {
     let cursor = buffer.len();
     Field::Edit {
         buffer,
         cursor,
         edited: false,
         original,
+        bracketed,
+    }
+}
+
+/// Whether a forma display string reads as a list (`[…]`), the cue for the
+/// bracketed list-entry prompt.
+fn is_list_forma(forma: Option<&str>) -> bool {
+    match forma {
+        Some(text) => text.starts_with('[') && text.ends_with(']'),
+        None => false,
     }
 }
 
@@ -1100,11 +1158,12 @@ impl<W: Write> Automatic<W> {
 }
 
 impl<W: Write> Driver for Automatic<W> {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
         render_step(
             &mut self.output,
             &display_path(fqn),
             description,
+            depth,
             self.renderer,
         );
     }
@@ -1263,12 +1322,12 @@ impl<D, W: Write> Transcript<D, W> {
 }
 
 impl<D: Driver, W: Write> Driver for Transcript<D, W> {
-    fn step(&mut self, qualified: &str, description: &str) {
+    fn step(&mut self, qualified: &str, description: &str, depth: usize) {
         self.emit(Trace::Enter {
             path: qualified.to_string(),
         });
         self.inner
-            .step(qualified, description);
+            .step(qualified, description, depth);
     }
 
     fn enter(&mut self, qualified: &str) {
@@ -1395,7 +1454,7 @@ impl Headless {
 }
 
 impl Driver for Headless {
-    fn step(&mut self, _qualified: &str, _description: &str) {}
+    fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
 
     fn enter(&mut self, _qualified: &str) {}
 
@@ -1533,7 +1592,7 @@ impl Mock {
 
 #[cfg(test)]
 impl Driver for Mock {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, _depth: usize) {
         self.events
             .push(Event::Step {
                 qualified: fqn.to_string(),

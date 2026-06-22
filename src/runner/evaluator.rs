@@ -1,11 +1,13 @@
 //! Variable bindings and the evaluator that turns value-bearing
 //! Operations into Values for description rendering and binding.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use super::context::Context;
 use super::library::Library;
 use super::runner::RunnerError;
+use crate::formatting::{Substitutions, Syntax};
 use crate::program::{ExecutableRef, Fragment, Operation};
 use crate::value::{Numeric, Value};
 
@@ -33,6 +35,34 @@ impl Environment {
     pub fn extend(&mut self, name: String, value: Value) {
         self.bindings
             .insert(name, value);
+    }
+
+    /// Pre-styled fragments for each bound value, for splicing into a step's
+    /// prose where it interpolates that variable. See `render_value`.
+    pub fn substitutions(&self) -> Substitutions {
+        let mut subs = Substitutions::new();
+        for (name, value) in &self.bindings {
+            if let Some(fragments) = render_value(value) {
+                subs.insert(name.clone(), fragments);
+            }
+        }
+        subs
+    }
+}
+
+/// Pre-styled fragments for splicing a bound value into a step's prose,
+/// highlighted as it would be in source: strings quoted, numbers bare. Value
+/// kinds with no sensible inline prose form yield None, leaving the variable's
+/// `{ name }` interpolation to render as written.
+fn render_value(value: &Value) -> Option<Vec<(Syntax, Cow<'static, str>)>> {
+    match value {
+        Value::Literali(text) => Some(vec![
+            (Syntax::Quote, Cow::Borrowed("\"")),
+            (Syntax::String, Cow::Owned(text.clone())),
+            (Syntax::Quote, Cow::Borrowed("\"")),
+        ]),
+        Value::Quanticle(numeric) => Some(vec![(Syntax::Numeric, Cow::Owned(numeric.to_string()))]),
+        _ => None,
     }
 }
 
@@ -153,7 +183,7 @@ pub fn evaluate<'i>(
             }
             Ok(Value::Arraeum(values))
         }
-        Operation::Bind { names, value } => {
+        Operation::Bind { names, value, .. } => {
             let v = evaluate(library, context, env, value)?;
             bind_names(env, names, v)?;
             Ok(Value::Unitus)
@@ -177,14 +207,22 @@ pub fn evaluate<'i>(
 }
 
 /// Reduce a value to the elements a `foreach` iterates. A list yields its
-/// members; `Unit` (the absence of a value) is empty; a string acquired at a
-/// prompt may be a `[a, b]` literal, which parses into its elements, else it
-/// is a one-element list; a bare quantity widens likewise. A tablet, tuple,
-/// or future is not iterable.
+/// members; `Unit` (the absence of a value) is empty; a blank string (an empty
+/// prompt answer) is likewise empty, so a `foreach` over it runs zero times; a
+/// non-blank string may be a `[a, b]` literal, which parses into its elements,
+/// else it is a one-element list; a bare quantity widens likewise. A tablet,
+/// tuple, or future is not iterable.
 pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     match value {
         Value::Arraeum(items) => Ok(items),
         Value::Unitus => Ok(Vec::new()),
+        Value::Literali(text)
+            if text
+                .trim()
+                .is_empty() =>
+        {
+            Ok(Vec::new())
+        }
         Value::Literali(text) => match parse_list_literal(&text) {
             Some(items) => Ok(items),
             None => Ok(vec![Value::Literali(text)]),
@@ -194,9 +232,24 @@ pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     }
 }
 
-/// Parse a `[ "a", b, ... ]` literal into its elements, each a string with
-/// any surrounding quotes stripped. Returns `None` for text that is not
-/// bracketed. Commas inside element text are not supported.
+/// Coerce a raw user-supplied string — a command-line argument or an unquoted
+/// list element — into its natural Value type: a `[ … ]` literal becomes a
+/// list, a number becomes a quantity, anything else stays a string.
+pub(super) fn parse_value(text: &str) -> Value {
+    let trimmed = text.trim();
+    if let Some(items) = parse_list_literal(trimmed) {
+        return Value::Arraeum(items);
+    }
+    if let Some(numeric) = crate::parsing::parse_numeric(trimmed) {
+        return Value::Quanticle(Numeric::from(&numeric));
+    }
+    Value::Literali(text.to_string())
+}
+
+/// Parse a `[ "a", b, ... ]` literal into its elements. A quoted element is a
+/// string verbatim; an unquoted one takes its natural type via `parse_value`.
+/// Returns `None` for text that is not bracketed. TODO This splits naively on
+/// ',' so commas inside element text are not supported.
 fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     let inner = text
         .trim()
@@ -212,11 +265,13 @@ fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
         .split(',')
         .map(|element| {
             let element = element.trim();
-            let unquoted = element
+            match element
                 .strip_prefix('"')
                 .and_then(|e| e.strip_suffix('"'))
-                .unwrap_or(element);
-            Value::Literali(unquoted.to_string())
+            {
+                Some(unquoted) => Value::Literali(unquoted.to_string()),
+                None => parse_value(element),
+            }
         })
         .collect();
     Some(items)

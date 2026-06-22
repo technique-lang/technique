@@ -197,7 +197,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.driver
                     .enter(&qualified);
             } else {
-                let echo = render_argument_echo(name, params, &env);
+                let echo = render_argument_echo(&qualified, params, &env);
                 self.driver
                     .enter(&echo);
             }
@@ -408,7 +408,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
                 Ok(outcome)
             }
-            Operation::Bind { names, value } => self.walk_bind(env, names, value),
+            Operation::Bind {
+                names,
+                value,
+                inferred,
+            } => self.walk_bind(env, names, value, inferred.as_ref()),
             Operation::Variable(_)
             | Operation::Number(_)
             | Operation::String(_)
@@ -561,13 +565,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .render();
                     let invoked = format!("{} <{}>", caller, name);
 
-                    let formae = subroutine
-                        .signature
-                        .map(|s| {
-                            s.requires
-                                .formae()
-                        })
-                        .unwrap_or_default();
+                    let formae = render_parameter_formae(subroutine.signature);
 
                     // A prior run's recorded inputs for this callee. A
                     // prompted argument (an elided call or a `?` hole) is
@@ -589,7 +587,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 .map(|p| p.value);
                             let forma = formae
                                 .get(i)
-                                .map(|f| f.value);
+                                .map(|s| s.as_str());
                             let value = match recorded
                                 .as_ref()
                                 .and_then(|r| r.get(taken))
@@ -634,7 +632,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     None => {
                                         let forma = formae
                                             .get(i)
-                                            .map(|f| f.value);
+                                            .map(|s| s.as_str());
                                         match self
                                             .driver
                                             .acquire(&invoked, bind, forma)
@@ -693,7 +691,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let saved = self
                         .path
                         .replace(lexical_segments);
-                    self.announce_procedure(subroutine, name, &lexical);
+                    self.announce_procedure(subroutine, name, &lexical, &local);
 
                     // Walk the callee's body in its own `local` environment,
                     // then sign off its scope; a Quit or error skips the
@@ -802,6 +800,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         env: &mut Environment,
         names: &'i [language::Identifier<'i>],
         value: &'i Operation<'i>,
+        inferred: Option<&'i language::Genus<'i>>,
     ) -> Result<Outcome, RunnerError> {
         let descriptive = if let Operation::Sequence(ops) = value {
             ops.is_empty()
@@ -816,11 +815,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
+            let rendered = inferred
+                .map(|genus| crate::formatting::render_genus(genus, &crate::formatting::Identity));
+            let forma = match &rendered {
+                Some(text) => Some(text.as_str()),
+                None => None,
+            };
             let mut acquired = Vec::with_capacity(names.len());
             for name in names {
                 match self
                     .driver
-                    .acquire(&qualified, Some(name.value), None)
+                    .acquire(&qualified, Some(name.value), forma)
                 {
                     UserInput::Done(value) => acquired.push(value),
                     UserInput::Skip => {
@@ -894,13 +899,26 @@ impl<'i, D: Driver> Runner<'i, D> {
             None => {
                 let mut number = 1;
                 loop {
-                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
+                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                     number += 1;
                 }
             }
             Some(expr) => {
+                // A collection naming an as-yet-unbound variable — e.g. a list
+                // a zero-iteration or skipped earlier loop never populated —
+                // iterates nothing rather than aborting the run. The name is
+                // statically in scope (resolution guarantees it); it simply has
+                // no value yet at runtime.
+                if let Operation::Variable(id) = expr {
+                    if env
+                        .lookup(id.value)
+                        .is_none()
+                    {
+                        return Ok(Outcome::Done(Value::Unitus));
+                    }
+                }
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
                 let items = super::evaluator::coerce_to_list(value)?;
                 for (i, item) in items
@@ -910,7 +928,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
-                    if let Outcome::Stopped = self.walk_iteration(env, number, body)? {
+                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
                         return Ok(Outcome::Stopped);
                     }
                 }
@@ -920,10 +938,13 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// Walk one pass of a loop body within its `[number]` iteration scope,
-    /// bracketing it with `↘`/`↙` chrome.
+    /// bracketing it with `↘`/`↙` chrome. The `↘` line echoes the loop
+    /// variable(s) bound for this pass, in the same `value ~ name` form used
+    /// for a procedure call's arguments.
     fn walk_iteration(
         &mut self,
         env: &mut Environment,
+        names: &'i [language::Identifier<'i>],
         number: usize,
         body: &'i Operation<'i>,
     ) -> Result<Outcome, RunnerError> {
@@ -932,8 +953,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         let qualified = self
             .path
             .render();
+        let echo = render_iteration_echo(&qualified, names, env);
         self.driver
-            .enter(&qualified);
+            .enter(&echo);
         let result = self.walk(env, body);
         let verdict = match &result {
             Ok(Outcome::Done(_)) => Some(UserInput::Done(Value::Unitus)),
@@ -1128,14 +1150,19 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
+        let subs = env.substitutions();
         let step_text = crate::formatting::formatter::render_step(
             source,
+            &subs,
             self.driver
                 .renderer(),
         );
 
+        let depth = self
+            .path
+            .depth();
         self.driver
-            .step(qualified, &step_text);
+            .step(qualified, &step_text, depth);
 
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
@@ -1209,9 +1236,19 @@ impl<'i, D: Driver> Runner<'i, D> {
         subroutine: &'i Subroutine<'i>,
         name: &'i str,
         qualified: &str,
+        env: &Environment,
     ) {
-        self.driver
-            .enter(qualified);
+        let params = subroutine
+            .parameters
+            .unwrap_or(&[]);
+        if params.is_empty() {
+            self.driver
+                .enter(qualified);
+        } else {
+            let echo = render_argument_echo(qualified, params, env);
+            self.driver
+                .enter(&echo);
+        }
         let declaration = crate::formatting::formatter::render_declaration(
             name,
             subroutine.parameters,
@@ -1477,21 +1514,69 @@ fn nests_work(op: &Operation) -> bool {
     }
 }
 
-/// Render the entry call with arguments bound to each parameter in
-/// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
-fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
-    let bindings: Vec<String> = params
+/// Render a procedure's qualified path with arguments bound to each parameter
+/// in `value ~ name` form, e.g. `connectivity_check: ([] ~ e, 0 ~ s)`. The
+/// qualified path already carries its trailing `:`.
+fn render_argument_echo(
+    qualified: &str,
+    params: &[language::Identifier],
+    env: &Environment,
+) -> String {
+    format!("{} ({})", qualified, render_bindings(params, env))
+}
+
+/// Append a loop iteration's bound variable(s) to its path in `value ~ name`
+/// form, e.g. `cleanup_ec2:/3/[1] ("i-1234" ~ instance)` — a string value
+/// shows quoted. A `repeat` with no iteration variable echoes the bare path.
+fn render_iteration_echo(
+    qualified: &str,
+    names: &[language::Identifier],
+    env: &Environment,
+) -> String {
+    if names.is_empty() {
+        qualified.to_string()
+    } else {
+        format!("{} ({})", qualified, render_bindings(names, env))
+    }
+}
+
+/// Comma-join a set of bindings in `value ~ name` form with each value read
+/// from the environment.
+fn render_bindings(names: &[language::Identifier], env: &Environment) -> String {
+    let bindings: Vec<String> = names
         .iter()
-        .map(|p| {
-            let value = match env.lookup(p.value) {
-                Some(Value::Literali(text)) => text.clone(),
-                Some(other) => other.to_string(),
+        .map(|n| {
+            let value = match env.lookup(n.value) {
+                Some(value) => value.to_string(),
                 None => String::new(),
             };
-            format!("{} ~ {}", value, p.value)
+            format!("{} ~ {}", value, n.value)
         })
         .collect();
-    format!("{}: ({})", name, bindings.join(", "))
+    bindings.join(", ")
+}
+
+/// Render each parameter's forma as a prompt display string. A single declared
+/// list parameter (`[Region]`) renders bracketed so the driver offers list
+/// entry; every other genus renders its bare element formae.
+fn render_parameter_formae(signature: Option<&language::Signature>) -> Vec<String> {
+    match signature.map(|s| &s.requires) {
+        Some(genus @ language::Genus::List(_)) => {
+            vec![crate::formatting::render_genus(
+                genus,
+                &crate::formatting::Identity,
+            )]
+        }
+        Some(genus) => genus
+            .formae()
+            .iter()
+            .map(|f| {
+                f.value
+                    .to_string()
+            })
+            .collect(),
+        None => Vec::new(),
+    }
 }
 
 /// Describe a procedure's expected parameters as `name : Type` fragments for
@@ -1567,7 +1652,7 @@ pub(super) fn bind_parameters(
             param
                 .value
                 .to_string(),
-            Value::Literali(argument.clone()),
+            super::evaluator::parse_value(argument),
         );
     }
     Ok(env)

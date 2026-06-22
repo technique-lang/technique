@@ -135,6 +135,7 @@ fn bind_extends_env_for_subsequent_lookup() {
     let bind = Operation::Bind {
         names: &names,
         value: Box::new(Operation::String(vec![Fragment::Text("Hello")])),
+        inferred: None,
     };
     let lookup = Operation::Variable(Identifier::new("greeting"));
     let seq = Operation::Sequence(vec![bind, lookup]);
@@ -190,6 +191,7 @@ fn multi_name_bind_destructures_parametriq() {
     let bind = Operation::Bind {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("triple"))),
+        inferred: None,
     };
     let result = evaluate(&library, &context, &mut env, &bind).expect("evaluated");
     assert_eq!(result, value::Value::Unitus);
@@ -227,6 +229,7 @@ fn multi_name_bind_wrong_arity_errors() {
     let bind = Operation::Bind {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("pair"))),
+        inferred: None,
     };
     match evaluate(&library, &context, &mut env, &bind) {
         Err(RunnerError::BindArityMismatch { expected, actual }) => {
@@ -250,6 +253,7 @@ fn multi_name_bind_against_scalar_errors_as_not_tuple() {
     let bind = Operation::Bind {
         names: &names,
         value: Box::new(Operation::Variable(Identifier::new("scalar"))),
+        inferred: None,
     };
     match evaluate(&library, &context, &mut env, &bind) {
         Err(RunnerError::BindNotTuple { expected }) => {
@@ -403,6 +407,17 @@ fn coerce_list_passthrough_and_widening() {
     assert_eq!(
         coerce_to_list(value::Value::Literali("solo".to_string())).expect("coerced"),
         vec![value::Value::Literali("solo".to_string())]
+    );
+
+    // A blank answer (the empty default at a list prompt) is the empty list,
+    // so a `foreach` over it runs zero times rather than once over "".
+    assert_eq!(
+        coerce_to_list(value::Value::Literali(String::new())).expect("coerced"),
+        Vec::<value::Value>::new()
+    );
+    assert_eq!(
+        coerce_to_list(value::Value::Literali("   ".to_string())).expect("coerced"),
+        Vec::<value::Value>::new()
     );
 }
 

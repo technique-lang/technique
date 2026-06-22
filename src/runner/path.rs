@@ -52,6 +52,21 @@ impl<'i> QualifiedPath<'i> {
         std::mem::replace(&mut self.segments, segments)
     }
 
+    /// Document indentation level of the current step: the count of nested
+    /// step scopes on the path — dependent and parallel steps and rendered
+    /// attribute frames. Iteration, section, procedure, and external segments
+    /// carry no visual indent, matching the formatter's nesting.
+    pub fn depth(&self) -> usize {
+        self.segments
+            .iter()
+            .filter(|segment| match segment {
+                PathSegment::DependentStep(_) | PathSegment::ParallelStep(_) => true,
+                PathSegment::Attributes(frame) => render_attributes(frame).is_some(),
+                _ => false,
+            })
+            .count()
+    }
+
     /// Render the current path as a PFFTT absolute path string, always
     /// rooted at `/`. The full enclosing hierarchy is shown: every scope
     /// level is its own `/`-delimited component, with a `Procedure`
