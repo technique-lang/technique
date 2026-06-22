@@ -248,6 +248,19 @@ fn render_fragments<'i>(fragments: &[(Syntax, Cow<'i, str>)], renderer: &dyn Ren
     result
 }
 
+/// Whether a word opens with sentence punctuation that should sit flush
+/// against the preceding token rather than after a separating space. Lets the
+/// formatter preserve `{ code },` written without an intervening space.
+fn hugs_left(word: &str) -> bool {
+    match word
+        .chars()
+        .next()
+    {
+        Some(c) => c == ',' || c == '.' || c == ';' || c == ':' || c == '!' || c == '?',
+        None => false,
+    }
+}
+
 /// A list reads as a tablet when it is non-empty and every element is a
 /// labelled value. Such lists are laid out and treated as blocks rather than
 /// inline.
@@ -788,11 +801,21 @@ impl<'i> Formatter<'i> {
     fn append_descriptives(&mut self, descriptives: &'i [Descriptive<'i>]) {
         let syntax = self.current;
         let mut line = self.builder();
+        // Whether the previous descriptive emitted an inline construct (code,
+        // application, binding). Sentence punctuation opening the next text
+        // then hugs it, preserving `{ code },` written without a space.
+        let mut after_construct = false;
 
         for descriptive in descriptives {
             match descriptive {
                 Descriptive::Text(text) => {
-                    line.add_breakable(syntax, text);
+                    if after_construct {
+                        line.add_breakable_hugging(syntax, text);
+                    } else {
+                        line.add_breakable(syntax, text);
+                    }
+                    after_construct = false;
+                    continue;
                 }
                 Descriptive::CodeInline(exprs) if exprs.len() == 1 => {
                     let expr = &exprs[0];
@@ -926,6 +949,7 @@ impl<'i> Formatter<'i> {
                     line.add_binding(inner_descriptive, variables);
                 }
             }
+            after_construct = true;
         }
 
         line.flush();
@@ -1519,6 +1543,26 @@ impl<'a, 'i> Line<'a, 'i> {
         }
     }
 
+    /// Like `add_breakable`, but a leading sentence-punctuation word hugs the
+    /// preceding token with no separating space, so `{ code },` round-trips.
+    fn add_breakable_hugging(&mut self, syntax: Syntax, content: &'i str) {
+        let mut words = content.split_ascii_whitespace();
+        if let Some(first) = words.next() {
+            if !self
+                .current
+                .is_empty()
+                && hugs_left(first)
+            {
+                self.add_hugging(syntax, first);
+            } else {
+                self.add_word(syntax, first);
+            }
+            for word in words {
+                self.add_word(syntax, word);
+            }
+        }
+    }
+
     fn add_word(&mut self, syntax: Syntax, word: &'i str) {
         if !self
             .current
@@ -1548,6 +1592,13 @@ impl<'a, 'i> Line<'a, 'i> {
                 .push((syntax, Cow::Borrowed(word)));
             self.position += word.len() as u8;
         }
+    }
+
+    /// Append a fragment that must hug the preceding token with no separating
+    /// space. Used for sentence punctuation written flush against an inline
+    /// construct, e.g. the `,` in `{ code },`.
+    fn add_hugging(&mut self, syntax: Syntax, word: &'i str) {
+        self.add_no_wrap(syntax, Cow::Borrowed(word));
     }
 
     fn add_inline_code(&mut self, expr: &'i Expression) {
