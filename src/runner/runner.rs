@@ -901,6 +901,19 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
             }
             Some(expr) => {
+                // A collection naming an as-yet-unbound variable — e.g. a list
+                // a zero-iteration or skipped earlier loop never populated —
+                // iterates nothing rather than aborting the run. The name is
+                // statically in scope (resolution guarantees it); it simply has
+                // no value yet at runtime.
+                if let Operation::Variable(id) = expr {
+                    if env
+                        .lookup(id.value)
+                        .is_none()
+                    {
+                        return Ok(Outcome::Done(Value::Unitus));
+                    }
+                }
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
                 let items = super::evaluator::coerce_to_list(value)?;
                 for (i, item) in items

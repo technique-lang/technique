@@ -404,6 +404,17 @@ fn coerce_list_passthrough_and_widening() {
         coerce_to_list(value::Value::Literali("solo".to_string())).expect("coerced"),
         vec![value::Value::Literali("solo".to_string())]
     );
+
+    // A blank answer (the empty default at a list prompt) is the empty list,
+    // so a `foreach` over it runs zero times rather than once over "".
+    assert_eq!(
+        coerce_to_list(value::Value::Literali(String::new())).expect("coerced"),
+        Vec::<value::Value>::new()
+    );
+    assert_eq!(
+        coerce_to_list(value::Value::Literali("   ".to_string())).expect("coerced"),
+        Vec::<value::Value>::new()
+    );
 }
 
 #[test]

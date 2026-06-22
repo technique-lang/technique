@@ -1774,12 +1774,14 @@ fn foreach_over_unit_iterates_nothing() {
 }
 
 #[test]
-fn foreach_over_non_list_or_unbound_errors() {
+fn foreach_over_non_list_errors_unbound_is_empty() {
     // foreach item in source, where `source` is supplied by the caller's
     // environment. A tuple or tablet source is `NotIterable` (lists iterate
     // and scalars widen, but a tablet is a record that must be projected via
-    // values()/labels()/pairs() first, and a tuple does neither); an unbound
-    // source propagates `UnboundVariable` rather than being swallowed.
+    // values()/labels()/pairs() first, and a tuple does neither). An unbound
+    // `source` iterates nothing rather than aborting: a statically undefined
+    // name is caught earlier by resolution, so a name unbound at runtime is one
+    // a zero-iteration or skipped loop never populated.
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
@@ -1839,7 +1841,8 @@ fn foreach_over_non_list_or_unbound_errors() {
         other => panic!("expected NotIterable, got {:?}", other),
     }
 
-    // An unbound `source` propagates the evaluation error.
+    // An unbound `source` iterates nothing: the run completes and the loop
+    // body never executes.
     let mut unbound_fixture = StoreFixture::new("foreach-unbound");
     let mut runner = Runner::new(
         &program,
@@ -1849,10 +1852,18 @@ fn foreach_over_non_list_or_unbound_errors() {
         Library::stub(),
     );
     let env = Environment::new();
-    match runner.run(env) {
-        Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "source"),
-        other => panic!("expected UnboundVariable, got {:?}", other),
-    }
+    runner
+        .run(env)
+        .expect("run");
+    let ran = runner
+        .into_driver()
+        .events()
+        .iter()
+        .any(|event| match event {
+            Event::Step { .. } => true,
+            _ => false,
+        });
+    assert!(!ran, "loop body must not run when source is unbound");
 }
 
 #[test]
