@@ -3,6 +3,36 @@
 use crate::formatting::*;
 use crate::language::*;
 use std::borrow::Cow;
+use std::collections::HashMap;
+
+/// Runtime values for the variables a step's prose interpolates, so the
+/// runner can splice the values the user supplied in place of the `{ name }`
+/// reference. Each entry is the pre-styled fragments for one variable.
+/// Non-runtime rendering (formatting, error messages) uses an empty set, so
+/// interpolations render as their source `{ name }`.
+#[derive(Default)]
+pub struct Substitutions {
+    bindings: HashMap<String, Vec<(Syntax, Cow<'static, str>)>>,
+}
+
+impl Substitutions {
+    pub fn new() -> Self {
+        Substitutions {
+            bindings: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, name: String, fragments: Vec<(Syntax, Cow<'static, str>)>) {
+        self.bindings
+            .insert(name, fragments);
+    }
+
+    fn lookup(&self, name: &str) -> Option<&[(Syntax, Cow<'static, str>)]> {
+        self.bindings
+            .get(name)
+            .map(|fragments| fragments.as_slice())
+    }
+}
 
 // Helper function to convert numbers to superscript
 fn to_superscript(num: i8) -> String {
@@ -226,8 +256,13 @@ pub fn render_description<'i>(paragraphs: &'i [Paragraph<'i>], renderer: &dyn Re
 }
 
 /// Render step's without descending into nested subscopes.
-pub fn render_step<'i>(scope: &'i Scope, renderer: &dyn Render) -> String {
+pub fn render_step<'i>(
+    scope: &'i Scope,
+    subs: &'i Substitutions,
+    renderer: &dyn Render,
+) -> String {
     let mut sub = Formatter::new(78);
+    sub.substitutions = Some(subs);
     match scope {
         Scope::DependentBlock { .. } | Scope::ParallelBlock { .. } => {
             sub.append_step(scope);
@@ -292,6 +327,7 @@ struct Formatter<'i> {
     width: u8,
     current: Syntax,
     buffer: String,
+    substitutions: Option<&'i Substitutions>,
 }
 
 impl<'i> Formatter<'i> {
@@ -302,6 +338,7 @@ impl<'i> Formatter<'i> {
             width,
             current: Syntax::Neutral,
             buffer: String::new(),
+            substitutions: None,
         }
     }
 
@@ -419,6 +456,7 @@ impl<'i> Formatter<'i> {
             width: self.width,
             current: Syntax::Neutral,
             buffer: String::new(),
+            substitutions: self.substitutions,
         }
     }
 
@@ -800,6 +838,7 @@ impl<'i> Formatter<'i> {
 
     fn append_descriptives(&mut self, descriptives: &'i [Descriptive<'i>]) {
         let syntax = self.current;
+        let subs = self.substitutions;
         let mut line = self.builder();
         // Whether the previous descriptive emitted an inline construct (code,
         // application, binding). Sentence punctuation opening the next text
@@ -819,6 +858,14 @@ impl<'i> Formatter<'i> {
                 }
                 Descriptive::CodeInline(exprs) if exprs.len() == 1 => {
                     let expr = &exprs[0];
+                    // A bare `{ variable }` for which the runner has a bound
+                    // value renders as that value in place of the source name.
+                    if let Expression::Variable(name, _) = expr {
+                        if let Some(fragments) = subs.and_then(|subs| subs.lookup(name.value)) {
+                            line.add_value(fragments);
+                            continue;
+                        }
+                    }
                     match expr {
                         _ if is_tablet_list_expr(expr) => {
                             line.flush();
@@ -1599,6 +1646,36 @@ impl<'a, 'i> Line<'a, 'i> {
     /// construct, e.g. the `,` in `{ code },`.
     fn add_hugging(&mut self, syntax: Syntax, word: &'i str) {
         self.add_no_wrap(syntax, Cow::Borrowed(word));
+    }
+
+    /// Splice a substituted variable's pre-styled fragments into the line as
+    /// one non-breaking unit, wrapping before it if it would overflow.
+    fn add_value(&mut self, fragments: &[(Syntax, Cow<'static, str>)]) {
+        let len: u8 = fragments
+            .iter()
+            .map(|(_, content)| content.len() as u8)
+            .sum();
+        if !self
+            .current
+            .is_empty()
+        {
+            if self.position + 1 + len
+                > self
+                    .output
+                    .width
+            {
+                self.wrap_line();
+            } else {
+                self.current
+                    .push((Syntax::Neutral, Cow::Borrowed(" ")));
+                self.position += 1;
+            }
+        }
+        for (syntax, content) in fragments {
+            self.current
+                .push((*syntax, content.clone()));
+        }
+        self.position += len;
     }
 
     fn add_inline_code(&mut self, expr: &'i Expression) {
