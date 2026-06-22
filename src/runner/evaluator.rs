@@ -194,9 +194,24 @@ pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     }
 }
 
-/// Parse a `[ "a", b, ... ]` literal into its elements, each a string with
-/// any surrounding quotes stripped. Returns `None` for text that is not
-/// bracketed. Commas inside element text are not supported.
+/// Coerce a raw user-supplied string — a command-line argument or an unquoted
+/// list element — into its natural Value type: a `[ … ]` literal becomes a
+/// list, a number becomes a quantity, anything else stays a string.
+pub(super) fn parse_value(text: &str) -> Value {
+    let trimmed = text.trim();
+    if let Some(items) = parse_list_literal(trimmed) {
+        return Value::Arraeum(items);
+    }
+    if let Some(numeric) = crate::parsing::parse_numeric(trimmed) {
+        return Value::Quanticle(Numeric::from(&numeric));
+    }
+    Value::Literali(text.to_string())
+}
+
+/// Parse a `[ "a", b, ... ]` literal into its elements. A quoted element is a
+/// string verbatim; an unquoted one takes its natural type via `parse_value`.
+/// Returns `None` for text that is not bracketed. TODO This splits naively on
+/// ',' so commas inside element text are not supported.
 fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     let inner = text
         .trim()
@@ -212,11 +227,13 @@ fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
         .split(',')
         .map(|element| {
             let element = element.trim();
-            let unquoted = element
+            match element
                 .strip_prefix('"')
                 .and_then(|e| e.strip_suffix('"'))
-                .unwrap_or(element);
-            Value::Literali(unquoted.to_string())
+            {
+                Some(unquoted) => Value::Literali(unquoted.to_string()),
+                None => parse_value(element),
+            }
         })
         .collect();
     Some(items)

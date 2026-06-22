@@ -1966,7 +1966,7 @@ fn argument_echo_binds_each_parameter() {
     let source = r#"
 % technique v1
 
-connectivity_check(e, s) :
+connectivity_check(e, s, address) :
 
 1.  step
         "#
@@ -1974,7 +1974,11 @@ connectivity_check(e, s) :
     let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
-    let args = ["[]".to_string(), "0".to_string()];
+    let args = [
+        "[]".to_string(),
+        "0".to_string(),
+        "10 Downing Street".to_string(),
+    ];
     let env = bind_parameters(&program, &args).expect("bind");
     let params = program
         .subroutines
@@ -1983,7 +1987,10 @@ connectivity_check(e, s) :
         .parameters
         .unwrap();
     let echo = render_argument_echo("connectivity_check", params, &env);
-    assert_eq!(echo, "connectivity_check: ([] ~ e, 0 ~ s)");
+    assert_eq!(
+        echo,
+        "connectivity_check: ([] ~ e, 0 ~ s, \"10 Downing Street\" ~ address)"
+    );
 }
 
 #[test]

@@ -1480,18 +1480,23 @@ fn nests_work(op: &Operation) -> bool {
 /// Render the entry call with arguments bound to each parameter in
 /// `value ~ name` form, e.g. `connectivity_check([] ~ e, 0 ~ s)`.
 fn render_argument_echo(name: &str, params: &[language::Identifier], env: &Environment) -> String {
-    let bindings: Vec<String> = params
+    format!("{}: ({})", name, render_bindings(params, env))
+}
+
+/// Comma-join a set of bindings in `value ~ name` form with each value read
+/// from the environment.
+fn render_bindings(names: &[language::Identifier], env: &Environment) -> String {
+    let bindings: Vec<String> = names
         .iter()
-        .map(|p| {
-            let value = match env.lookup(p.value) {
-                Some(Value::Literali(text)) => text.clone(),
-                Some(other) => other.to_string(),
+        .map(|n| {
+            let value = match env.lookup(n.value) {
+                Some(value) => value.to_string(),
                 None => String::new(),
             };
-            format!("{} ~ {}", value, p.value)
+            format!("{} ~ {}", value, n.value)
         })
         .collect();
-    format!("{}: ({})", name, bindings.join(", "))
+    bindings.join(", ")
 }
 
 /// Describe a procedure's expected parameters as `name : Type` fragments for
@@ -1567,7 +1572,7 @@ pub(super) fn bind_parameters(
             param
                 .value
                 .to_string(),
-            Value::Literali(argument.clone()),
+            super::evaluator::parse_value(argument),
         );
     }
     Ok(env)
