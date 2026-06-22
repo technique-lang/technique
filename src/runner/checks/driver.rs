@@ -23,7 +23,7 @@ fn mock_returns_canned_answers_in_order() {
 #[test]
 fn mock_records_step_and_ask_events() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Unitus)]);
-    p.step("/local_network:I/1", "Check the cable.");
+    p.step("/local_network:I/1", "Check the cable.", 1);
     let _ = p.ask("/local_network:I/1", &[], Value::Unitus, true);
     assert_eq!(
         p.events(),
@@ -80,10 +80,23 @@ fn mock_ask_without_answers_panics() {
 fn console_step_writes_fqn_and_description() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
-    p.step("local_network:I/1", "Check the cable.");
+    p.step("local_network:I/1", "Check the cable.", 1);
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ local_network:I/1"));
     assert!(written.contains("    Check the cable."));
+}
+
+#[test]
+fn console_step_indents_description_to_depth() {
+    let mut output: Vec<u8> = Vec::new();
+    let mut p = Console::with_output(&mut output);
+    // A depth-2 substep indents its prose by eight spaces while the marker
+    // stays at the left margin.
+    p.step("local_network:I/1/a", "Inspect the connector.", 2);
+    let written = String::from_utf8(output).expect("utf8");
+    assert!(written.contains("→ local_network:I/1/a"));
+    assert!(written.contains("\n        Inspect the connector."));
+    assert!(!written.contains("\n    Inspect the connector."));
 }
 
 #[test]

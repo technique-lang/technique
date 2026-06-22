@@ -48,10 +48,12 @@ pub enum UserInput {
 /// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
 /// the debugging `Transcript`, and the test `Mock`.
 pub trait Driver {
-    /// Show the step's Qualified Name and rendered description.
-    /// The implementation displays them; it does not block waiting for
-    /// input — the walker calls `ask` for that separately.
-    fn step(&mut self, qualified: &str, description: &str);
+    /// Show the step's Qualified Name and rendered description. `depth` is the
+    /// step's document nesting level (one-origin), indenting the description to
+    /// match while the `→` marker stays at the left margin. The implementation
+    /// displays them; it does not block waiting for input — the walker calls
+    /// `ask` for that separately.
+    fn step(&mut self, qualified: &str, description: &str, depth: usize);
 
     /// Announce descent into a named scope — a Section or an invoked
     /// subroutine — with its Qualified Name (the `↘` marker).
@@ -157,9 +159,15 @@ impl<W: Write> Console<W> {
 }
 
 impl<W: Write> Driver for Console<W> {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
         let renderer = self.renderer();
-        render_step(&mut self.output, &display_path(fqn), description, renderer);
+        render_step(
+            &mut self.output,
+            &display_path(fqn),
+            description,
+            depth,
+            renderer,
+        );
     }
 
     fn enter(&mut self, qualified: &str) {
@@ -380,8 +388,16 @@ fn interact<W: Write>(
 /// Write text indented by four spaces, replicating the canonical source
 /// layout the code formatter emits.
 fn write_indented<W: Write>(out: &mut W, text: &str) {
+    write_indented_by(out, text, 1);
+}
+
+/// Write text indented by four spaces per `depth` level, so a step's prose
+/// sits at the same nesting it has in the source document. A `depth` of zero
+/// is treated as one — every step is indented at least one level.
+fn write_indented_by<W: Write>(out: &mut W, text: &str, depth: usize) {
+    let pad = " ".repeat(4 * depth.max(1));
     for line in text.lines() {
-        let _ = writeln!(out, "    {}", line);
+        let _ = writeln!(out, "{}{}", pad, line);
     }
 }
 
@@ -389,11 +405,18 @@ fn write_marker_line<W: Write>(out: &mut W, text: &str, renderer: &dyn Render) {
     let _ = writeln!(out, "{}", renderer.style(Syntax::Marker, text));
 }
 
-/// Render a step's `→` line and description.
-fn render_step<W: Write>(out: &mut W, fqn: &str, description: &str, renderer: &dyn Render) {
+/// Render a step's `→` line and description. The marker stays at the left
+/// margin; the description is indented to its document nesting `depth`.
+fn render_step<W: Write>(
+    out: &mut W,
+    fqn: &str,
+    description: &str,
+    depth: usize,
+    renderer: &dyn Render,
+) {
     write_marker_line(out, &format!("→ {}", fqn), renderer);
     let _ = writeln!(out);
-    write_indented(out, description);
+    write_indented_by(out, description, depth);
     let _ = writeln!(out);
 }
 
@@ -1100,11 +1123,12 @@ impl<W: Write> Automatic<W> {
 }
 
 impl<W: Write> Driver for Automatic<W> {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
         render_step(
             &mut self.output,
             &display_path(fqn),
             description,
+            depth,
             self.renderer,
         );
     }
@@ -1263,12 +1287,12 @@ impl<D, W: Write> Transcript<D, W> {
 }
 
 impl<D: Driver, W: Write> Driver for Transcript<D, W> {
-    fn step(&mut self, qualified: &str, description: &str) {
+    fn step(&mut self, qualified: &str, description: &str, depth: usize) {
         self.emit(Trace::Enter {
             path: qualified.to_string(),
         });
         self.inner
-            .step(qualified, description);
+            .step(qualified, description, depth);
     }
 
     fn enter(&mut self, qualified: &str) {
@@ -1395,7 +1419,7 @@ impl Headless {
 }
 
 impl Driver for Headless {
-    fn step(&mut self, _qualified: &str, _description: &str) {}
+    fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
 
     fn enter(&mut self, _qualified: &str) {}
 
@@ -1533,7 +1557,7 @@ impl Mock {
 
 #[cfg(test)]
 impl Driver for Mock {
-    fn step(&mut self, fqn: &str, description: &str) {
+    fn step(&mut self, fqn: &str, description: &str, _depth: usize) {
         self.events
             .push(Event::Step {
                 qualified: fqn.to_string(),

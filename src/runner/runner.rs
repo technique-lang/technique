@@ -1147,8 +1147,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .renderer(),
         );
 
+        let depth = self
+            .path
+            .depth();
         self.driver
-            .step(qualified, &step_text);
+            .step(qualified, &step_text, depth);
 
         let produced = match self.walk(env, body)? {
             Outcome::Stopped => return Ok(Outcome::Stopped),
