@@ -1128,8 +1128,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.appender
             .append(&begin)?;
 
+        let subs = env.substitutions();
         let step_text = crate::formatting::formatter::render_step(
             source,
+            &subs,
             self.driver
                 .renderer(),
         );

@@ -637,12 +637,10 @@ test :
             }
         })
         .collect();
-    // Both steps render from their source paragraphs: the binding syntax
-    // and the interpolation reference are shown as-written, with ordinals.
-    assert_eq!(
-        descriptions,
-        vec!["1.  { 42 ~ answer }", "2.  Result: { answer }"]
-    );
+    // Step 1's binding syntax shows as-written (the value isn't bound until
+    // its body walks). By step 2 `answer` is bound, so its interpolation
+    // renders the value in place of the variable name.
+    assert_eq!(descriptions, vec!["1.  { 42 ~ answer }", "2.  Result: 42"]);
 }
 
 #[test]
@@ -1030,9 +1028,10 @@ greet(name) :
             _ => None,
         })
         .collect();
-    // The step renders from its source paragraph, showing the template.
-    // `greet` is a top-level procedure, addressed at its own root.
-    assert_eq!(steps, vec![("/greet:/1", "1.  Hello { name }")]);
+    // `name` is bound to the invocation argument, so the step renders the
+    // value in place of the interpolation. `greet` is a top-level procedure,
+    // addressed at its own root.
+    assert_eq!(steps, vec![("/greet:/1", "1.  Hello \"World\"")]);
 }
 
 #[test]
@@ -1490,7 +1489,7 @@ fn foreach_walks_body_once_per_list_element() {
         .collect();
     assert_eq!(
         steps,
-        vec![("/[1]/a", "a.  { item }"), ("/[2]/a", "a.  { item }")]
+        vec![("/[1]/a", "a.  \"first\""), ("/[2]/a", "a.  \"second\"")]
     );
 }
 
@@ -1573,9 +1572,9 @@ fn foreach_over_seq_builtin_runs() {
     assert_eq!(
         steps,
         vec![
-            ("/[1]/a", "a.  { n }"),
-            ("/[2]/a", "a.  { n }"),
-            ("/[3]/a", "a.  { n }"),
+            ("/[1]/a", "a.  1"),
+            ("/[2]/a", "a.  2"),
+            ("/[3]/a", "a.  3"),
         ]
     );
 }
@@ -1658,10 +1657,7 @@ fn foreach_destructures_tuple_elements() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        steps,
-        vec!["a.  { first } / { second }", "a.  { first } / { second }"]
-    );
+    assert_eq!(steps, vec!["a.  \"a\" / \"b\"", "a.  \"c\" / \"d\""]);
 }
 
 #[test]
@@ -1724,7 +1720,7 @@ fn foreach_widens_primitive_to_singleton() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps, vec![("/[1]/a", "a.  { item }")]);
+    assert_eq!(steps, vec![("/[1]/a", "a.  \"lonely\"")]);
 }
 
 #[test]
@@ -2027,7 +2023,7 @@ greet(name) :
             }
         })
         .collect();
-    assert_eq!(descriptions, vec!["1.  Hello { name }"]);
+    assert_eq!(descriptions, vec!["1.  Hello \"world\""]);
 }
 
 #[test]

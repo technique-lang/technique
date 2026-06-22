@@ -1,11 +1,13 @@
 //! Variable bindings and the evaluator that turns value-bearing
 //! Operations into Values for description rendering and binding.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use super::context::Context;
 use super::library::Library;
 use super::runner::RunnerError;
+use crate::formatting::{Substitutions, Syntax};
 use crate::program::{ExecutableRef, Fragment, Operation};
 use crate::value::{Numeric, Value};
 
@@ -33,6 +35,34 @@ impl Environment {
     pub fn extend(&mut self, name: String, value: Value) {
         self.bindings
             .insert(name, value);
+    }
+
+    /// Pre-styled fragments for each bound value, for splicing into a step's
+    /// prose where it interpolates that variable. See `render_value`.
+    pub fn substitutions(&self) -> Substitutions {
+        let mut subs = Substitutions::new();
+        for (name, value) in &self.bindings {
+            if let Some(fragments) = render_value(value) {
+                subs.insert(name.clone(), fragments);
+            }
+        }
+        subs
+    }
+}
+
+/// Pre-styled fragments for splicing a bound value into a step's prose,
+/// highlighted as it would be in source: strings quoted, numbers bare. Value
+/// kinds with no sensible inline prose form yield None, leaving the variable's
+/// `{ name }` interpolation to render as written.
+fn render_value(value: &Value) -> Option<Vec<(Syntax, Cow<'static, str>)>> {
+    match value {
+        Value::Literali(text) => Some(vec![
+            (Syntax::Quote, Cow::Borrowed("\"")),
+            (Syntax::String, Cow::Owned(text.clone())),
+            (Syntax::Quote, Cow::Borrowed("\"")),
+        ]),
+        Value::Quanticle(numeric) => Some(vec![(Syntax::Numeric, Cow::Owned(numeric.to_string()))]),
+        _ => None,
     }
 }
 
