@@ -880,11 +880,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                 Some(text) => Some(text.as_str()),
                 None => None,
             };
+            // Set the acquired `(name : forma)` off from the path with a
+            // trailing space; an invocation prompt instead glues its arguments
+            // straight to the `<callee>`.
+            let prompt = format!("{qualified} ");
             let mut acquired = Vec::with_capacity(names.len());
             for name in names {
                 match self
                     .driver
-                    .acquire(&qualified, Some(name.value), forma)
+                    .acquire(&prompt, Some(name.value), forma)
                 {
                     UserInput::Done(value) => acquired.push(value),
                     UserInput::Skip => {
