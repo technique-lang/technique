@@ -204,7 +204,23 @@ impl<'i> Translator<'i> {
 
         let mut ops = Vec::new();
         let mut responses = Vec::new();
-        self.translate_descriptions(&mut ops, description);
+        // The description's executable content becomes an anonymous step-0
+        // scope, present only when the description carries instructions rather
+        // than prose alone.
+        let mut prologue = Vec::new();
+        self.translate_step_content(&mut prologue, description);
+        if prologue
+            .iter()
+            .any(|op| {
+                if let Operation::Prose(_) = op {
+                    false
+                } else {
+                    true
+                }
+            })
+        {
+            ops.push(Operation::Prologue(prologue));
+        }
         for element in &procedure.elements {
             match element {
                 language::Element::Steps(scopes, _) => {
@@ -456,8 +472,8 @@ impl<'i> Translator<'i> {
         }
     }
 
-    // Hoist executable Descriptives out of description paragraphs and
-    // append them to `ops` as an "anonymous step 0" prefix.
+    // Hoist the executable Descriptives out of a paragraph, dropping its
+    // prose. Used to scan a section title for any invocations it makes.
     fn translate_descriptions(
         &mut self,
         ops: &mut Vec<Operation<'i>>,

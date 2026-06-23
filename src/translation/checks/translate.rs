@@ -1212,10 +1212,9 @@ run :
 }
 
 #[test]
-fn procedure_description_executables_hoist_as_prefix() {
-    // Hoisting at the procedure level: an executable Descriptive in the
-    // procedure's description forms an "anonymous step 0" prefix ahead of
-    // the explicit Steps.
+fn procedure_description_executables_hoist_as_prologue() {
+    // An executable Descriptive in the procedure's description forms an
+    // anonymous step-0 Prologue scope ahead of the explicit Steps.
     let source = r#"
 % technique v1
 
@@ -1235,11 +1234,22 @@ init : () -> ()
     let Operation::Sequence(ops) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    // Prefix Invoke from the description, then the explicit Step.
+    // Prologue from the description, then the explicit Step.
     assert_eq!(ops.len(), 2);
-    let Operation::Invoke(_) = &ops[0] else {
-        panic!("expected Invoke prefix, got {:?}", ops[0]);
+    let Operation::Prologue(prologue) = &ops[0] else {
+        panic!("expected Prologue, got {:?}", ops[0]);
     };
+    let invokes = prologue
+        .iter()
+        .filter(|op| {
+            if let Operation::Invoke(_) = op {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(invokes, 1);
     let Operation::Step { .. } = &ops[1] else {
         panic!("expected Step, got {:?}", ops[1]);
     };

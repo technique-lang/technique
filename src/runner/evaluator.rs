@@ -200,6 +200,7 @@ pub fn evaluate<'i>(
         // to defer against; it stands for an as-yet-unsupplied value.
         Operation::Hole => Ok(Value::Futurae(String::new())),
         Operation::Prose(_)
+        | Operation::Prologue(_)
         | Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }

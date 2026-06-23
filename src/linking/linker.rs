@@ -80,7 +80,7 @@ fn link_operation<'i>(
                 link_operation(arg, library, problems);
             }
         }
-        Operation::Sequence(ops) => {
+        Operation::Sequence(ops) | Operation::Prologue(ops) => {
             for op in ops {
                 link_operation(op, library, problems);
             }
