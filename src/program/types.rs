@@ -128,6 +128,7 @@ pub enum Operation<'i> {
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
     Hole,
+    Prose(&'i str),
     Sequence(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,

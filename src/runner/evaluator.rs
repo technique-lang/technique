@@ -199,7 +199,8 @@ pub fn evaluate<'i>(
         // A `?` reached outside a procedure invocation has no parameter name
         // to defer against; it stands for an as-yet-unsupplied value.
         Operation::Hole => Ok(Value::Futurae(String::new())),
-        Operation::Section { .. }
+        Operation::Prose(_)
+        | Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }
         | Operation::Invoke(_) => Ok(Value::Unitus),

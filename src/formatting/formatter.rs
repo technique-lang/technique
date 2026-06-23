@@ -256,11 +256,7 @@ pub fn render_description<'i>(paragraphs: &'i [Paragraph<'i>], renderer: &dyn Re
 }
 
 /// Render step's without descending into nested subscopes.
-pub fn render_step<'i>(
-    scope: &'i Scope,
-    subs: &'i Substitutions,
-    renderer: &dyn Render,
-) -> String {
+pub fn render_step<'i>(scope: &'i Scope, subs: &'i Substitutions, renderer: &dyn Render) -> String {
     let mut sub = Formatter::new(78);
     sub.substitutions = Some(subs);
     match scope {

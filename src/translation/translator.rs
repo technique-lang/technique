@@ -328,7 +328,7 @@ impl<'i> Translator<'i> {
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
-                self.translate_descriptions(&mut body_ops, description);
+                self.translate_step_content(&mut body_ops, description);
                 self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
@@ -345,7 +345,7 @@ impl<'i> Translator<'i> {
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
-                self.translate_descriptions(&mut body_ops, description);
+                self.translate_step_content(&mut body_ops, description);
                 self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
@@ -470,6 +470,28 @@ impl<'i> Translator<'i> {
                     // A multi-statement code block hoists its statements
                     // directly into the body, one operation per call, rather
                     // than nesting them in a Sequence.
+                    Some(Operation::Sequence(inner)) => ops.extend(inner),
+                    Some(op) => ops.push(op),
+                    None => {}
+                }
+            }
+        }
+    }
+
+    // Like translate_descriptions() but for a step body.
+    fn translate_step_content(
+        &mut self,
+        ops: &mut Vec<Operation<'i>>,
+        paragraphs: &'i [language::Paragraph<'i>],
+    ) {
+        for paragraph in paragraphs {
+            let language::Paragraph(descriptives, _) = paragraph;
+            for descriptive in descriptives {
+                if let language::Descriptive::Text(text) = descriptive {
+                    ops.push(Operation::Prose(text));
+                    continue;
+                }
+                match self.executable_from_descriptive(descriptive) {
                     Some(Operation::Sequence(inner)) => ops.extend(inner),
                     Some(op) => ops.push(op),
                     None => {}

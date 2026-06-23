@@ -419,6 +419,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_)
+            | Operation::Prose(_)
             | Operation::Hole => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Outcome::Done(value))
@@ -1450,6 +1451,7 @@ fn computable(op: &Operation) -> bool {
             .iter()
             .any(computable),
         Operation::Step { body, .. } | Operation::Section { body, .. } => computable(body),
+        Operation::Prose(_) => false,
         _ => true,
     }
 }

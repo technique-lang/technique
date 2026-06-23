@@ -398,12 +398,12 @@ make_coffee :
     };
     let inner_ordinals: Vec<&str> = inner
         .iter()
-        .map(|op| match op {
+        .filter_map(|op| match op {
             Operation::Step {
                 ordinal: Ordinal::Dependent(n),
                 ..
-            } => *n,
-            _ => panic!("expected dependent substep"),
+            } => Some(*n),
+            _ => None,
         })
         .collect();
     assert_eq!(inner_ordinals, vec!["a", "b"]);
@@ -542,10 +542,11 @@ make_coffee :
     let Operation::Sequence(inner) = outer_body.as_ref() else {
         panic!("expected inner Sequence");
     };
+    // inner[0] is the outer step's own prose; the substep follows.
     let Operation::Step {
         attributes: substep_attrs,
         ..
-    } = &inner[0]
+    } = &inner[1]
     else {
         panic!("expected substep");
     };
@@ -1070,8 +1071,8 @@ helper : () -> Result
     let Operation::Sequence(body_ops) = body.as_ref() else {
         panic!("expected Sequence");
     };
-    assert_eq!(body_ops.len(), 1);
-    let Operation::Bind { names, value, .. } = &body_ops[0] else {
+    assert_eq!(body_ops.len(), 2);
+    let Operation::Bind { names, value, .. } = &body_ops[1] else {
         panic!("expected Bind");
     };
     assert_eq!(names[0].value, "outcome");
@@ -1107,15 +1108,17 @@ helper : () -> Result
     let Operation::Sequence(body_ops) = body.as_ref() else {
         panic!("expected Sequence");
     };
-    assert_eq!(body_ops.len(), 1);
-    let Operation::Invoke(_) = &body_ops[0] else {
-        panic!("expected Invoke, got {:?}", body_ops[0]);
+    // [Prose("Do"), Invoke, Prose("first.")] — the invoke sits between prose.
+    assert_eq!(body_ops.len(), 3);
+    let Operation::Invoke(_) = &body_ops[1] else {
+        panic!("expected Invoke, got {:?}", body_ops[1]);
     };
 }
 
 #[test]
-fn step_plain_text_does_not_hoist() {
-    // Plain text in a step description is display-only; nothing hoists.
+fn step_plain_text_becomes_prose() {
+    // Plain text in a step description is kept as an inert Prose operation, so
+    // the step's last value reflects source order (here, no value: Done unit).
     let source = r#"
 % technique v1
 
@@ -1137,7 +1140,11 @@ run :
     let Operation::Sequence(body_ops) = body.as_ref() else {
         panic!("expected Sequence");
     };
-    assert!(body_ops.is_empty());
+    assert_eq!(body_ops.len(), 1);
+    let Operation::Prose(text) = &body_ops[0] else {
+        panic!("expected Prose, got {:?}", body_ops[0]);
+    };
+    assert_eq!(*text, "Just a plain step with no executable bits.");
 }
 
 #[test]
@@ -1165,9 +1172,9 @@ run :
     let Operation::Sequence(body_ops) = body.as_ref() else {
         panic!("expected Sequence");
     };
-    assert_eq!(body_ops.len(), 1);
-    let Operation::Execute(_) = &body_ops[0] else {
-        panic!("expected Execute, got {:?}", body_ops[0]);
+    assert_eq!(body_ops.len(), 2);
+    let Operation::Execute(_) = &body_ops[1] else {
+        panic!("expected Execute, got {:?}", body_ops[1]);
     };
 }
 
@@ -1197,9 +1204,9 @@ run :
     let Operation::Sequence(body_ops) = body.as_ref() else {
         panic!("expected Sequence");
     };
-    assert_eq!(body_ops.len(), 1);
-    let Operation::Variable(id) = &body_ops[0] else {
-        panic!("expected Variable, got {:?}", body_ops[0]);
+    assert_eq!(body_ops.len(), 2);
+    let Operation::Variable(id) = &body_ops[1] else {
+        panic!("expected Variable, got {:?}", body_ops[1]);
     };
     assert_eq!(id.value, "x");
 }
@@ -1357,7 +1364,7 @@ run :
     let Operation::Loop {
         responses: loop_responses,
         ..
-    } = &step_body[0]
+    } = &step_body[1]
     else {
         panic!("expected Loop");
     };
@@ -1525,14 +1532,14 @@ delete_rds_instance :
     // Step body, one Execute per call.
     let names: Vec<&str> = step_body
         .iter()
-        .map(|op| match op {
+        .filter_map(|op| match op {
             Operation::Execute(executable) => {
                 let ExecutableRef::Unresolved(target) = &executable.target else {
                     panic!("expected Unresolved, got {:?}", executable.target);
                 };
-                target.value
+                Some(target.value)
             }
-            other => panic!("expected Execute, got {:?}", other),
+            _ => None,
         })
         .collect();
     assert_eq!(
@@ -1569,7 +1576,7 @@ run :
     let Operation::Sequence(outer_ops) = outer.as_ref() else {
         panic!("expected Sequence");
     };
-    let Operation::Step { body: substep, .. } = &outer_ops[0] else {
+    let Operation::Step { body: substep, .. } = &outer_ops[1] else {
         panic!("expected substep");
     };
     let Operation::Sequence(sub_ops) = substep.as_ref() else {
@@ -1577,12 +1584,12 @@ run :
     };
     let ordinals: Vec<&str> = sub_ops
         .iter()
-        .map(|op| match op {
+        .filter_map(|op| match op {
             Operation::Step {
                 ordinal: Ordinal::Dependent(n),
                 ..
-            } => *n,
-            _ => panic!("expected sub-substep"),
+            } => Some(*n),
+            _ => None,
         })
         .collect();
     assert_eq!(ordinals, vec!["i", "ii"]);
