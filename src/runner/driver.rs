@@ -59,6 +59,14 @@ pub trait Driver {
     /// subroutine — with its Qualified Name (the `↘` marker).
     fn enter(&mut self, qualified: &str);
 
+    /// Cross into this document on the way in: the `⇒` boundary line carrying
+    /// the document name, version, and run identifier (`/ NetworkProbe,1 000096`).
+    fn commence(&mut self, label: &str);
+
+    /// Cross out of this document on the way out: the `⇐` boundary line carrying
+    /// the run identifier (`/ 000096`).
+    fn conclude(&mut self, label: &str);
+
     /// Display a line of formatted content at the left margin.
     fn display(&mut self, content: &str);
 
@@ -174,6 +182,17 @@ impl<W: Write> Driver for Console<W> {
         let renderer = self.renderer();
         render_enter(&mut self.output, &display_path(qualified), renderer);
         let _ = writeln!(self.output);
+    }
+
+    fn commence(&mut self, label: &str) {
+        let renderer = self.renderer();
+        write_marker_line(&mut self.output, &format!("⇒ {}", label), renderer);
+        let _ = writeln!(self.output);
+    }
+
+    fn conclude(&mut self, label: &str) {
+        let renderer = self.renderer();
+        write_marker_line(&mut self.output, &format!("⇐ {}", label), renderer);
     }
 
     fn display(&mut self, content: &str) {
@@ -1173,6 +1192,15 @@ impl<W: Write> Driver for Automatic<W> {
         let _ = writeln!(self.output);
     }
 
+    fn commence(&mut self, label: &str) {
+        write_marker_line(&mut self.output, &format!("⇒ {}", label), self.renderer);
+        let _ = writeln!(self.output);
+    }
+
+    fn conclude(&mut self, label: &str) {
+        write_marker_line(&mut self.output, &format!("⇐ {}", label), self.renderer);
+    }
+
     fn display(&mut self, content: &str) {
         let _ = writeln!(self.output, "{}", content);
         let _ = writeln!(self.output);
@@ -1338,6 +1366,16 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .enter(qualified);
     }
 
+    fn commence(&mut self, label: &str) {
+        self.inner
+            .commence(label);
+    }
+
+    fn conclude(&mut self, label: &str) {
+        self.inner
+            .conclude(label);
+    }
+
     fn display(&mut self, content: &str) {
         self.inner
             .display(content);
@@ -1457,6 +1495,10 @@ impl Driver for Headless {
     fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
 
     fn enter(&mut self, _qualified: &str) {}
+
+    fn commence(&mut self, _label: &str) {}
+
+    fn conclude(&mut self, _label: &str) {}
 
     fn display(&mut self, _content: &str) {}
 
@@ -1606,6 +1648,10 @@ impl Driver for Mock {
                 qualified: fqn.to_string(),
             });
     }
+
+    fn commence(&mut self, _label: &str) {}
+
+    fn conclude(&mut self, _label: &str) {}
 
     fn display(&mut self, content: &str) {
         self.events

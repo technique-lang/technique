@@ -46,11 +46,12 @@ pub struct Record {
 }
 
 /// A lifecycle or step-outcome event; the keyword written into each PFFTT
-/// record line. `Start`, `Stop`, and `Resume` are run-lifecycle events emitted
-/// at the root path `/`; `Begin` marks entry into a step or scope (paired with the
-/// eventual `Done`, `Skip`, or `Fail` at the same path). `Stop` records a deliberate
+/// record line. `Start`, `Finish`, `Stop`, and `Resume` are run-lifecycle
+/// events emitted at the root path `/`; `Begin` marks entry into a step or
+/// scope (paired with the eventual `Done`, `Skip`, or `Fail` at the same path).
+/// `Finish` closes a run that walked to its end; `Stop` records a deliberate
 /// quit — the run stays resumable, and the record distinguishes the quit from a
-/// crash (which records nothing).
+/// crash (which records nothing) and from a `Finish`.
 /// `Invoke` records dispatch into another procedure (the return is
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` and `Return` bracket an effectful host call (a `Command` or
@@ -61,6 +62,7 @@ pub struct Record {
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
+    Finish,
     Stop,
     Resume,
     Invoke(InvokeTarget),
@@ -245,6 +247,7 @@ impl Store {
                     inputs.insert(record.path, supplied);
                 }
                 State::Start { .. }
+                | State::Finish
                 | State::Stop
                 | State::Resume
                 | State::Invoke(_)
@@ -466,6 +469,7 @@ fn format_state(out: &mut String, state: &State) {
             out.push_str("Start ");
             out.push_str(uri);
         }
+        State::Finish => out.push_str("Finish"),
         State::Stop => out.push_str("Stop"),
         State::Resume => out.push_str("Resume"),
         State::Invoke(target) => {
@@ -661,6 +665,12 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
             Ok(State::Start {
                 uri: uri.to_string(),
             })
+        }
+        "Finish" => {
+            if rest.is_some() {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(State::Finish)
         }
         "Stop" => {
             if rest.is_some() {

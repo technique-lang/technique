@@ -150,8 +150,8 @@ fn step_outcomes_recorded() {
                 .is_empty()
         })
         .collect();
-    // Start + Begin + Done — three lines.
-    assert_eq!(lines.len(), 3);
+    // Start + Begin + Done + Finish — four lines.
+    assert_eq!(lines.len(), 4);
     assert_eq!(
         lines[0],
         "2026-05-16T00:00:00Z 000001 / Start file:///tmp/Test.tq"
@@ -1411,8 +1411,9 @@ fn loop_inside_step_produces_one_result() {
         .run(env)
         .expect("run");
 
-    // One Start record, then the enclosing step's Begin and Done — the
-    // Loop inside the step body does not record events of its own.
+    // One Start record, then the enclosing step's Begin and Done, then the
+    // closing Finish — the Loop inside the step body does not record events of
+    // its own.
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -1422,9 +1423,10 @@ fn loop_inside_step_produces_one_result() {
                 .is_empty()
         })
         .collect();
-    assert_eq!(lines.len(), 3);
+    assert_eq!(lines.len(), 4);
     assert!(lines[1].ends_with(" Begin"));
     assert!(lines[2].contains(" Done"));
+    assert!(lines[3].ends_with(" Finish"));
 }
 
 #[test]
