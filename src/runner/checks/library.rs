@@ -15,7 +15,7 @@ fn text(s: &str) -> Value {
 // evaluator takes once a call is resolved.
 fn call(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::capture();
     let id = library
         .resolve(name)
         .expect("builtin registered");
@@ -27,7 +27,7 @@ fn call(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
 fn call_system(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     let mut library = Library::core();
     library.extend(Library::system());
-    let context = Context::native();
+    let context = Context::capture();
     let id = library
         .resolve(name)
         .expect("builtin registered");

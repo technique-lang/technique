@@ -1,0 +1,12 @@
+local_network :
+
+# Local Network Connectivity
+
+Establish that the local network { exec("ls /") } environment is
+functioning.
+
+    1.  Check physical network interface { exec(
+        ```bash
+            echo "eth0 UP"
+        ```
+        ) } and look for eth0 being marked UP.

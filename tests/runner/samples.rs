@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use technique::parsing;
-use technique::runner::{Appender, Environment, Headless, Library, Outcome, Runner};
+use technique::runner::{Appender, Context, Environment, Headless, Library, Outcome, Runner};
 use technique::translation;
 
 use crate::common::list_technique_documents;
@@ -80,7 +80,8 @@ fn ensure_run() {
             HashMap::new(),
             Headless::new(),
             library,
-        );
+        )
+        .with_context(Context::capture());
         let outcome = match runner.run(Environment::new()) {
             Ok(outcome) => outcome,
             Err(e) => {

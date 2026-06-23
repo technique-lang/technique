@@ -143,6 +143,12 @@ impl<'i, D: Driver> Runner<'i, D> {
         self
     }
 
+    /// Override the host context builtins write through (default: the terminal).
+    pub fn with_context(mut self, context: Context) -> Self {
+        self.context = context;
+        self
+    }
+
     /// Consume the runner and return the inner driver after a run completes.
     /// Used to read a `Headless` driver's result count or to assert on the
     /// Mock's event log.

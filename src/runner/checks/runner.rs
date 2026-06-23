@@ -2679,7 +2679,7 @@ cleanup :
         &program,
         Appender::memory(),
         completed,
-        Automatic::new(false),
+        Automatic::with_handle(Vec::new()),
         Library::stub(),
     );
     let outcome = runner
