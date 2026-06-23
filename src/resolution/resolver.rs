@@ -105,7 +105,7 @@ fn resolve_operation<'i>(
                 resolve_operation(arg, known, arities, problems);
             }
         }
-        Operation::Sequence(ops) | Operation::List(ops) => {
+        Operation::Sequence(ops) | Operation::List(ops) | Operation::Prologue(ops) => {
             for op in ops {
                 resolve_operation(op, known, arities, problems);
             }
@@ -144,6 +144,7 @@ fn resolve_operation<'i>(
         Operation::Variable(_)
         | Operation::Number(_)
         | Operation::Multiline(_, _)
+        | Operation::Prose(_)
         | Operation::Hole => {}
     }
 }
@@ -172,7 +173,7 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
             gather_iterated(body, iterated);
         }
         Operation::Bind { value, .. } => gather_iterated(value, iterated),
-        Operation::Sequence(ops) | Operation::List(ops) => {
+        Operation::Sequence(ops) | Operation::List(ops) | Operation::Prologue(ops) => {
             for op in ops {
                 gather_iterated(op, iterated);
             }
@@ -209,6 +210,7 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
         Operation::Variable(_)
         | Operation::Number(_)
         | Operation::Multiline(_, _)
+        | Operation::Prose(_)
         | Operation::Hole => {}
     }
 }
@@ -231,7 +233,7 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             }
             mark_iterated(body, iterated);
         }
-        Operation::Sequence(ops) | Operation::List(ops) => {
+        Operation::Sequence(ops) | Operation::List(ops) | Operation::Prologue(ops) => {
             for op in ops {
                 mark_iterated(op, iterated);
             }
@@ -268,6 +270,7 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
         Operation::Variable(_)
         | Operation::Number(_)
         | Operation::Multiline(_, _)
+        | Operation::Prose(_)
         | Operation::Hole => {}
     }
 }
@@ -322,7 +325,7 @@ fn check_scope<'i>(
             }
             check_scope(body, scope, problems);
         }
-        Operation::Sequence(ops) | Operation::List(ops) => {
+        Operation::Sequence(ops) | Operation::List(ops) | Operation::Prologue(ops) => {
             for op in ops {
                 check_scope(op, scope, problems);
             }
@@ -356,7 +359,10 @@ fn check_scope<'i>(
                 check_scope(&entry.value, scope, problems);
             }
         }
-        Operation::Number(_) | Operation::Multiline(_, _) | Operation::Hole => {}
+        Operation::Number(_)
+        | Operation::Multiline(_, _)
+        | Operation::Prose(_)
+        | Operation::Hole => {}
     }
 }
 

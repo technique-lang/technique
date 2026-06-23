@@ -143,6 +143,12 @@ impl<'i, D: Driver> Runner<'i, D> {
         self
     }
 
+    /// Override the host context builtins write through (default: the terminal).
+    pub fn with_context(mut self, context: Context) -> Self {
+        self.context = context;
+        self
+    }
+
     /// Consume the runner and return the inner driver after a run completes.
     /// Used to read a `Headless` driver's result count or to assert on the
     /// Mock's event log.
@@ -263,6 +269,17 @@ impl<'i, D: Driver> Runner<'i, D> {
     ) -> Result<Outcome, RunnerError> {
         match op {
             Operation::Sequence(ops) => self.walk_sequence(env, ops),
+            Operation::Prologue(ops) => {
+                self.path
+                    .push(PathSegment::Prologue);
+                let qualified = self
+                    .path
+                    .render();
+                let result = self.perform_prologue(env, &qualified, ops);
+                self.path
+                    .pop();
+                result
+            }
             Operation::Section {
                 numeral,
                 title,
@@ -419,6 +436,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_)
+            | Operation::Prose(_)
             | Operation::Hole => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Outcome::Done(value))
@@ -1107,6 +1125,56 @@ impl<'i, D: Driver> Runner<'i, D> {
         result
     }
 
+    // Walk the anonymous step-0 scope. Its `/0` address is bracketed
+    // Begin…Done like a step's, so a completed prologue short-circuits on
+    // resume (and rehydrates any bindings it made) rather than re-running its
+    // commands; unlike a step it takes no sign-off of its own, folding its
+    // outcome into the enclosing procedure's seal.
+    fn perform_prologue(
+        &mut self,
+        env: &mut Environment,
+        qualified: &str,
+        ops: &'i [Operation<'i>],
+    ) -> Result<Outcome, RunnerError> {
+        if let Some(value) = self
+            .completed
+            .get(qualified)
+        {
+            let value = value.clone();
+            if ops
+                .iter()
+                .any(nests_work)
+            {
+                for op in ops {
+                    self.walk(env, op)?;
+                }
+            } else if let Some(names) = ops
+                .iter()
+                .find_map(binding_names)
+            {
+                super::evaluator::bind_names(env, names, value.clone())?;
+            }
+            return Ok(Outcome::Done(value));
+        }
+
+        self.begin_scope(qualified)?;
+        let outcome = self.walk_sequence(env, ops)?;
+        if let Outcome::Stopped = outcome {
+            return Ok(outcome);
+        }
+        let record = Record {
+            recorded: now_iso8601(),
+            run_id: self
+                .appender
+                .run_id(),
+            path: qualified.to_string(),
+            state: record_state(&outcome),
+        };
+        self.appender
+            .append(&record)?;
+        Ok(outcome)
+    }
+
     fn perform_step(
         &mut self,
         env: &mut Environment,
@@ -1446,10 +1514,11 @@ fn computable(op: &Operation) -> bool {
     match op {
         // A pure-prose body is not computable (this is fine!).
         Operation::Sequence(ops) if ops.is_empty() => false,
-        Operation::Sequence(ops) => ops
+        Operation::Sequence(ops) | Operation::Prologue(ops) => ops
             .iter()
             .any(computable),
         Operation::Step { body, .. } | Operation::Section { body, .. } => computable(body),
+        Operation::Prose(_) => false,
         _ => true,
     }
 }

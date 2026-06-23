@@ -1311,6 +1311,70 @@ check :
 }
 
 #[test]
+fn description_instruction_records_under_step_zero() {
+    // An exec in the procedure description runs in the anonymous step-0
+    // Prologue scope, recording under the `/0` path ahead of the steps.
+    let source = r#"
+% technique v1
+
+check :
+
+Prepare the ground { exec("true") } before the steps.
+
+1.  Do the work.
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
+    let mut library = Library::core();
+    library.extend(Library::system());
+    crate::linking::link(&mut program, &library).expect("linked");
+
+    let mut fixture = StoreFixture::new("description-step-zero");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        Automatic::with_handle(Vec::new()),
+        library,
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let pfftt = fixture.pfftt_contents();
+    let records: Vec<_> = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .collect();
+    let zero: Vec<_> = records
+        .iter()
+        .filter(|r| r.path == "/check:/0")
+        .map(|r| &r.state)
+        .collect();
+    // The /0 scope is bracketed Begin…Done with the exec's trace between.
+    let State::Begin = zero[0] else {
+        panic!("expected Begin first at /check:/0, got {:?}", zero[0]);
+    };
+    let State::Done(_) = zero[zero.len() - 1] else {
+        panic!(
+            "expected Done last at /check:/0, got {:?}",
+            zero[zero.len() - 1]
+        );
+    };
+    assert!(zero
+        .iter()
+        .any(|state| {
+            if let State::Execute { .. } = state {
+                true
+            } else {
+                false
+            }
+        }));
+}
+
+#[test]
 fn loop_inside_step_produces_one_result() {
     let mut fixture = StoreFixture::new("loop-in-step");
 
@@ -2615,7 +2679,7 @@ cleanup :
         &program,
         Appender::memory(),
         completed,
-        Automatic::new(false),
+        Automatic::with_handle(Vec::new()),
         Library::stub(),
     );
     let outcome = runner

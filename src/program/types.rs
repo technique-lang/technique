@@ -128,7 +128,13 @@ pub enum Operation<'i> {
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
     Hole,
+    Prose(&'i str),
     Sequence(Vec<Operation<'i>>),
+    /// The executable work hoisted from a procedure's description is an
+    /// anonymous "step 0". Present only when the description carries
+    /// instructions, not for prose alone. Its outcome folds into the
+    /// procedure's own sign-off rather than prompting itself.
+    Prologue(Vec<Operation<'i>>),
     Section {
         numeral: &'i str,
         title: Option<Box<Operation<'i>>>,

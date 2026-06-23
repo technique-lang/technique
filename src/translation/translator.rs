@@ -204,7 +204,23 @@ impl<'i> Translator<'i> {
 
         let mut ops = Vec::new();
         let mut responses = Vec::new();
-        self.translate_descriptions(&mut ops, description);
+        // The description's executable content becomes an anonymous step-0
+        // scope, present only when the description carries instructions rather
+        // than prose alone.
+        let mut prologue = Vec::new();
+        self.translate_step_content(&mut prologue, description);
+        if prologue
+            .iter()
+            .any(|op| {
+                if let Operation::Prose(_) = op {
+                    false
+                } else {
+                    true
+                }
+            })
+        {
+            ops.push(Operation::Prologue(prologue));
+        }
         for element in &procedure.elements {
             match element {
                 language::Element::Steps(scopes, _) => {
@@ -276,8 +292,7 @@ impl<'i> Translator<'i> {
                 let mut responses = Vec::new();
 
                 if let Some(paragraph) = title {
-                    // scan for operations in section content
-                    self.translate_descriptions(&mut body_ops, std::slice::from_ref(paragraph));
+                    self.hoist_title_executables(&mut body_ops, paragraph);
                 }
                 match body {
                     language::Technique::Steps(scopes) => {
@@ -328,7 +343,7 @@ impl<'i> Translator<'i> {
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
-                self.translate_descriptions(&mut body_ops, description);
+                self.translate_step_content(&mut body_ops, description);
                 self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Dependent(ordinal),
@@ -345,7 +360,7 @@ impl<'i> Translator<'i> {
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
-                self.translate_descriptions(&mut body_ops, description);
+                self.translate_step_content(&mut body_ops, description);
                 self.attach_subscopes(&mut body_ops, &mut responses, subscopes, attrs);
                 Operation::Step {
                     ordinal: Ordinal::Parallel,
@@ -456,9 +471,30 @@ impl<'i> Translator<'i> {
         }
     }
 
-    // Hoist executable Descriptives out of description paragraphs and
-    // append them to `ops` as an "anonymous step 0" prefix.
-    fn translate_descriptions(
+    // A section title can itself invoke a procedure (`I. Run <setup>`). Hoist
+    // any such executables into the section body so they run on entry; the
+    // title's prose is rendered separately, so it is dropped here.
+    fn hoist_title_executables(
+        &mut self,
+        ops: &mut Vec<Operation<'i>>,
+        title: &'i language::Paragraph<'i>,
+    ) {
+        let language::Paragraph(descriptives, _) = title;
+        for descriptive in descriptives {
+            match self.executable_from_descriptive(descriptive) {
+                // A multi-statement code block hoists its statements directly,
+                // one operation per call, rather than nesting in a Sequence.
+                Some(Operation::Sequence(inner)) => ops.extend(inner),
+                Some(op) => ops.push(op),
+                None => {}
+            }
+        }
+    }
+
+    // Translate a step's description paragraphs into its body operations,
+    // keeping prose as inert `Prose` so the body's last value honours source
+    // order: a value contributes the step's result only in tail position.
+    fn translate_step_content(
         &mut self,
         ops: &mut Vec<Operation<'i>>,
         paragraphs: &'i [language::Paragraph<'i>],
@@ -466,10 +502,11 @@ impl<'i> Translator<'i> {
         for paragraph in paragraphs {
             let language::Paragraph(descriptives, _) = paragraph;
             for descriptive in descriptives {
+                if let language::Descriptive::Text(text) = descriptive {
+                    ops.push(Operation::Prose(text));
+                    continue;
+                }
                 match self.executable_from_descriptive(descriptive) {
-                    // A multi-statement code block hoists its statements
-                    // directly into the body, one operation per call, rather
-                    // than nesting them in a Sequence.
                     Some(Operation::Sequence(inner)) => ops.extend(inner),
                     Some(op) => ops.push(op),
                     None => {}

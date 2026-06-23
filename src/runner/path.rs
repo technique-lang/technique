@@ -10,6 +10,7 @@ use crate::language;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum PathSegment<'i> {
     Section(&'i str),
+    Prologue,
     DependentStep(&'i str),
     ParallelStep(usize),
     Iteration(usize),
@@ -125,6 +126,7 @@ pub fn render_path(segments: &[PathSegment]) -> String {
 fn render_segment(segment: &PathSegment) -> Option<String> {
     match segment {
         PathSegment::Section(numeral) => Some(numeral.to_string()),
+        PathSegment::Prologue => Some("0".to_string()),
         PathSegment::DependentStep(ordinal) => Some(ordinal.to_string()),
         PathSegment::ParallelStep(index) => Some(format!("-{}", index)),
         PathSegment::Iteration(number) => Some(format!("[{}]", number)), // you can't "index" into it!
