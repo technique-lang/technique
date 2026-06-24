@@ -305,10 +305,10 @@ fn prompt_action<W: Write>(
 }
 
 /// Solicit the user's approval to run a shell command. The script appears
-/// pre-filled on the `▶` prompt line as if already typed — Enter runs it,
+/// pre-filled on the '▶' prompt line as if already typed — Enter runs it,
 /// typing edits it in place, Esc opens the menu (Skip / Fail / Quit). On
-/// `Done` no settle line is printed — the command's output follows immediately
-/// and the step's own verdict prompt judges the result.
+/// `Done` the live line is redrawn in grey with the interactive prompt marker
+/// becoming the '$', reminiscent of a shell.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
     let qualified = display_path(qualified);
     let field = edit(
@@ -334,7 +334,16 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
             .count() as u16
         + 1;
     match &result {
-        UserInput::Done(_) | UserInput::Quit => {
+        UserInput::Done(produced) => {
+            let ran = if let Value::Literali(text) = produced {
+                text.trim_end()
+            } else {
+                script.trim_end()
+            };
+            let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+            let _ = writeln!(out, "{}", format!("→ {} $ {}", qualified, ran).dark_grey());
+        }
+        UserInput::Quit => {
             let _ = writeln!(out);
         }
         UserInput::Skip => {
