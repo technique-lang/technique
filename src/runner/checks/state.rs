@@ -318,6 +318,17 @@ fn format_record_pins_on_disk_text() {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
         path: "/".to_string(),
+        state: State::Finish,
+    };
+    assert_eq!(
+        format_record(&record),
+        "2026-05-17T00:28:30Z 015003 / Finish\n"
+    );
+
+    let record = Record {
+        recorded: "2026-05-17T00:28:30Z".to_string(),
+        run_id: RunId(15003),
+        path: "/".to_string(),
         state: State::Stop,
     };
     assert_eq!(
@@ -486,6 +497,12 @@ fn record_round_trips_through_format_and_parse() {
             state: State::Start {
                 uri: "file:///foo/Bar.tq".to_string(),
             },
+        },
+        Record {
+            recorded: "2026-05-17T00:28:25Z".to_string(),
+            run_id: RunId(1),
+            path: "/".to_string(),
+            state: State::Finish,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),

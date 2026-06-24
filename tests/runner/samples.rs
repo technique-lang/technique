@@ -29,9 +29,10 @@ fn strip_timestamp_and_runid(trail: &str) -> Vec<String> {
 /// matches the expected `.pfftt` checked in beside the sample. The walk
 /// records pin each step's qualified path and outcome in walk order, so a
 /// wrong path, a missing seal, a dropped iteration segment, or a reordered
-/// walk is caught. The in-memory capture holds only the walk (the store layer
-/// writes Start), so the first line is skipped when comparing. A sample
-/// without a matching `.pfftt` also fails.
+/// walk is caught. The in-memory capture holds the walk and its closing
+/// `Finish`, but not the opening `Start` (the store layer writes that), so the
+/// expected file's first line is skipped when comparing. A sample without a
+/// matching `.pfftt` also fails.
 #[test]
 fn ensure_run() {
     let dir = Path::new("tests/samples/runner/");
@@ -96,9 +97,10 @@ fn ensure_run() {
                 .contents(),
         );
 
-        // The expected file is a complete, valid PFFTT trail; its first line is
-        // the opening Start lifecycle record, which the in-memory walk capture
-        // does not include, so skip it before comparing the walk records.
+        // The expected file is a complete, valid PFFTT trail; its first line
+        // is the opening Start lifecycle record, which the in-memory walk
+        // capture does not include, so skip the first line before comparing
+        // the walk records.
         let expected_path = file.with_extension("pfftt");
         let expected_text = fs::read_to_string(&expected_path).unwrap_or_else(|e| {
             panic!(

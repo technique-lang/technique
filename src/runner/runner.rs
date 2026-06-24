@@ -113,6 +113,7 @@ pub struct Runner<'i, D: Driver> {
     path: QualifiedPath<'i>,
     library: Library,
     context: Context,
+    document: Option<String>,
 }
 
 impl<'i, D: Driver> Runner<'i, D> {
@@ -132,7 +133,15 @@ impl<'i, D: Driver> Runner<'i, D> {
             path: QualifiedPath::new(),
             library,
             context: Context::native(),
+            document: None,
         }
+    }
+
+    /// Name the source document so the run brackets its walk double arrow
+    /// marked trace lines.
+    pub fn with_document(mut self, document: String) -> Self {
+        self.document = Some(document);
+        self
     }
 
     /// Seed the runner with the inputs recorded by a prior run — the values
@@ -167,6 +176,17 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// anonymous wrapper if the document is top-level Steps, otherwise
     /// the first declared procedure.
     pub fn run(&mut self, mut env: Environment) -> Result<Outcome, RunnerError> {
+        if let Some(document) = &self.document {
+            let label = format!(
+                "/ {},1 #{}",
+                document,
+                self.appender
+                    .run_id()
+                    .render()
+            );
+            self.driver
+                .commence(&label);
+        }
         if let Some(metadata) = self
             .program
             .prelude
@@ -259,6 +279,27 @@ impl<'i, D: Driver> Runner<'i, D> {
         } else {
             result
         };
+        // A run that walked to its end closes with a `Finish` record at the
+        // root and the double arrow marker.
+        if let Ok(outcome) = &result {
+            if let Outcome::Stopped = outcome {
+            } else {
+                self.record_finish()?;
+                if self
+                    .document
+                    .is_some()
+                {
+                    let label = format!(
+                        "/ #{}",
+                        self.appender
+                            .run_id()
+                            .render()
+                    );
+                    self.driver
+                        .conclude(&label);
+                }
+            }
+        }
         result
     }
 
@@ -785,7 +826,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.driver
-                    .settle("→", &qualified, &input);
+                    .settle("⇒", &qualified, &input);
                 let outcome = outcome_from(input);
                 self.appender
                     .append(&Record {
@@ -839,11 +880,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                 Some(text) => Some(text.as_str()),
                 None => None,
             };
+            // Set the acquired `(name : forma)` off from the path with a
+            // trailing space; an invocation prompt instead glues its arguments
+            // straight to the `<callee>`.
+            let prompt = format!("{qualified} ");
             let mut acquired = Vec::with_capacity(names.len());
             for name in names {
                 match self
                     .driver
-                    .acquire(&qualified, Some(name.value), forma)
+                    .acquire(&prompt, Some(name.value), forma)
                 {
                     UserInput::Done(value) => acquired.push(value),
                     UserInput::Skip => {
@@ -1484,6 +1529,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                 state: record_state(&outcome),
             })?;
         Ok(outcome)
+    }
+
+    /// Record a `Finish` at the root path, closing a run that walked to its end.
+    fn record_finish(&mut self) -> Result<(), RunnerError> {
+        let run_id = self
+            .appender
+            .run_id();
+        let record = Record {
+            recorded: now_iso8601(),
+            run_id,
+            path: "/".to_string(),
+            state: State::Finish,
+        };
+        self.appender
+            .append(&record)
     }
 
     /// Record a deliberate Stop at the root path and unwind the walk.

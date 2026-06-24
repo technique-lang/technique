@@ -535,6 +535,17 @@ fn reading_invocations() {
             parameters: None
         })
     );
+
+    // Any scheme reads as external; a `:` cannot occur in a local identifier.
+    input.initialize("<file://./OtherDoor.tq>");
+    let result = input.read_invocation();
+    assert_eq!(
+        result,
+        Ok(Invocation {
+            target: Target::Remote(External::new("file://./OtherDoor.tq")),
+            parameters: None
+        })
+    );
 }
 
 #[test]

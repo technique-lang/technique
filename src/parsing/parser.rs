@@ -2152,14 +2152,16 @@ impl<'i> Parser<'i> {
         Ok(symbol)
     }
 
-    /// Parse a target like <procedure_name> or <https://example.com/proc>
+    /// Parse a target of either the form <procedure_name> or
+    /// <https://example.com/proc>. A `:` cannot appear in a local identifier,
+    /// so its presence marks the content as an external URI.
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
         let start_offset = self.offset;
         self.take_block_chars("an invocation", '<', '>', true, |inner| {
             let content = inner
                 .source
                 .trim();
-            if content.starts_with("https://") {
+            if content.contains(':') {
                 Ok(Target::Remote(External {
                     value: content,
                     span: inner.span_of(content),

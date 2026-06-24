@@ -48,12 +48,14 @@ pub fn start<'i>(
     let pfftt = construct_state_path(&run_dir, document);
     let appender = Appender::open(pfftt, run_id)?;
     let completed = HashMap::new();
+    let label = document_label(document);
     let outcome = match mode {
         Mode::Interactive => {
             if !std::io::stdout().is_terminal() {
                 return Err(RunnerError::TerminalRequired);
             }
-            let mut runner = Runner::new(program, appender, completed, Console::new(), library);
+            let mut runner = Runner::new(program, appender, completed, Console::new(), library)
+                .with_document(label);
             runner.run(env)?
         }
         Mode::Automatic => {
@@ -63,7 +65,8 @@ pub fn start<'i>(
                 completed,
                 Automatic::new(colour),
                 library,
-            );
+            )
+            .with_document(label);
             runner.run(env)?
         }
     };
@@ -133,8 +136,21 @@ pub fn resume<'i>(
         state: State::Resume,
     };
     appender.append(&record)?;
-    let mut runner =
-        Runner::new(program, appender, completed, Console::new(), library).with_inputs(inputs);
+    let mut runner = Runner::new(program, appender, completed, Console::new(), library)
+        .with_inputs(inputs)
+        .with_document(document_label(&document));
     let env = Environment::new();
     runner.run(env)
+}
+
+// The boundary trace lines name the document by its file stem (`NetworkProbe`
+// for `NetworkProbe.tq`), matching the PFFTT file the run writes to.
+fn document_label(document: &Path) -> String {
+    document
+        .file_stem()
+        .map(|s| {
+            s.to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_default()
 }
