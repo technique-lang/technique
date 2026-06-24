@@ -224,7 +224,7 @@ impl<W: Write> Driver for Console<W> {
     }
 
     fn external(&mut self, qualified: &str) -> UserInput {
-        prompt(&mut self.output, qualified, "→", &[], Value::Unitus)
+        prompt(&mut self.output, qualified, "⇒", &[], Value::Unitus)
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
