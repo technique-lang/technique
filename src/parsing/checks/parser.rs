@@ -2496,6 +2496,32 @@ fn parse_collecting_errors_basic() {
 }
 
 #[test]
+fn multiline_fence_interior_is_opaque() {
+    let mut input = Parser::new();
+
+    // The `http://` in the fenced shell once looked like a procedure
+    // declaration boundary and truncated the block before its closing `}`.
+    let source = r#"
+% technique v1
+
+check_proxy :
+
+1.  Make a request. { exec(```bash
+https_proxy=http://10.0.0.1:8888/ curl -f https://www.example.com/
+    ```) }
+"#
+    .trim_ascii();
+
+    input.initialize(source);
+    let result = input.parse_collecting_errors();
+    assert!(
+        result.is_ok(),
+        "fenced shell content must not be read as structure: {:?}",
+        result.err()
+    );
+}
+
+#[test]
 fn test_multiple_error_collection() {
     use std::path::Path;
 

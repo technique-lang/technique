@@ -405,31 +405,7 @@ impl<'i> Parser<'i> {
         P1: Fn(&str) -> bool,
         P2: Fn(&str) -> bool,
     {
-        let mut i = 0;
-        let mut begun = false;
-
-        for line in self
-            .source
-            .lines()
-        {
-            if !begun && start_predicate(line) {
-                begun = true;
-                i += line.len() + 1;
-                continue;
-            } else if begun && end_predicate(line) {
-                // don't include this line
-                break;
-            }
-
-            i += line.len() + 1;
-        }
-
-        if i > self
-            .source
-            .len()
-        {
-            i -= 1;
-        }
+        let i = locate_block_lines(self.source, start_predicate, end_predicate);
 
         // Extract the substring from start to the found position
         let block = &self.source[..i];
@@ -1064,31 +1040,11 @@ impl<'i> Parser<'i> {
     /// Parse a procedure with error recovery - collects multiple errors instead of stopping at the first one
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
         // Find the procedure block boundaries
-        let mut i = 0;
-        let mut begun = false;
-
-        for line in self
-            .source
-            .lines()
-        {
-            if !begun && is_procedure_declaration(line) {
-                begun = true;
-                i += line.len() + 1;
-                continue;
-            } else if begun && is_procedure_declaration(line) {
-                // don't include this line
-                break;
-            }
-
-            i += line.len() + 1;
-        }
-
-        if i > self
-            .source
-            .len()
-        {
-            i -= 1;
-        }
+        let i = locate_block_lines(
+            self.source,
+            is_procedure_declaration,
+            is_procedure_declaration,
+        );
 
         // Extract the procedure block
         let block = &self.source[..i];
@@ -1304,31 +1260,7 @@ impl<'i> Parser<'i> {
         ParsingError,
     > {
         // Find declaration block boundaries
-        let mut i = 0;
-        let mut begun = false;
-
-        for line in parser
-            .source
-            .lines()
-        {
-            if !begun && is_procedure_declaration(line) {
-                begun = true;
-                i += line.len() + 1;
-                continue;
-            } else if begun && is_procedure_body(line) {
-                // don't include this line
-                break;
-            }
-
-            i += line.len() + 1;
-        }
-
-        if i > parser
-            .source
-            .len()
-        {
-            i -= 1;
-        }
+        let i = locate_block_lines(parser.source, is_procedure_declaration, is_procedure_body);
 
         // Extract declaration block
         let block = &parser.source[..i];
@@ -3025,6 +2957,49 @@ fn is_genus(content: &str) -> bool {
             }
         }
     }
+}
+
+/// Deal with corner cases (like fenced multi-line strings) which otherwise
+/// would break the block detection logic.
+fn locate_block_lines<P1, P2>(source: &str, start: P1, end: P2) -> usize
+where
+    P1: Fn(&str) -> bool,
+    P2: Fn(&str) -> bool,
+{
+    let mut i = 0;
+    let mut begun = false;
+    let mut in_fence = false;
+
+    for line in source.lines() {
+        let opaque = in_fence;
+        if line
+            .matches("```")
+            .count()
+            % 2
+            == 1
+        {
+            in_fence = !in_fence;
+        }
+        if opaque {
+            i += line.len() + 1;
+            continue;
+        }
+
+        if !begun && start(line) {
+            begun = true;
+        } else if begun && end(line) {
+            // don't include this line
+            break;
+        }
+
+        i += line.len() + 1;
+    }
+
+    if i > source.len() {
+        i -= 1;
+    }
+
+    i
 }
 
 /// Correct declarations are of the form
