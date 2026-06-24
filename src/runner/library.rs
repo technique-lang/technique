@@ -264,12 +264,12 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Arraeum(pairs))
 }
 
-/// `exec(script)` — run a shell script, teeing its stdout through the Context
-/// to the operator as it streams while accumulating it as the return value.
-/// Output is held as bytes until the end so a chunk split mid-UTF-8 is
-/// harmless and only one String is allocated. Trailing newlines are trimmed
-/// from the captured value (matching the usual experience when doing shell
-/// `$(...)` substitution). A non-zero exit is an error.
+/// `exec(script)` — run a shell script, teeing its combined stdout and stderr
+/// through the Context to the operator as it streams while accumulating it as
+/// the return value. Output is held as bytes until the end so a chunk split
+/// mid-UTF-8 is harmless and only one String is allocated. Trailing newlines
+/// are trimmed from the captured value (matching the usual experience when
+/// doing shell `$(...)` substitution). A non-zero exit is an error.
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -281,9 +281,13 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         }
     };
 
+    // Fold the child's stderr into its stdout (`exec 2>&1`) so the two streams
+    // are teed and captured together as one ordered transcript. A single pipe
+    // keeps this to one reader, with no risk of deadlocking on a full stderr
+    // buffer the way two separately drained pipes would.
     let mut child = Command::new("bash")
         .arg("-c")
-        .arg(script)
+        .arg(format!("exec 2>&1\n{}", script))
         .stdout(Stdio::piped())
         .spawn()
         .map_err(RunnerError::ExecError)?;
