@@ -2412,10 +2412,14 @@ fn deferred_invoke_is_prompted_and_recorded() {
         anonymous_with_body(Operation::Sequence(vec![invoke]))
     }
 
-    // The operator marks the external procedure Done.
+    // The operator confirms the departure, then marks the external procedure
+    // Done at the return.
     let mut fixture = StoreFixture::new("deferred-done");
     let program = deferred_program();
-    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
@@ -2463,7 +2467,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     // concern, tested elsewhere; what matters here is the recorded Skip.)
     let mut fixture = StoreFixture::new("deferred-skip");
     let program = deferred_program();
-    let prompt = Mock::with_answers([UserInput::Skip]);
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus), UserInput::Skip]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),

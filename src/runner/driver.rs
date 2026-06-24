@@ -96,6 +96,14 @@ pub trait Driver {
         computable: bool,
     ) -> UserInput;
 
+    /// Cross out into an external `<uri>` procedure: prompt at the `⇒` departure
+    /// — the place arguments would be solicited — then leave the glyph-less `⇒`
+    /// depart line, paired with the `⇐` return that `external` prompts and
+    /// `settle` closes with the verdict. The same document-boundary crossing the
+    /// run's own `commence`/`conclude` makes, one level down. `Quit` abandons
+    /// before departing; the unattended drivers proceed with `Done`.
+    fn depart(&mut self, qualified: &str) -> UserInput;
+
     /// Settle an external invocation this run cannot perform (a `<uri>` call
     /// into another document or system). `Console` prompts the operator to
     /// attest it — `Done` if it was performed or recorded elsewhere, otherwise
@@ -228,8 +236,18 @@ impl<W: Write> Driver for Console<W> {
         prompt(&mut self.output, qualified, "→", choices, produced)
     }
 
+    fn depart(&mut self, qualified: &str) -> UserInput {
+        let input = prompt(&mut self.output, qualified, "⇒", &[], Value::Unitus);
+        if let UserInput::Quit = input {
+        } else {
+            let renderer = self.renderer();
+            write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), renderer);
+        }
+        input
+    }
+
     fn external(&mut self, qualified: &str) -> UserInput {
-        prompt(&mut self.output, qualified, "⇒", &[], Value::Unitus)
+        prompt(&mut self.output, qualified, "⇐", &[], Value::Unitus)
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
@@ -1282,6 +1300,11 @@ impl<W: Write> Driver for Automatic<W> {
         }
     }
 
+    fn depart(&mut self, qualified: &str) -> UserInput {
+        write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), self.renderer);
+        UserInput::Done(Value::Unitus)
+    }
+
     fn external(&mut self, _qualified: &str) -> UserInput {
         UserInput::Skip
     }
@@ -1450,6 +1473,11 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
         outcome
     }
 
+    fn depart(&mut self, qualified: &str) -> UserInput {
+        self.inner
+            .depart(qualified)
+    }
+
     fn external(&mut self, qualified: &str) -> UserInput {
         self.emit(Trace::External {
             path: qualified.to_string(),
@@ -1563,6 +1591,10 @@ impl Driver for Headless {
     ) -> UserInput {
         self.results += 1;
         UserInput::Done(produced)
+    }
+
+    fn depart(&mut self, _qualified: &str) -> UserInput {
+        UserInput::Done(Value::Unitus)
     }
 
     fn external(&mut self, _qualified: &str) -> UserInput {
@@ -1740,6 +1772,12 @@ impl Driver for Mock {
         self.answers
             .pop_front()
             .expect("Mock::ask called with no canned answers remaining")
+    }
+
+    fn depart(&mut self, _qualified: &str) -> UserInput {
+        self.answers
+            .pop_front()
+            .expect("Mock::depart called with no canned answers remaining")
     }
 
     fn external(&mut self, qualified: &str) -> UserInput {

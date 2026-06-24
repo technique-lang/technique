@@ -519,6 +519,32 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
+    /// Echo a deferred external's arguments after its `<uri>` path in the
+    /// `value ~ name` binding form. A bare variable shows its binding; any
+    /// other expression shows its evaluated value. Not shown if ther eare no
+    /// arguments.
+    fn render_deferred_echo(
+        &self,
+        env: &mut Environment,
+        qualified: &str,
+        arguments: &[Operation<'i>],
+    ) -> Result<String, RunnerError> {
+        if arguments.is_empty() {
+            return Ok(qualified.to_string());
+        }
+        let mut parts = Vec::new();
+        for arg in arguments {
+            let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
+            let part = if let Operation::Variable(id) = arg {
+                format!("{} ~ {}", value, id.value)
+            } else {
+                value.to_string()
+            };
+            parts.push(part);
+        }
+        Ok(format!("{} ({})", qualified, parts.join(", ")))
+    }
+
     /// An action's parts for the user to confirm: its imperative verb (the
     /// library's `display` name, e.g. `Click`) and the bare label its single
     /// argument evaluates to, with string literals shown unquoted.
@@ -813,11 +839,23 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.begin_scope(&qualified)?;
-                self.driver
-                    .announce(&format!("<{}>", ext.value));
-                let input = self
+                // Prompt at the departure, echoing the arguments flowing into
+                // the external Technque.
+                let echo = self.render_deferred_echo(env, &qualified, &invocable.arguments)?;
+                let embarked = self
                     .driver
-                    .external(&qualified);
+                    .depart(&echo);
+                let input = match embarked {
+                    UserInput::Quit => {
+                        self.path
+                            .pop();
+                        return self.record_stop();
+                    }
+                    UserInput::Done(_) => self
+                        .driver
+                        .external(&qualified),
+                    declined => declined,
+                };
                 if let UserInput::Quit = input {
                     self.path
                         .pop();
@@ -825,7 +863,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.driver
-                    .settle("⇒", &qualified, &input);
+                    .settle("⇐", &qualified, &input);
                 let outcome = outcome_from(input);
                 self.appender
                     .append(&Record {
