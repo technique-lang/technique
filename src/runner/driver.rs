@@ -25,11 +25,14 @@ use crate::highlighting::Terminal;
 use crate::value::Value;
 
 /// Which driver walks a run: `Interactive` prompts the user, `Automatic` runs
-/// to completion, taking each step's body value as the result.
+/// to completion taking each step's body value as the result, `Quiet` does the
+/// same but with the no-output `Headless` driver, leaving only executed
+/// commands' output on the terminal.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
     Interactive,
     Automatic,
+    Quiet,
 }
 
 /// The person executing each step indicates a verdict on each prompt as

@@ -344,12 +344,33 @@ fn main() {
                 )
                 .arg(
                     Arg::new("mode")
-                        .short('m')
                         .long("mode")
-                        .value_parser(["interactive", "automatic"])
+                        .value_parser(["interactive", "automatic", "quiet"])
                         .default_value("interactive")
                         .action(ArgAction::Set)
-                        .help("Whether to walk the procedure interactively, prompting the operator at each step, or automatically, taking each step's computed value and running to completion or first failure."),
+                        .conflicts_with_all(["interactive", "automatic", "quiet"])
+                        .help("How to walk the procedure: interactively, prompting the operator at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
+                )
+                .arg(
+                    Arg::new("interactive")
+                        .short('i')
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with_all(["automatic", "quiet"])
+                        .help("Short form for --mode=interactive."),
+                )
+                .arg(
+                    Arg::new("automatic")
+                        .short('a')
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with_all(["interactive", "quiet"])
+                        .help("Short form for --mode=automatic."),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with_all(["interactive", "automatic"])
+                        .help("Short form for --mode=quiet."),
                 )
                 .arg(
                     Arg::new("output")
@@ -358,13 +379,6 @@ fn main() {
                         .default_value("pfftt")
                         .action(ArgAction::Set)
                         .help("Whether to write the recorded trace to disk in PFFTT format, as is the default, or to instead print a diagnostic trace of the steps as the are completed (for debugging)."),
-                )
-                .arg(
-                    Arg::new("quiet")
-                        .short('q')
-                        .long("quiet")
-                        .action(ArgAction::SetTrue)
-                        .help("Suppress all progress trace output and run automatically, only printing the output of external commands executed by the Technique."),
                 )
                 .arg(
                     Arg::new("raw-control-chars")
@@ -800,25 +814,42 @@ fn main() {
 
             debug!(?output);
 
-            let mode = match submatches
-                .get_one::<String>("mode")
-                .map(String::as_str)
+            // The short flags -i / -a / -q are shorthand overrides for --mode;
+            // clap has already enforced they are mutually exclusive.
+            let mode = if *submatches
+                .get_one::<bool>("quiet")
+                .unwrap()
             {
-                Some("automatic") => Mode::Automatic,
-                _ => Mode::Interactive,
+                Mode::Quiet
+            } else if *submatches
+                .get_one::<bool>("automatic")
+                .unwrap()
+            {
+                Mode::Automatic
+            } else if *submatches
+                .get_one::<bool>("interactive")
+                .unwrap()
+            {
+                Mode::Interactive
+            } else {
+                match submatches
+                    .get_one::<String>("mode")
+                    .map(String::as_str)
+                {
+                    Some("automatic") => Mode::Automatic,
+                    Some("quiet") => Mode::Quiet,
+                    Some("interactive") => Mode::Interactive,
+                    _ => unreachable!()
+                }
             };
+
+            debug!(?mode);
 
             let raw_output = *submatches
                 .get_one::<bool>("raw-control-chars")
                 .unwrap(); // flags are always present since SetTrue implies default_value
 
             debug!(raw_output);
-
-            let quiet = *submatches
-                .get_one::<bool>("quiet")
-                .unwrap();
-
-            debug!(quiet);
 
             let colour = raw_output || std::io::stdout().is_terminal();
 
@@ -927,7 +958,7 @@ fn main() {
             }
 
             match runner::start(
-                mode, quiet, colour, filename, &program, &arguments, library, &names,
+                mode, colour, filename, &program, &arguments, library, &names,
             ) {
                 Ok((run_id, Outcome::Stopped)) => {
                     eprintln!(
