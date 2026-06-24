@@ -360,6 +360,13 @@ fn main() {
                         .help("Whether to write the recorded trace to disk in PFFTT format, as is the default, or to instead print a diagnostic trace of the steps as the are completed (for debugging)."),
                 )
                 .arg(
+                    Arg::new("quiet")
+                        .short('q')
+                        .long("quiet")
+                        .action(ArgAction::SetTrue)
+                        .help("Suppress all progress trace output and run automatically, only printing the output of external commands executed by the Technique."),
+                )
+                .arg(
                     Arg::new("raw-control-chars")
                         .short('R')
                         .long("raw-control-chars")
@@ -807,6 +814,12 @@ fn main() {
 
             debug!(raw_output);
 
+            let quiet = *submatches
+                .get_one::<bool>("quiet")
+                .unwrap();
+
+            debug!(quiet);
+
             let colour = raw_output || std::io::stdout().is_terminal();
 
             let filename = Path::new(filename);
@@ -914,7 +927,7 @@ fn main() {
             }
 
             match runner::start(
-                mode, colour, filename, &program, &arguments, library, &names,
+                mode, quiet, colour, filename, &program, &arguments, library, &names,
             ) {
                 Ok((run_id, Outcome::Stopped)) => {
                     eprintln!(

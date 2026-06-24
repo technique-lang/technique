@@ -32,9 +32,12 @@ const STORE_ROOT: &str = ".store";
 /// Allocate a new run, write the opening `Start` record, and walk the program
 /// to completion or until the user interrupts by signalling they are pausing
 /// or quitting. Command-line arguments are bound to the entry procedure's
-/// parameters before the beginning the walk.
+/// parameters before the beginning the walk. `quiet` runs non-interactively
+/// with the `Headless` driver, suppressing all chrome so only executed
+/// commands' output reaches the terminal.
 pub fn start<'i>(
     mode: Mode,
+    quiet: bool,
     colour: bool,
     document: &Path,
     program: &'i Program<'i>,
@@ -49,6 +52,12 @@ pub fn start<'i>(
     let appender = Appender::open(pfftt, run_id)?;
     let completed = HashMap::new();
     let label = document_label(document);
+    if quiet {
+        let mut runner =
+            Runner::new(program, appender, completed, Headless::new(), library).with_document(label);
+        let outcome = runner.run(env)?;
+        return Ok((run_id, outcome));
+    }
     let outcome = match mode {
         Mode::Interactive => {
             if !std::io::stdout().is_terminal() {
