@@ -465,6 +465,16 @@ fn render_settle<W: Write>(
     let _ = writeln!(out, "{} {}", path, renderer.style(syntax, glyph));
 }
 
+/// Render an automatically-run shell command on one line: `{path} $ {script}`,
+/// the whole line dark grey like the trace chrome so it reads as announce
+/// rather than as the command's own output that follows. The `$` stands in for
+/// a shell prompt (distinct from the operator's `▶` edit prompt). Trailing
+/// whitespace is trimmed so a code block's blank tail line is not echoed.
+fn render_command<W: Write>(out: &mut W, qualified: &str, script: &str, renderer: &dyn Render) {
+    let line = renderer.style(Syntax::Marker, &format!("{} $ {}", qualified, script.trim_end()));
+    let _ = writeln!(out, "{}", line);
+}
+
 /// Render a Section heading: its numeral and title.
 fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str, renderer: &dyn Render) {
     let styled_numeral = renderer.style(crate::formatting::Syntax::StepItem, numeral);
@@ -1236,8 +1246,8 @@ impl<W: Write> Driver for Automatic<W> {
         UserInput::Skip
     }
 
-    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
-        write_indented(&mut self.output, script);
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        render_command(&mut self.output, &display_path(qualified), script, self.renderer);
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
