@@ -67,8 +67,10 @@ pub trait Driver {
     fn commence(&mut self, label: &str);
 
     /// Cross out of this document on the way out: the `⇐` boundary line carrying
-    /// the run identifier (`/ 000096`).
-    fn conclude(&mut self, label: &str);
+    /// the document name, version, and run identifier (`/ NetworkProbe,1 000096`),
+    /// closed by the run's rolled-up verdict glyph just as a scope's `↙` sign-off
+    /// is. Quit renders no glyph.
+    fn conclude(&mut self, label: &str, verdict: &UserInput);
 
     /// Display a line of formatted content at the left margin.
     fn display(&mut self, content: &str);
@@ -193,9 +195,9 @@ impl<W: Write> Driver for Console<W> {
         let _ = writeln!(self.output);
     }
 
-    fn conclude(&mut self, label: &str) {
+    fn conclude(&mut self, label: &str, verdict: &UserInput) {
         let renderer = self.renderer();
-        write_marker_line(&mut self.output, &format!("⇐ {}", label), renderer);
+        render_conclude(&mut self.output, label, verdict, renderer);
     }
 
     fn display(&mut self, content: &str) {
@@ -460,6 +462,17 @@ fn render_enter<W: Write>(out: &mut W, qualified: &str, renderer: &dyn Render) {
     write_marker_line(out, &format!("↘ {}", qualified), renderer);
 }
 
+/// The glyph and styling for a settled verdict, or `None` for Quit (which
+/// renders no glyph).
+fn verdict_glyph(verdict: &UserInput) -> Option<(&'static str, Syntax)> {
+    match verdict {
+        UserInput::Done(_) => Some(("✓", Syntax::Done)),
+        UserInput::Skip => Some(("⊘", Syntax::Skip)),
+        UserInput::Fail(_) => Some(("✗", Syntax::Fail)),
+        UserInput::Quit => None,
+    }
+}
+
 fn render_settle<W: Write>(
     out: &mut W,
     marker: &str,
@@ -467,14 +480,29 @@ fn render_settle<W: Write>(
     verdict: &UserInput,
     renderer: &dyn Render,
 ) {
-    let (glyph, syntax) = match verdict {
-        UserInput::Done(_) => ("✓", Syntax::Done),
-        UserInput::Skip => ("⊘", Syntax::Skip),
-        UserInput::Fail(_) => ("✗", Syntax::Fail),
-        UserInput::Quit => return,
+    let (glyph, syntax) = match verdict_glyph(verdict) {
+        Some(pair) => pair,
+        None => return,
     };
     let path = renderer.style(Syntax::Marker, &format!("{} {}", marker, qualified));
     let _ = writeln!(out, "{} {}", path, renderer.style(syntax, glyph));
+}
+
+/// Render the run's closing `⇐` boundary line, the rolled-up verdict glyph
+/// following the label just as a scope's `↙` sign-off carries its own. Quit
+/// renders nothing, as in `render_settle`.
+fn render_conclude<W: Write>(
+    out: &mut W,
+    label: &str,
+    verdict: &UserInput,
+    renderer: &dyn Render,
+) {
+    let (glyph, syntax) = match verdict_glyph(verdict) {
+        Some(pair) => pair,
+        None => return,
+    };
+    let line = renderer.style(Syntax::Marker, &format!("⇐ {}", label));
+    let _ = writeln!(out, "{} {}", line, renderer.style(syntax, glyph));
 }
 
 /// Render an automatically-run shell command on one line: `{path} $ {script}`,
@@ -1219,8 +1247,8 @@ impl<W: Write> Driver for Automatic<W> {
         let _ = writeln!(self.output);
     }
 
-    fn conclude(&mut self, label: &str) {
-        write_marker_line(&mut self.output, &format!("⇐ {}", label), self.renderer);
+    fn conclude(&mut self, label: &str, verdict: &UserInput) {
+        render_conclude(&mut self.output, label, verdict, self.renderer);
     }
 
     fn display(&mut self, content: &str) {
@@ -1393,9 +1421,9 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .commence(label);
     }
 
-    fn conclude(&mut self, label: &str) {
+    fn conclude(&mut self, label: &str, verdict: &UserInput) {
         self.inner
-            .conclude(label);
+            .conclude(label, verdict);
     }
 
     fn display(&mut self, content: &str) {
@@ -1520,7 +1548,7 @@ impl Driver for Headless {
 
     fn commence(&mut self, _label: &str) {}
 
-    fn conclude(&mut self, _label: &str) {}
+    fn conclude(&mut self, _label: &str, _verdict: &UserInput) {}
 
     fn display(&mut self, _content: &str) {}
 
@@ -1673,7 +1701,7 @@ impl Driver for Mock {
 
     fn commence(&mut self, _label: &str) {}
 
-    fn conclude(&mut self, _label: &str) {}
+    fn conclude(&mut self, _label: &str, _verdict: &UserInput) {}
 
     fn display(&mut self, content: &str) {
         self.events

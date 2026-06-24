@@ -285,18 +285,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             if let Outcome::Stopped = outcome {
             } else {
                 self.record_finish()?;
-                if self
-                    .document
-                    .is_some()
-                {
+                if let Some(document) = &self.document {
                     let label = format!(
-                        "/ #{}",
+                        "/ {},1 #{}",
+                        document,
                         self.appender
                             .run_id()
                             .render()
                     );
+                    let verdict = verdict_from(outcome);
                     self.driver
-                        .conclude(&label);
+                        .conclude(&label, &verdict);
                 }
             }
         }
@@ -1590,6 +1589,18 @@ fn outcome_from(input: UserInput) -> Outcome {
         UserInput::Skip => Outcome::Skipped(Value::Unitus),
         UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
         UserInput::Quit => Outcome::Stopped,
+    }
+}
+
+/// The closing line's verdict, rolling the run's final `Outcome` back into the
+/// `UserInput` glyph the driver renders — mirroring the entry procedure's
+/// sign-off. A `Done` shows `✓`, a `Skipped` `⊘`, a failure `✗`; the value and
+/// reason are immaterial to the glyph.
+fn verdict_from(outcome: &Outcome) -> UserInput {
+    match outcome {
+        Outcome::Done(_) => UserInput::Done(Value::Unitus),
+        Outcome::Skipped(_) => UserInput::Skip,
+        _ => UserInput::Fail(String::new()),
     }
 }
 
