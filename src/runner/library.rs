@@ -1,7 +1,10 @@
 //! The function table for the evaluator.
 
-use std::io::Read;
+use std::io::{self, Read};
+use std::os::fd::AsFd;
 use std::process::{Command, Stdio};
+
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 
 use super::context::Context;
 use super::runner::RunnerError;
@@ -264,12 +267,24 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Arraeum(pairs))
 }
 
-/// `exec(script)` — run a shell script, teeing its combined stdout and stderr
-/// through the Context to the operator as it streams while accumulating it as
-/// the return value. Output is held as bytes until the end so a chunk split
-/// mid-UTF-8 is harmless and only one String is allocated. Trailing newlines
-/// are trimmed from the captured value (matching the usual experience when
-/// doing shell `$(...)` substitution). A non-zero exit is an error.
+/// `exec(script)` — run a shell script, teeing its output through the Context
+/// to the operator chunk by chunk as it streams while accumulating it as the
+/// return value. stdout and stderr are kept on separate pipes and merged here so
+/// stderr can be shown in red on a colour terminal; the captured return value is
+/// always the plain, uncoloured transcript. Because the two pipes are
+/// independent kernel buffers, cross-stream ordering is approximate — bytes stay
+/// ordered within each stream but interleaving between them is not guaranteed.
+/// Both pipes are drained together under `poll()` so neither can deadlock by
+/// filling while the reader is parked on the other. Chunks are written through
+/// the instant they are read, so a carriage-return-updated progress meter (as
+/// `curl` writes) appears live rather than being held back to a line boundary.
+/// Each stderr run is wrapped in red and the colour reset immediately, never
+/// held on across the wait for more output, so an interrupt — a real `SIGINT`,
+/// since a running command is outside the prompt's raw-mode window — finds the
+/// terminal already in its default colour. Bytes are accumulated for the return
+/// value and decoded only at the end, so a chunk split mid-UTF-8 is harmless.
+/// Trailing newlines are trimmed from the captured value (matching shell
+/// `$(...)` substitution). A non-zero exit is an error.
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -281,34 +296,119 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         }
     };
 
-    // Fold the child's stderr into its stdout (`exec 2>&1`) so the two streams
-    // are teed and captured together as one ordered transcript. A single pipe
-    // keeps this to one reader, with no risk of deadlocking on a full stderr
-    // buffer the way two separately drained pipes would.
     let mut child = Command::new("bash")
         .arg("-c")
-        .arg(format!("exec 2>&1\n{}", script))
+        .arg(script)
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(RunnerError::ExecError)?;
 
-    let mut stdout = child
+    let mut out = child
         .stdout
         .take()
         .expect("child stdout was piped");
+    let mut err = child
+        .stderr
+        .take()
+        .expect("child stderr was piped");
+
+    // The captured return value stays plain; the Context reddens stderr on a
+    // colour terminal as it writes. Each stream keeps a small buffer holding a
+    // partial UTF-8 sequence carried over from the previous read, so a colour
+    // escape is never written into the middle of a character.
     let mut captured = Vec::new();
+    let mut out_pending = Vec::new();
+    let mut err_pending = Vec::new();
+    let mut out_open = true;
+    let mut err_open = true;
     let mut buffer = [0u8; 8192];
-    loop {
-        let count = stdout
-            .read(&mut buffer)
-            .map_err(RunnerError::ExecError)?;
-        if count == 0 {
-            break;
+
+    while out_open || err_open {
+        // Ask poll() which still-open stream is readable, copying the readiness
+        // out into flags so the borrowed fds are released before the readers
+        // are borrowed mutably below.
+        let (mut out_ready, mut err_ready) = (false, false);
+        {
+            let mut fds = Vec::with_capacity(2);
+            let mut tags = Vec::with_capacity(2);
+            if out_open {
+                fds.push(PollFd::new(out.as_fd(), PollFlags::POLLIN));
+                tags.push(true);
+            }
+            if err_open {
+                fds.push(PollFd::new(err.as_fd(), PollFlags::POLLIN));
+                tags.push(false);
+            }
+            poll(&mut fds, PollTimeout::NONE)
+                .map_err(|e| RunnerError::ExecError(io::Error::from(e)))?;
+            for (fd, is_out) in fds
+                .iter()
+                .zip(&tags)
+            {
+                if !fd
+                    .revents()
+                    .unwrap_or(PollFlags::empty())
+                    .is_empty()
+                {
+                    if *is_out {
+                        out_ready = true;
+                    } else {
+                        err_ready = true;
+                    }
+                }
+            }
         }
+
+        // A single read after a readiness signal never blocks: it yields the
+        // available bytes, or zero once the stream has closed.
+        if out_ready {
+            let count = out
+                .read(&mut buffer)
+                .map_err(RunnerError::ExecError)?;
+            if count == 0 {
+                out_open = false;
+            } else {
+                tee(
+                    &buffer[..count],
+                    &mut out_pending,
+                    false,
+                    context,
+                    &mut captured,
+                )?;
+            }
+        }
+        if err_ready {
+            let count = err
+                .read(&mut buffer)
+                .map_err(RunnerError::ExecError)?;
+            if count == 0 {
+                err_open = false;
+            } else {
+                tee(
+                    &buffer[..count],
+                    &mut err_pending,
+                    true,
+                    context,
+                    &mut captured,
+                )?;
+            }
+        }
+    }
+
+    // Flush any bytes still held back (a trailing partial character, decoded
+    // lossily) now that no continuation can arrive.
+    if !out_pending.is_empty() {
+        captured.extend_from_slice(&out_pending);
         context
-            .write(&buffer[..count])
+            .write_run(&out_pending, false)
             .map_err(RunnerError::ExecError)?;
-        captured.extend_from_slice(&buffer[..count]);
+    }
+    if !err_pending.is_empty() {
+        captured.extend_from_slice(&err_pending);
+        context
+            .write_run(&err_pending, true)
+            .map_err(RunnerError::ExecError)?;
     }
 
     let status = child
@@ -328,6 +428,44 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
             .trim_end_matches(['\n', '\r'])
             .to_string(),
     ))
+}
+
+/// Tee a chunk from one stream to the operator, recording it plain in
+/// `captured` and writing it through the Context (which reddens it when
+/// `stderr` and the terminal is colour-capable). The chunk is appended to that
+/// stream's `pending` buffer, then every complete UTF-8 character available is
+/// written through; a trailing partial character stays in `pending` for the
+/// next read, so a colour escape never lands in the middle of a character.
+fn tee(
+    bytes: &[u8],
+    pending: &mut Vec<u8>,
+    stderr: bool,
+    context: &Context,
+    captured: &mut Vec<u8>,
+) -> Result<(), RunnerError> {
+    pending.extend_from_slice(bytes);
+    // How much of `pending` ends on a character boundary: all of it unless the
+    // tail is an incomplete sequence.
+    let ready = match std::str::from_utf8(pending) {
+        Ok(_) => pending.len(),
+        Err(error)
+            if error
+                .error_len()
+                .is_none() =>
+        {
+            error.valid_up_to()
+        }
+        Err(_) => pending.len(),
+    };
+    if ready == 0 {
+        return Ok(());
+    }
+    captured.extend_from_slice(&pending[..ready]);
+    context
+        .write_run(&pending[..ready], stderr)
+        .map_err(RunnerError::ExecError)?;
+    pending.drain(..ready);
+    Ok(())
 }
 
 /// `now()` — the current wall-clock time as an ISO 8601 string. A read of

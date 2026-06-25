@@ -132,7 +132,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             driver,
             path: QualifiedPath::new(),
             library,
-            context: Context::native(),
+            context: Context::native(false),
             document: None,
         }
     }

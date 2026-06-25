@@ -9,7 +9,7 @@ use crate::value;
 #[test]
 fn variable_lookup() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::Variable(Identifier::new("missing"));
     let mut env = Environment::new();
     match evaluate(&library, &context, &mut env, &op) {
@@ -30,7 +30,7 @@ fn variable_lookup() {
 #[test]
 fn number_evaluates_to_quanticle() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::Number(LangNumeric::Integral(42));
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
@@ -40,7 +40,7 @@ fn number_evaluates_to_quanticle() {
 #[test]
 fn string_interpolation() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let mut env = Environment::new();
     env.extend(
         "name".to_string(),
@@ -68,7 +68,7 @@ fn string_interpolation() {
 #[test]
 fn multiline_joins_with_newlines() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::Multiline(None, vec!["foo", "bar", "baz"]);
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
@@ -78,7 +78,7 @@ fn multiline_joins_with_newlines() {
 #[test]
 fn tablet_entries_evaluate() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::Tablet(vec![
         Entry {
             label: "name",
@@ -109,7 +109,7 @@ fn tablet_entries_evaluate() {
 #[test]
 fn list_elements_evaluate() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::List(vec![
         Operation::Number(LangNumeric::Integral(1)),
         Operation::Number(LangNumeric::Integral(4)),
@@ -130,7 +130,7 @@ fn list_elements_evaluate() {
 #[test]
 fn bind_extends_env_for_subsequent_lookup() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let names = [Identifier::new("greeting")];
     let bind = Operation::Bind {
         names: &names,
@@ -150,7 +150,7 @@ fn bind_extends_env_for_subsequent_lookup() {
 #[test]
 fn sequence_evaluation() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let seq = Operation::Sequence(vec![
         Operation::Number(LangNumeric::Integral(1)),
         Operation::Number(LangNumeric::Integral(2)),
@@ -173,7 +173,7 @@ fn sequence_evaluation() {
 #[test]
 fn multi_name_bind_destructures_parametriq() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let mut env = Environment::new();
     env.extend(
         "triple".to_string(),
@@ -212,7 +212,7 @@ fn multi_name_bind_destructures_parametriq() {
 #[test]
 fn multi_name_bind_wrong_arity_errors() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let mut env = Environment::new();
     env.extend(
         "pair".to_string(),
@@ -243,7 +243,7 @@ fn multi_name_bind_wrong_arity_errors() {
 #[test]
 fn multi_name_bind_against_scalar_errors_as_not_tuple() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let mut env = Environment::new();
     env.extend(
         "scalar".to_string(),
@@ -266,7 +266,7 @@ fn multi_name_bind_against_scalar_errors_as_not_tuple() {
 #[test]
 fn execute_dispatches_resolved_builtin() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let id = library
         .resolve("seq")
         .expect("seq registered");
@@ -292,7 +292,7 @@ fn execute_dispatches_resolved_builtin() {
 #[test]
 fn execute_unresolved_function_errors() {
     let library = Library::core();
-    let context = Context::native();
+    let context = Context::native(false);
     let op = Operation::Execute(Executable {
         target: ExecutableRef::Unresolved(Identifier::new("click")),
         arguments: Vec::new(),

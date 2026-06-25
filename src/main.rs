@@ -839,7 +839,7 @@ fn main() {
                     Some("automatic") => Mode::Automatic,
                     Some("quiet") => Mode::Quiet,
                     Some("interactive") => Mode::Interactive,
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             };
 

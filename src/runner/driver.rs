@@ -16,7 +16,7 @@ use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::style::{
     Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor, Stylize,
 };
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType};
 use crossterm::{cursor, queue};
 
 use super::path::display_path;
@@ -241,7 +241,11 @@ impl<W: Write> Driver for Console<W> {
         if let UserInput::Quit = input {
         } else {
             let renderer = self.renderer();
-            write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), renderer);
+            write_marker_line(
+                &mut self.output,
+                &format!("⇒ {}", display_path(qualified)),
+                renderer,
+            );
         }
         input
     }
@@ -334,6 +338,8 @@ fn prompt_action<W: Write>(
 /// becoming the '$', reminiscent of a shell.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
     let qualified = display_path(qualified);
+    // Seed the editable line
+    let script = script.trim_end();
     let field = edit(
         script.to_string(),
         Value::Literali(script.to_string()),
@@ -509,12 +515,7 @@ fn render_settle<W: Write>(
 /// Render the run's closing `⇐` boundary line, the rolled-up verdict glyph
 /// following the label just as a scope's `↙` sign-off carries its own. Quit
 /// renders nothing, as in `render_settle`.
-fn render_conclude<W: Write>(
-    out: &mut W,
-    label: &str,
-    verdict: &UserInput,
-    renderer: &dyn Render,
-) {
+fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, renderer: &dyn Render) {
     let (glyph, syntax) = match verdict_glyph(verdict) {
         Some(pair) => pair,
         None => return,
@@ -529,7 +530,10 @@ fn render_conclude<W: Write>(
 /// a shell prompt (distinct from the operator's `▶` edit prompt). Trailing
 /// whitespace is trimmed so a code block's blank tail line is not echoed.
 fn render_command<W: Write>(out: &mut W, qualified: &str, script: &str, renderer: &dyn Render) {
-    let line = renderer.style(Syntax::Marker, &format!("{} $ {}", qualified, script.trim_end()));
+    let line = renderer.style(
+        Syntax::Marker,
+        &format!("{} $ {}", qualified, script.trim_end()),
+    );
     let _ = writeln!(out, "{}", line);
 }
 
@@ -945,8 +949,8 @@ fn draw<W: Write>(
         format!("{} {}", settle, qualified).dark_grey(),
         PROMPT_SYMBOL.blue(),
     )?;
-    let cursor_col = draw_tail(out, interaction, prefix)?;
-    place_cursor(out, cursor_col)
+    let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col, end_col)
 }
 
 /// Draw the read-only action prompt line: `» {path} {verb} {label} ▶`, the verb
@@ -968,32 +972,41 @@ fn draw_action<W: Write>(
     }
     write!(out, " {} ", PROMPT_SYMBOL.blue())?;
     let prefix = action_prefix_width(qualified, verb, label);
-    let cursor_col = draw_tail(out, interaction, prefix)?;
-    place_cursor(out, cursor_col)
+    let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col, end_col)
 }
 
 /// Render the interaction state after the prompt prefix — the Esc menu, the
-/// fail-reason buffer, or the field's content — returning the cursor column
-/// (`None` hides it). Shared by the step/command prompt and the action prompt.
+/// fail-reason buffer, or the field's content — returning the target cursor
+/// column (`None` hides it) and the column writing finished at. Both are
+/// absolute columns from the line start; when the content is wider than the
+/// terminal they exceed its width and `place_cursor` resolves the wrap. Shared
+/// by the step/command prompt and the action prompt.
 fn draw_tail<W: Write>(
     out: &mut W,
     interaction: &Interaction,
     prefix: u16,
-) -> io::Result<Option<u16>> {
+) -> io::Result<(Option<u16>, u16)> {
     let mut cursor_col: Option<u16> = None;
+    let mut end_col: u16 = prefix;
     match interaction.menu {
         Some(active) => match &interaction.reason {
             Some(reason) => {
                 write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                let lead = prefix
+                    + REASON_PREFIX
+                        .chars()
+                        .count() as u16;
                 cursor_col = Some(
-                    prefix
-                        + REASON_PREFIX
-                            .chars()
-                            .count() as u16
-                        + reason.buffer[..reason.cursor]
-                            .chars()
-                            .count() as u16,
+                    lead + reason.buffer[..reason.cursor]
+                        .chars()
+                        .count() as u16,
                 );
+                end_col = lead
+                    + reason
+                        .buffer
+                        .chars()
+                        .count() as u16;
             }
             None => render_menu(out, interaction, active)?,
         },
@@ -1018,6 +1031,11 @@ fn draw_tail<W: Write>(
                             .chars()
                             .count() as u16,
                 );
+                end_col = prefix
+                    + buffer
+                        .chars()
+                        .count() as u16
+                    + if *bracketed { 2 } else { 0 };
             }
             Field::Frozen { .. } => {
                 cursor_col = Some(prefix);
@@ -1031,14 +1049,44 @@ fn draw_tail<W: Write>(
             }
         },
     }
-    Ok(cursor_col)
+    Ok((cursor_col, end_col))
 }
 
 /// Position (or hide) the cursor after a prompt line is drawn, then flush.
-fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>) -> io::Result<()> {
+/// `end_col` is where writing left the cursor; `cursor_col` is where it belongs.
+/// When the content wrapped, an absolute `MoveToColumn` past the right margin
+/// clamps to the edge, so the target column is resolved against the terminal
+/// width into a move back from the end instead.
+fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>, end_col: u16) -> io::Result<()> {
     match cursor_col {
-        Some(col) => queue!(out, cursor::Show, cursor::MoveToColumn(col))?,
-        None => queue!(out, cursor::Hide)?,
+        None => {
+            queue!(out, cursor::Hide)?;
+        }
+        Some(target) if target >= end_col => {
+            // The cursor belongs at the end of what was just written, which is
+            // exactly where writing left it — moving would only fight the wrap.
+            queue!(out, cursor::Show)?;
+        }
+        Some(target) => {
+            let width = size()
+                .map(|(cols, _)| cols)
+                .unwrap_or(80)
+                .max(1);
+            // The physical cursor sits at the end; step up to the target's row
+            // (a column that exactly fills a row leaves the cursor on it, not the
+            // next) and across to its column.
+            let end_row = if end_col % width == 0 {
+                end_col / width - 1
+            } else {
+                end_col / width
+            };
+            let up = end_row - target / width;
+            queue!(out, cursor::Show)?;
+            if up > 0 {
+                queue!(out, cursor::MoveUp(up))?;
+            }
+            queue!(out, cursor::MoveToColumn(target % width))?;
+        }
     }
     out.flush()
 }
@@ -1301,7 +1349,11 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn depart(&mut self, qualified: &str) -> UserInput {
-        write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), self.renderer);
+        write_marker_line(
+            &mut self.output,
+            &format!("⇒ {}", display_path(qualified)),
+            self.renderer,
+        );
         UserInput::Done(Value::Unitus)
     }
 
@@ -1310,7 +1362,12 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
-        render_command(&mut self.output, &display_path(qualified), script, self.renderer);
+        render_command(
+            &mut self.output,
+            &display_path(qualified),
+            script,
+            self.renderer,
+        );
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
