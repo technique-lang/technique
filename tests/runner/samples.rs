@@ -35,7 +35,7 @@ fn strip_timestamp_and_runid(trail: &str) -> Vec<String> {
 /// matching `.pfftt` also fails.
 #[test]
 fn ensure_run() {
-    let dir = Path::new("tests/samples/runner/");
+    let dir = Path::new("tests/golden/runner/");
     let files = list_technique_documents(dir);
 
     let mut failures = Vec::new();
