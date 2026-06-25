@@ -1314,33 +1314,44 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &step_text, depth);
 
-        let produced = match self.walk(env, body)? {
-            Outcome::Stopped => return Ok(Outcome::Stopped),
-            Outcome::Done(value) => value,
-            // The body settled itself — a declined command beat (Skip / Fail)
-            // or a thrown exec failure, which catches here as a Fail. Record
-            // and show its verdict without an acceptance prompt.
-            settled => {
-                let settled = match settled {
-                    Outcome::Throw(failure) => Outcome::Failed(failure),
-                    other => other,
-                };
-                let record = Record {
-                    recorded: now_iso8601(),
-                    run_id,
-                    path: qualified.to_string(),
-                    state: record_state(&settled),
-                };
-                self.appender
-                    .append(&record)?;
-                let verdict = match &settled {
-                    Outcome::Skipped(_) => UserInput::Skip,
-                    Outcome::Failed(Failure::Aborted(reason)) => UserInput::Fail(reason.clone()),
-                    _ => unreachable!("only Skip and Fail reach the settled branch"),
-                };
-                self.driver
-                    .settle("→", qualified, &verdict);
-                return Ok(settled);
+        // A descriptive binding on a step with response choices takes its value
+        // from the chosen response, not a separate acquire: skip the body walk
+        // and bind the choice (taken below) to the step's name(s).
+        let binding_via_response = !responses.is_empty() && binds_descriptively(body);
+
+        let produced = if binding_via_response {
+            Value::Unitus
+        } else {
+            match self.walk(env, body)? {
+                Outcome::Stopped => return Ok(Outcome::Stopped),
+                Outcome::Done(value) => value,
+                // The body settled itself — a declined command beat (Skip / Fail)
+                // or a thrown exec failure, which catches here as a Fail. Record
+                // and show its verdict without an acceptance prompt.
+                settled => {
+                    let settled = match settled {
+                        Outcome::Throw(failure) => Outcome::Failed(failure),
+                        other => other,
+                    };
+                    let record = Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified.to_string(),
+                        state: record_state(&settled),
+                    };
+                    self.appender
+                        .append(&record)?;
+                    let verdict = match &settled {
+                        Outcome::Skipped(_) => UserInput::Skip,
+                        Outcome::Failed(Failure::Aborted(reason)) => {
+                            UserInput::Fail(reason.clone())
+                        }
+                        _ => unreachable!("only Skip and Fail reach the settled branch"),
+                    };
+                    self.driver
+                        .settle("→", qualified, &verdict);
+                    return Ok(settled);
+                }
             }
         };
 
@@ -1385,6 +1396,19 @@ impl<'i, D: Driver> Runner<'i, D> {
             UserInput::Skip => Outcome::Skipped(propagate),
             other => outcome_from(other),
         };
+        // Bind the chosen response to the step's name(s); a skip binds Unitus
+        // so a later reference resolves, mirroring a descriptive acquire.
+        if binding_via_response {
+            if let Some(names) = binding_names(body) {
+                match &outcome {
+                    Outcome::Done(value) => {
+                        super::evaluator::bind_names(env, names, value.clone())?
+                    }
+                    Outcome::Skipped(_) => super::evaluator::bind_names(env, names, Value::Unitus)?,
+                    _ => {}
+                }
+            }
+        }
         let record = Record {
             recorded: now_iso8601(),
             run_id,

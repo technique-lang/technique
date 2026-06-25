@@ -2721,6 +2721,75 @@ task :
 }
 
 #[test]
+fn response_choice_binds_to_the_step_variable() {
+    // A step carrying both a descriptive binding and response choices takes its
+    // value from the chosen response: the menu is the only prompt (no separate
+    // acquire), and the choice binds to the variable for later steps to read.
+    let source = r#"
+% technique v1
+
+task :
+
+    1.  Is it working ~ answer
+        'Yes' | 'No'
+    2.  You said { answer }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("response-binds-variable");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("Yes".to_string())),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let driver = runner.into_driver();
+    // The response menu replaces the acquire: the binding step never prompts to
+    // type a value.
+    let acquires = driver
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Acquire { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(acquires, 0);
+
+    // Step 2 interpolates `answer`, proving the chosen response bound to it.
+    let descriptions: Vec<&str> = driver
+        .events()
+        .iter()
+        .filter_map(|event| {
+            if let Event::Step { description, .. } = event {
+                Some(description.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        descriptions,
+        vec!["1.  Is it working ~ answer", "2.  You said \"Yes\""]
+    );
+}
+
+#[test]
 fn resume_rehydrates_binding_made_inside_a_completed_loop() {
     // The DeleteAccount resume bug: a completed `foreach` step binds a variable
     // inside its loop body that a later `foreach` consumes. Skipping the

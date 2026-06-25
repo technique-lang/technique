@@ -1,0 +1,10 @@
+% technique v1
+
+remove_planet :
+
+# Destroy Obstacles in way of Hyperspace Bypass
+
+    1.  Are all the hatches open? ~ hatches
+            'Open' | 'Closed'
+    2.  Record { hatches } in the flight log
+    3.  Energize the demolition beams.
