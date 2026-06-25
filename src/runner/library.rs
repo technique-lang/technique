@@ -303,15 +303,12 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         .expect("child stderr was piped");
 
     // The captured return value stays plain; the Context reddens stderr on a
-    // colour terminal as it writes. Each stream keeps a small buffer holding a
-    // partial UTF-8 sequence carried over from the previous read, so a colour
-    // escape is never written into the middle of a character.
-    let mut captured = Vec::new();
-    let mut out_pending = Vec::new();
-    let mut err_pending = Vec::new();
-    let mut out_open = true;
-    let mut err_open = true;
-    let mut buffer = [0u8; 8192];
+    // colour terminal as it writes. Each stream keeps a `pending` buffer
+    // holding partial lines, as bytes are only flushed to terminal at newline
+    // to avoid the two stream stomping on each other.
+    let mut captured = Vec::new(); let mut out_pending = Vec::new(); let mut
+    err_pending = Vec::new(); let mut out_open = true; let mut err_open =
+    true; let mut buffer = [0u8; 8192];
 
     while out_open || err_open {
         // Ask poll() which still-open stream is readable, copying the readiness
@@ -385,8 +382,7 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         }
     }
 
-    // Flush any bytes still held back (a trailing partial character, decoded
-    // lossily) now that no continuation can arrive.
+    // Flush each stream's final partial content, if any is remaining.
     if !out_pending.is_empty() {
         captured.extend_from_slice(&out_pending);
         context
@@ -420,9 +416,10 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 }
 
 /// Tee a chunk to the user, recording it plain in `captured` and writing it
-/// through the Context. The chunk is appended to `pending`, then every complete
-/// UTF-8 character is written through; a trailing partial character stays in
-/// `pending` for the next read, so a colour escape never splits a character.
+/// through the Context. Only whole lines are written through; the trailing
+/// partial line waits in `pending` for its newline (or the stream's close), so
+/// a `Stream::Stderr` run never lands inside a `Stream::Stdout` line. A newline
+/// is always a UTF-8 boundary, so this never splits a character either.
 fn tee(
     bytes: &[u8],
     pending: &mut Vec<u8>,
@@ -431,22 +428,13 @@ fn tee(
     captured: &mut Vec<u8>,
 ) -> Result<(), RunnerError> {
     pending.extend_from_slice(bytes);
-    // How much of `pending` ends on a character boundary: all of it unless the
-    // tail is an incomplete sequence.
-    let ready = match std::str::from_utf8(pending) {
-        Ok(_) => pending.len(),
-        Err(error)
-            if error
-                .error_len()
-                .is_none() =>
-        {
-            error.valid_up_to()
-        }
-        Err(_) => pending.len(),
+    let ready = match pending
+        .iter()
+        .rposition(|b| *b == b'\n' || *b == b'\r')
+    {
+        Some(last) => last + 1,
+        None => return Ok(()),
     };
-    if ready == 0 {
-        return Ok(());
-    }
     captured.extend_from_slice(&pending[..ready]);
     context
         .write_run(&pending[..ready], stream)
