@@ -285,18 +285,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             if let Outcome::Stopped = outcome {
             } else {
                 self.record_finish()?;
-                if self
-                    .document
-                    .is_some()
-                {
+                if let Some(document) = &self.document {
                     let label = format!(
-                        "/ #{}",
+                        "/ {},1 #{}",
+                        document,
                         self.appender
                             .run_id()
                             .render()
                     );
+                    let verdict = verdict_from(outcome);
                     self.driver
-                        .conclude(&label);
+                        .conclude(&label, &verdict);
                 }
             }
         }
@@ -518,6 +517,32 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
             None => Ok(String::new()),
         }
+    }
+
+    /// Echo a deferred external's arguments after its `<uri>` path in the
+    /// `value ~ name` binding form. A bare variable shows its binding; any
+    /// other expression shows its evaluated value. Not shown if ther eare no
+    /// arguments.
+    fn render_deferred_echo(
+        &self,
+        env: &mut Environment,
+        qualified: &str,
+        arguments: &[Operation<'i>],
+    ) -> Result<String, RunnerError> {
+        if arguments.is_empty() {
+            return Ok(qualified.to_string());
+        }
+        let mut parts = Vec::new();
+        for arg in arguments {
+            let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
+            let part = if let Operation::Variable(id) = arg {
+                format!("{} ~ {}", value, id.value)
+            } else {
+                value.to_string()
+            };
+            parts.push(part);
+        }
+        Ok(format!("{} ({})", qualified, parts.join(", ")))
     }
 
     /// An action's parts for the user to confirm: its imperative verb (the
@@ -814,11 +839,23 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.begin_scope(&qualified)?;
-                self.driver
-                    .announce(&format!("<{}>", ext.value));
-                let input = self
+                // Prompt at the departure, echoing the arguments flowing into
+                // the external Technque.
+                let echo = self.render_deferred_echo(env, &qualified, &invocable.arguments)?;
+                let embarked = self
                     .driver
-                    .external(&qualified);
+                    .depart(&echo);
+                let input = match embarked {
+                    UserInput::Quit => {
+                        self.path
+                            .pop();
+                        return self.record_stop();
+                    }
+                    UserInput::Done(_) => self
+                        .driver
+                        .external(&qualified),
+                    declined => declined,
+                };
                 if let UserInput::Quit = input {
                     self.path
                         .pop();
@@ -826,7 +863,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.driver
-                    .settle("⇒", &qualified, &input);
+                    .settle("⇐", &qualified, &input);
                 let outcome = outcome_from(input);
                 self.appender
                     .append(&Record {
@@ -1277,35 +1314,64 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.driver
             .step(qualified, &step_text, depth);
 
-        let produced = match self.walk(env, body)? {
-            Outcome::Stopped => return Ok(Outcome::Stopped),
-            Outcome::Done(value) => value,
-            // The body settled itself — a declined command beat (Skip / Fail)
-            // or a thrown exec failure, which catches here as a Fail. Record
-            // and show its verdict without an acceptance prompt.
-            settled => {
-                let settled = match settled {
-                    Outcome::Throw(failure) => Outcome::Failed(failure),
-                    other => other,
-                };
-                let record = Record {
-                    recorded: now_iso8601(),
-                    run_id,
-                    path: qualified.to_string(),
-                    state: record_state(&settled),
-                };
-                self.appender
-                    .append(&record)?;
-                let verdict = match &settled {
-                    Outcome::Skipped(_) => UserInput::Skip,
-                    Outcome::Failed(Failure::Aborted(reason)) => UserInput::Fail(reason.clone()),
-                    _ => unreachable!("only Skip and Fail reach the settled branch"),
-                };
-                self.driver
-                    .settle("→", qualified, &verdict);
-                return Ok(settled);
+        // A descriptive binding on a step with response choices takes its value
+        // from the chosen response, not a separate acquire: skip the body walk
+        // and bind the choice (taken below) to the step's name(s).
+        let binding_via_response = !responses.is_empty() && binds_descriptively(body);
+
+        let produced = if binding_via_response {
+            Value::Unitus
+        } else {
+            match self.walk(env, body)? {
+                Outcome::Stopped => return Ok(Outcome::Stopped),
+                Outcome::Done(value) => value,
+                // The body settled itself — a declined command beat (Skip / Fail)
+                // or a thrown exec failure, which catches here as a Fail. Record
+                // and show its verdict without an acceptance prompt.
+                settled => {
+                    let settled = match settled {
+                        Outcome::Throw(failure) => Outcome::Failed(failure),
+                        other => other,
+                    };
+                    let record = Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified.to_string(),
+                        state: record_state(&settled),
+                    };
+                    self.appender
+                        .append(&record)?;
+                    let verdict = match &settled {
+                        Outcome::Skipped(_) => UserInput::Skip,
+                        Outcome::Failed(Failure::Aborted(reason)) => {
+                            UserInput::Fail(reason.clone())
+                        }
+                        _ => unreachable!("only Skip and Fail reach the settled branch"),
+                    };
+                    self.driver
+                        .settle("→", qualified, &verdict);
+                    return Ok(settled);
+                }
             }
         };
+
+        // A descriptive binding already took the user's input at its acquire
+        // prompt; that value (or a bare <Enter>) is the step's verdict, so
+        // settle Done without a redundant acceptance prompt.
+        if responses.is_empty() && binds_descriptively(body) {
+            let outcome = Outcome::Done(produced);
+            self.driver
+                .settle("→", qualified, &verdict_from(&outcome));
+            let record = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: record_state(&outcome),
+            };
+            self.appender
+                .append(&record)?;
+            return Ok(outcome);
+        }
 
         let choices: Vec<&str> = responses
             .iter()
@@ -1330,6 +1396,19 @@ impl<'i, D: Driver> Runner<'i, D> {
             UserInput::Skip => Outcome::Skipped(propagate),
             other => outcome_from(other),
         };
+        // Bind the chosen response to the step's name(s); a skip binds Unitus
+        // so a later reference resolves, mirroring a descriptive acquire.
+        if binding_via_response {
+            if let Some(names) = binding_names(body) {
+                match &outcome {
+                    Outcome::Done(value) => {
+                        super::evaluator::bind_names(env, names, value.clone())?
+                    }
+                    Outcome::Skipped(_) => super::evaluator::bind_names(env, names, Value::Unitus)?,
+                    _ => {}
+                }
+            }
+        }
         let record = Record {
             recorded: now_iso8601(),
             run_id,
@@ -1593,6 +1672,18 @@ fn outcome_from(input: UserInput) -> Outcome {
     }
 }
 
+/// The closing line's verdict, rolling the run's final `Outcome` back into the
+/// `UserInput` glyph the driver renders — mirroring the entry procedure's
+/// sign-off. A `Done` shows `✓`, a `Skipped` `⊘`, a failure `✗`; the value and
+/// reason are immaterial to the glyph.
+fn verdict_from(outcome: &Outcome) -> UserInput {
+    match outcome {
+        Outcome::Done(_) => UserInput::Done(Value::Unitus),
+        Outcome::Skipped(_) => UserInput::Skip,
+        _ => UserInput::Fail(String::new()),
+    }
+}
+
 /// Project the runner's in-memory `Outcome` into the on-disk `State` for the
 /// PFFTT file. A `Done` records its full value (serialized by the state codec),
 /// so a value bound with `~` rehydrates on resume. Quit is unreachable here:
@@ -1626,6 +1717,38 @@ fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>
             .iter()
             .find_map(binding_names),
         _ => None,
+    }
+}
+
+/// Whether walking a step body amounts to nothing more than acquiring one or
+/// more descriptive `~` bindings — prose interleaved with bindings that carry no
+/// expression to compute their value. Such a step takes the user's input at its
+/// acquire prompt(s); the last doubles as the step's completion, so there is no
+/// separate verdict left to take.
+fn binds_descriptively(op: &Operation) -> bool {
+    match op {
+        Operation::Bind { value, .. } => {
+            if let Operation::Sequence(ops) = value.as_ref() {
+                ops.is_empty()
+            } else {
+                false
+            }
+        }
+        Operation::Sequence(ops) => {
+            let mut bound = false;
+            for op in ops {
+                if let Operation::Prose(_) = op {
+                    continue;
+                }
+                if binds_descriptively(op) {
+                    bound = true;
+                } else {
+                    return false;
+                }
+            }
+            bound
+        }
+        _ => false,
     }
 }
 

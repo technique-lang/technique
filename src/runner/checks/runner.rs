@@ -2412,10 +2412,14 @@ fn deferred_invoke_is_prompted_and_recorded() {
         anonymous_with_body(Operation::Sequence(vec![invoke]))
     }
 
-    // The operator marks the external procedure Done.
+    // The operator confirms the departure, then marks the external procedure
+    // Done at the return.
     let mut fixture = StoreFixture::new("deferred-done");
     let program = deferred_program();
-    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Unitus),
+        UserInput::Done(Value::Unitus),
+    ]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
@@ -2463,7 +2467,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     // concern, tested elsewhere; what matters here is the recorded Skip.)
     let mut fixture = StoreFixture::new("deferred-skip");
     let program = deferred_program();
-    let prompt = Mock::with_answers([UserInput::Skip]);
+    let prompt = Mock::with_answers([UserInput::Done(Value::Unitus), UserInput::Skip]);
     let mut runner = Runner::new(
         &program,
         fixture.take_appender(),
@@ -2527,10 +2531,10 @@ cleanup :
     resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("descriptive-binding-acquire");
-    // The acquire for `items` pops first, then the step and substep verdicts.
+    // The acquire for `items` doubles as step 1's completion; step 2 and its
+    // two substeps then take their verdicts.
     let prompt = Mock::with_answers([
         UserInput::Done(Value::Literali(r#"["east", "west"]"#.to_string())),
-        UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
@@ -2596,12 +2600,11 @@ task :
     resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("descriptive-tuple-acquire");
-    // Two acquires (account_number, then account_name), then the two step
-    // verdicts.
+    // Two acquires (account_number, then account_name); the second doubles as
+    // step 1's completion, then step 2 takes its verdict.
     let prompt = Mock::with_answers([
         UserInput::Done(Value::Literali("12345".to_string())),
         UserInput::Done(Value::Literali("Acme".to_string())),
-        UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
     let mut runner = Runner::new(
@@ -2631,6 +2634,159 @@ task :
         })
         .collect();
     assert_eq!(acquired, vec![Some("account_number"), Some("account_name")]);
+}
+
+#[test]
+fn descriptive_binding_settles_without_a_second_prompt() {
+    // `Do something ~ answer` solicits the value once at its acquire prompt;
+    // that input is the step's verdict, so the step settles Done with the
+    // acquired value rather than asking a redundant second time. The plain step
+    // that follows is the only one to take an `ask`.
+    let source = r#"
+% technique v1
+
+task :
+
+    1.  Do something ~ answer
+    2.  Then check the result
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("descriptive-binding-settles");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("42".to_string())),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let driver = runner.into_driver();
+    let acquires = driver
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Acquire { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    let asks = driver
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Ask { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    // One acquire (for `answer`) and one ask (for step 2 only): the binding
+    // step never reaches an `ask`.
+    assert_eq!(acquires, 1);
+    assert_eq!(asks, 1);
+
+    let pfftt = fixture.pfftt_contents();
+    let record = pfftt
+        .lines()
+        .filter_map(|line| parse_record(line).ok())
+        .find(|record| {
+            record
+                .path
+                .ends_with("/1")
+                && if let State::Done(_) = record.state {
+                    true
+                } else {
+                    false
+                }
+        })
+        .expect("step 1 recorded Done");
+    let State::Done(Some(value)) = record.state else {
+        panic!("expected step 1 Done carrying the acquired value");
+    };
+    assert_eq!(value, Value::Literali("42".to_string()));
+}
+
+#[test]
+fn response_choice_binds_to_the_step_variable() {
+    // A step carrying both a descriptive binding and response choices takes its
+    // value from the chosen response: the menu is the only prompt (no separate
+    // acquire), and the choice binds to the variable for later steps to read.
+    let source = r#"
+% technique v1
+
+task :
+
+    1.  Is it working ~ answer
+        'Yes' | 'No'
+    2.  You said { answer }
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("response-binds-variable");
+    let prompt = Mock::with_answers([
+        UserInput::Done(Value::Literali("Yes".to_string())),
+        UserInput::Done(Value::Unitus),
+    ]);
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        prompt,
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+
+    let driver = runner.into_driver();
+    // The response menu replaces the acquire: the binding step never prompts to
+    // type a value.
+    let acquires = driver
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Event::Acquire { .. } = event {
+                true
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(acquires, 0);
+
+    // Step 2 interpolates `answer`, proving the chosen response bound to it.
+    let descriptions: Vec<&str> = driver
+        .events()
+        .iter()
+        .filter_map(|event| {
+            if let Event::Step { description, .. } = event {
+                Some(description.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        descriptions,
+        vec!["1.  Is it working ~ answer", "2.  You said \"Yes\""]
+    );
 }
 
 #[test]
@@ -2824,10 +2980,10 @@ sweep :
     resolve(&mut program).expect("resolve");
 
     let mut fixture = StoreFixture::new("iterated-binding");
+    // The acquire for `regions` doubles as step 1's completion; step 2's
+    // foreach iterates zero times, so only its own verdict follows.
     let prompt = Mock::with_answers([
         UserInput::Done(Value::Literali("[]".to_string())),
-        UserInput::Done(Value::Unitus),
-        UserInput::Done(Value::Unitus),
         UserInput::Done(Value::Unitus),
     ]);
     let mut runner = Runner::new(
