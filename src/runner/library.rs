@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 
-use super::context::Context;
+use super::context::{Context, Stream};
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
@@ -267,24 +267,13 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Arraeum(pairs))
 }
 
-/// `exec(script)` — run a shell script, teeing its output through the Context
-/// to the operator chunk by chunk as it streams while accumulating it as the
-/// return value. stdout and stderr are kept on separate pipes and merged here so
-/// stderr can be shown in red on a colour terminal; the captured return value is
-/// always the plain, uncoloured transcript. Because the two pipes are
-/// independent kernel buffers, cross-stream ordering is approximate — bytes stay
-/// ordered within each stream but interleaving between them is not guaranteed.
-/// Both pipes are drained together under `poll()` so neither can deadlock by
-/// filling while the reader is parked on the other. Chunks are written through
-/// the instant they are read, so a carriage-return-updated progress meter (as
-/// `curl` writes) appears live rather than being held back to a line boundary.
-/// Each stderr run is wrapped in red and the colour reset immediately, never
-/// held on across the wait for more output, so an interrupt — a real `SIGINT`,
-/// since a running command is outside the prompt's raw-mode window — finds the
-/// terminal already in its default colour. Bytes are accumulated for the return
-/// value and decoded only at the end, so a chunk split mid-UTF-8 is harmless.
-/// Trailing newlines are trimmed from the captured value (matching shell
-/// `$(...)` substitution). A non-zero exit is an error.
+/// Run a shell script, teeing its output to the user chunk by chunk as it
+/// streams while accumulating the output as the return value. The child's
+/// stdout and stderr are kept on separate pipes so stderr can be shown in
+/// red; both are drained together using `poll()` so neither deadlocks. Bytes
+/// are decoded at the end, so a chunk split mid-UTF-8 is harmless; trailing
+/// newlines are trimmed (matching shell substitution). A non-zero exit is an
+/// error.
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -372,7 +361,7 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
                 tee(
                     &buffer[..count],
                     &mut out_pending,
-                    false,
+                    Stream::Stdout,
                     context,
                     &mut captured,
                 )?;
@@ -388,7 +377,7 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
                 tee(
                     &buffer[..count],
                     &mut err_pending,
-                    true,
+                    Stream::Stderr,
                     context,
                     &mut captured,
                 )?;
@@ -401,13 +390,13 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     if !out_pending.is_empty() {
         captured.extend_from_slice(&out_pending);
         context
-            .write_run(&out_pending, false)
+            .write_run(&out_pending, Stream::Stdout)
             .map_err(RunnerError::ExecError)?;
     }
     if !err_pending.is_empty() {
         captured.extend_from_slice(&err_pending);
         context
-            .write_run(&err_pending, true)
+            .write_run(&err_pending, Stream::Stderr)
             .map_err(RunnerError::ExecError)?;
     }
 
@@ -430,16 +419,14 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     ))
 }
 
-/// Tee a chunk from one stream to the operator, recording it plain in
-/// `captured` and writing it through the Context (which reddens it when
-/// `stderr` and the terminal is colour-capable). The chunk is appended to that
-/// stream's `pending` buffer, then every complete UTF-8 character available is
-/// written through; a trailing partial character stays in `pending` for the
-/// next read, so a colour escape never lands in the middle of a character.
+/// Tee a chunk to the user, recording it plain in `captured` and writing it
+/// through the Context. The chunk is appended to `pending`, then every complete
+/// UTF-8 character is written through; a trailing partial character stays in
+/// `pending` for the next read, so a colour escape never splits a character.
 fn tee(
     bytes: &[u8],
     pending: &mut Vec<u8>,
-    stderr: bool,
+    stream: Stream,
     context: &Context,
     captured: &mut Vec<u8>,
 ) -> Result<(), RunnerError> {
@@ -462,7 +449,7 @@ fn tee(
     }
     captured.extend_from_slice(&pending[..ready]);
     context
-        .write_run(&pending[..ready], stderr)
+        .write_run(&pending[..ready], stream)
         .map_err(RunnerError::ExecError)?;
     pending.drain(..ready);
     Ok(())
