@@ -1344,6 +1344,24 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
         };
 
+        // A descriptive binding already took the user's input at its acquire
+        // prompt; that value (or a bare <Enter>) is the step's verdict, so
+        // settle Done without a redundant acceptance prompt.
+        if responses.is_empty() && binds_descriptively(body) {
+            let outcome = Outcome::Done(produced);
+            self.driver
+                .settle("→", qualified, &verdict_from(&outcome));
+            let record = Record {
+                recorded: now_iso8601(),
+                run_id,
+                path: qualified.to_string(),
+                state: record_state(&outcome),
+            };
+            self.appender
+                .append(&record)?;
+            return Ok(outcome);
+        }
+
         let choices: Vec<&str> = responses
             .iter()
             .map(|r| r.value)
@@ -1675,6 +1693,38 @@ fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>
             .iter()
             .find_map(binding_names),
         _ => None,
+    }
+}
+
+/// Whether walking a step body amounts to nothing more than acquiring one or
+/// more descriptive `~` bindings — prose interleaved with bindings that carry no
+/// expression to compute their value. Such a step takes the user's input at its
+/// acquire prompt(s); the last doubles as the step's completion, so there is no
+/// separate verdict left to take.
+fn binds_descriptively(op: &Operation) -> bool {
+    match op {
+        Operation::Bind { value, .. } => {
+            if let Operation::Sequence(ops) = value.as_ref() {
+                ops.is_empty()
+            } else {
+                false
+            }
+        }
+        Operation::Sequence(ops) => {
+            let mut bound = false;
+            for op in ops {
+                if let Operation::Prose(_) = op {
+                    continue;
+                }
+                if binds_descriptively(op) {
+                    bound = true;
+                } else {
+                    return false;
+                }
+            }
+            bound
+        }
+        _ => false,
     }
 }
 
