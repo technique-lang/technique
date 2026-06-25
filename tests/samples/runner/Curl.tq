@@ -1,0 +1,1 @@
+1. { exec("curl -L -o fedora.iso https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-Live-44-1.7.x86_64.iso") }
