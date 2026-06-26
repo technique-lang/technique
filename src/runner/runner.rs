@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 
 use super::context::Context;
-use super::driver::{Driver, UserInput};
+use super::driver::{Driver, Standing, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
@@ -405,6 +405,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                             }
                             UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
                             UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Override => {
+                                unreachable!("a command prompt never offers Override")
+                            }
                             UserInput::Quit => self.record_stop(),
                         }
                     }
@@ -426,6 +429,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                             }
                             UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
                             UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Override => {
+                                unreachable!("an action prompt never offers Override")
+                            }
                             UserInput::Quit => self.record_stop(),
                         }
                     }
@@ -941,6 +947,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     UserInput::Fail(reason) => {
                         return Ok(Outcome::Failed(Failure::Aborted(reason)))
                     }
+                    UserInput::Override => unreachable!("an acquire prompt never offers Override"),
                     UserInput::Quit => return self.record_stop(),
                 }
             }
@@ -1079,6 +1086,9 @@ impl<'i, D: Driver> Runner<'i, D> {
     ) -> Result<Outcome, RunnerError> {
         let mut parallel_idx: usize = 0;
         let mut last = Value::Unitus;
+        let mut failed: Option<Failure> = None;
+        let mut done_seen = false;
+        let mut skip_seen = false;
         for op in ops {
             let outcome = match op {
                 Operation::Step { ordinal, .. } => {
@@ -1094,16 +1104,35 @@ impl<'i, D: Driver> Runner<'i, D> {
                 _ => self.walk(env, op)?,
             };
             match outcome {
-                Outcome::Done(value) | Outcome::Skipped(value) => last = value,
+                Outcome::Done(value) => {
+                    done_seen = true;
+                    last = value;
+                }
+                Outcome::Skipped(value) => {
+                    skip_seen = true;
+                    last = value;
+                }
                 Outcome::Stopped => return Ok(Outcome::Stopped),
                 // A Throw is a hard failure mid-body; it propagates up to the
-                // enclosing step. A plain Fail is a step's recorded verdict and
-                // the sequence continues to its siblings.
+                // enclosing step at once. A Fail is a step's recorded verdict; the
+                // sequence runs on to its siblings but carries the failure so the
+                // enclosing scope rolls up as failed (its sign-off may overrule).
                 Outcome::Throw(failure) => return Ok(Outcome::Throw(failure)),
-                Outcome::Failed(_) => {}
+                Outcome::Failed(failure) => {
+                    if failed.is_none() {
+                        failed = Some(failure);
+                    }
+                }
             }
         }
-        Ok(Outcome::Done(last))
+        // Roll the children up by worst-wins precedence: any failure fails the
+        // sequence; otherwise a single green makes it Done; only an all-skipped
+        // (non-empty) sequence rolls up to Skip.
+        match failed {
+            Some(failure) => Ok(Outcome::Failed(failure)),
+            None if !done_seen && skip_seen => Ok(Outcome::Skipped(last)),
+            None => Ok(Outcome::Done(last)),
+        }
     }
 
     fn walk_section(
@@ -1325,9 +1354,32 @@ impl<'i, D: Driver> Runner<'i, D> {
             match self.walk(env, body)? {
                 Outcome::Stopped => return Ok(Outcome::Stopped),
                 Outcome::Done(value) => value,
-                // The body settled itself — a declined command beat (Skip / Fail)
-                // or a thrown exec failure, which catches here as a Fail. Record
-                // and show its verdict without an acceptance prompt.
+                // A rolled-up child failure signs off through `overrule`: the
+                // failure stands and propagates by default, but an interactive
+                // run may Override it to Done, severing the rollup.
+                Outcome::Failed(_) => {
+                    let input = self
+                        .driver
+                        .overrule(qualified, "→", Standing::Fail);
+                    if let UserInput::Quit = input {
+                        return self.record_stop();
+                    }
+                    self.driver
+                        .settle("→", qualified, &input);
+                    let outcome = outcome_from(input);
+                    let record = Record {
+                        recorded: now_iso8601(),
+                        run_id,
+                        path: qualified.to_string(),
+                        state: record_state(&outcome),
+                    };
+                    self.appender
+                        .append(&record)?;
+                    return Ok(outcome);
+                }
+                // The body settled itself — a declined command beat (Skip) or a
+                // thrown exec failure (caught here as a Fail). Record and show
+                // its verdict without an acceptance prompt.
                 settled => {
                     let settled = match settled {
                         Outcome::Throw(failure) => Outcome::Failed(failure),
@@ -1559,6 +1611,33 @@ impl<'i, D: Driver> Runner<'i, D> {
         outcome: Outcome,
         computable: bool,
     ) -> Result<Outcome, RunnerError> {
+        let standing = match &outcome {
+            Outcome::Failed(_) | Outcome::Throw(_) => Some(Standing::Fail),
+            Outcome::Skipped(_) => Some(Standing::Skip),
+            _ => None,
+        };
+        if let Some(standing) = standing {
+            let input = self
+                .driver
+                .overrule(qualified, "↙", standing);
+            if let UserInput::Quit = input {
+                return self.record_stop();
+            }
+            self.driver
+                .settle("↙", qualified, &input);
+            let settled = outcome_from(input);
+            let record = Record {
+                recorded: now_iso8601(),
+                run_id: self
+                    .appender
+                    .run_id(),
+                path: qualified.to_string(),
+                state: record_state(&settled),
+            };
+            self.appender
+                .append(&record)?;
+            return Ok(settled);
+        }
         let produced = match outcome {
             Outcome::Done(value) | Outcome::Skipped(value) => value,
             _ => Value::Unitus,
@@ -1662,10 +1741,13 @@ fn computable(op: &Operation) -> bool {
     }
 }
 
-/// Lift a `UserInput` from the prompt into the runner's `Outcome`.
+/// Lift a `UserInput` from the prompt into the runner's `Outcome`. An Override
+/// settles `Done ()`, severing the rollup so the failed child below does not
+/// propagate past this node.
 fn outcome_from(input: UserInput) -> Outcome {
     match input {
         UserInput::Done(value) => Outcome::Done(value),
+        UserInput::Override => Outcome::Done(Value::Unitus),
         UserInput::Skip => Outcome::Skipped(Value::Unitus),
         UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
         UserInput::Quit => Outcome::Stopped,

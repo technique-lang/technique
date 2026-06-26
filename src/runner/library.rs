@@ -306,9 +306,12 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     // colour terminal as it writes. Each stream keeps a `pending` buffer
     // holding partial lines, as bytes are only flushed to terminal at newline
     // to avoid the two stream stomping on each other.
-    let mut captured = Vec::new(); let mut out_pending = Vec::new(); let mut
-    err_pending = Vec::new(); let mut out_open = true; let mut err_open =
-    true; let mut buffer = [0u8; 8192];
+    let mut captured = Vec::new();
+    let mut out_pending = Vec::new();
+    let mut err_pending = Vec::new();
+    let mut out_open = true;
+    let mut err_open = true;
+    let mut buffer = [0u8; 8192];
 
     while out_open || err_open {
         // Ask poll() which still-open stream is readable, copying the readiness

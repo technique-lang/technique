@@ -967,6 +967,7 @@ fn main() {
                     );
                     std::process::exit(0);
                 }
+                Ok((_, Outcome::Failed(_) | Outcome::Throw(_))) => std::process::exit(1),
                 Ok((_, _)) => std::process::exit(0),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
