@@ -33,5 +33,6 @@ fn check_directory(dir: &Path) {
 #[test]
 fn ensure_parse() {
     check_directory(Path::new("tests/samples/parsing/"));
+    check_directory(Path::new("tests/samples/runner/"));
     check_directory(Path::new("examples/minimal/"));
 }

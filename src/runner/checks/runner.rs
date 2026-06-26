@@ -1254,9 +1254,10 @@ check :
 }
 
 #[test]
-fn automatic_failing_exec_fails_step_and_continues() {
-    // A non-zero exec exit settles its step Fail; the walk continues to the
-    // sibling below rather than aborting the run.
+fn automatic_failing_exec_fails_run_and_continues() {
+    // A non-zero exec exit settles its step Fail and, with no user present to
+    // overrule it, rolls the autonomous run up to Failed; the walk still
+    // continues to the sibling below rather than aborting at the failure.
     let source = r#"
 % technique v1
 
@@ -1286,8 +1287,8 @@ check :
         .run(Environment::new())
         .expect("run");
     match outcome {
-        Outcome::Done(_) => {}
-        other => panic!("expected Done, got {:?}", other),
+        Outcome::Failed(_) => {}
+        other => panic!("expected Failed, got {:?}", other),
     }
 
     let pfftt = fixture.pfftt_contents();
@@ -1308,6 +1309,71 @@ check :
     assert!(records
         .iter()
         .any(|r| r.path == "/check:/2"));
+}
+
+const ONE_FAILED_STEP: &str = r#"
+% technique v1
+
+check :
+
+1.  A step the user fails
+        "#;
+
+#[test]
+fn interactive_override_severs_the_rollup_to_done() {
+    // The user fails the step, then deliberately Overrides the procedure's
+    // sign-off: the override settles it Done, severing the rollup so the failed
+    // child does not propagate. Only an interactive run can do this.
+    let source = ONE_FAILED_STEP.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("interactive-override");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        Mock::with_answers([UserInput::Fail("not done".to_string()), UserInput::Override]),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Done(_) => {}
+        other => panic!("expected Done after override, got {:?}", other),
+    }
+}
+
+#[test]
+fn interactive_accepting_a_failure_propagates() {
+    // Without an Override, the failed step stands: the procedure rolls up to
+    // Failed even with the user at the controls.
+    let source = ONE_FAILED_STEP.trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parsed");
+    let mut program = translate(&document).expect("translated");
+    resolve(&mut program).expect("resolve");
+
+    let mut fixture = StoreFixture::new("interactive-propagate");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        // The step's Fail, then the sign-off accepts the standing failure.
+        Mock::with_answers([
+            UserInput::Fail("not done".to_string()),
+            UserInput::Fail(String::new()),
+        ]),
+        Library::stub(),
+    );
+    let outcome = runner
+        .run(Environment::new())
+        .expect("run");
+    match outcome {
+        Outcome::Failed(_) => {}
+        other => panic!("expected Failed, got {:?}", other),
+    }
 }
 
 #[test]

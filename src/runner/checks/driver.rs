@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::runner::driver::{
-    draw, edit, is_list_forma, Automatic, Console, Driver, Event, Interaction, Mock, UserInput,
+    draw, edit, is_list_forma, Automatic, Console, Driver, Event, Interaction, Mock, Standing,
+    UserInput,
 };
 use crate::value::{Numeric, Value};
 
@@ -157,6 +158,51 @@ fn default_enter_completes_with_produced() {
     assert_eq!(
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Done(Value::Unitus))
+    );
+}
+
+#[test]
+fn overrule_fail_enter_propagates() {
+    // At a failed sign-off the default is the failure itself: a bare Enter
+    // settles Fail and never silently lifts it.
+    let mut it = Interaction::overrule(Standing::Fail);
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Fail(String::new()))
+    );
+}
+
+#[test]
+fn overrule_fail_menu_o_overrides() {
+    // Override is reachable only deliberately — from the menu — and settles as
+    // Override, which the runner lifts to a rollup-severing Done.
+    let mut it = Interaction::overrule(Standing::Fail);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE)),
+        Some(UserInput::Override)
+    );
+}
+
+#[test]
+fn overrule_skip_enter_propagates() {
+    // An all-skipped scope defaults to Skip, not Done.
+    let mut it = Interaction::overrule(Standing::Skip);
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(UserInput::Skip)
+    );
+}
+
+#[test]
+fn override_inert_without_a_failure() {
+    // A Skip standing has nothing to override, so the menu's `o` is greyed and
+    // does nothing.
+    let mut it = Interaction::overrule(Standing::Skip);
+    it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        it.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE)),
+        None
     );
 }
 
@@ -511,6 +557,7 @@ fn list_prompt() -> Interaction {
         field: edit(String::new(), Value::Literali(String::new()), true),
         menu: None,
         reason: None,
+        standing: Standing::Done,
     }
 }
 

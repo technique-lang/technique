@@ -16,7 +16,7 @@ use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::style::{
     Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor, Stylize,
 };
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType};
 use crossterm::{cursor, queue};
 
 use super::path::display_path;
@@ -44,7 +44,19 @@ pub enum UserInput {
     Done(Value),
     Skip,
     Fail(String),
+    /// Deliberately accept a node whose child failed, settling it `Done ()` and
+    /// severing the rollup so the failure does not propagate above. Reachable
+    /// only from the `<Esc>` menu at a failed node, never the Enter default.
+    Override,
     Quit,
+}
+
+/// The default verdict a node's rolled-up body leaves standing at its sign-off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    Done,
+    Skip,
+    Fail,
 }
 
 /// What the walker uses to drive a run. Implementations are the interactive
@@ -138,6 +150,17 @@ pub trait Driver {
     /// `produced` is the scope's value, offered for acceptance; `computable`
     /// drives unattended `Done`/`Skip` as in `ask`.
     fn seal(&mut self, qualified: &str, produced: Value, computable: bool) -> UserInput;
+
+    /// Sign off a node that rolled up to a failure or skip. When running
+    /// interactively a failure may be Overridden to Done.
+    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
+        let _ = (qualified, marker);
+        match standing {
+            Standing::Done => UserInput::Done(Value::Unitus),
+            Standing::Skip => UserInput::Skip,
+            Standing::Fail => UserInput::Fail(String::new()),
+        }
+    }
 
     /// Render the settled verdict line for a step or scope close: `marker`
     /// (`→` step, `↙` scope close), Qualified Name, and the verdict's glyph.
@@ -241,7 +264,11 @@ impl<W: Write> Driver for Console<W> {
         if let UserInput::Quit = input {
         } else {
             let renderer = self.renderer();
-            write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), renderer);
+            write_marker_line(
+                &mut self.output,
+                &format!("⇒ {}", display_path(qualified)),
+                renderer,
+            );
         }
         input
     }
@@ -260,6 +287,10 @@ impl<W: Write> Driver for Console<W> {
 
     fn seal(&mut self, qualified: &str, produced: Value, _computable: bool) -> UserInput {
         prompt(&mut self.output, qualified, "↙", &[], produced)
+    }
+
+    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
+        prompt_overrule(&mut self.output, qualified, marker, standing)
     }
 
     fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
@@ -304,6 +335,21 @@ fn prompt<W: Write>(
     result
 }
 
+fn prompt_overrule<W: Write>(
+    out: &mut W,
+    qualified: &str,
+    marker: &str,
+    standing: Standing,
+) -> UserInput {
+    let qualified = display_path(qualified);
+    let result = interact(out, Interaction::overrule(standing), |o, i| {
+        draw(o, &qualified, marker, i)
+    });
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = out.flush();
+    result
+}
+
 /// Present a read-only action on the live prompt line — `» {path} {verb} {label} ▶`
 /// — and settle on the user's verdict. On Done it leaves a compact dark-grey
 /// trace `» {path} {name}()`; Skip / Fail / Quit clear the line for the step's
@@ -334,6 +380,8 @@ fn prompt_action<W: Write>(
 /// becoming the '$', reminiscent of a shell.
 fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
     let qualified = display_path(qualified);
+    // Seed the editable line
+    let script = script.trim_end();
     let field = edit(
         script.to_string(),
         Value::Literali(script.to_string()),
@@ -345,42 +393,19 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
             field,
             menu: None,
             reason: None,
+            standing: Standing::Done,
         },
         |o, i| draw(o, &qualified, "→", i),
     );
-    let col = "→"
-        .chars()
-        .count() as u16
-        + 1
-        + qualified
-            .chars()
-            .count() as u16
-        + 1;
-    match &result {
-        UserInput::Done(produced) => {
-            let ran = if let Value::Literali(text) = produced {
-                text.trim_end()
-            } else {
-                script.trim_end()
-            };
-            let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
-            let _ = writeln!(out, "{}", format!("→ {} $ {}", qualified, ran).dark_grey());
-        }
-        UserInput::Quit => {
-            let _ = writeln!(out);
-        }
-        UserInput::Skip => {
-            let _ = queue!(out, cursor::MoveToColumn(col));
-            let _ = write!(out, "{}", "⊘".yellow());
-            let _ = queue!(out, Clear(ClearType::UntilNewLine));
-            let _ = writeln!(out);
-        }
-        UserInput::Fail(_) => {
-            let _ = queue!(out, cursor::MoveToColumn(col));
-            let _ = write!(out, "{}", "✗".red());
-            let _ = queue!(out, Clear(ClearType::UntilNewLine));
-            let _ = writeln!(out);
-        }
+
+    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    if let UserInput::Done(produced) = &result {
+        let ran = if let Value::Literali(text) = produced {
+            text.trim_end()
+        } else {
+            script.trim_end()
+        };
+        let _ = writeln!(out, "{}", format!("→ {} $ {}", qualified, ran).dark_grey());
     }
     let _ = out.flush();
     result
@@ -397,6 +422,7 @@ fn prompt_acquire<W: Write>(out: &mut W, label: &str, list: bool) -> UserInput {
             field,
             menu: None,
             reason: None,
+            standing: Standing::Done,
         },
         |o, i| draw(o, label, "↘", i),
     );
@@ -484,7 +510,7 @@ fn render_enter<W: Write>(out: &mut W, qualified: &str, renderer: &dyn Render) {
 /// renders no glyph).
 fn verdict_glyph(verdict: &UserInput) -> Option<(&'static str, Syntax)> {
     match verdict {
-        UserInput::Done(_) => Some(("✓", Syntax::Done)),
+        UserInput::Done(_) | UserInput::Override => Some(("✓", Syntax::Done)),
         UserInput::Skip => Some(("⊘", Syntax::Skip)),
         UserInput::Fail(_) => Some(("✗", Syntax::Fail)),
         UserInput::Quit => None,
@@ -509,12 +535,7 @@ fn render_settle<W: Write>(
 /// Render the run's closing `⇐` boundary line, the rolled-up verdict glyph
 /// following the label just as a scope's `↙` sign-off carries its own. Quit
 /// renders nothing, as in `render_settle`.
-fn render_conclude<W: Write>(
-    out: &mut W,
-    label: &str,
-    verdict: &UserInput,
-    renderer: &dyn Render,
-) {
+fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, renderer: &dyn Render) {
     let (glyph, syntax) = match verdict_glyph(verdict) {
         Some(pair) => pair,
         None => return,
@@ -529,7 +550,10 @@ fn render_conclude<W: Write>(
 /// a shell prompt (distinct from the operator's `▶` edit prompt). Trailing
 /// whitespace is trimmed so a code block's blank tail line is not echoed.
 fn render_command<W: Write>(out: &mut W, qualified: &str, script: &str, renderer: &dyn Render) {
-    let line = renderer.style(Syntax::Marker, &format!("{} $ {}", qualified, script.trim_end()));
+    let line = renderer.style(
+        Syntax::Marker,
+        &format!("{} $ {}", qualified, script.trim_end()),
+    );
     let _ = writeln!(out, "{}", line);
 }
 
@@ -550,6 +574,7 @@ enum MenuItem {
     Edit,
     Skip,
     Fail,
+    Override,
     Quit,
 }
 
@@ -559,18 +584,21 @@ impl MenuItem {
             MenuItem::Edit => "Edit",
             MenuItem::Skip => "Skip",
             MenuItem::Fail => "Fail",
+            MenuItem::Override => "Override",
             MenuItem::Quit => "Quit",
         }
     }
 }
 
-/// The Esc-menu, always shown in full. `Edit` leads but is greyed and
-/// unselectable unless the produced value is an editable scalar, so the menu
-/// teaches that some steps can be edited while most cannot.
-const MENU: [MenuItem; 4] = [
+/// The Esc-menu, always shown in full. `Edit` leads but is greyed unless the
+/// produced value is an editable scalar; `Override` is greyed unless a child
+/// failed, so the menu teaches both which steps can be edited and that a
+/// failure can be deliberately accepted.
+const MENU: [MenuItem; 5] = [
     MenuItem::Edit,
     MenuItem::Skip,
     MenuItem::Fail,
+    MenuItem::Override,
     MenuItem::Quit,
 ];
 
@@ -666,6 +694,10 @@ struct Interaction {
     field: Field,
     menu: Option<usize>,
     reason: Option<Reason>,
+    /// The node's rolled-up default — `Done` for an ordinary prompt, `Fail` or
+    /// `Skip` at an `overrule`. Colours the `▶`, enables `Override` (only on
+    /// `Fail`), and is where the `<Esc>` menu opens.
+    standing: Standing,
 }
 
 impl Interaction {
@@ -698,29 +730,62 @@ impl Interaction {
             field,
             menu: None,
             reason: None,
+            standing: Standing::Done,
         }
     }
 
-    /// Whether a menu item is currently selectable. Only `Edit` is ever
-    /// disabled — offered when the produced value is an editable scalar, greyed
-    /// otherwise; the exits are always available. Navigation skips a disabled
-    /// item and the menu never opens onto one.
+    /// Seed an interaction to sign off a node whose body rolled up to `standing`
+    /// (`Fail` or `Skip`). No value to accept, so the field is a frozen Unit;
+    /// the standing colours the `▶` and, on `Fail`, lights up `Override`.
+    fn overrule(standing: Standing) -> Self {
+        Interaction {
+            field: Field::Frozen {
+                produced: Value::Unitus,
+            },
+            menu: None,
+            reason: None,
+            standing,
+        }
+    }
+
+    /// Whether a menu item is currently selectable. `Edit` is offered only when
+    /// the produced value is an editable scalar; `Override` only when a child
+    /// failed (`standing` is `Fail`); the exits are always available. Navigation
+    /// skips a disabled item and the menu never opens onto one.
     fn enabled(&self, item: MenuItem) -> bool {
         match item {
             MenuItem::Edit => match &self.field {
                 Field::Frozen { produced } => editable_seed(produced).is_some(),
                 _ => false,
             },
+            MenuItem::Override => self.standing == Standing::Fail,
             _ => true,
         }
     }
 
-    /// First selectable item, where the menu opens. The exits are always
-    /// enabled, so the fallback never fires.
+    /// First selectable item. The exits are always enabled, so the fallback
+    /// never fires.
     fn first_enabled(&self) -> usize {
         (0..MENU.len())
             .find(|&i| self.enabled(MENU[i]))
             .unwrap_or(0)
+    }
+
+    /// Where the menu opens: on the node's standing verdict at an overrule (so
+    /// the cursor rests on what Enter would settle), otherwise the first
+    /// selectable item.
+    fn landing(&self) -> usize {
+        let target = match self.standing {
+            Standing::Fail => Some(MenuItem::Fail),
+            Standing::Skip => Some(MenuItem::Skip),
+            Standing::Done => None,
+        };
+        target
+            .and_then(|item| {
+                MENU.iter()
+                    .position(|m| *m == item)
+            })
+            .unwrap_or_else(|| self.first_enabled())
     }
 
     /// Nearest selectable item after / before `from`, or `None` at the edge —
@@ -792,6 +857,7 @@ impl Interaction {
                 });
                 None
             }
+            MenuItem::Override => Some(UserInput::Override),
             MenuItem::Quit => Some(UserInput::Quit),
         }
     }
@@ -825,6 +891,9 @@ impl Interaction {
             KeyCode::Enter => self.activate(MENU[active]),
             KeyCode::Char('s') | KeyCode::Char('S') => self.choose(MenuItem::Skip),
             KeyCode::Char('f') | KeyCode::Char('F') => self.choose(MenuItem::Fail),
+            KeyCode::Char('o') | KeyCode::Char('O') if self.enabled(MenuItem::Override) => {
+                self.choose(MenuItem::Override)
+            }
             KeyCode::Char('q') | KeyCode::Char('Q') => self.choose(MenuItem::Quit),
             KeyCode::Esc => {
                 self.menu = None;
@@ -857,9 +926,10 @@ impl Interaction {
 
     fn field_key(&mut self, code: KeyCode) -> Option<UserInput> {
         if let KeyCode::Esc = code {
-            self.menu = Some(self.first_enabled());
+            self.menu = Some(self.landing());
             return None;
         }
+        let standing = self.standing;
         match &mut self.field {
             Field::Edit {
                 buffer,
@@ -901,7 +971,15 @@ impl Interaction {
                 }
             },
             Field::Frozen { produced } => match code {
-                KeyCode::Enter => Some(UserInput::Done(std::mem::replace(produced, Value::Unitus))),
+                // Enter accepts the standing verdict: an ordinary prompt's Done,
+                // but at an overrule the failure (or skip) the body left — so
+                // Enter never silently lifts a failure; only the Override menu
+                // item does.
+                KeyCode::Enter => Some(match standing {
+                    Standing::Done => UserInput::Done(std::mem::replace(produced, Value::Unitus)),
+                    Standing::Skip => UserInput::Skip,
+                    Standing::Fail => UserInput::Fail(String::new()),
+                }),
                 _ => None,
             },
             Field::Choose { choices, active } => match code {
@@ -939,14 +1017,30 @@ fn draw<W: Write>(
     queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
 
     let prefix = prompt_prefix_width(qualified, settle);
+    // The `▶` previews the verdict Enter will settle: blue for an ordinary Done,
+    // else the failure / skip glyph's own colour so the triangle matches the
+    // `✗` / `⊘` it foreshadows.
+    let symbol = match interaction.standing {
+        Standing::Done => PROMPT_SYMBOL.blue(),
+        Standing::Fail => PROMPT_SYMBOL.with(Color::Rgb {
+            r: 0xcc,
+            g: 0x00,
+            b: 0x00,
+        }),
+        Standing::Skip => PROMPT_SYMBOL.with(Color::Rgb {
+            r: 0xc4,
+            g: 0xa0,
+            b: 0x00,
+        }),
+    };
     write!(
         out,
         "{} {} ",
         format!("{} {}", settle, qualified).dark_grey(),
-        PROMPT_SYMBOL.blue(),
+        symbol,
     )?;
-    let cursor_col = draw_tail(out, interaction, prefix)?;
-    place_cursor(out, cursor_col)
+    let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col, end_col)
 }
 
 /// Draw the read-only action prompt line: `» {path} {verb} {label} ▶`, the verb
@@ -968,32 +1062,41 @@ fn draw_action<W: Write>(
     }
     write!(out, " {} ", PROMPT_SYMBOL.blue())?;
     let prefix = action_prefix_width(qualified, verb, label);
-    let cursor_col = draw_tail(out, interaction, prefix)?;
-    place_cursor(out, cursor_col)
+    let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
+    place_cursor(out, cursor_col, end_col)
 }
 
 /// Render the interaction state after the prompt prefix — the Esc menu, the
-/// fail-reason buffer, or the field's content — returning the cursor column
-/// (`None` hides it). Shared by the step/command prompt and the action prompt.
+/// fail-reason buffer, or the field's content — returning the target cursor
+/// column (`None` hides it) and the column writing finished at. Both are
+/// absolute columns from the line start; when the content is wider than the
+/// terminal they exceed its width and `place_cursor` resolves the wrap. Shared
+/// by the step/command prompt and the action prompt.
 fn draw_tail<W: Write>(
     out: &mut W,
     interaction: &Interaction,
     prefix: u16,
-) -> io::Result<Option<u16>> {
+) -> io::Result<(Option<u16>, u16)> {
     let mut cursor_col: Option<u16> = None;
+    let mut end_col: u16 = prefix;
     match interaction.menu {
         Some(active) => match &interaction.reason {
             Some(reason) => {
                 write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
+                let lead = prefix
+                    + REASON_PREFIX
+                        .chars()
+                        .count() as u16;
                 cursor_col = Some(
-                    prefix
-                        + REASON_PREFIX
-                            .chars()
-                            .count() as u16
-                        + reason.buffer[..reason.cursor]
-                            .chars()
-                            .count() as u16,
+                    lead + reason.buffer[..reason.cursor]
+                        .chars()
+                        .count() as u16,
                 );
+                end_col = lead
+                    + reason
+                        .buffer
+                        .chars()
+                        .count() as u16;
             }
             None => render_menu(out, interaction, active)?,
         },
@@ -1018,6 +1121,11 @@ fn draw_tail<W: Write>(
                             .chars()
                             .count() as u16,
                 );
+                end_col = prefix
+                    + buffer
+                        .chars()
+                        .count() as u16
+                    + if *bracketed { 2 } else { 0 };
             }
             Field::Frozen { .. } => {
                 cursor_col = Some(prefix);
@@ -1031,14 +1139,44 @@ fn draw_tail<W: Write>(
             }
         },
     }
-    Ok(cursor_col)
+    Ok((cursor_col, end_col))
 }
 
 /// Position (or hide) the cursor after a prompt line is drawn, then flush.
-fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>) -> io::Result<()> {
+/// `end_col` is where writing left the cursor; `cursor_col` is where it belongs.
+/// When the content wrapped, an absolute `MoveToColumn` past the right margin
+/// clamps to the edge, so the target column is resolved against the terminal
+/// width into a move back from the end instead.
+fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>, end_col: u16) -> io::Result<()> {
     match cursor_col {
-        Some(col) => queue!(out, cursor::Show, cursor::MoveToColumn(col))?,
-        None => queue!(out, cursor::Hide)?,
+        None => {
+            queue!(out, cursor::Hide)?;
+        }
+        Some(target) if target >= end_col => {
+            // The cursor belongs at the end of what was just written, which is
+            // exactly where writing left it — moving would only fight the wrap.
+            queue!(out, cursor::Show)?;
+        }
+        Some(target) => {
+            let width = size()
+                .map(|(cols, _)| cols)
+                .unwrap_or(80)
+                .max(1);
+            // The physical cursor sits at the end; step up to the target's row
+            // (a column that exactly fills a row leaves the cursor on it, not the
+            // next) and across to its column.
+            let end_row = if end_col % width == 0 {
+                end_col / width - 1
+            } else {
+                end_col / width
+            };
+            let up = end_row - target / width;
+            queue!(out, cursor::Show)?;
+            if up > 0 {
+                queue!(out, cursor::MoveUp(up))?;
+            }
+            queue!(out, cursor::MoveToColumn(target % width))?;
+        }
     }
     out.flush()
 }
@@ -1301,7 +1439,11 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn depart(&mut self, qualified: &str) -> UserInput {
-        write_marker_line(&mut self.output, &format!("⇒ {}", display_path(qualified)), self.renderer);
+        write_marker_line(
+            &mut self.output,
+            &format!("⇒ {}", display_path(qualified)),
+            self.renderer,
+        );
         UserInput::Done(Value::Unitus)
     }
 
@@ -1310,7 +1452,12 @@ impl<W: Write> Driver for Automatic<W> {
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
-        render_command(&mut self.output, &display_path(qualified), script, self.renderer);
+        render_command(
+            &mut self.output,
+            &display_path(qualified),
+            script,
+            self.renderer,
+        );
         UserInput::Done(Value::Literali(script.to_string()))
     }
 
@@ -1409,7 +1556,7 @@ impl<D, W: Write> Transcript<D, W> {
 
     fn trace_outcome(&mut self, path: &str, produced: Value, outcome: &UserInput) {
         let outcome = match outcome {
-            UserInput::Done(_) => Disposition::Done,
+            UserInput::Done(_) | UserInput::Override => Disposition::Done,
             UserInput::Skip => Disposition::Skip,
             UserInput::Fail(reason) => Disposition::Fail(reason.clone()),
             UserInput::Quit => Disposition::Stop,
@@ -1827,6 +1974,20 @@ impl Driver for Mock {
                 qualified: qualified.to_string(),
             });
         UserInput::Done(Value::Unitus)
+    }
+
+    fn overrule(&mut self, qualified: &str, _marker: &str, standing: Standing) -> UserInput {
+        self.events
+            .push(Event::Seal {
+                qualified: qualified.to_string(),
+            });
+        self.answers
+            .pop_front()
+            .unwrap_or(match standing {
+                Standing::Done => UserInput::Done(Value::Unitus),
+                Standing::Skip => UserInput::Skip,
+                Standing::Fail => UserInput::Fail(String::new()),
+            })
     }
 
     fn settle(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}

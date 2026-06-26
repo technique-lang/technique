@@ -13,6 +13,7 @@ crossterm = "0.29"
 ignore = "0.4"
 lsp-server = "0.7.9"
 lsp-types = "0.97"
+nix = { version = "0.29", features = ["poll"] }
 owo-colors = "4"
 regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }

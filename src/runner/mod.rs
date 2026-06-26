@@ -53,9 +53,9 @@ pub fn start<'i>(
     let label = document_label(document);
     let outcome = match mode {
         Mode::Quiet => {
-            let mut runner =
-                Runner::new(program, appender, completed, Headless::new(), library)
-                    .with_document(label);
+            let mut runner = Runner::new(program, appender, completed, Headless::new(), library)
+                .with_context(Context::native(colour))
+                .with_document(label);
             runner.run(env)?
         }
         Mode::Interactive => {
@@ -63,6 +63,7 @@ pub fn start<'i>(
                 return Err(RunnerError::TerminalRequired);
             }
             let mut runner = Runner::new(program, appender, completed, Console::new(), library)
+                .with_context(Context::native(colour))
                 .with_document(label);
             runner.run(env)?
         }
@@ -74,6 +75,7 @@ pub fn start<'i>(
                 Automatic::new(colour),
                 library,
             )
+            .with_context(Context::native(colour))
             .with_document(label);
             runner.run(env)?
         }
@@ -100,21 +102,24 @@ pub fn inspect<'i>(
             let appender = Appender::sink();
             let completed = HashMap::new();
             let driver = Transcript::new(Console::new());
-            let mut runner = Runner::new(program, appender, completed, driver, library);
+            let mut runner = Runner::new(program, appender, completed, driver, library)
+                .with_context(Context::native(colour));
             runner.run(env)
         }
         Mode::Automatic => {
             let appender = Appender::sink();
             let completed = HashMap::new();
             let driver = Transcript::new(Automatic::new(colour));
-            let mut runner = Runner::new(program, appender, completed, driver, library);
+            let mut runner = Runner::new(program, appender, completed, driver, library)
+                .with_context(Context::native(colour));
             runner.run(env)
         }
         Mode::Quiet => {
             let appender = Appender::sink();
             let completed = HashMap::new();
             let driver = Transcript::new(Headless::new());
-            let mut runner = Runner::new(program, appender, completed, driver, library);
+            let mut runner = Runner::new(program, appender, completed, driver, library)
+                .with_context(Context::native(colour));
             runner.run(env)
         }
     }
@@ -152,6 +157,7 @@ pub fn resume<'i>(
     };
     appender.append(&record)?;
     let mut runner = Runner::new(program, appender, completed, Console::new(), library)
+        .with_context(Context::native(std::io::stdout().is_terminal()))
         .with_inputs(inputs)
         .with_document(document_label(&document));
     let env = Environment::new();

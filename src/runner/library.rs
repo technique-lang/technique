@@ -1,9 +1,12 @@
 //! The function table for the evaluator.
 
-use std::io::Read;
+use std::io::{self, Read};
+use std::os::fd::AsFd;
 use std::process::{Command, Stdio};
 
-use super::context::Context;
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+
+use super::context::{Context, Stream};
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
@@ -264,12 +267,13 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Arraeum(pairs))
 }
 
-/// `exec(script)` — run a shell script, teeing its combined stdout and stderr
-/// through the Context to the operator as it streams while accumulating it as
-/// the return value. Output is held as bytes until the end so a chunk split
-/// mid-UTF-8 is harmless and only one String is allocated. Trailing newlines
-/// are trimmed from the captured value (matching the usual experience when
-/// doing shell `$(...)` substitution). A non-zero exit is an error.
+/// Run a shell script, teeing its output to the user chunk by chunk as it
+/// streams while accumulating the output as the return value. The child's
+/// stdout and stderr are kept on separate pipes so stderr can be shown in
+/// red; both are drained together using `poll()` so neither deadlocks. Bytes
+/// are decoded at the end, so a chunk split mid-UTF-8 is harmless; trailing
+/// newlines are trimmed (matching shell substitution). A non-zero exit is an
+/// error.
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -281,34 +285,118 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         }
     };
 
-    // Fold the child's stderr into its stdout (`exec 2>&1`) so the two streams
-    // are teed and captured together as one ordered transcript. A single pipe
-    // keeps this to one reader, with no risk of deadlocking on a full stderr
-    // buffer the way two separately drained pipes would.
     let mut child = Command::new("bash")
         .arg("-c")
-        .arg(format!("exec 2>&1\n{}", script))
+        .arg(script)
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(RunnerError::ExecError)?;
 
-    let mut stdout = child
+    let mut out = child
         .stdout
         .take()
         .expect("child stdout was piped");
+    let mut err = child
+        .stderr
+        .take()
+        .expect("child stderr was piped");
+
+    // The captured return value stays plain; the Context reddens stderr on a
+    // colour terminal as it writes. Each stream keeps a `pending` buffer
+    // holding partial lines, as bytes are only flushed to terminal at newline
+    // to avoid the two stream stomping on each other.
     let mut captured = Vec::new();
+    let mut out_pending = Vec::new();
+    let mut err_pending = Vec::new();
+    let mut out_open = true;
+    let mut err_open = true;
     let mut buffer = [0u8; 8192];
-    loop {
-        let count = stdout
-            .read(&mut buffer)
-            .map_err(RunnerError::ExecError)?;
-        if count == 0 {
-            break;
+
+    while out_open || err_open {
+        // Ask poll() which still-open stream is readable, copying the readiness
+        // out into flags so the borrowed fds are released before the readers
+        // are borrowed mutably below.
+        let (mut out_ready, mut err_ready) = (false, false);
+        {
+            let mut fds = Vec::with_capacity(2);
+            let mut tags = Vec::with_capacity(2);
+            if out_open {
+                fds.push(PollFd::new(out.as_fd(), PollFlags::POLLIN));
+                tags.push(true);
+            }
+            if err_open {
+                fds.push(PollFd::new(err.as_fd(), PollFlags::POLLIN));
+                tags.push(false);
+            }
+            poll(&mut fds, PollTimeout::NONE)
+                .map_err(|e| RunnerError::ExecError(io::Error::from(e)))?;
+            for (fd, is_out) in fds
+                .iter()
+                .zip(&tags)
+            {
+                if !fd
+                    .revents()
+                    .unwrap_or(PollFlags::empty())
+                    .is_empty()
+                {
+                    if *is_out {
+                        out_ready = true;
+                    } else {
+                        err_ready = true;
+                    }
+                }
+            }
         }
+
+        // A single read after a readiness signal never blocks: it yields the
+        // available bytes, or zero once the stream has closed.
+        if out_ready {
+            let count = out
+                .read(&mut buffer)
+                .map_err(RunnerError::ExecError)?;
+            if count == 0 {
+                out_open = false;
+            } else {
+                tee(
+                    &buffer[..count],
+                    &mut out_pending,
+                    Stream::Stdout,
+                    context,
+                    &mut captured,
+                )?;
+            }
+        }
+        if err_ready {
+            let count = err
+                .read(&mut buffer)
+                .map_err(RunnerError::ExecError)?;
+            if count == 0 {
+                err_open = false;
+            } else {
+                tee(
+                    &buffer[..count],
+                    &mut err_pending,
+                    Stream::Stderr,
+                    context,
+                    &mut captured,
+                )?;
+            }
+        }
+    }
+
+    // Flush each stream's final partial content, if any is remaining.
+    if !out_pending.is_empty() {
+        captured.extend_from_slice(&out_pending);
         context
-            .write(&buffer[..count])
+            .write_run(&out_pending, Stream::Stdout)
             .map_err(RunnerError::ExecError)?;
-        captured.extend_from_slice(&buffer[..count]);
+    }
+    if !err_pending.is_empty() {
+        captured.extend_from_slice(&err_pending);
+        context
+            .write_run(&err_pending, Stream::Stderr)
+            .map_err(RunnerError::ExecError)?;
     }
 
     let status = child
@@ -328,6 +416,34 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
             .trim_end_matches(['\n', '\r'])
             .to_string(),
     ))
+}
+
+/// Tee a chunk to the user, recording it plain in `captured` and writing it
+/// through the Context. Only whole lines are written through; the trailing
+/// partial line waits in `pending` for its newline (or the stream's close), so
+/// a `Stream::Stderr` run never lands inside a `Stream::Stdout` line. A newline
+/// is always a UTF-8 boundary, so this never splits a character either.
+fn tee(
+    bytes: &[u8],
+    pending: &mut Vec<u8>,
+    stream: Stream,
+    context: &Context,
+    captured: &mut Vec<u8>,
+) -> Result<(), RunnerError> {
+    pending.extend_from_slice(bytes);
+    let ready = match pending
+        .iter()
+        .rposition(|b| *b == b'\n' || *b == b'\r')
+    {
+        Some(last) => last + 1,
+        None => return Ok(()),
+    };
+    captured.extend_from_slice(&pending[..ready]);
+    context
+        .write_run(&pending[..ready], stream)
+        .map_err(RunnerError::ExecError)?;
+    pending.drain(..ready);
+    Ok(())
 }
 
 /// `now()` — the current wall-clock time as an ISO 8601 string. A read of
