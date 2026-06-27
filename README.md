@@ -112,3 +112,11 @@ as well as very detailed ones:
 
 Detailed examples can be found in the _examples/_ and _tests/_ directories.
 Documents written in Technique have file extension _\*.tq_.
+
+<!--
+See also:
+- AGENTS.md
+- CONTRIBUTING.md
+- https://www.technique-lang.org/tutorial/
+- https://www.technique-lang.org/reference/
+-->
