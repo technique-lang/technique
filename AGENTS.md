@@ -7,15 +7,21 @@ checklists.
 
 The current version is Technique v1, written in Rust.
 
+Strictly the input source as a whole is a Technique "document" (and the
+top-level definition in the grammar is a `Technique`), but the term
+"procedure" is often loosely used to refer to a given Technique as a whole (in
+the Technique language a `Procedure` is a named collection of steps,
+optionally with a title, description, and types for input and output).
+
 # Build and Development Commands
 
 The main CLI has three major groups of subcommands.
 
-- Syntax and type-checking, code formatting
+- Syntax and type-checking, code formatting;
 
-- Render procedure to PDF via Typst: `cargo run -- render File.tq`
+- Rendering procedures to PDF via Typst; and
 
-- Run a procedure: `cargo run -- run File.tq`
+- Running procedures.
 
 ## Compiling and checking
 
@@ -89,8 +95,10 @@ Technique documents can be _executed_.
 This initiates a depth-first walk of the tree represented by the input
 document. Each step, substep, sub-substep, scope, and enclosing procedure,
 section, and the document as a whole has a Result, which is {`Done`, `Skip`,
-or `Fail` } and a Value, often unit "Unitus" `()` or a string literal
-"Literali" `"Some content here"`.
+or `Fail` } and a Value, often unit "Unitus" `()`, string "Literali" literals
+ `"Some content here"`, or numeric "Quanticle" literals `42`. Arrays
+ "Arraeum", key/value tables "Tabularum", and other more complex types are
+ defined in @src/value/types.rs
 
 As the document is evaluated the current scope is printed and the user is
 prompted a result, usually by pressing `<Enter>`. There is a menu available
