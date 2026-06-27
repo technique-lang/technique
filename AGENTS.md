@@ -49,8 +49,8 @@ Format a Technique file with carefully refined syntax highlighting:
 
 - `cargo run -- format File.tq`
 
-includes re-wrapping of descriptive paragraphs and properly laying out nested
-steps, substeps, and sub-substeps.
+This includes re-wrapping of descriptive paragraphs and properly laying out
+nested steps, substeps, and sub-substeps.
 
 If redirected to a file or pipe ANSI colours are stripped from the output.
 
@@ -95,10 +95,10 @@ Technique documents can be _executed_.
 This initiates a depth-first walk of the tree represented by the input
 document. Each step, substep, sub-substep, scope, and enclosing procedure,
 section, and the document as a whole has a Result, which is {`Done`, `Skip`,
-or `Fail` } and a Value, often unit "Unitus" `()`, string "Literali" literals
- `"Some content here"`, or numeric "Quanticle" literals `42`. Arrays
- "Arraeum", key/value tables "Tabularum", and other more complex types are
- defined in @src/value/types.rs
+or `Fail` } and a Value, often unit "Unitus" `()`, string literals "Literali"
+`"Some content here"`, or numeric literals "Quanticle" `42`. Arrays "Arraeum",
+key/value tables "Tabularum", and other more complex types are defined in
+@src/value/types.rs
 
 As the document is evaluated the current scope is printed and the user is
 prompted a result, usually by pressing `<Enter>`. There is a menu available
@@ -127,3 +127,209 @@ which will proceed to call any functions that create effects, placing the
 result in the `Done` value, and otherwise will `Skip` prose that an automated
 program cannot act on. External processes that do not return `0` will result
 in `Fail`.
+
+# Language Design
+
+These files are trivial example procedures created during testing:
+
+- tests/samples/parsing/HeaderAndDeclaration.tq
+- examples/minimal/ExampleOfEverything.tq
+- examples/minimal/SimpleList.tq
+- tests/samples/parsing/TabletOfQuantity.tq
+- tests/golden/parsing/ManyAttributes.tq
+- tests/golden/runner/DemolitionBeams.tq
+
+
+These files are complete real-world procedures:
+
+- examples/prototype/SurgicalSafetyChecklist.tq
+- examples/prototype/SystemsEngineeringProcess.tq
+- examples/prototype/NetworkProbe.tq
+- examples/prototype/DontPanic.tq
+- examples/prototype/GovernmentForm.tq
+- examples/prototype/DatabaseUpgrade.tq
+
+These files contain deliberate mistakes for testing parser failures and error
+message output:
+
+- tests/broken/parsing/BadDeclaration.tq
+- tests/broken/parsing/IllegalUnitSymbol.tq
+- tests/broken/parsing/UnclosedInterpolation.tq
+- tests/broken/translation/DuplicateProcedure.tq
+- tests/broken/resolution/UnboundVariable.tq
+
+Within all these examples, and reviewing the Abstract Syntax Tree found in
+@src/language/types.rs, you can see:
+
+## Metadata header:
+
+- If files have a metadata header, they start with the magic string  
+  `% technique v1` indicating the file format version 1.
+- The optional SPDX line begins with `!` and expresses a license and
+  optionally copyright declaration
+- The optional domain line begins with `&` and the name indicating which kind
+  of Technique this is.
+
+## Technique
+
+Valid Technique is either:
+
+- a series of steps, or
+- a procedure (which can itself contain sections enclosing further procedures).
+
+The first procedure in a document is effectively the "main" procedure, the
+entry point.
+
+## Sections
+
+Documents can be split into sections, marked with uppercase Roman numerals
+(`I.`, `II.`, `III.`, ...). These are effectively sub-techniques unto
+themselves.
+
+This allows an author to either write a procedure, a series of steps, a series
+of sections with steps (and substeps) as an outline, or a fully complex series
+of sections each with a series of procedures within them.
+
+## Procedures
+
+- A procedure is marked as starting with a declaration of the form `name :
+Input -> Output`. The signature part `Input -> Output` is optional. The `:`
+  is required. There are optional parameters after the name, in the form
+  `name(a, b, c)`.
+- Procedures have that declaration, followed by an optional title beginning
+  with `#`, followed by an optional free text description, followed by zero or
+  more steps.
+
+## Steps
+
+- Steps are either:
+  "dependent steps", typically with ordinals `1.`, `2.`,
+  `3.`, ... with each step needing to be completed before proceeding to the
+  next step (with substeps following the conventional pattern of `a.` , `b.`,
+  `c.`, ..., and a third level of sub-substeps using lowercase Roman numerals
+  `i.`, `ii.`, `iii.`, ...), or
+  "parallel steps", marked with `-`.
+- Attributes scope a step to a role (a person or function, marked with `@`)
+  and/or a place (a location, marked with `^`), as in `@hitchhiker` or
+  `^sleeping_quarters`. Multiple attributes can be combined with `+` (e.g.
+  `@waiter + ^milliways`); the special `@*` resets the scope. Attributes
+  are effectively parallel steps and create scopes within which parallel or
+  dependent steps can be nested.
+- This is invalid:
+
+```technique
+invalid :
+  - Top level parallel step
+      - nested parallel substep
+```
+
+because there is no way for the parser to differentiate between the two.
+
+- The free form descriptive text can be escaped to code using an inline code block, delimited with braces `{ ... }`
+- Within code blocks there are basic control flow: `repeat`, `foreach` loops.
+- Within code blocks there are function calls to builtin functions: `exec()`
+- Other procedures in the file can be invoked with the syntax `<function_name>(params)`.
+- Variable binding is done with `~` operator, with the variable following the
+  result being bound. Bindings can occur in Expressions (that is CodeBlock and
+  CodeInline) or naked, in Descriptives.
+- Data structures are called tablets, with syntax as:
+
+```technique
+    [
+        "label" = value,
+        "label2" = value2
+    ]
+```
+
+- Multiple choice responses like `'Yes' | 'No'` for an enum with two text values.
+
+# Implementation notes
+
+## Code navigation
+
+For Rust symbol lookups (definitions, references, call hierarchy, types), use
+the deferred `LSP` tool (load via `ToolSearch select:LSP`). Use `Grep` tool
+only for non-symbol text.
+
+## Whitespace
+
+The parser is whitespace agnostic. Indentation is not significant. The
+formatter outputs a Technique in a canonical form (with scopes indented by 4
+spaces, for example) but when reading input the parser is liberal in what it
+accepts.
+
+## Key modules
+
+- @src/language/types.rs Technique language abstract syntax tree
+  (AST); and
+- @src/parsing/parser.rs parser implementation.
+
+## Key types
+
+- Scope, the recursive nesting node — steps, sections, attributes, response
+  enums, and code blocks all live here as variants.
+- Paragraph, a container of Descriptives, generally corresponding to a
+  paragraph of text describing a procedure or step. Descriptive in turn
+  contains text, invocations, code inlines, and variable bindings.
+
+## Parser design
+
+The parser is implemented as a stateful object with the reference to the
+source and the offset of bytes consumed within that source. This allows the
+parser to be zero-copy.
+
+Each concept has a recognition function, for example `is_code_block()` and
+`is_substep_dependent()` which is used to guard invocation of the relevant
+parser consuming methods, such as `read_code_block()` and
+`read_substep_dependent()` respectively. This is done as follows:
+
+```rust
+    let title = if is_procedure_title(self.source) {
+        self.read_procedure_title()?;
+    }
+```
+
+thus ensuring the reading function is guaranteed to actually be facing the
+content it is expected to consume avoiding the need to test for start
+conditions within that `read_*()` function.
+
+There are a variety of `take_*()` methods, notably `take_block_lines()` which
+consumes from a starting predicate to an ending predicate. This has been
+extensively tested and should be considered 100% reliable.
+
+## Translation, Resolution, and Linking
+
+After parsing, a translation phase lowers the AST into a `Program` that the
+runner walks (@src/program/types.rs is authoritative for the Intermediate
+Representation).
+
+- @src/translation/translator.rs — `translate()` and `TranslationError`
+  (analog of `parser.rs` holding both `parse()` and `ParsingError`).
+- @src/translation/checks/{translate,errors}.rs — hand-written test
+  suite, source strings parsed inline through the real parser.
+
+Key design decisions:
+
+- Every translated node is an `Operation<'i>`. See @src/program/types.rs for
+  the variants.
+- Where the parsed AST already carries the right shape (descriptive
+  paragraphs, signatures, response values, attribute lists), translation-side
+  types borrow from the AST via `&'i ...` references. The executable spine is
+  owned because that's where translation adds information (resolved subroutine
+  references, for example).
+- Translation-side types use names distinct from AST counterparts to
+  minimise namespace overlap: `Subroutine` vs `language::Procedure`,
+  `Fragment` vs `language::Piece`, `Entry` vs `language::Pair`.
+- References to AST types are always qualified with `language::`
+  (`language::Identifier`, `language::Paragraph`, ...). Don't import
+  with a glob; don't bring single types into scope unqualified.
+- `Loop` unifies `foreach`/`repeat` via `Loop { names, over:
+  Option<Box<Operation>>, body }`; `over: None` means forever.
+- Procedure invocations carry a `SubroutineRef::Unresolved(Identifier)`
+  out of translation; the subsequent `resolution` phase
+  @src/resolution/ replaces these with
+  `SubroutineRef::Resolved(SubroutineId)`.
+- Tests use multi-line raw strings parsed through the real parser, with
+  `.trim_ascii()` so the `% technique v1` header lands at byte 0. Match the
+  convention in @src/parsing/checks/parser.rs
+
