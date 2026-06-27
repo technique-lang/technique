@@ -127,6 +127,27 @@ result in the `Done` value, and otherwise will `Skip` prose that an automated
 program cannot act on. External processes that do not return `0` will result
 in `Fail`.
 
+## Inspecting results
+
+As with the parser, the internal representation of what would be written the
+state store can instead be serialized to the terminal:
+
+- `cargo run -- run --output=native File.tq`
+
+which can be more direct that attempting to read the PFFTT file in the .store/
+directory.
+
+# Language Server
+
+Technique has a language server implementation available for integration with
+editors and IDEs via:
+
+- `cargo run -- language`
+
+It accepts commands and code over stdin and returns compilation errors and
+other diagnostics in accordance with the Language Server Protocol (LSP). It is
+not run by developers directly.
+
 # Language Design
 
 These files are trivial example procedures created during testing:
@@ -271,6 +292,10 @@ Results are written to the @./.store/ directory, and serve both as the
 permanent record of a step having been completed and also as a trace allowing
 the procedure to be resumed if interrupted. The line format is serialized by
 @src/runner/state.rs, which is authoritative.
+
+Note that the local .store/ is an implementation detail, and that a more
+robust solution will in the future involve a proper database, either running
+locally or via an external service.
 
 # Implementation notes
 

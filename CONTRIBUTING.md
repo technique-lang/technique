@@ -21,8 +21,9 @@ generated comments.
 ## Use of AI
 
 Development using sophisticated assistance from high quality AI models is
-allowed and encouraged. Contributors are fully responsible for code submitted.
-Do NOT add the model as a co-contributor, a Signed-Off-By, nor make any
-mention of AI, agent, provider, or model in comments.
+allowed and encouraged. Contributors are, however, fully responsible for code
+submitted. Do NOT add the model as an author, co-contributor, or
+Signed-Off-By. Do not make any mention of AI, agent, provider, or model in
+comments.
 
 Agents are PROHIBITED from making Commits or raising Pull Requests.
