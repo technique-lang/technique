@@ -14,7 +14,7 @@ The main CLI has three major groups of subcommands.
 - Syntax and type-checking, code formatting
 
 - Render procedure to PDF via Typst: `cargo run -- render File.tq`
--
+
 - Run a procedure: `cargo run -- run File.tq`
 
 ## Compiling and checking
@@ -35,22 +35,22 @@ The translated `Program` produced by the translator can be inspected with
 
 Compiler phases are `parsing`, `translation`, `resolution`, and `linking`. By
 default `check` runs the whole pipeline. The `--until` option allows you to
-stop at an earlier phase so an intermediate results can be inspected.
+stop at an earlier phase so intermediate results can be inspected.
 
 ## Formatting
 
-Format a Techniqe file with carefully refined syntax highlighting:
+Format a Technique file with carefully refined syntax highlighting:
 
 - `cargo run -- format File.tq`
 
-inclues re-wrapping of descriptive paragraphs and properly laying out nested
+includes re-wrapping of descriptive paragraphs and properly laying out nested
 steps, substeps, and sub-substeps.
 
 If redirected to a file or pipe ANSI colours are stripped from the output.
 
 ## Rendering
 
-Technqiue documents can be rendered to PDF.
+Technique documents can be rendered to PDF.
 
 A template will be selected based on the "domain" the document is written in.
 
@@ -59,7 +59,7 @@ By default rendering a Technique will use the domain listed on a document's
 `source` domain which renders the input document with syntax highlighting but
 in PDF form.
 
-The domain can be overriden with `--domain`. For example, to render a document
+The domain can be overridden with `--domain`. For example, to render a document
 with the `procedure` domain instead, do:
 
 - `cargo run -- render --domain=procedure File.tq`
@@ -80,7 +80,7 @@ finally, `--output` can switch the output from writing the `pdf` to disk to writ
 
 # Executing Technique
 
-Techique documents can be _executed_.
+Technique documents can be _executed_.
 
 ## Running interactively
 
@@ -115,7 +115,7 @@ A document can instead be run automatically
 
 - `cargo run -- run --mode=automatic File.tq`
 
-which will proceed to call any funcitons that create effects, placing the
+which will proceed to call any functions that create effects, placing the
 result in the `Done` value, and otherwise will `Skip` prose that an automated
 program cannot act on. External processes that do not return `0` will result
 in `Fail`.
