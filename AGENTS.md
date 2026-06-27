@@ -50,7 +50,8 @@ Format a Technique file with carefully refined syntax highlighting:
 - `cargo run -- format File.tq`
 
 This includes re-wrapping of descriptive paragraphs and properly laying out
-nested steps, substeps, and sub-substeps.
+nested steps, substeps, and sub-substeps (see @src/formatting/formatter.rs;
+syntax highlighting lives in @src/highlighting/).
 
 If redirected to a file or pipe ANSI colours are stripped from the output.
 
@@ -58,7 +59,8 @@ If redirected to a file or pipe ANSI colours are stripped from the output.
 
 Technique documents can be rendered to PDF.
 
-A template will be selected based on the "domain" the document is written in.
+A template will be selected based on the "domain" the document is written in
+(domains live in @src/domain/, templates in @src/templating/).
 
 By default rendering a Technique will use the domain listed on a document's
 "domain line" metadata header, if present, otherwise will fallback to the
@@ -93,7 +95,8 @@ Technique documents can be _executed_.
 - `cargo run -- run File.tq`
 
 This initiates a depth-first walk of the tree represented by the input
-document. Each step, substep, sub-substep, scope, and enclosing procedure,
+document (the runner lives in @src/runner/). Each step, substep, sub-substep,
+scope, and enclosing procedure,
 section, and the document as a whole has a Result, which is {`Done`, `Skip`,
 or `Fail` } and a Value, often unit "Unitus" `()`, string literals "Literali"
 `"Some content here"`, or numeric literals "Quanticle" `42`. Arrays "Arraeum",
@@ -104,14 +107,10 @@ As the document is evaluated the current scope is printed and the user is
 prompted a result, usually by pressing `<Enter>`. There is a menu available
 via the user pressing `<Esc>`.
 
-Results are recorded in a state store under _.store/_ in the current
-directory. Files are named for the input document with a _.pfftt_ extension
-under the "run id" identifying the instantiation, 42 in this example, printed
-at start and at finish or interruption.
-
-./.store/000042/File.pfftt
-
-An interrupted run can be continued
+Results are written to `.store/` keyed by the "run id" identifying the
+instantiation, 42 in this example, printed at start and at finish or
+interruption (see [Result store](#result-store) below). An interrupted run can
+be continued
 
 - `cargo run -- resume 42`
 
@@ -243,6 +242,36 @@ because there is no way for the parser to differentiate between the two.
 
 - Multiple choice responses like `'Yes' | 'No'` for an enum with two text values.
 
+# Running
+
+## Result store
+
+Each step has a "result", and that result is recorded in the Procedure
+interchange Format For Transferring Techniques (PFFTT), file extension
+_.pfftt_.
+
+This is a line-oriented file format where each line is of the form
+
+```pfftt
+2026-06-14T05:58:08.773Z 000042 /high_pressure_cleaning:/I/setup_machine:/1/b Done ()
+```
+
+where the fields are
+
+- `2026-06-14T05:58:08.773Z` is the timestamp
+- `000042` is the run identifier
+- `/high_pressure_cleaning:/I/setup_machine:/1/b` is the fully qualified path,
+  in this case top-level procedure `high_pressure_cleaning :` containing
+  section `I`, containing a procedure `setup_machine :`, containing steps of
+  which step `1` contains a substep `b`.
+- `Done`, the state reflected by this PFFTT line
+- `()` the value of the step or state, if any, in this case Unitus.
+
+Results are written to the @./.store/ directory, and serve both as the
+permanent record of a step having been completed and also as a trace allowing
+the procedure to be resumed if interrupted. The line format is serialized by
+@src/runner/state.rs, which is authoritative.
+
 # Implementation notes
 
 ## Code navigation
@@ -333,3 +362,30 @@ Key design decisions:
   `.trim_ascii()` so the `% technique v1` header lands at byte 0. Match the
   convention in @src/parsing/checks/parser.rs
 
+# Resources
+
+## Formal grammar
+
+Formal definition of the language grammar (not used for parsing):
+
+- https://github.com/technique-lang/specification/blob/main/technique.bnf possibly at @../specification/technique.bnf
+
+Ambiguities are resolved in favour of the actual parser implementation here.
+
+There is also a formal definition of the PFFTT format:
+
+- https://github.com/technique-lang/specification/blob/main/pfftt.bnf possibly at @../specification/pfftt.bnf
+
+## Syntax highlighting for IDEs
+
+There is a Tree Sitter grammar used for doing syntax highlighting (only):
+
+- https://github.com/technique-lang/tree-sitter-technique/ possibly at @../tree-sitter-technique/grammar.js
+
+## Language Website
+
+Prose descriptions and introductory material are available on the public website:
+
+- https://www.technique-lang.org/tutorial/ a basic language and tool tutorial
+- https://www.technique-lang.org/reference/ language reference and resources
+- https://engrxiv.org/preprint/view/5911 formal paper on the fundamental nature of procedures
