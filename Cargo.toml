@@ -13,7 +13,6 @@ crossterm = "0.29"
 ignore = "0.4"
 lsp-server = "0.8.0"
 lsp-types = "0.97"
-nix = { version = "0.31", features = ["poll"] }
 owo-colors = "4"
 regex = "1.11.1"
 serde = { version = "1.0.209", features = [ "derive" ] }
@@ -23,6 +22,9 @@ tinytemplate = "1.2.1"
 
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["poll"] }
 
 [build-dependencies]
 
