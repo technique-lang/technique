@@ -43,6 +43,7 @@ pub enum ParsingError {
     InvalidParameters(Span),
     InvalidDeclaration(Span),
     InvalidSection(Span),
+    MixedSectionContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
     InvalidCodeBlock(Span),
@@ -77,6 +78,7 @@ impl ParsingError {
             | ParsingError::InvalidParameters(span)
             | ParsingError::InvalidDeclaration(span)
             | ParsingError::InvalidSection(span)
+            | ParsingError::MixedSectionContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
             | ParsingError::InvalidCodeBlock(span)

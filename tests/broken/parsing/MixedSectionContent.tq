@@ -1,0 +1,19 @@
+mix_drink :
+
+I. Mix Drink
+
+    1.  Take the juice
+    2.  Pour in one measure
+    3.  Allow three cubes <prepare_gin>
+
+II. Enjoy
+
+    1.  Drink
+
+III. Rehabilitation
+
+    1.  Seek help
+
+prepare_gin :
+    1.  Remove cubes
+    2.  Drop them in

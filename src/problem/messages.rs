@@ -472,6 +472,37 @@ author of the Technique.
                 .to_string(),
             )
         }
+        ParsingError::MixedSectionContent(_) => (
+            "Section mixes steps and procedures".to_string(),
+            r#"
+A section contains either steps or procedures, but not both. A section that
+begins with steps cannot then declare a procedure:
+
+    I. Mix Drink
+
+        1.  Take the juice from one bottle
+        2.  Pour in one measure of water
+
+    prepare_mega_gin :
+
+Writing steps directly under a heading is a convenient shorthand and perfectly
+valid Technique, but to add a helper procedure alongside them you will need to
+upgrade to the main part of the section being a named procedure, and then you
+can write a helper procedure that follows
+
+    I. Mix Drink
+
+    mix_drink :
+
+        1.  Take the juice from one bottle
+        2.  Pour in one measure of water
+        3.  Allow three cubes to melt <prepare_mega_gin>
+
+    prepare_mega_gin :
+                "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidInvocation(_) => {
             let examples = vec![
                 Invocation {
