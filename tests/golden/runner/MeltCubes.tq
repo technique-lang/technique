@@ -1,0 +1,9 @@
+% technique v1
+
+melt_cubes :
+
+# Melt the cubes
+
+    1.  Allow the cubes to melt <https://example.com/Helper>.
+    2.  Stir well { exec("/bin/true") }
+    3.  Serve

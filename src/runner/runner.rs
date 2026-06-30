@@ -267,7 +267,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            let computable = computable(&entry.body);
+            let computable = is_scope_computable(&entry.body);
             let sealed = match result {
                 Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
                 Ok(outcome) => self.seal_scope(&qualified, outcome, computable),
@@ -787,7 +787,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // then sign off its scope; a Quit or error skips the
                     // sign-off, leaving the procedure unfinished.
                     let result = self.walk(&mut local, &subroutine.body);
-                    let computable = computable(&subroutine.body);
+                    let computable = is_scope_computable(&subroutine.body);
                     let sealed = match result {
                         Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
                         Ok(outcome) => self.seal_scope(&lexical, outcome, computable),
@@ -1103,6 +1103,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
                 _ => self.walk(env, op)?,
             };
+            // Pure descriptive prose carries a value but performs no work: it
+            // is neutral in the rollup, so an Invoke (or other work) that skips
+            // is not masked by the prose surrounding it in the same paragraph.
+            if let Operation::Prose(_) = op {
+                if let Outcome::Done(value) = outcome {
+                    last = value;
+                }
+                continue;
+            }
             match outcome {
                 Outcome::Done(value) => {
                     done_seen = true;
@@ -1159,7 +1168,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
-        let computable = computable(body);
+        let computable = is_scope_computable(body);
         // A section is a structural scope: the user signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
@@ -1429,7 +1438,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
-        let computable = computable(body);
+        let computable = is_step_computable(body);
         // `ask` consumes `produced`; keep a copy for a Skip to propagate.
         let propagate = produced.clone();
         let input = self
@@ -1725,17 +1734,33 @@ fn describe_execute(function: &str) -> String {
     format!("{}()", function)
 }
 
-/// This is true when a body holds work to perform (that can be evaluated); a
-/// step whose definition is purely descriptive prose can and will have a
-/// Result, but is not computable.
-fn computable(op: &Operation) -> bool {
+/// Whether a scope holds any work to perform, scanning every member. If any
+/// enclose steps or etc are computable then their results will subsequently
+/// be rolled-up (`Fail` > `Done` > `Skip`). If not computable then (in
+/// automatic) this will end up being judged `Skip`.
+fn is_scope_computable(op: &Operation) -> bool {
     match op {
         // A pure-prose body is not computable (this is fine!).
         Operation::Sequence(ops) if ops.is_empty() => false,
         Operation::Sequence(ops) | Operation::Prologue(ops) => ops
             .iter()
-            .any(computable),
-        Operation::Step { body, .. } | Operation::Section { body, .. } => computable(body),
+            .any(is_scope_computable),
+        Operation::Step { body, .. } | Operation::Section { body, .. } => is_scope_computable(body),
+        Operation::Prose(_) => false,
+        _ => true,
+    }
+}
+
+/// Whether a step's result is computed rather than being purely descriptive.
+/// A procedure description of step content evaluates to its final member: a
+/// step ending in an invocation, code block, or substep computes a result,
+/// while one ending in descriptive prose does not.
+fn is_step_computable(op: &Operation) -> bool {
+    match op {
+        Operation::Sequence(ops) | Operation::Prologue(ops) => match ops.last() {
+            Some(last) => is_step_computable(last),
+            None => false,
+        },
         Operation::Prose(_) => false,
         _ => true,
     }
