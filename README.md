@@ -111,7 +111,8 @@ as well as very detailed ones:
 </a>
 
 Detailed examples can be found in the _examples/_ and _tests/_ directories.
-Documents written in Technique have file extension _\*.tq_.
+Documents written in Technique have file extension _\*.tq_. The MIME type is
+`application/technique`.
 
 <!--
 See also:

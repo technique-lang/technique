@@ -1,9 +1,14 @@
 //! The function table for the evaluator.
 
-use std::io::{self, Read};
+use std::io;
+#[cfg(unix)]
+use std::io::Read;
+#[cfg(unix)]
 use std::os::fd::AsFd;
+#[cfg(unix)]
 use std::process::{Command, Stdio};
 
+#[cfg(unix)]
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 
 use super::context::{Context, Stream};
@@ -274,6 +279,7 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 /// are decoded at the end, so a chunk split mid-UTF-8 is harmless; trailing
 /// newlines are trimmed (matching shell substitution). A non-zero exit is an
 /// error.
+#[cfg(unix)]
 fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
@@ -418,11 +424,20 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
     ))
 }
 
+#[cfg(not(unix))]
+fn exec(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+    Err(RunnerError::ExecError(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "exec() is not supported on this platform",
+    )))
+}
+
 /// Tee a chunk to the user, recording it plain in `captured` and writing it
 /// through the Context. Only whole lines are written through; the trailing
 /// partial line waits in `pending` for its newline (or the stream's close), so
 /// a `Stream::Stderr` run never lands inside a `Stream::Stdout` line. A newline
 /// is always a UTF-8 boundary, so this never splits a character either.
+#[cfg(unix)]
 fn tee(
     bytes: &[u8],
     pending: &mut Vec<u8>,
