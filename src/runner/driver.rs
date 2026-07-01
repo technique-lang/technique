@@ -60,15 +60,26 @@ pub enum Standing {
     Fail,
 }
 
+/// The kind of step from the point of view of the runner..
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Prose,      // descriptive text; unit value
+    Computable, // a value will be computed with no external side effect
+    // (invoke, bind, literal, Pure builtin)
+    System, // an external command the host runs, e.g exec()
+    Action, // an act a human performs e.g. click())
+    Choice, // a response the user must select
+}
+
 /// What the walker uses to drive a run. Implementations are the interactive
-/// console `Console`, the no-operator `Automatic`, the no-output `Headless`,
-/// the debugging `Transcript`, and the test `Mock`.
+/// console `Console`, the unattended `Automatic`, the no-output `Headless`,
+/// the debugging `Transcript`, and `Mock` for testing.
 pub trait Driver {
-    /// Show the step's Qualified Name and rendered description. `depth` is the
-    /// step's document nesting level (one-origin), indenting the description to
-    /// match while the `→` marker stays at the left margin. The implementation
-    /// displays them; it does not block waiting for input — the walker calls
-    /// `ask` for that separately.
+    /// Show the step's Qualified Name and rendered description. `depth` is
+    /// the step's document nesting level used to indent rendered source while
+    /// markers like `→` stay at the left margin. The implementation displays
+    /// them; it does not block waiting for input — the walker calls `ask` for
+    /// that separately.
     fn step(&mut self, qualified: &str, description: &str, depth: usize);
 
     /// Announce descent into a named scope — a Section or an invoked
@@ -92,22 +103,15 @@ pub trait Driver {
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
     fn announce(&mut self, message: &str);
 
-    /// Answer the most recent `step` prompt. `produced` is the value the
-    /// step body computed, offered as the step's value: `Console` presents it
-    /// for the operator to accept, `Automatic` takes it directly. When
-    /// `choices` is non-empty the operator instead selects one of those
-    /// response values, yielding `Done(Literali(choice))`. Skip, fail, and
-    /// quit are available either way. `produced` is consumed: the driver
-    /// either moves it into the returned `Done` or discards it. `qualified` is
-    /// the step's Qualified Name, repeated on the live prompt line. `computable`
-    /// is whether the step has a body; an unattended driver `Done`s it, else `Skip`.
-    fn ask(
-        &mut self,
-        qualified: &str,
-        choices: &[&str],
-        produced: Value,
-        computable: bool,
-    ) -> UserInput;
+    /// Answer the most recent `step` prompt. `produced` is the value the step
+    /// body computed, offered as the step's value: `Console` presents it for
+    /// the user to accept, `Automatic` answers it directly. When `choices` is
+    /// non-empty the user instead selects one of those response values,
+    /// yielding `Done(Literali(choice))`. Skip, Fail, and Quit are available
+    /// to user either way. `produced` is consumed: the driver either moves it
+    /// into the returned `Done` or discards it. `qualified` is the step's
+    /// Qualified Name, repeated on the live prompt line.
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput;
 
     /// Cross out into an external `<uri>` procedure: prompt at the `⇒` departure
     /// — the place arguments would be solicited — then leave the glyph-less `⇒`
@@ -118,7 +122,7 @@ pub trait Driver {
     fn depart(&mut self, qualified: &str) -> UserInput;
 
     /// Record an external invocation this run cannot perform (a `<uri>` call
-    /// into another document or system). `Console` prompts the operator to
+    /// into another document or system). `Console` prompts the user to
     /// attest it — `Done` if it was performed or recorded elsewhere, otherwise
     /// `Skip` / `Fail` / `Quit`. The unattended drivers return `Skip`: nothing
     /// executed it and no one is present to vouch that it was done, so the run
@@ -145,12 +149,12 @@ pub trait Driver {
     /// numeral and title, e.g. `II. Check internet connectivity`.
     fn section(&mut self, qualified: &str, numeral: &str, title: &str);
 
-    /// Prompt the operator to sign off a completed structural scope — a Section
-    /// at its close, or the whole run at the entry procedure's close. Like
-    /// `ask` but with no response choices, settling to the `↙` close marker;
-    /// `produced` is the scope's value, offered for acceptance; `computable`
-    /// drives unattended `Done`/`Skip` as in `ask`.
-    fn seal(&mut self, qualified: &str, produced: Value, computable: bool) -> UserInput;
+    /// Prompt the user to sign off a completed structural scope — a
+    /// Section at its close, or the whole run at the entry procedure's close.
+    /// Like `ask` but with no response choices, settling to the `↙` close
+    /// marker; `produced` is the scope's value, offered for acceptance;
+    /// `kind` drives unattended `Done` or `Skip` as in `ask`.
+    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput;
 
     /// Sign off a node that rolled up to a failure or skip. When running
     /// interactively a failure may be Overridden to Done.
@@ -219,7 +223,7 @@ pub trait Verdict {
         qualified: &str,
         choices: &[&str],
         produced: Value,
-        computable: bool,
+        kind: Kind,
     ) -> UserInput;
 
     fn seal<O: Output>(
@@ -227,7 +231,7 @@ pub trait Verdict {
         out: &mut O,
         qualified: &str,
         produced: Value,
-        computable: bool,
+        kind: Kind,
     ) -> UserInput;
 
     fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput;
@@ -397,7 +401,7 @@ impl Verdict for Interactive {
         qualified: &str,
         choices: &[&str],
         produced: Value,
-        _computable: bool,
+        _kind: Kind,
     ) -> UserInput {
         prompt(out.surface(), qualified, "→", choices, produced)
     }
@@ -407,7 +411,7 @@ impl Verdict for Interactive {
         out: &mut O,
         qualified: &str,
         produced: Value,
-        _computable: bool,
+        _kind: Kind,
     ) -> UserInput {
         prompt(out.surface(), qualified, "↙", &[], produced)
     }
@@ -471,11 +475,10 @@ impl Verdict for Interactive {
 /// and scope's body value as the result, if available, otherwise Skip.
 pub struct Batch;
 
-fn unattended(produced: Value, computable: bool) -> UserInput {
-    if computable {
-        UserInput::Done(produced)
-    } else {
-        UserInput::Skip
+fn unattended(produced: Value, kind: Kind) -> UserInput {
+    match kind {
+        Kind::Computable | Kind::System => UserInput::Done(produced),
+        Kind::Prose | Kind::Action | Kind::Choice => UserInput::Skip,
     }
 }
 
@@ -486,9 +489,9 @@ impl Verdict for Batch {
         _qualified: &str,
         _choices: &[&str],
         produced: Value,
-        computable: bool,
+        kind: Kind,
     ) -> UserInput {
-        unattended(produced, computable)
+        unattended(produced, kind)
     }
 
     fn seal<O: Output>(
@@ -496,9 +499,9 @@ impl Verdict for Batch {
         _out: &mut O,
         _qualified: &str,
         produced: Value,
-        computable: bool,
+        kind: Kind,
     ) -> UserInput {
-        unattended(produced, computable)
+        unattended(produced, kind)
     }
 
     fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
@@ -515,7 +518,8 @@ impl Verdict for Batch {
         label: &str,
     ) -> UserInput {
         out.show_action(verb, label);
-        UserInput::Done(Value::Unitus)
+        // An unattended run cannot attest a physical action was performed.
+        UserInput::Skip
     }
 
     fn acquire<O: Output>(
@@ -596,15 +600,9 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .section(qualified, numeral, title);
     }
 
-    fn ask(
-        &mut self,
-        qualified: &str,
-        choices: &[&str],
-        produced: Value,
-        computable: bool,
-    ) -> UserInput {
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput {
         self.verdict
-            .ask(&mut self.out, qualified, choices, produced, computable)
+            .ask(&mut self.out, qualified, choices, produced, kind)
     }
 
     fn depart(&mut self, qualified: &str) -> UserInput {
@@ -627,9 +625,9 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .action(&mut self.out, qualified, name, verb, label)
     }
 
-    fn seal(&mut self, qualified: &str, produced: Value, computable: bool) -> UserInput {
+    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput {
         self.verdict
-            .seal(&mut self.out, qualified, produced, computable)
+            .seal(&mut self.out, qualified, produced, kind)
     }
 
     fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
@@ -981,7 +979,7 @@ fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, rend
 /// Render an automatically-run shell command on one line: `{path} $ {script}`,
 /// the whole line dark grey like the trace chrome so it reads as announce
 /// rather than as the command's own output that follows. The `$` stands in for
-/// a shell prompt (distinct from the operator's `▶` edit prompt). Trailing
+/// a shell prompt (distinct from the user's `▶` edit prompt). Trailing
 /// whitespace is trimmed so a code block's blank tail line is not echoed.
 fn render_command<W: Write>(out: &mut W, qualified: &str, script: &str, renderer: &dyn Render) {
     let line = renderer.style(
@@ -1122,7 +1120,7 @@ struct Reason {
 
 /// Our state machine behind the "raw-mode" Console. `handle`
 /// folds one key into the state, returning `Some(UserInput)` once the
-/// operator has settled on an outcome. `reason` is the Fail submenu, open only
+/// user has chosen an outcome. `reason` is the Fail submenu, open only
 /// while `menu` rests on Fail.
 struct Prompt {
     field: Field,
@@ -1897,16 +1895,10 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .announce(message);
     }
 
-    fn ask(
-        &mut self,
-        qualified: &str,
-        choices: &[&str],
-        produced: Value,
-        computable: bool,
-    ) -> UserInput {
+    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput {
         let outcome = self
             .inner
-            .ask(qualified, choices, produced.clone(), computable);
+            .ask(qualified, choices, produced.clone(), kind);
         self.trace_outcome(qualified, produced, &outcome);
         outcome
     }
@@ -1952,10 +1944,10 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .section(qualified, numeral, title);
     }
 
-    fn seal(&mut self, qualified: &str, produced: Value, computable: bool) -> UserInput {
+    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput {
         let outcome = self
             .inner
-            .seal(qualified, produced.clone(), computable);
+            .seal(qualified, produced.clone(), kind);
         self.trace_outcome(qualified, produced, &outcome);
         outcome
     }
@@ -2115,7 +2107,7 @@ impl Driver for Mock {
         qualified: &str,
         choices: &[&str],
         _produced: Value,
-        _computable: bool,
+        _kind: Kind,
     ) -> UserInput {
         self.events
             .push(Event::Ask {
@@ -2177,7 +2169,7 @@ impl Driver for Mock {
     /// rather than draining the `ask` answer queue — the structural-scope
     /// close is orthogonal to the step verdicts a test drives. A test
     /// asserting close behaviour inspects the recorded `Seal` event.
-    fn seal(&mut self, qualified: &str, _produced: Value, _computable: bool) -> UserInput {
+    fn seal(&mut self, qualified: &str, _produced: Value, _kind: Kind) -> UserInput {
         self.events
             .push(Event::Seal {
                 qualified: qualified.to_string(),

@@ -349,7 +349,7 @@ fn main() {
                         .default_value("interactive")
                         .action(ArgAction::Set)
                         .conflicts_with_all(["interactive", "automatic", "quiet"])
-                        .help("How to walk the procedure: interactively, prompting the operator at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
+                        .help("How to walk the procedure: interactively, prompting the user at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
                 )
                 .arg(
                     Arg::new("interactive")

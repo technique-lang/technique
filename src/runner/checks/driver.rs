@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::runner::driver::{
-    draw, edit, is_list_forma, Automatic, Console, Driver, Event, Mock, Prompt, Standing, UserInput,
+    draw, edit, is_list_forma, Automatic, Console, Driver, Event, Kind, Mock, Prompt, Standing,
+    UserInput,
 };
 use crate::value::{Numeric, Value};
 
@@ -13,18 +14,24 @@ fn mock_returns_canned_answers_in_order() {
         UserInput::Quit,
     ]);
     assert_eq!(
-        p.ask("/I/1", &[], Value::Unitus, true),
+        p.ask("/I/1", &[], Value::Unitus, Kind::Computable),
         UserInput::Done(Value::Unitus)
     );
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Skip);
-    assert_eq!(p.ask("/I/1", &[], Value::Unitus, true), UserInput::Quit);
+    assert_eq!(
+        p.ask("/I/1", &[], Value::Unitus, Kind::Computable),
+        UserInput::Skip
+    );
+    assert_eq!(
+        p.ask("/I/1", &[], Value::Unitus, Kind::Computable),
+        UserInput::Quit
+    );
 }
 
 #[test]
 fn mock_records_step_and_ask_events() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     p.step("/local_network:I/1", "Check the cable.", 1);
-    let _ = p.ask("/local_network:I/1", &[], Value::Unitus, true);
+    let _ = p.ask("/local_network:I/1", &[], Value::Unitus, Kind::Computable);
     assert_eq!(
         p.events(),
         &[
@@ -43,7 +50,7 @@ fn mock_records_step_and_ask_events() {
 #[test]
 fn mock_records_offered_choices() {
     let mut p = Mock::with_answers([UserInput::Done(Value::Literali("Yes".to_string()))]);
-    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus, true);
+    let _ = p.ask("I/1", &["Yes", "No"], Value::Unitus, Kind::Computable);
     assert_eq!(
         p.events(),
         &[Event::Ask {
@@ -73,7 +80,7 @@ fn mock_records_enter_and_announce() {
 #[should_panic(expected = "Mock::ask called with no canned answers remaining")]
 fn mock_ask_without_answers_panics() {
     let mut p = Mock::new();
-    let _ = p.ask("I/1", &[], Value::Unitus, true);
+    let _ = p.ask("I/1", &[], Value::Unitus, Kind::Computable);
 }
 
 #[test]
@@ -103,15 +110,52 @@ fn console_step_indents_description_to_depth() {
 fn automatic_settles_done_when_computable_skip_otherwise() {
     let mut p = Automatic::with_handle(Vec::new());
     assert_eq!(
-        p.ask("/I/1", &[], Value::Literali("ran".to_string()), true),
+        p.ask(
+            "/I/1",
+            &[],
+            Value::Literali("ran".to_string()),
+            Kind::Computable
+        ),
         UserInput::Done(Value::Literali("ran".to_string()))
     );
-    assert_eq!(p.ask("/I/2", &[], Value::Unitus, false), UserInput::Skip);
     assert_eq!(
-        p.seal("/I", Value::Unitus, true),
+        p.ask("/I/2", &[], Value::Unitus, Kind::Prose),
+        UserInput::Skip
+    );
+    assert_eq!(
+        p.seal("/I", Value::Unitus, Kind::Computable),
         UserInput::Done(Value::Unitus)
     );
-    assert_eq!(p.seal("/II", Value::Unitus, false), UserInput::Skip);
+    assert_eq!(p.seal("/II", Value::Unitus, Kind::Prose), UserInput::Skip);
+}
+
+#[test]
+fn automatic_declines_action_and_choice_as_skip() {
+    // Unattended, a physical Action cannot be attested and a response Choice
+    // cannot be made, so both decline to Skip; a System command's output is
+    // taken as Done just like a plain Computable.
+    let mut p = Automatic::with_handle(Vec::new());
+    assert_eq!(
+        p.action("/I/1", "click", "Click", "Actions"),
+        UserInput::Skip
+    );
+    assert_eq!(
+        p.ask("/I/2", &["Yes", "No"], Value::Unitus, Kind::Choice),
+        UserInput::Skip
+    );
+    assert_eq!(
+        p.ask("/I/3", &[], Value::Unitus, Kind::Action),
+        UserInput::Skip
+    );
+    assert_eq!(
+        p.ask(
+            "/I/4",
+            &[],
+            Value::Literali("out".to_string()),
+            Kind::System
+        ),
+        UserInput::Done(Value::Literali("out".to_string()))
+    );
 }
 
 #[test]
@@ -208,7 +252,7 @@ fn override_inert_without_a_failure() {
 #[test]
 fn esc_edit_typed_enter_returns_literali() {
     // Editing is opt-in: Esc -> Edit (the first menu item) opens the buffer
-    // seeded from the value, which the operator can then extend.
+    // seeded from the value, which the user can then extend.
     let mut it = Prompt::begin(&[], Value::Literali("eth".to_string()));
     it.handle(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(
@@ -573,7 +617,7 @@ fn list_prompt_empty_submits_empty_list() {
 
 #[test]
 fn list_prompt_wraps_typed_buffer() {
-    // Whatever the operator types is wrapped in brackets on submit, so the
+    // Whatever the user types is wrapped in brackets on submit, so the
     // result parses through the existing list-literal path.
     let mut it = list_prompt();
     for c in "east, west".chars() {

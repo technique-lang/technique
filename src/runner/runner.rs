@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 
 use super::context::Context;
-use super::driver::{Driver, Standing, UserInput};
+use super::driver::{Driver, Kind, Standing, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
@@ -105,7 +105,7 @@ pub enum RunnerError {
 /// the position in the document via a `QualifiedPath` stack, carries an
 /// `Environment` with known result values. Holds the set of step FQNs already
 /// completed in a *prior* run — the resume snapshot plus an append handle to
-/// write results and the prompt the operator interacts through.
+/// write results and the prompt the user interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
@@ -269,12 +269,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             let qualified = self
                 .path
                 .render();
-            let computable = is_scope_computable(&entry.body);
+            let kind = self.kind_of_scope(&entry.body);
             let sealed = match result {
                 Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
-                Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, computable),
+                Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, kind),
                 Ok(Conclusion::Throwing(failure)) => {
-                    self.seal_scope(&qualified, Outcome::Fail(failure), computable)
+                    self.seal_scope(&qualified, Outcome::Fail(failure), kind)
                 }
                 Err(error) => Err(error),
             };
@@ -357,14 +357,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // read-only to confirm. Either way Skip or Fail declines and
                 // records the step; Quit stops. `Pure` builtins just announce
                 // and run.
-                let nature = match &executable.target {
-                    ExecutableRef::Resolved(id) => self
-                        .library
-                        .nature(*id),
-                    _ => Nature::Pure,
-                };
+                let kind = self.execute_kind(executable);
                 // Pure builtins record nothing; only effectful calls are traced.
-                let effectful = if let Nature::Pure = nature {
+                let effectful = if let Kind::Computable = kind {
                     false
                 } else {
                     true
@@ -380,8 +375,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                             },
                         })?;
                 }
-                let outcome = match nature {
-                    Nature::Command => {
+                let outcome = match kind {
+                    Kind::System => {
                         let script = self.script_text(env, executable)?;
                         match self
                             .driver
@@ -408,7 +403,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     Err(other) => Err(other),
                                 }
                             }
-                            UserInput::Skip => Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus))),
+                            UserInput::Skip => {
+                                Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)))
+                            }
                             UserInput::Fail(reason) => {
                                 Ok(Conclusion::Throwing(Failure::Aborted(reason)))
                             }
@@ -418,7 +415,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             UserInput::Quit => self.record_stop(),
                         }
                     }
-                    Nature::Action => {
+                    Kind::Action => {
                         let (verb, label) = self.action_parts(env, executable)?;
                         match self
                             .driver
@@ -434,7 +431,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 )?;
                                 Ok(Conclusion::Completed(Outcome::Done(value)))
                             }
-                            UserInput::Skip => Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus))),
+                            UserInput::Skip => {
+                                Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)))
+                            }
                             UserInput::Fail(reason) => {
                                 Ok(Conclusion::Throwing(Failure::Aborted(reason)))
                             }
@@ -444,7 +443,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             UserInput::Quit => self.record_stop(),
                         }
                     }
-                    Nature::Pure => {
+                    Kind::Computable => {
                         self.driver
                             .announce(&describe_execute(&function));
                         let value = super::evaluator::dispatch(
@@ -456,6 +455,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         )?;
                         Ok(Conclusion::Completed(Outcome::Done(value)))
                     }
+                    _ => unreachable!(), // execute_kind yields only System/Action/Computable
                 }?;
                 // Pair the Execute with a Return carrying its value; a stopped
                 // run leaves the enter unpaired.
@@ -513,7 +513,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
-    /// The shell script an `exec` will run, rendered for the operator to see
+    /// The shell script an `exec` will run, rendered for the user to see
     /// before they command it. The command's first argument is the script.
     fn script_text(
         &mut self,
@@ -766,7 +766,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Record the dispatch once the arguments are in hand —
                     // declining at the prompt above returns before this, so a
                     // declined call records no Invoke. Recorded at answer-time,
-                    // so the gap from the previous event is the operator wait.
+                    // so the gap from the previous event is the user wait.
                     let run_id = self
                         .appender
                         .run_id();
@@ -796,14 +796,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // then close its scope; a Quit or error skips the close,
                     // leaving the procedure unfinished.
                     let result = self.walk(&mut local, &subroutine.body);
-                    let computable = is_scope_computable(&subroutine.body);
+                    let kind = self.kind_of_scope(&subroutine.body);
                     let sealed = match result {
                         Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
                         Ok(Conclusion::Completed(outcome)) => {
-                            self.seal_scope(&lexical, outcome, computable)
+                            self.seal_scope(&lexical, outcome, kind)
                         }
                         Ok(Conclusion::Throwing(failure)) => {
-                            self.seal_scope(&lexical, Outcome::Fail(failure), computable)
+                            self.seal_scope(&lexical, Outcome::Fail(failure), kind)
                         }
                         Err(error) => Err(error),
                     };
@@ -959,7 +959,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                         return Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)));
                     }
                     UserInput::Fail(reason) => {
-                        return Ok(Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason))))
+                        return Ok(Conclusion::Completed(Outcome::Fail(Failure::Aborted(
+                            reason,
+                        ))))
                     }
                     UserInput::Override => unreachable!(), // an acquire prompt never offers Override
                     UserInput::Quit => return self.record_stop(),
@@ -1166,15 +1168,15 @@ impl<'i, D: Driver> Runner<'i, D> {
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
-        let computable = is_scope_computable(body);
+        let kind = self.kind_of_scope(body);
         // A section is a structural scope: the user signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
         match result {
             Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
-            Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, computable),
+            Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, kind),
             Ok(Conclusion::Throwing(failure)) => {
-                self.seal_scope(&qualified, Outcome::Fail(failure), computable)
+                self.seal_scope(&qualified, Outcome::Fail(failure), kind)
             }
             Err(error) => Err(error),
         }
@@ -1214,8 +1216,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             ..
         } = op
         else {
-            // walk_step called with non-Step operation
-            unreachable!();
+            unreachable!(); // walk_step called with non-Step operation
         };
 
         for frame in attributes {
@@ -1281,18 +1282,8 @@ impl<'i, D: Driver> Runner<'i, D> {
         if let Conclusion::Stopping = conclusion {
             return Ok(conclusion);
         }
-        // A prologue takes a step's verdict rule: ending in prose, it records
-        // Skip even when a command within it ran. A thrown failure records Fail
-        // and still propagates.
-        let computable = ops
-            .last()
-            .is_some_and(is_step_computable);
-        let conclusion = match conclusion {
-            Conclusion::Completed(Outcome::Done(value)) if !computable => {
-                Conclusion::Completed(Outcome::Skip(value))
-            }
-            other => other,
-        };
+        // Translation emits a Prologue only when the description carries real
+        // work (prose-only descriptions never become step 0)
         let record = Record {
             recorded: now_iso8601(),
             run_id: self
@@ -1459,12 +1450,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             .iter()
             .map(|r| r.value)
             .collect();
-        let computable = is_step_computable(op);
+        let kind = self.kind_of_step(op);
         // `ask` consumes `produced`; keep a copy for a Skip to propagate.
         let propagate = produced.clone();
         let input = self
             .driver
-            .ask(qualified, &choices, produced, computable);
+            .ask(qualified, &choices, produced, kind);
 
         // Quit halts the walk; this step's Begin stands without a matching
         // outcome, so resume re-runs it.
@@ -1643,7 +1634,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         qualified: &str,
         outcome: Outcome,
-        computable: bool,
+        kind: Kind,
     ) -> Result<Conclusion, RunnerError> {
         let standing = match &outcome {
             Outcome::Fail(_) => Some(Standing::Fail),
@@ -1682,7 +1673,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .run_id();
         let input = self
             .driver
-            .seal(qualified, produced, computable);
+            .seal(qualified, produced, kind);
         if let UserInput::Quit = input {
             return self.record_stop();
         }
@@ -1753,6 +1744,61 @@ impl<'i, D: Driver> Runner<'i, D> {
             .append(&suspend)?;
         Ok(Conclusion::Stopping)
     }
+
+    /// Classify an `Execute` by its builtin's `Nature`, resolving the target as
+    /// the dispatch does.
+    fn execute_kind(&self, exec: &Executable) -> Kind {
+        let nature = match &exec.target {
+            ExecutableRef::Resolved(id) => self
+                .library
+                .nature(*id),
+            _ => Nature::Pure,
+        };
+        match nature {
+            Nature::Pure => Kind::Computable,
+            Nature::Command => Kind::System,
+            Nature::Action => Kind::Action,
+        }
+    }
+
+    /// Classify a step by its final member: a step offering response choices is
+    /// a `Choice`; otherwise the value comes from the last operation, an ending
+    /// in prose being `Prose` and everything else `Computable`.
+    fn kind_of_step(&self, op: &Operation) -> Kind {
+        match op {
+            Operation::Step { responses, .. } if !responses.is_empty() => Kind::Choice,
+            Operation::Step { body, .. } => self.kind_of_step(body),
+            Operation::Sequence(ops) | Operation::Prologue(ops) => match ops.last() {
+                Some(last) => self.kind_of_step(last),
+                None => Kind::Prose,
+            },
+            Operation::Execute(exec) => self.execute_kind(exec),
+            Operation::Prose(_) => Kind::Prose,
+            _ => Kind::Computable,
+        }
+    }
+
+    /// A scope's Kind: `Computable` if any member holds work, else `Prose`. A
+    /// pure-prose scope is `Prose`, so an unattended run skips its close.
+    fn kind_of_scope(&self, op: &Operation) -> Kind {
+        match op {
+            Operation::Sequence(ops) | Operation::Prologue(ops) => {
+                if ops
+                    .iter()
+                    .any(|op| self.kind_of_scope(op) == Kind::Computable)
+                {
+                    Kind::Computable
+                } else {
+                    Kind::Prose
+                }
+            }
+            Operation::Step { body, .. } | Operation::Section { body, .. } => {
+                self.kind_of_scope(body)
+            }
+            Operation::Prose(_) => Kind::Prose,
+            _ => Kind::Computable,
+        }
+    }
 }
 
 fn describe_execute(function: &str) -> String {
@@ -1822,45 +1868,6 @@ impl Rollup {
             Standing::Skip => Outcome::Skip(self.value),
             Standing::Done => Outcome::Done(self.value),
         }
-    }
-}
-
-/// Whether a scope holds any computable work, scanning every member. A scope of
-/// pure prose is not computable, so an automatic run skips its close.
-fn is_scope_computable(op: &Operation) -> bool {
-    match op {
-        Operation::Sequence(ops) | Operation::Prologue(ops) => ops
-            .iter()
-            .any(is_scope_computable),
-        Operation::Step { body, .. } | Operation::Section { body, .. } => is_scope_computable(body),
-        other => computes(other),
-    }
-}
-
-/// A single operation's own computability, ignoring nesting: descriptive prose
-/// computes nothing; every other primitive (invoke, execute, code, bind, ...)
-/// does. The one leaf definition both fold predicates rest on.
-fn computes(op: &Operation) -> bool {
-    match op {
-        Operation::Prose(_) => false,
-        _ => true,
-    }
-}
-
-/// Whether a step computes its result rather than describing it. A step's value
-/// is its final member, so one ending in an invocation, code, or substep
-/// computes a value while one ending in prose does not.
-fn is_step_computable(op: &Operation) -> bool {
-    match op {
-        // A step offering response choices needs a selection no non-interactive
-        // run can make; it is not computable and so is skipped.
-        Operation::Step { responses, .. } if !responses.is_empty() => false,
-        Operation::Step { body, .. } => is_step_computable(body),
-        Operation::Sequence(ops) | Operation::Prologue(ops) => match ops.last() {
-            Some(last) => is_step_computable(last),
-            None => false,
-        },
-        other => computes(other),
     }
 }
 

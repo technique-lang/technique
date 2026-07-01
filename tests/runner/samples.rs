@@ -118,7 +118,9 @@ fn ensure_run() {
         // A pure-prose procedure legitimately finishes Skip under the
         // automatic driver; only a Fail or Stopped run is a test failure.
         let finished = match outcome {
-            Conclusion::Completed(Outcome::Done(_)) | Conclusion::Completed(Outcome::Skip(_)) => true,
+            Conclusion::Completed(Outcome::Done(_)) | Conclusion::Completed(Outcome::Skip(_)) => {
+                true
+            }
             _ => {
                 println!("File {:?} did not finish cleanly: {:?}", file, outcome);
                 false

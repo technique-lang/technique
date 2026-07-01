@@ -437,7 +437,7 @@ fn quit_propagates_and_stops_walking() {
     // Only the first Step was prompted; the second never fired.
     assert_eq!(step_fqns, vec!["/1"]);
 
-    // Quit records the step's Begin (the operator started looking at it), then
+    // Quit records the step's Begin (the user started looking at it), then
     // a Stop lifecycle line at the root path — the deliberate-stop marker that
     // tells a quit from a crash. No Done/Skip/Fail for the step itself.
     let pfftt = fixture.pfftt_contents();
@@ -648,7 +648,7 @@ test :
 #[test]
 fn hole_argument_acquired_at_entry() {
     // main invokes cycle with `?`, declining to supply the Situation. The
-    // operator is asked for `s` once, when cycle is entered, and the bound
+    // user is asked for `s` once, when cycle is entered, and the bound
     // value serves both reads in the body.
     let source = r#"
 % technique v1
@@ -1421,14 +1421,15 @@ Prepare the ground { exec("true") } before the steps.
         .filter(|r| r.path == "/check:/0")
         .map(|r| &r.state)
         .collect();
-    // The exec runs (its trace between Begin and the verdict), but the prologue
-    // ends in prose so it settles Skip.
+    // The exec runs (its trace between Begin and the outcome); the prologue
+    // holds real work, so it records that work's outcome — Done — rather than
+    // being stamped Skip by its prose tail.
     let State::Begin = zero[0] else {
         panic!("expected Begin first at /check:/0, got {:?}", zero[0]);
     };
-    let State::Skip = zero[zero.len() - 1] else {
+    let State::Done(_) = zero[zero.len() - 1] else {
         panic!(
-            "expected Skip last at /check:/0, got {:?}",
+            "expected Done last at /check:/0, got {:?}",
             zero[zero.len() - 1]
         );
     };
@@ -1503,7 +1504,7 @@ fn repeat_loops_until_quit() {
     let mut fixture = StoreFixture::new("repeat-until-quit");
 
     // A `repeat` whose body is a single step. Each pass walks the step with
-    // a distinct `[n]` iteration segment; the operator quits on the third
+    // a distinct `[n]` iteration segment; the user quits on the third
     // pass, ending the loop.
     let inner = Operation::Step {
         ordinal: Ordinal::Dependent("1"),
@@ -2466,8 +2467,8 @@ fn sequence_value_is_last_member() {
 #[test]
 fn deferred_invoke_is_prompted_and_recorded() {
     // A call to an external procedure this run cannot resolve (it lives in
-    // another document or system) is presented for the operator to settle: the
-    // run does not descend into it, but the operator can mark it Done (it was
+    // another document or system) is presented for the user to settle: the
+    // run does not descend into it, but the user can mark it Done (it was
     // performed, or recorded elsewhere), Skip, or Fail. The call site and the
     // settled outcome are both recorded.
     fn deferred_program() -> Program<'static> {
@@ -2483,7 +2484,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         anonymous_with_body(Operation::Sequence(vec![invoke]))
     }
 
-    // The operator confirms the departure, then marks the external procedure
+    // The user confirms the departure, then marks the external procedure
     // Done at the return.
     let mut fixture = StoreFixture::new("deferred-done");
     let program = deferred_program();
@@ -2503,7 +2504,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .expect("run");
     assert_eq!(outcome, Conclusion::Completed(Outcome::Done(Value::Unitus)));
 
-    // The operator was prompted about the external node, by its FQP.
+    // The user was prompted about the external node, by its FQP.
     let prompt = runner.into_driver();
     let asked: Vec<&str> = prompt
         .events()
@@ -2532,7 +2533,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         State::Done(Some(Value::Unitus))
     )));
 
-    // The operator declines: Skip is recorded at the external's FQP. (The
+    // The user declines: Skip is recorded at the external's FQP. (The
     // enclosing sequence proceeds and returns its last Done value, so the
     // run's overall outcome is not itself the Skip — that is walk_sequence's
     // concern, tested elsewhere; what matters here is the recorded Skip.)
@@ -2558,7 +2559,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
         .collect();
     assert_eq!(settled, vec![State::Begin, State::Skip]);
 
-    // Under an automatic run there is no operator to attest the external work
+    // Under an automatic run there is no user to attest the external work
     // and nothing executed it, so it records Skip rather than a fabricated Done.
     let mut fixture = StoreFixture::new("deferred-automatic");
     let program = deferred_program();
@@ -2584,7 +2585,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
 
 #[test]
 fn descriptive_binding_acquires_list_for_foreach() {
-    // A descriptive `~ items` binding has no executable value, so the operator
+    // A descriptive `~ items` binding has no executable value, so the user
     // is asked to supply it. They enter a `[ … ]` literal, which coerces to a
     // list, and the following foreach walks its body once per element.
     let source = r#"
@@ -2922,7 +2923,7 @@ cleanup :
 }
 
 // An elided invocation `<hail>` acquires its parameter `name` from the
-// operator. The argument it was called with is recorded as an `Input` at the
+// user. The argument it was called with is recorded as an `Input` at the
 // callee's path so a resume can restore it.
 const ACQUIRE_INPUT_SOURCE: &str = r#"
 % technique v1
@@ -2943,7 +2944,7 @@ fn invoke_records_supplied_input() {
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
 
-    // The operator supplies "World" at the acquire prompt; the rest are step
+    // The user supplies "World" at the acquire prompt; the rest are step
     // and scope sign-offs.
     let prompt = Mock::with_answers([
         UserInput::Done(Value::Literali("World".to_string())),

@@ -1,5 +1,5 @@
 //! Host capabilities available to native functions when they execute. For now
-//! the only capability is passing output through to the operator: output goes
+//! the only capability is passing output through to the user: output goes
 //! straight to standard output, or — for tests — into an in-memory buffer. A
 //! future GUI or web frontend would hold its own sink here, with
 //! `native()` staying the terminal default and a separate constructor carrying
