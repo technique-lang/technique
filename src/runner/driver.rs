@@ -4,11 +4,11 @@
 //! this is a human user or a program running non-interactively.
 
 //! The walker tells the driver what to show and then asks for the step's
-//! outcome. `Console` drives a raw-mode terminal UI, presenting a step or
-//! scope's returned Value as an editable candidate and reading the operator's
-//! keystrokes; `Automatic` takes the body's returned Value with no human
-//! intervention; `Mock` is for testing, recording what the walker tried to
-//! show and returning canned answers.
+//! outcome. A driver is assembled from two orthogonal axes: an `Output`
+//! presentation policy (`Visual` renders a trace, `Silent` shows nothing) and
+//! a `Verdict` input policy (`Interactive` reads the user's keystrokes,
+//! `Batch` takes the body's value unattended). `Interface` composes the two.
+//! `Mock` is for testing.
 
 use std::io::{self, Write};
 
@@ -52,10 +52,11 @@ pub enum UserInput {
 }
 
 /// The default verdict a node's rolled-up body leaves standing at its sign-off.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Declaration order encodes verdict precedence: Fail beats Done beats Skip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Standing {
-    Done,
     Skip,
+    Done,
     Fail,
 }
 
@@ -165,7 +166,7 @@ pub trait Driver {
     /// Render the settled verdict line for a step or scope close: `marker`
     /// (`→` step, `↙` scope close), Qualified Name, and the verdict's glyph.
     /// Quit renders nothing.
-    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
+    fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
 
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
     /// abandon the call, Quit stops the run.
@@ -176,59 +177,121 @@ pub trait Driver {
     fn renderer(&self) -> &'static dyn Render;
 }
 
-/// Interactive console prompt in a terminal. `step` / `section` / `announce`
-/// print in "cooked mode" (to use the old terminfo slang term for it); `ask`
-/// switches to "raw mode" to read keystrokes. The default is confirmation:
-/// `<Enter>` completes the step, accepting the body's value intact. The
-/// `<Esc>` menu offers Skip / Fail / Quit and, for an editable scalar, Edit —
-/// the one path to reshape the value. The keystroke logic lives in
-/// `Interaction`; this is the terminal shell around it.
-pub struct Console<W: Write> {
+/// The presentation axis: what a driver shows. `Visual` renders the trace to a
+/// terminal; `Silent` shows nothing. The `show_*` methods draw the line a
+/// `Batch` verdict still displays for a point it decides without prompting;
+/// `surface` hands an interactive verdict the raw sink to prompt on.
+pub trait Output {
+    fn step(&mut self, qualified: &str, description: &str, depth: usize);
+    fn enter(&mut self, qualified: &str);
+    fn commence(&mut self, label: &str);
+    fn conclude(&mut self, label: &str, verdict: &UserInput);
+    fn display(&mut self, content: &str);
+    fn announce(&mut self, message: &str);
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str);
+
+    /// The settled verdict line for a step or scope close.
+    fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
+
+    /// The `$ script` line for an auto-run command.
+    fn show_command(&mut self, qualified: &str, script: &str);
+
+    /// The `» verb label` line for an action.
+    fn show_action(&mut self, verb: &str, label: &str);
+
+    /// The `⇒` marker line for an external departure.
+    fn show_depart(&mut self, qualified: &str);
+
+    /// The raw sink an interactive prompt draws on; `Silent` discards.
+    fn surface(&mut self) -> &mut dyn Write;
+
+    fn renderer(&self) -> &'static dyn Render;
+}
+
+/// The input axis: what verdict a driver returns for each prompt. `Interactive`
+/// reads the user's keystrokes off the `Output`'s surface; `Batch` decides
+/// unattended. Each method is handed `&mut O` so an interactive policy can draw
+/// its prompt on that surface.
+pub trait Verdict {
+    fn ask<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        computable: bool,
+    ) -> UserInput;
+
+    fn seal<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        produced: Value,
+        computable: bool,
+    ) -> UserInput;
+
+    fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput;
+
+    fn action<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        name: &str,
+        verb: &str,
+        label: &str,
+    ) -> UserInput;
+
+    fn acquire<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput;
+
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput;
+
+    fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput;
+
+    fn overrule<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        marker: &str,
+        standing: Standing,
+    ) -> UserInput;
+}
+
+/// A visual presentation to a terminal, rendering the trace shared by the
+/// interactive and batch drivers.
+pub struct Visual<W: Write> {
     output: W,
+    renderer: &'static dyn Render,
 }
 
-impl Console<io::Stdout> {
-    pub fn new() -> Self {
-        Console {
-            output: io::stdout(),
-        }
-    }
-}
-
-#[cfg(test)]
-impl<W: Write> Console<W> {
-    pub fn with_output(output: W) -> Self {
-        Console { output }
-    }
-}
-
-impl<W: Write> Driver for Console<W> {
+impl<W: Write> Output for Visual<W> {
     fn step(&mut self, fqn: &str, description: &str, depth: usize) {
-        let renderer = self.renderer();
         render_step(
             &mut self.output,
             &display_path(fqn),
             description,
             depth,
-            renderer,
+            self.renderer,
         );
     }
 
     fn enter(&mut self, qualified: &str) {
-        let renderer = self.renderer();
-        render_enter(&mut self.output, &display_path(qualified), renderer);
+        render_enter(&mut self.output, &display_path(qualified), self.renderer);
         let _ = writeln!(self.output);
     }
 
     fn commence(&mut self, label: &str) {
-        let renderer = self.renderer();
-        write_marker_line(&mut self.output, &format!("⇒ {}", label), renderer);
+        write_marker_line(&mut self.output, &format!("⇒ {}", label), self.renderer);
         let _ = writeln!(self.output);
     }
 
     fn conclude(&mut self, label: &str, verdict: &UserInput) {
-        let renderer = self.renderer();
-        render_conclude(&mut self.output, label, verdict, renderer);
+        render_conclude(&mut self.output, label, verdict, self.renderer);
     }
 
     fn display(&mut self, content: &str) {
@@ -238,10 +301,9 @@ impl<W: Write> Driver for Console<W> {
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
         let qualified = display_path(qualified);
-        let renderer = self.renderer();
-        write_marker_line(&mut self.output, &format!("↘ {}", qualified), renderer);
+        write_marker_line(&mut self.output, &format!("↘ {}", qualified), self.renderer);
         let _ = writeln!(self.output);
-        render_section(&mut self.output, numeral, title, renderer);
+        render_section(&mut self.output, numeral, title, self.renderer);
         let _ = writeln!(self.output);
     }
 
@@ -249,78 +311,430 @@ impl<W: Write> Driver for Console<W> {
         write_indented(&mut self.output, message);
     }
 
-    fn ask(
-        &mut self,
-        qualified: &str,
-        choices: &[&str],
-        produced: Value,
-        _computable: bool,
-    ) -> UserInput {
-        prompt(&mut self.output, qualified, "→", choices, produced)
-    }
-
-    fn depart(&mut self, qualified: &str) -> UserInput {
-        let input = prompt(&mut self.output, qualified, "⇒", &[], Value::Unitus);
-        if let UserInput::Quit = input {
-        } else {
-            let renderer = self.renderer();
-            write_marker_line(
-                &mut self.output,
-                &format!("⇒ {}", display_path(qualified)),
-                renderer,
-            );
-        }
-        input
-    }
-
-    fn external(&mut self, qualified: &str) -> UserInput {
-        prompt(&mut self.output, qualified, "⇐", &[], Value::Unitus)
-    }
-
-    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
-        prompt_command(&mut self.output, qualified, script)
-    }
-
-    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
-        prompt_action(&mut self.output, qualified, name, verb, label)
-    }
-
-    fn seal(&mut self, qualified: &str, produced: Value, _computable: bool) -> UserInput {
-        prompt(&mut self.output, qualified, "↙", &[], produced)
-    }
-
-    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
-        prompt_overrule(&mut self.output, qualified, marker, standing)
-    }
-
-    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+    fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
         let qualified = display_path(qualified);
-        let renderer = self.renderer();
-        render_settle(&mut self.output, marker, &qualified, verdict, renderer);
+        render_settle(&mut self.output, marker, &qualified, verdict, self.renderer);
         let _ = self
             .output
             .flush();
     }
 
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+    fn show_command(&mut self, qualified: &str, script: &str) {
+        render_command(
+            &mut self.output,
+            &display_path(qualified),
+            script,
+            self.renderer,
+        );
+    }
+
+    fn show_action(&mut self, verb: &str, label: &str) {
+        let text = if label.is_empty() {
+            format!("» {}", verb)
+        } else {
+            format!("» {} {}", verb, label)
+        };
+        write_indented(&mut self.output, &text);
+    }
+
+    fn show_depart(&mut self, qualified: &str) {
+        write_marker_line(
+            &mut self.output,
+            &format!("⇒ {}", display_path(qualified)),
+            self.renderer,
+        );
+    }
+
+    fn surface(&mut self) -> &mut dyn Write {
+        &mut self.output
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        self.renderer
+    }
+}
+
+/// The silent (no UI) presentation: every callback is a no-op and the surface
+/// discards, so a `Technique` can run without a terminal, leaving only the
+/// output from the executed child commands.
+pub struct Silent {
+    discard: io::Sink,
+}
+
+impl Output for Silent {
+    fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
+    fn enter(&mut self, _qualified: &str) {}
+    fn commence(&mut self, _label: &str) {}
+    fn conclude(&mut self, _label: &str, _verdict: &UserInput) {}
+    fn display(&mut self, _content: &str) {}
+    fn announce(&mut self, _message: &str) {}
+    fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
+    fn show_verdict(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
+    fn show_command(&mut self, _qualified: &str, _script: &str) {}
+    fn show_action(&mut self, _verb: &str, _label: &str) {}
+    fn show_depart(&mut self, _qualified: &str) {}
+
+    fn surface(&mut self) -> &mut dyn Write {
+        &mut self.discard
+    }
+
+    fn renderer(&self) -> &'static dyn Render {
+        &Identity
+    }
+}
+
+/// The interactive verdict policy: prompt the user on the output's surface
+/// and read their keystrokes. The keystroke logic lives in `Interaction`. The
+/// default is confirmation: `<Enter>` completes the step, accepting the
+/// default action or the body's current value intact; the `<Esc>` menu offers
+/// Skip, Fail, Quit, sometimes Override, and (for an editable scalar) Edit.
+pub struct Interactive;
+
+impl Verdict for Interactive {
+    fn ask<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        _computable: bool,
+    ) -> UserInput {
+        prompt(out.surface(), qualified, "→", choices, produced)
+    }
+
+    fn seal<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        produced: Value,
+        _computable: bool,
+    ) -> UserInput {
+        prompt(out.surface(), qualified, "↙", &[], produced)
+    }
+
+    fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
+        prompt_command(out.surface(), qualified, script)
+    }
+
+    fn action<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        name: &str,
+        verb: &str,
+        label: &str,
+    ) -> UserInput {
+        prompt_action(out.surface(), qualified, name, verb, label)
+    }
+
+    fn acquire<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput {
         let label = format!(
             "{}({} : {})",
             display_path(qualified),
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
-        prompt_acquire(&mut self.output, &label, is_list_forma(forma))
+        prompt_acquire(out.surface(), &label, is_list_forma(forma))
+    }
+
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
+        let input = prompt(out.surface(), qualified, "⇒", &[], Value::Unitus);
+        if let UserInput::Quit = input {
+        } else {
+            out.show_depart(qualified);
+        }
+        input
+    }
+
+    fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
+        prompt(out.surface(), qualified, "⇐", &[], Value::Unitus)
+    }
+
+    fn overrule<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        marker: &str,
+        standing: Standing,
+    ) -> UserInput {
+        prompt_overrule(out.surface(), qualified, marker, standing)
+    }
+}
+
+/// The policy for running unattended (ie, not interactive): take each step
+/// and scope's body value as the result, if available, otherwise Skip.
+pub struct Batch;
+
+fn unattended(produced: Value, computable: bool) -> UserInput {
+    if computable {
+        UserInput::Done(produced)
+    } else {
+        UserInput::Skip
+    }
+}
+
+impl Verdict for Batch {
+    fn ask<O: Output>(
+        &mut self,
+        _out: &mut O,
+        _qualified: &str,
+        _choices: &[&str],
+        produced: Value,
+        computable: bool,
+    ) -> UserInput {
+        unattended(produced, computable)
+    }
+
+    fn seal<O: Output>(
+        &mut self,
+        _out: &mut O,
+        _qualified: &str,
+        produced: Value,
+        computable: bool,
+    ) -> UserInput {
+        unattended(produced, computable)
+    }
+
+    fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
+        out.show_command(qualified, script);
+        UserInput::Done(Value::Literali(script.to_string()))
+    }
+
+    fn action<O: Output>(
+        &mut self,
+        out: &mut O,
+        _qualified: &str,
+        _name: &str,
+        verb: &str,
+        label: &str,
+    ) -> UserInput {
+        out.show_action(verb, label);
+        UserInput::Done(Value::Unitus)
+    }
+
+    fn acquire<O: Output>(
+        &mut self,
+        _out: &mut O,
+        _qualified: &str,
+        _name: Option<&str>,
+        _forma: Option<&str>,
+    ) -> UserInput {
+        UserInput::Done(Value::Unitus)
+    }
+
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
+        out.show_depart(qualified);
+        UserInput::Done(Value::Unitus)
+    }
+
+    fn external<O: Output>(&mut self, _out: &mut O, _qualified: &str) -> UserInput {
+        UserInput::Skip
+    }
+
+    fn overrule<O: Output>(
+        &mut self,
+        _out: &mut O,
+        _qualified: &str,
+        _marker: &str,
+        standing: Standing,
+    ) -> UserInput {
+        match standing {
+            Standing::Done => UserInput::Done(Value::Unitus),
+            Standing::Skip => UserInput::Skip,
+            Standing::Fail => UserInput::Fail(String::new()),
+        }
+    }
+}
+
+/// A `Driver` built from an `Output` and a `Verdict`: presentation calls go
+/// to the output, verdict calls go to the verdict policy, both of which are
+/// then passed the output so it can prompt with them.
+pub struct Interface<O: Output, V: Verdict> {
+    out: O,
+    verdict: V,
+}
+
+impl<O: Output, V: Verdict> Driver for Interface<O, V> {
+    fn step(&mut self, qualified: &str, description: &str, depth: usize) {
+        self.out
+            .step(qualified, description, depth);
+    }
+
+    fn enter(&mut self, qualified: &str) {
+        self.out
+            .enter(qualified);
+    }
+
+    fn commence(&mut self, label: &str) {
+        self.out
+            .commence(label);
+    }
+
+    fn conclude(&mut self, label: &str, verdict: &UserInput) {
+        self.out
+            .conclude(label, verdict);
+    }
+
+    fn display(&mut self, content: &str) {
+        self.out
+            .display(content);
+    }
+
+    fn announce(&mut self, message: &str) {
+        self.out
+            .announce(message);
+    }
+
+    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
+        self.out
+            .section(qualified, numeral, title);
+    }
+
+    fn ask(
+        &mut self,
+        qualified: &str,
+        choices: &[&str],
+        produced: Value,
+        computable: bool,
+    ) -> UserInput {
+        self.verdict
+            .ask(&mut self.out, qualified, choices, produced, computable)
+    }
+
+    fn depart(&mut self, qualified: &str) -> UserInput {
+        self.verdict
+            .depart(&mut self.out, qualified)
+    }
+
+    fn external(&mut self, qualified: &str) -> UserInput {
+        self.verdict
+            .external(&mut self.out, qualified)
+    }
+
+    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
+        self.verdict
+            .command(&mut self.out, qualified, script)
+    }
+
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+        self.verdict
+            .action(&mut self.out, qualified, name, verb, label)
+    }
+
+    fn seal(&mut self, qualified: &str, produced: Value, computable: bool) -> UserInput {
+        self.verdict
+            .seal(&mut self.out, qualified, produced, computable)
+    }
+
+    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
+        self.verdict
+            .overrule(&mut self.out, qualified, marker, standing)
+    }
+
+    fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+        self.out
+            .show_verdict(marker, qualified, verdict);
+    }
+
+    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+        self.verdict
+            .acquire(&mut self.out, qualified, name, forma)
     }
 
     fn renderer(&self) -> &'static dyn Render {
-        &Terminal
+        self.out
+            .renderer()
+    }
+}
+
+/// Represents the interactive console prompt in a terminal: renders the
+/// output trace and reads the user's keystrokes.
+pub type Console<W = io::Stdout> = Interface<Visual<W>, Interactive>;
+
+/// Non-interactive driver that still renders the trace, then takes each
+/// body's value (if any) as the result.
+pub type Automatic<W = io::Stdout> = Interface<Visual<W>, Batch>;
+
+/// Non-interactive driver with no UI output, leaving only executed child
+/// process's output the only thing written to the terminal.
+pub type Headless = Interface<Silent, Batch>;
+
+impl Console<io::Stdout> {
+    pub fn new() -> Self {
+        Interface {
+            out: Visual {
+                output: io::stdout(),
+                renderer: &Terminal,
+            },
+            verdict: Interactive,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<W: Write> Console<W> {
+    pub fn with_output(output: W) -> Self {
+        Interface {
+            out: Visual {
+                output,
+                renderer: &Terminal,
+            },
+            verdict: Interactive,
+        }
+    }
+}
+
+impl Automatic<io::Stdout> {
+    pub fn new(colour: bool) -> Self {
+        Interface {
+            out: Visual {
+                output: io::stdout(),
+                renderer: if colour { &Terminal } else { &Identity },
+            },
+            verdict: Batch,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<W: Write> Automatic<W> {
+    pub fn with_handle(output: W) -> Self {
+        Interface {
+            out: Visual {
+                output,
+                renderer: &Identity,
+            },
+            verdict: Batch,
+        }
+    }
+
+    pub fn into_output(self) -> W {
+        self.out
+            .output
+    }
+}
+
+impl Headless {
+    pub fn new() -> Self {
+        Interface {
+            out: Silent {
+                discard: io::sink(),
+            },
+            verdict: Batch,
+        }
     }
 }
 
 /// Run one interactive prompt and return the user's verdict, clearing the
 /// live `▶` row on settle.
-fn prompt<W: Write>(
-    out: &mut W,
+fn prompt(
+    mut out: &mut dyn Write,
     qualified: &str,
     settle: &str,
     choices: &[&str],
@@ -330,13 +744,17 @@ fn prompt<W: Write>(
     let result = interact(out, Interaction::begin(choices, produced), |o, i| {
         draw(o, &qualified, settle, i)
     });
-    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
     let _ = out.flush();
     result
 }
 
-fn prompt_overrule<W: Write>(
-    out: &mut W,
+fn prompt_overrule(
+    mut out: &mut dyn Write,
     qualified: &str,
     marker: &str,
     standing: Standing,
@@ -345,7 +763,11 @@ fn prompt_overrule<W: Write>(
     let result = interact(out, Interaction::overrule(standing), |o, i| {
         draw(o, &qualified, marker, i)
     });
-    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
     let _ = out.flush();
     result
 }
@@ -354,8 +776,8 @@ fn prompt_overrule<W: Write>(
 /// — and settle on the user's verdict. On Done it leaves a compact dark-grey
 /// trace `» {path} {name}()`; Skip / Fail / Quit clear the line for the step's
 /// own settle to follow.
-fn prompt_action<W: Write>(
-    out: &mut W,
+fn prompt_action(
+    mut out: &mut dyn Write,
     qualified: &str,
     name: &str,
     verb: &str,
@@ -365,7 +787,11 @@ fn prompt_action<W: Write>(
     let result = interact(out, Interaction::begin(&[], Value::Unitus), |o, i| {
         draw_action(o, &qualified, verb, label, i)
     });
-    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
     if let UserInput::Done(_) = &result {
         let _ = writeln!(out, "{}", format!("» {} {}()", qualified, name).dark_grey());
     }
@@ -378,7 +804,7 @@ fn prompt_action<W: Write>(
 /// typing edits it in place, Esc opens the menu (Skip / Fail / Quit). On
 /// `Done` the live line is redrawn in grey with the interactive prompt marker
 /// becoming the '$', reminiscent of a shell.
-fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserInput {
+fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> UserInput {
     let qualified = display_path(qualified);
     // Seed the editable line
     let script = script.trim_end();
@@ -398,7 +824,11 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
         |o, i| draw(o, &qualified, "→", i),
     );
 
-    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
     if let UserInput::Done(produced) = &result {
         let ran = if let Value::Literali(text) = produced {
             text.trim_end()
@@ -414,7 +844,7 @@ fn prompt_command<W: Write>(out: &mut W, qualified: &str, script: &str) -> UserI
 /// Solicit a deferred input on the `▶` prompt line: `<Enter>` accepts the
 /// empty default, typing overrides it; the `<Esc>` menu and `<Ctrl-C>` abandon
 /// the call.
-fn prompt_acquire<W: Write>(out: &mut W, label: &str, list: bool) -> UserInput {
+fn prompt_acquire(mut out: &mut dyn Write, label: &str, list: bool) -> UserInput {
     let field = edit(String::new(), Value::Literali(String::new()), list);
     let result = interact(
         out,
@@ -426,18 +856,22 @@ fn prompt_acquire<W: Write>(out: &mut W, label: &str, list: bool) -> UserInput {
         },
         |o, i| draw(o, label, "↘", i),
     );
-    let _ = queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine));
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    );
     let _ = out.flush();
     result
 }
 
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
-/// row cleared. Shared by the step/scope prompt and the exec command gate; the
+/// row cleared. Shared by the step/scope prompt and the exec command prompt; the
 /// caller writes whatever record line it wants afterward.
-fn interact<W: Write>(
-    out: &mut W,
+fn interact(
+    mut out: &mut dyn Write,
     mut interaction: Interaction,
-    mut render: impl FnMut(&mut W, &Interaction) -> io::Result<()>,
+    mut render: impl FnMut(&mut dyn Write, &Interaction) -> io::Result<()>,
 ) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
@@ -461,7 +895,7 @@ fn interact<W: Write>(
         }
     };
     let _ = disable_raw_mode();
-    let _ = queue!(out, cursor::Show);
+    let _ = queue!(&mut out, cursor::Show);
     let _ = out.flush();
     result
 }
@@ -1008,13 +1442,17 @@ impl Interaction {
 /// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
 /// grey (matching the trace lines above), and ▶ is the shell-prompt character
 /// before the cursor/content area.
-fn draw<W: Write>(
-    out: &mut W,
+fn draw(
+    mut out: &mut dyn Write,
     qualified: &str,
     settle: &str,
     interaction: &Interaction,
 ) -> io::Result<()> {
-    queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+    queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    )?;
 
     let prefix = prompt_prefix_width(qualified, settle);
     // The `▶` previews the verdict Enter will settle: blue for an ordinary Done,
@@ -1045,18 +1483,22 @@ fn draw<W: Write>(
 
 /// Draw the read-only action prompt line: `» {path} {verb} {label} ▶`, the verb
 /// in light brown, the marker and path dark grey like the trace lines above.
-fn draw_action<W: Write>(
-    out: &mut W,
+fn draw_action(
+    mut out: &mut dyn Write,
     qualified: &str,
     verb: &str,
     label: &str,
     interaction: &Interaction,
 ) -> io::Result<()> {
-    queue!(out, cursor::MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+    queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    )?;
     write!(out, "{} ", format!("» {}", qualified).dark_grey())?;
-    queue!(out, SetForegroundColor(LIGHT_BROWN))?;
+    queue!(&mut out, SetForegroundColor(LIGHT_BROWN))?;
     write!(out, "{}", verb)?;
-    queue!(out, ResetColor)?;
+    queue!(&mut out, ResetColor)?;
     if !label.is_empty() {
         write!(out, " {}", label)?;
     }
@@ -1072,8 +1514,8 @@ fn draw_action<W: Write>(
 /// absolute columns from the line start; when the content is wider than the
 /// terminal they exceed its width and `place_cursor` resolves the wrap. Shared
 /// by the step/command prompt and the action prompt.
-fn draw_tail<W: Write>(
-    out: &mut W,
+fn draw_tail(
+    out: &mut dyn Write,
     interaction: &Interaction,
     prefix: u16,
 ) -> io::Result<(Option<u16>, u16)> {
@@ -1147,15 +1589,15 @@ fn draw_tail<W: Write>(
 /// When the content wrapped, an absolute `MoveToColumn` past the right margin
 /// clamps to the edge, so the target column is resolved against the terminal
 /// width into a move back from the end instead.
-fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>, end_col: u16) -> io::Result<()> {
+fn place_cursor(mut out: &mut dyn Write, cursor_col: Option<u16>, end_col: u16) -> io::Result<()> {
     match cursor_col {
         None => {
-            queue!(out, cursor::Hide)?;
+            queue!(&mut out, cursor::Hide)?;
         }
         Some(target) if target >= end_col => {
             // The cursor belongs at the end of what was just written, which is
             // exactly where writing left it — moving would only fight the wrap.
-            queue!(out, cursor::Show)?;
+            queue!(&mut out, cursor::Show)?;
         }
         Some(target) => {
             let width = size()
@@ -1171,11 +1613,11 @@ fn place_cursor<W: Write>(out: &mut W, cursor_col: Option<u16>, end_col: u16) ->
                 end_col / width
             };
             let up = end_row - target / width;
-            queue!(out, cursor::Show)?;
+            queue!(&mut out, cursor::Show)?;
             if up > 0 {
-                queue!(out, cursor::MoveUp(up))?;
+                queue!(&mut out, cursor::MoveUp(up))?;
             }
-            queue!(out, cursor::MoveToColumn(target % width))?;
+            queue!(&mut out, cursor::MoveToColumn(target % width))?;
         }
     }
     out.flush()
@@ -1205,7 +1647,7 @@ const LIGHT_BROWN: Color = Color::Rgb {
 
 /// Render a horizontal row of Response options in the formatter's orange, the
 /// active one in reverse video.
-fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io::Result<()> {
+fn render_choices(mut out: &mut dyn Write, choices: &[&str], active: usize) -> io::Result<()> {
     for (i, choice) in choices
         .iter()
         .enumerate()
@@ -1213,19 +1655,19 @@ fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io:
         if i > 0 {
             write!(out, "  ")?;
         }
-        queue!(out, SetAttribute(Attribute::Bold))?;
+        queue!(&mut out, SetAttribute(Attribute::Bold))?;
         if i == active {
             queue!(
-                out,
+                &mut out,
                 SetBackgroundColor(Color::White),
                 SetForegroundColor(RESPONSE_ACTIVE)
             )?;
             write!(out, " {} ", choice)?;
         } else {
-            queue!(out, SetForegroundColor(RESPONSE))?;
+            queue!(&mut out, SetForegroundColor(RESPONSE))?;
             write!(out, " {} ", choice)?;
         }
-        queue!(out, ResetColor, SetAttribute(Attribute::Reset))?;
+        queue!(&mut out, ResetColor, SetAttribute(Attribute::Reset))?;
     }
     Ok(())
 }
@@ -1233,7 +1675,11 @@ fn render_choices<W: Write>(out: &mut W, choices: &[&str], active: usize) -> io:
 /// Render the Esc-menu: the active item in reverse video, a disabled item (a
 /// greyed `Edit`) dimmed, the rest plain. The active item is always enabled, so
 /// reverse and dim never apply to the same item.
-fn render_menu<W: Write>(out: &mut W, interaction: &Interaction, active: usize) -> io::Result<()> {
+fn render_menu(
+    mut out: &mut dyn Write,
+    interaction: &Interaction,
+    active: usize,
+) -> io::Result<()> {
     for (i, item) in MENU
         .iter()
         .enumerate()
@@ -1243,13 +1689,13 @@ fn render_menu<W: Write>(out: &mut W, interaction: &Interaction, active: usize) 
         }
         let label = item.label();
         if i == active {
-            queue!(out, SetAttribute(Attribute::Reverse))?;
+            queue!(&mut out, SetAttribute(Attribute::Reverse))?;
             write!(out, " {} ", label)?;
-            queue!(out, SetAttribute(Attribute::Reset))?;
+            queue!(&mut out, SetAttribute(Attribute::Reset))?;
         } else if !interaction.enabled(*item) {
-            queue!(out, SetAttribute(Attribute::Dim))?;
+            queue!(&mut out, SetAttribute(Attribute::Dim))?;
             write!(out, " {} ", label)?;
-            queue!(out, SetAttribute(Attribute::Reset))?;
+            queue!(&mut out, SetAttribute(Attribute::Reset))?;
         } else {
             write!(out, " {} ", label)?;
         }
@@ -1351,153 +1797,6 @@ fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
     }
 }
 
-/// No-operator driver: writes a trace of each step to its output and takes
-/// the body's computed value as the step's outcome, running to completion
-/// or first failure. A pure-prose step (empty body value) records ().
-pub struct Automatic<W: Write> {
-    output: W,
-    renderer: &'static dyn Render,
-}
-
-impl Automatic<io::Stdout> {
-    pub fn new(colour: bool) -> Self {
-        Automatic {
-            output: io::stdout(),
-            renderer: if colour { &Terminal } else { &Identity },
-        }
-    }
-}
-
-#[cfg(test)]
-impl<W: Write> Automatic<W> {
-    pub fn with_handle(output: W) -> Self {
-        Automatic {
-            output,
-            renderer: &Identity,
-        }
-    }
-
-    pub fn into_output(self) -> W {
-        self.output
-    }
-}
-
-impl<W: Write> Driver for Automatic<W> {
-    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
-        render_step(
-            &mut self.output,
-            &display_path(fqn),
-            description,
-            depth,
-            self.renderer,
-        );
-    }
-
-    fn enter(&mut self, qualified: &str) {
-        render_enter(&mut self.output, &display_path(qualified), self.renderer);
-        let _ = writeln!(self.output);
-    }
-
-    fn commence(&mut self, label: &str) {
-        write_marker_line(&mut self.output, &format!("⇒ {}", label), self.renderer);
-        let _ = writeln!(self.output);
-    }
-
-    fn conclude(&mut self, label: &str, verdict: &UserInput) {
-        render_conclude(&mut self.output, label, verdict, self.renderer);
-    }
-
-    fn display(&mut self, content: &str) {
-        let _ = writeln!(self.output, "{}", content);
-        let _ = writeln!(self.output);
-    }
-
-    fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
-        let qualified = display_path(qualified);
-        write_marker_line(&mut self.output, &format!("↘ {}", qualified), self.renderer);
-        let _ = writeln!(self.output);
-        render_section(&mut self.output, numeral, title, self.renderer);
-        let _ = writeln!(self.output);
-    }
-
-    fn announce(&mut self, message: &str) {
-        write_indented(&mut self.output, message);
-    }
-
-    fn ask(
-        &mut self,
-        _qualified: &str,
-        _choices: &[&str],
-        produced: Value,
-        computable: bool,
-    ) -> UserInput {
-        if computable {
-            UserInput::Done(produced)
-        } else {
-            UserInput::Skip
-        }
-    }
-
-    fn depart(&mut self, qualified: &str) -> UserInput {
-        write_marker_line(
-            &mut self.output,
-            &format!("⇒ {}", display_path(qualified)),
-            self.renderer,
-        );
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn external(&mut self, _qualified: &str) -> UserInput {
-        UserInput::Skip
-    }
-
-    fn command(&mut self, qualified: &str, script: &str) -> UserInput {
-        render_command(
-            &mut self.output,
-            &display_path(qualified),
-            script,
-            self.renderer,
-        );
-        UserInput::Done(Value::Literali(script.to_string()))
-    }
-
-    fn action(&mut self, _qualified: &str, _name: &str, verb: &str, label: &str) -> UserInput {
-        let text = if label.is_empty() {
-            format!("» {}", verb)
-        } else {
-            format!("» {} {}", verb, label)
-        };
-        write_indented(&mut self.output, &text);
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn seal(&mut self, _qualified: &str, produced: Value, computable: bool) -> UserInput {
-        if computable {
-            UserInput::Done(produced)
-        } else {
-            UserInput::Skip
-        }
-    }
-
-    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
-        let qualified = display_path(qualified);
-        render_settle(&mut self.output, marker, &qualified, verdict, self.renderer);
-    }
-
-    fn acquire(
-        &mut self,
-        _qualified: &str,
-        _name: Option<&str>,
-        _forma: Option<&str>,
-    ) -> UserInput {
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn renderer(&self) -> &'static dyn Render {
-        self.renderer
-    }
-}
-
 #[derive(Debug)]
 #[allow(dead_code)] // fields are read only via Debug
 enum Trace {
@@ -1506,7 +1805,8 @@ enum Trace {
     },
     Leave {
         path: String,
-        outcome: Disposition,
+        // None marks a Quit.
+        outcome: Option<Standing>,
         result: Value,
     },
     Execute {
@@ -1524,13 +1824,14 @@ enum Trace {
     },
 }
 
-#[derive(Debug)]
-#[allow(dead_code)] // read only via Debug
-enum Disposition {
-    Done,
-    Skip,
-    Fail(String),
-    Stop,
+/// The standing a settled verdict leaves, or `None` for a Quit.
+fn disposition(input: &UserInput) -> Option<Standing> {
+    match input {
+        UserInput::Done(_) | UserInput::Override => Some(Standing::Done),
+        UserInput::Skip => Some(Standing::Skip),
+        UserInput::Fail(_) => Some(Standing::Fail),
+        UserInput::Quit => None,
+    }
 }
 
 /// A driver for debugging that prints each value-bearing callback as a
@@ -1555,15 +1856,9 @@ impl<D, W: Write> Transcript<D, W> {
     }
 
     fn trace_outcome(&mut self, path: &str, produced: Value, outcome: &UserInput) {
-        let outcome = match outcome {
-            UserInput::Done(_) | UserInput::Override => Disposition::Done,
-            UserInput::Skip => Disposition::Skip,
-            UserInput::Fail(reason) => Disposition::Fail(reason.clone()),
-            UserInput::Quit => Disposition::Stop,
-        };
         self.emit(Trace::Leave {
             path: path.to_string(),
-            outcome,
+            outcome: disposition(outcome),
             result: produced,
         });
     }
@@ -1669,9 +1964,9 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
         outcome
     }
 
-    fn settle(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
+    fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
         self.inner
-            .settle(marker, qualified, verdict);
+            .show_verdict(marker, qualified, verdict);
     }
 
     fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
@@ -1695,88 +1990,6 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     fn renderer(&self) -> &'static dyn Render {
         self.inner
             .renderer()
-    }
-}
-
-/// No-operator, no-output driver: takes each step and scope's computed value as
-/// its result, emitting nothing, and counts the results it settles — one per
-/// step and per structural-scope close. Lets a Technique be run without a
-/// terminal, the result count read back from `results()`.
-pub struct Headless {
-    results: usize,
-}
-
-impl Headless {
-    pub fn new() -> Self {
-        Headless { results: 0 }
-    }
-
-    pub fn results(&self) -> usize {
-        self.results
-    }
-}
-
-impl Driver for Headless {
-    fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
-
-    fn enter(&mut self, _qualified: &str) {}
-
-    fn commence(&mut self, _label: &str) {}
-
-    fn conclude(&mut self, _label: &str, _verdict: &UserInput) {}
-
-    fn display(&mut self, _content: &str) {}
-
-    fn announce(&mut self, _message: &str) {}
-
-    fn ask(
-        &mut self,
-        _qualified: &str,
-        _choices: &[&str],
-        produced: Value,
-        _computable: bool,
-    ) -> UserInput {
-        self.results += 1;
-        UserInput::Done(produced)
-    }
-
-    fn depart(&mut self, _qualified: &str) -> UserInput {
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn external(&mut self, _qualified: &str) -> UserInput {
-        self.results += 1;
-        UserInput::Skip
-    }
-
-    fn command(&mut self, _qualified: &str, script: &str) -> UserInput {
-        UserInput::Done(Value::Literali(script.to_string()))
-    }
-
-    fn action(&mut self, _qualified: &str, _name: &str, _verb: &str, _label: &str) -> UserInput {
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn section(&mut self, _qualified: &str, _numeral: &str, _title: &str) {}
-
-    fn seal(&mut self, _qualified: &str, produced: Value, _computable: bool) -> UserInput {
-        self.results += 1;
-        UserInput::Done(produced)
-    }
-
-    fn settle(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
-
-    fn acquire(
-        &mut self,
-        _qualified: &str,
-        _name: Option<&str>,
-        _forma: Option<&str>,
-    ) -> UserInput {
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn renderer(&self) -> &'static dyn Render {
-        &Identity
     }
 }
 
@@ -1937,10 +2150,10 @@ impl Driver for Mock {
             .expect("Mock::external called with no canned answers remaining")
     }
 
-    /// Records the command beat and auto-commands the run (`Done`) without
-    /// draining the answer queue — the exec gate is orthogonal to the step
-    /// verdicts a test drives. A test asserting gate behaviour inspects the
-    /// recorded `Command` event.
+    /// Records the command and auto-confirms it (`Done`) without draining the
+    /// answer queue — a command is orthogonal to the step verdicts a test
+    /// drives. A test asserting command behaviour inspects the recorded
+    /// `Command` event.
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
         self.events
             .push(Event::Command {
@@ -1950,9 +2163,9 @@ impl Driver for Mock {
         UserInput::Done(Value::Unitus)
     }
 
-    /// Records the action beat and auto-confirms the run (`Done`) without
-    /// draining the answer queue — like `command`, the action gate is
-    /// orthogonal to the step verdicts a test drives.
+    /// Records the action and auto-confirms it (`Done`) without draining the
+    /// answer queue — like `command`, an action is orthogonal to the step
+    /// verdicts a test drives.
     fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
         self.events
             .push(Event::Action {
@@ -1990,7 +2203,7 @@ impl Driver for Mock {
             })
     }
 
-    fn settle(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
+    fn show_verdict(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
 
     fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
         self.events

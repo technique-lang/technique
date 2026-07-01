@@ -119,9 +119,9 @@ fn automatic_settles_done_when_computable_skip_otherwise() {
 fn automatic_settle_renders_verdict_glyph() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Automatic::with_handle(&mut output);
-    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
-    p.settle("→", "/I/2", &UserInput::Skip);
-    p.settle("↙", "/I", &UserInput::Done(Value::Unitus));
+    p.show_verdict("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.show_verdict("→", "/I/2", &UserInput::Skip);
+    p.show_verdict("↙", "/I", &UserInput::Done(Value::Unitus));
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ I/1 ✓"));
     assert!(written.contains("→ I/2 ⊘"));
@@ -132,8 +132,8 @@ fn automatic_settle_renders_verdict_glyph() {
 fn console_settle_writes_verdict_line() {
     let mut output: Vec<u8> = Vec::new();
     let mut p = Console::with_output(&mut output);
-    p.settle("→", "/I/1", &UserInput::Done(Value::Unitus));
-    p.settle("↙", "/I", &UserInput::Skip);
+    p.show_verdict("→", "/I/1", &UserInput::Done(Value::Unitus));
+    p.show_verdict("↙", "/I", &UserInput::Skip);
     let written = String::from_utf8(output).expect("utf8");
     assert!(written.contains("→ I/1"));
     assert!(written.contains("✓"));

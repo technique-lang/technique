@@ -1419,13 +1419,14 @@ Prepare the ground { exec("true") } before the steps.
         .filter(|r| r.path == "/check:/0")
         .map(|r| &r.state)
         .collect();
-    // The /0 scope is bracketed Begin…Done with the exec's trace between.
+    // The exec runs (its trace between Begin and the verdict), but the prologue
+    // ends in prose so it settles Skip.
     let State::Begin = zero[0] else {
         panic!("expected Begin first at /check:/0, got {:?}", zero[0]);
     };
-    let State::Done(_) = zero[zero.len() - 1] else {
+    let State::Skip = zero[zero.len() - 1] else {
         panic!(
-            "expected Done last at /check:/0, got {:?}",
+            "expected Skip last at /check:/0, got {:?}",
             zero[zero.len() - 1]
         );
     };
