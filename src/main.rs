@@ -13,7 +13,7 @@ use technique::highlighting::{self, Terminal};
 use technique::linking;
 use technique::parsing;
 use technique::resolution;
-use technique::runner::{self, Builtin, Library, Mode, Outcome, RunId};
+use technique::runner::{self, Builtin, Conclusion, Library, Mode, Outcome, RunId};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -349,7 +349,7 @@ fn main() {
                         .default_value("interactive")
                         .action(ArgAction::Set)
                         .conflicts_with_all(["interactive", "automatic", "quiet"])
-                        .help("How to walk the procedure: interactively, prompting the operator at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
+                        .help("How to walk the procedure: interactively, prompting the user at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
                 )
                 .arg(
                     Arg::new("interactive")
@@ -960,14 +960,16 @@ fn main() {
             match runner::start(
                 mode, colour, filename, &program, &arguments, library, &names,
             ) {
-                Ok((run_id, Outcome::Stopped)) => {
+                Ok((run_id, Conclusion::Stopping)) => {
                     eprintln!(
                         "stopped; resume with `technique resume {}`",
                         run_id.render()
                     );
                     std::process::exit(0);
                 }
-                Ok((_, Outcome::Failed(_) | Outcome::Throw(_))) => std::process::exit(1),
+                Ok((_, Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_))) => {
+                    std::process::exit(1)
+                }
                 Ok((_, _)) => std::process::exit(0),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
@@ -1084,7 +1086,7 @@ fn main() {
             }
 
             match runner::resume(run_id, &program, library) {
-                Ok(Outcome::Stopped) => {
+                Ok(Conclusion::Stopping) => {
                     eprintln!(
                         "stopped; continue with `technique resume {}`",
                         run_id.render()

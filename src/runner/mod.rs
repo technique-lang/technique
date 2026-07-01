@@ -1,5 +1,5 @@
 //! Interactive runner that walks a translated Program step-by-step,
-//! prompting the operator and recording each completed step to a state store
+//! prompting the user and recording each completed step to a state store
 //! so a run can be resumed after interruption.
 
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ pub use context::Context;
 pub use driver::{Headless, Mode};
 pub use evaluator::Environment;
 pub use library::{library_for, Builtin, Library, Native};
-pub use runner::{Outcome, Runner, RunnerError};
+pub use runner::{Conclusion, Outcome, Runner, RunnerError};
 pub use state::{Appender, RecordError, RunId};
 
 use driver::{Automatic, Console, Transcript};
@@ -43,7 +43,7 @@ pub fn start<'i>(
     arguments: &[String],
     library: Library,
     libraries: &[String],
-) -> Result<(RunId, Outcome), RunnerError> {
+) -> Result<(RunId, Conclusion), RunnerError> {
     let env = bind_parameters(program, arguments)?;
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (run_id, run_dir) = store.create(document, now_iso8601(), libraries)?;
@@ -92,7 +92,7 @@ pub fn inspect<'i>(
     program: &'i Program<'i>,
     arguments: &[String],
     library: Library,
-) -> Result<Outcome, RunnerError> {
+) -> Result<Conclusion, RunnerError> {
     let env = bind_parameters(program, arguments)?;
     match mode {
         Mode::Interactive => {
@@ -141,7 +141,7 @@ pub fn resume<'i>(
     run_id: RunId,
     program: &'i Program<'i>,
     library: Library,
-) -> Result<Outcome, RunnerError> {
+) -> Result<Conclusion, RunnerError> {
     if !std::io::stdout().is_terminal() {
         return Err(RunnerError::TerminalRequired);
     }

@@ -3,7 +3,9 @@ use std::fs;
 use std::path::Path;
 
 use technique::parsing;
-use technique::runner::{Appender, Context, Environment, Headless, Library, Outcome, Runner};
+use technique::runner::{
+    Appender, Conclusion, Context, Environment, Headless, Library, Outcome, Runner,
+};
 use technique::translation;
 
 use crate::common::list_technique_documents;
@@ -113,11 +115,16 @@ fn ensure_run() {
             .skip(1)
             .collect();
 
-        let finished = if let Outcome::Done(_) = outcome {
-            true
-        } else {
-            println!("File {:?} did not finish Done: {:?}", file, outcome);
-            false
+        // A pure-prose procedure legitimately finishes Skip under the
+        // automatic driver; only a Fail or Stopped run is a test failure.
+        let finished = match outcome {
+            Conclusion::Completed(Outcome::Done(_)) | Conclusion::Completed(Outcome::Skip(_)) => {
+                true
+            }
+            _ => {
+                println!("File {:?} did not finish cleanly: {:?}", file, outcome);
+                false
+            }
         };
 
         if !finished || recorded != expected {
@@ -145,7 +152,7 @@ fn ensure_run() {
 
     if !failures.is_empty() {
         panic!(
-            "Sample runs must finish Done and match their expected trail, but {} files failed",
+            "Sample runs must complete, and must match expected results, but {} files failed",
             failures.len()
         );
     }

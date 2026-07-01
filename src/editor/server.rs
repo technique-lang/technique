@@ -762,6 +762,10 @@ impl TechniqueLanguageServer {
                     "Invalid section heading".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
+                ParsingError::MixedSectionContent(_) => (
+                    "Section content must be steps or procedures".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidInvocation(_) => (
                     "Invalid procedure Invocation".to_string(),
                     DiagnosticSeverity::ERROR,

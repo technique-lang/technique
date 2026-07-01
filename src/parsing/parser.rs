@@ -43,6 +43,7 @@ pub enum ParsingError {
     InvalidParameters(Span),
     InvalidDeclaration(Span),
     InvalidSection(Span),
+    MixedSectionContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
     InvalidCodeBlock(Span),
@@ -77,6 +78,7 @@ impl ParsingError {
             | ParsingError::InvalidParameters(span)
             | ParsingError::InvalidDeclaration(span)
             | ParsingError::InvalidSection(span)
+            | ParsingError::MixedSectionContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
             | ParsingError::InvalidCodeBlock(span)
@@ -1344,6 +1346,18 @@ impl<'i> Parser<'i> {
                     } else if is_step_parallel(outer.source) {
                         let step = outer.read_step_parallel()?;
                         steps.push(step);
+                    } else if begins_procedure_declaration(outer.source) {
+                        // A section that began with steps cannot then declare a
+                        // procedure; the two cannot be mixed.
+                        let line = outer
+                            .source
+                            .lines()
+                            .next()
+                            .unwrap_or("");
+                        return Err(ParsingError::MixedSectionContent(Span::new(
+                            outer.offset,
+                            line.len(),
+                        )));
                     } else {
                         // Skip unrecognized content line by line
                         outer.skip_to_next_line();
@@ -2121,43 +2135,47 @@ impl<'i> Parser<'i> {
 
     /// Parse top-level ordered step
     fn read_step_dependent(&mut self) -> Result<Scope<'i>, ParsingError> {
-        self.take_block_lines(is_step_dependent, is_step_dependent, |outer| {
-            outer.trim_whitespace();
-            let start = outer.offset;
+        self.take_block_lines(
+            is_step_dependent,
+            |line| is_step_dependent(line) || begins_procedure_declaration(line),
+            |outer| {
+                outer.trim_whitespace();
+                let start = outer.offset;
 
-            // Parse ordinal
-            let re = regex!(r"^\s*(\d+)\.\s+");
-            let cap = re
-                .captures(outer.source)
-                .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
+                // Parse ordinal
+                let re = regex!(r"^\s*(\d+)\.\s+");
+                let cap = re
+                    .captures(outer.source)
+                    .ok_or(ParsingError::InvalidStep(Span::new(outer.offset, 0)))?;
 
-            let number = cap
-                .get(1)
-                .ok_or(ParsingError::Expected(
-                    Span::new(outer.offset, 0),
-                    "the ordinal Step number",
-                ))?
-                .as_str();
+                let number = cap
+                    .get(1)
+                    .ok_or(ParsingError::Expected(
+                        Span::new(outer.offset, 0),
+                        "the ordinal Step number",
+                    ))?
+                    .as_str();
 
-            let l = cap
-                .get(0)
-                .unwrap()
-                .len();
+                let l = cap
+                    .get(0)
+                    .unwrap()
+                    .len();
 
-            outer.advance(l);
+                outer.advance(l);
 
-            let text = outer.read_descriptive()?;
+                let text = outer.read_descriptive()?;
 
-            // Parse scopes (role assignments and substeps)
-            let scopes = outer.read_scopes()?;
+                // Parse scopes (role assignments and substeps)
+                let scopes = outer.read_scopes()?;
 
-            return Ok(Scope::DependentBlock {
-                ordinal: number,
-                description: text,
-                subscopes: scopes,
-                span: outer.span_since(start),
-            });
-        })
+                return Ok(Scope::DependentBlock {
+                    ordinal: number,
+                    description: text,
+                    subscopes: scopes,
+                    span: outer.span_since(start),
+                });
+            },
+        )
     }
 
     /// Parse a top-level concurrent step
@@ -2827,7 +2845,6 @@ fn is_identifier(content: &str) -> bool {
 ///
 /// terminated by an end of line.
 
-#[allow(unused)]
 fn is_signature(content: &str) -> bool {
     let re = regex!(r"\s*.+?\s*->\s*.+?\s*$");
 
@@ -3051,6 +3068,29 @@ fn is_procedure_declaration(content: &str) -> bool {
             // For block isolation, we only need to check the identifier part.
             // Actual signature validation happens during parsing.
             has_valid_name
+        }
+        None => false,
+    }
+}
+
+/// Tests whether a line begins a complete procedure declaration. Used as a
+/// boundary when reading steps: unlike the permissive is_procedure_declaration(),
+/// the text after the colon must be empty or a valid signature, so a descriptive
+/// line such as "note: be careful here" is not mistaken for a declaration.
+fn begins_procedure_declaration(content: &str) -> bool {
+    let line = content
+        .lines()
+        .next()
+        .unwrap_or("");
+
+    if !is_procedure_declaration(line) {
+        return false;
+    }
+
+    match line.split_once(':') {
+        Some((_, after)) => {
+            let after = after.trim_ascii();
+            after.is_empty() || is_signature(after)
         }
         None => false,
     }

@@ -6,7 +6,11 @@
 2026-06-23T05:57:55.457Z 000088 /local_network:/0 Done ()
 2026-06-23T05:57:55.457Z 000088 /local_network:/1 Begin
 2026-06-23T05:57:55.457Z 000088 /local_network:/1 Execute exec()
-2026-06-23T05:57:55.646Z 000088 /local_network:/1 Return "eth0 UP"
-2026-06-23T05:57:55.807Z 000088 /local_network:/1 Done ()
-2026-06-23T05:57:55.972Z 000088 /local_network: Done ()
-2026-06-23T05:57:55.972Z 000088 / Finish
+2026-06-23T05:57:55.646Z 000088 /local_network:/1 Return "Linux"
+2026-06-23T05:57:55.646Z 000088 /local_network:/1 Done "Linux"
+2026-06-23T05:58:55.457Z 000088 /local_network:/2 Begin
+2026-06-23T05:58:55.457Z 000088 /local_network:/2 Execute exec()
+2026-06-23T05:58:55.646Z 000088 /local_network:/2 Return "eth0 UP"
+2026-06-23T05:58:55.807Z 000088 /local_network:/2 Skip
+2026-06-23T05:58:55.972Z 000088 /local_network: Done ()
+2026-06-23T05:58:55.972Z 000088 / Finish

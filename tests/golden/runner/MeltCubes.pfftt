@@ -1,0 +1,15 @@
+2026-06-14T05:58:08.700Z 000001 / Start file://tests/samples/runner/MeltCubes.tq
+2026-06-14T05:58:08.700Z 000001 /melt_cubes: Begin
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/1 Begin
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/1 Invoke https://example.com/Helper
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/1/<https://example.com/Helper> Begin
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/1/<https://example.com/Helper> Skip
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/1 Skip
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/2 Begin
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/2 Execute exec()
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/2 Return ""
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/2 Done ""
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/3 Begin
+2026-06-14T05:58:08.700Z 000001 /melt_cubes:/3 Skip
+2026-06-14T05:58:08.700Z 000001 /melt_cubes: Done ()
+2026-06-14T05:58:08.700Z 000001 / Finish

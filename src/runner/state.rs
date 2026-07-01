@@ -95,7 +95,7 @@ pub enum InvokeTarget {
 }
 
 /// On-disk store of runs, rooted at some base directory (conventionally
-/// `.store/` relative to the operator's current directory).
+/// `.store/` relative to the user's current directory).
 #[allow(dead_code)]
 pub struct Store {
     base: PathBuf,
@@ -1013,7 +1013,7 @@ fn split_once_top_level_equals(text: &str) -> Option<(&str, &str)> {
 }
 
 // Split `text` once at the first top-level ` ~ ` separator (the binding
-// operator joining a supplied value to its parameter name).
+// user joining a supplied value to its parameter name).
 fn split_once_top_level_tilde(text: &str) -> Option<(&str, &str)> {
     let bytes = text.as_bytes();
     let mut depth = 0i32;

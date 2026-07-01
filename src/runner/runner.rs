@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 
 use super::context::Context;
-use super::driver::{Driver, Standing, UserInput};
+use super::driver::{Driver, Kind, Standing, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
@@ -17,25 +17,27 @@ use crate::program::{
 };
 use crate::value::Value;
 
-/// What executing an Operation (or evaluating a Step at any scale) produced.
-/// `Done(Value)` is the natural success — for a leaf Step the operator's
-/// recorded value, for a Sequence / Section / procedure body the unit value
-/// once the whole subtree is finished. `Skipped` and `Failed` are operator
-/// verdicts on individual Steps. `Stopped` is a control signal that
-/// propagates immediately up the call stack to halt the walk; the deliberate
-/// quit was already recorded as a `State::Stop` lifecycle event, so this
-/// carries no payload — a `technique resume` picks up from the first step
-/// with no recorded outcome.
+/// A step's result. `Done(Value)` is the natural success — for a leaf Step the
+/// user's recorded value, for a Sequence / Section / procedure body the unit
+/// value once the whole subtree is finished. `Skip` and `Fail` are the user's
+/// verdicts on individual Steps.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Done(Value),
     /// Carries the body's computed value for block semantics; recorded as no value.
-    Skipped(Value),
-    Failed(Failure),
-    /// A failure thrown mid-body (a failed exec); propagates up to the
-    /// enclosing step, which catches it and settles as Fail.
-    Throw(Failure),
-    Stopped,
+    Skip(Value),
+    Fail(Failure),
+}
+
+/// Wraps an `Outcome`, plus the control signals that propagate up the walk. A
+/// failure thrown mid-body (i.e. a failed exec) is `Throwing`; it propagates
+/// up to the enclosing step, which catches it and records a Fail. `Stopping`
+/// shows that we are halting the walk immediately.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Conclusion {
+    Completed(Outcome),
+    Throwing(Failure),
+    Stopping,
 }
 
 /// Why a Step failed.
@@ -103,7 +105,7 @@ pub enum RunnerError {
 /// the position in the document via a `QualifiedPath` stack, carries an
 /// `Environment` with known result values. Holds the set of step FQNs already
 /// completed in a *prior* run — the resume snapshot plus an append handle to
-/// write results and the prompt the operator interacts through.
+/// write results and the prompt the user interacts through.
 pub struct Runner<'i, D: Driver> {
     program: &'i Program<'i>,
     appender: Appender,
@@ -175,7 +177,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// selection here is `program.subroutines[0]` — the synthetic
     /// anonymous wrapper if the document is top-level Steps, otherwise
     /// the first declared procedure.
-    pub fn run(&mut self, mut env: Environment) -> Result<Outcome, RunnerError> {
+    pub fn run(&mut self, mut env: Environment) -> Result<Conclusion, RunnerError> {
         if let Some(document) = &self.document {
             let label = format!(
                 "/ {},1 #{}",
@@ -260,17 +262,20 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
         let result = self.walk(&mut env, &entry.body);
         // A named entry procedure is a structural scope: a completed run closes
-        // with a final sign-off prompt at its path. A Quit or error walk skips
+        // with a final closing prompt at its path. A Quit or error walk skips
         // it — the run did not finish. An anonymous entry (a bare series of
         // steps) has no procedure to accept, so it just ends.
         let result = if name.is_some() {
             let qualified = self
                 .path
                 .render();
-            let computable = computable(&entry.body);
+            let kind = self.kind_of_scope(&entry.body);
             let sealed = match result {
-                Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                Ok(outcome) => self.seal_scope(&qualified, outcome, computable),
+                Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
+                Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, kind),
+                Ok(Conclusion::Throwing(failure)) => {
+                    self.seal_scope(&qualified, Outcome::Fail(failure), kind)
+                }
                 Err(error) => Err(error),
             };
             self.path
@@ -281,8 +286,8 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         // A run that walked to its end closes with a `Finish` record at the
         // root and the double arrow marker.
-        if let Ok(outcome) = &result {
-            if let Outcome::Stopped = outcome {
+        if let Ok(conclusion) = &result {
+            if let Conclusion::Stopping = conclusion {
             } else {
                 self.record_finish()?;
                 if let Some(document) = &self.document {
@@ -293,7 +298,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             .run_id()
                             .render()
                     );
-                    let verdict = verdict_from(outcome);
+                    let verdict = verdict_from(conclusion);
                     self.driver
                         .conclude(&label, &verdict);
                 }
@@ -306,7 +311,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         env: &mut Environment,
         op: &'i Operation<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         match op {
             Operation::Sequence(ops) => self.walk_sequence(env, ops),
             Operation::Prologue(ops) => {
@@ -331,7 +336,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             // supplies the parallel ordinal counter. A bare Step never reaches
             // `walk` directly.
             Operation::Step { .. } => {
-                unreachable!("a Step is always walked as a Sequence member")
+                unreachable!() // a Step is always walked as a Sequence member
             }
             Operation::Loop {
                 names, over, body, ..
@@ -350,16 +355,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // their say-so. An `Action` (e.g. `click`) is a physical
                 // interaction the user performs themselves: show the call
                 // read-only to confirm. Either way Skip or Fail declines and
-                // settles the step; Quit stops. `Pure` builtins just announce
+                // records the step; Quit stops. `Pure` builtins just announce
                 // and run.
-                let nature = match &executable.target {
-                    ExecutableRef::Resolved(id) => self
-                        .library
-                        .nature(*id),
-                    _ => Nature::Pure,
-                };
+                let kind = self.execute_kind(executable);
                 // Pure builtins record nothing; only effectful calls are traced.
-                let effectful = if let Nature::Pure = nature {
+                let effectful = if let Kind::Computable = kind {
                     false
                 } else {
                     true
@@ -375,8 +375,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                             },
                         })?;
                 }
-                let outcome = match nature {
-                    Nature::Command => {
+                let outcome = match kind {
+                    Kind::System => {
                         let script = self.script_text(env, executable)?;
                         match self
                             .driver
@@ -390,12 +390,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     executable,
                                     Some(&[chosen]),
                                 ) {
-                                    Ok(value) => Ok(Outcome::Done(value)),
+                                    Ok(value) => Ok(Conclusion::Completed(Outcome::Done(value))),
                                     // A non-zero exit throws to fail the step
                                     // rather than aborting the run; the walk
                                     // continues.
                                     Err(RunnerError::CommandFailed(code)) => {
-                                        Ok(Outcome::Throw(Failure::Aborted(format!(
+                                        Ok(Conclusion::Throwing(Failure::Aborted(format!(
                                             "External command exited with status {}",
                                             code
                                         ))))
@@ -403,15 +403,19 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     Err(other) => Err(other),
                                 }
                             }
-                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
-                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Skip => {
+                                Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)))
+                            }
+                            UserInput::Fail(reason) => {
+                                Ok(Conclusion::Throwing(Failure::Aborted(reason)))
+                            }
                             UserInput::Override => {
-                                unreachable!("a command prompt never offers Override")
+                                unreachable!() // a command prompt never offers Override
                             }
                             UserInput::Quit => self.record_stop(),
                         }
                     }
-                    Nature::Action => {
+                    Kind::Action => {
                         let (verb, label) = self.action_parts(env, executable)?;
                         match self
                             .driver
@@ -425,17 +429,21 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     executable,
                                     None,
                                 )?;
-                                Ok(Outcome::Done(value))
+                                Ok(Conclusion::Completed(Outcome::Done(value)))
                             }
-                            UserInput::Skip => Ok(Outcome::Skipped(Value::Unitus)),
-                            UserInput::Fail(reason) => Ok(Outcome::Throw(Failure::Aborted(reason))),
+                            UserInput::Skip => {
+                                Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)))
+                            }
+                            UserInput::Fail(reason) => {
+                                Ok(Conclusion::Throwing(Failure::Aborted(reason)))
+                            }
                             UserInput::Override => {
-                                unreachable!("an action prompt never offers Override")
+                                unreachable!() // an action prompt never offers Override
                             }
                             UserInput::Quit => self.record_stop(),
                         }
                     }
-                    Nature::Pure => {
+                    Kind::Computable => {
                         self.driver
                             .announce(&describe_execute(&function));
                         let value = super::evaluator::dispatch(
@@ -445,18 +453,19 @@ impl<'i, D: Driver> Runner<'i, D> {
                             executable,
                             None,
                         )?;
-                        Ok(Outcome::Done(value))
+                        Ok(Conclusion::Completed(Outcome::Done(value)))
                     }
+                    _ => unreachable!(), // execute_kind yields only System/Action/Computable
                 }?;
                 // Pair the Execute with a Return carrying its value; a stopped
                 // run leaves the enter unpaired.
-                let stopped = if let Outcome::Stopped = outcome {
+                let stopped = if let Conclusion::Stopping = outcome {
                     true
                 } else {
                     false
                 };
                 if effectful && !stopped {
-                    let returned = if let Outcome::Done(value) = &outcome {
+                    let returned = if let Conclusion::Completed(Outcome::Done(value)) = &outcome {
                         Some(value.clone())
                     } else {
                         None
@@ -485,7 +494,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Prose(_)
             | Operation::Hole => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
-                Ok(Outcome::Done(value))
+                Ok(Conclusion::Completed(Outcome::Done(value)))
             }
         }
     }
@@ -504,7 +513,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
-    /// The shell script an `exec` will run, rendered for the operator to see
+    /// The shell script an `exec` will run, rendered for the user to see
     /// before they command it. The command's first argument is the script.
     fn script_text(
         &mut self,
@@ -586,7 +595,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         env: &mut Environment,
         invocable: &'i Invocable<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         match &invocable.target {
             SubroutineRef::Resolved(id) => {
                 let subroutine = &self
@@ -645,7 +654,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .completed
                         .contains_key(&lexical)
                     {
-                        return Ok(Outcome::Done(Value::Unitus));
+                        return Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)));
                     }
 
                     // Acquire deferred arguments at the call site, in the
@@ -757,7 +766,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Record the dispatch once the arguments are in hand —
                     // declining at the prompt above returns before this, so a
                     // declined call records no Invoke. Recorded at answer-time,
-                    // so the gap from the previous event is the operator wait.
+                    // so the gap from the previous event is the user wait.
                     let run_id = self
                         .appender
                         .run_id();
@@ -784,13 +793,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                     self.announce_procedure(subroutine, name, &lexical, &local);
 
                     // Walk the callee's body in its own `local` environment,
-                    // then sign off its scope; a Quit or error skips the
-                    // sign-off, leaving the procedure unfinished.
+                    // then close its scope; a Quit or error skips the close,
+                    // leaving the procedure unfinished.
                     let result = self.walk(&mut local, &subroutine.body);
-                    let computable = computable(&subroutine.body);
+                    let kind = self.kind_of_scope(&subroutine.body);
                     let sealed = match result {
-                        Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-                        Ok(outcome) => self.seal_scope(&lexical, outcome, computable),
+                        Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
+                        Ok(Conclusion::Completed(outcome)) => {
+                            self.seal_scope(&lexical, outcome, kind)
+                        }
+                        Ok(Conclusion::Throwing(failure)) => {
+                            self.seal_scope(&lexical, Outcome::Fail(failure), kind)
+                        }
                         Err(error) => Err(error),
                     };
                     self.path
@@ -803,13 +817,13 @@ impl<'i, D: Driver> Runner<'i, D> {
             SubroutineRef::Unresolved(id) => {
                 self.driver
                     .announce(&format!("<{}>", id.value));
-                Ok(Outcome::Done(Value::Unitus))
+                Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)))
             }
             SubroutineRef::Deferred(ext) => {
                 // An external target lives in another document or system, so
                 // this run cannot descend into it. Record the call site, then
-                // present the invocation as its own node for the operator to
-                // settle: Done if they performed (or recorded elsewhere) the
+                // present the invocation as its own node for the user to
+                // decide: Done if they performed (or recorded elsewhere) the
                 // external procedure, otherwise Skip or Fail. An unattended
                 // (automatic) run records Skip — nothing executed it and no one
                 // is present to attest it, so it is not marked Done.
@@ -841,7 +855,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 {
                     self.path
                         .pop();
-                    return Ok(Outcome::Done(Value::Unitus));
+                    return Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)));
                 }
 
                 self.begin_scope(&qualified)?;
@@ -869,18 +883,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
 
                 self.driver
-                    .settle("⇐", &qualified, &input);
-                let outcome = outcome_from(input);
+                    .show_verdict("⇐", &qualified, &input);
+                let conclusion = outcome_from(input);
                 self.appender
                     .append(&Record {
                         recorded: now_iso8601(),
                         run_id,
                         path: qualified,
-                        state: record_state(&outcome),
+                        state: record_state(&conclusion),
                     })?;
                 self.path
                     .pop();
-                Ok(outcome)
+                Ok(conclusion)
             }
         }
     }
@@ -903,7 +917,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         names: &'i [language::Identifier<'i>],
         value: &'i Operation<'i>,
         inferred: Option<&'i language::Genus<'i>>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         let descriptive = if let Operation::Sequence(ops) = value {
             ops.is_empty()
         } else {
@@ -942,12 +956,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                                 Value::Unitus,
                             )?;
                         }
-                        return Ok(Outcome::Skipped(Value::Unitus));
+                        return Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)));
                     }
                     UserInput::Fail(reason) => {
-                        return Ok(Outcome::Failed(Failure::Aborted(reason)))
+                        return Ok(Conclusion::Completed(Outcome::Fail(Failure::Aborted(
+                            reason,
+                        ))))
                     }
-                    UserInput::Override => unreachable!("an acquire prompt never offers Override"),
+                    UserInput::Override => unreachable!(), // an acquire prompt never offers Override
                     UserInput::Quit => return self.record_stop(),
                 }
             }
@@ -965,7 +981,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             } else {
                 Value::Parametriq(acquired)
             };
-            Ok(Outcome::Done(produced))
+            Ok(Conclusion::Completed(Outcome::Done(produced)))
         } else {
             // Walk rather than evaluate: the bound value may be an effectful
             // spine operation — an `Invoke` that must descend into its callee
@@ -973,13 +989,13 @@ impl<'i, D: Driver> Runner<'i, D> {
             // the evaluator would mishandle as Unit. Walking a pure value is
             // equivalent to evaluating it.
             match self.walk(env, value)? {
-                Outcome::Done(value) => {
+                Conclusion::Completed(Outcome::Done(value)) => {
                     super::evaluator::bind_names(env, names, value.clone())?;
-                    Ok(Outcome::Done(value))
+                    Ok(Conclusion::Completed(Outcome::Done(value)))
                 }
-                Outcome::Skipped(value) => {
+                Conclusion::Completed(Outcome::Skip(value)) => {
                     super::evaluator::bind_names(env, names, Value::Unitus)?;
-                    Ok(Outcome::Skipped(value))
+                    Ok(Conclusion::Completed(Outcome::Skip(value)))
                 }
                 other => Ok(other),
             }
@@ -1001,13 +1017,13 @@ impl<'i, D: Driver> Runner<'i, D> {
         names: &'i [language::Identifier<'i>],
         over: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         match over {
             None => {
                 let mut number = 1;
                 loop {
-                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
-                        return Ok(Outcome::Stopped);
+                    if let Conclusion::Stopping = self.walk_iteration(env, names, number, body)? {
+                        return Ok(Conclusion::Stopping);
                     }
                     number += 1;
                 }
@@ -1023,11 +1039,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                         .lookup(id.value)
                         .is_none()
                     {
-                        return Ok(Outcome::Done(Value::Unitus));
+                        return Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)));
                     }
                 }
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
                 let items = super::evaluator::coerce_to_list(value)?;
+                let mut rollup = Rollup::new();
                 for (i, item) in items
                     .into_iter()
                     .enumerate()
@@ -1035,11 +1052,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                     super::evaluator::bind_names(env, names, item)?;
 
                     let number = i + 1;
-                    if let Outcome::Stopped = self.walk_iteration(env, names, number, body)? {
-                        return Ok(Outcome::Stopped);
+                    match self.walk_iteration(env, names, number, body)? {
+                        Conclusion::Stopping => return Ok(Conclusion::Stopping),
+                        Conclusion::Throwing(f) => return Ok(Conclusion::Throwing(f)),
+                        Conclusion::Completed(other) => rollup.absorb(other),
                     }
                 }
-                Ok(Outcome::Done(Value::Unitus))
+                // A loop yields unit, so discard the rolled-up value while keeping its verdict.
+                match rollup.settle() {
+                    Outcome::Done(_) => Ok(Conclusion::Completed(Outcome::Done(Value::Unitus))),
+                    Outcome::Skip(_) => Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus))),
+                    other => Ok(Conclusion::Completed(other)),
+                }
             }
         }
     }
@@ -1054,7 +1078,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         names: &'i [language::Identifier<'i>],
         number: usize,
         body: &'i Operation<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         self.path
             .push(PathSegment::Iteration(number));
         let qualified = self
@@ -1065,14 +1089,16 @@ impl<'i, D: Driver> Runner<'i, D> {
             .enter(&echo);
         let result = self.walk(env, body);
         let verdict = match &result {
-            Ok(Outcome::Done(_)) => Some(UserInput::Done(Value::Unitus)),
-            Ok(Outcome::Skipped(_)) => Some(UserInput::Skip),
-            Ok(Outcome::Failed(Failure::Aborted(reason))) => Some(UserInput::Fail(reason.clone())),
+            Ok(Conclusion::Completed(Outcome::Done(_))) => Some(UserInput::Done(Value::Unitus)),
+            Ok(Conclusion::Completed(Outcome::Skip(_))) => Some(UserInput::Skip),
+            Ok(Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason)))) => {
+                Some(UserInput::Fail(reason.clone()))
+            }
             _ => None,
         };
         if let Some(verdict) = verdict {
             self.driver
-                .settle("↙", &qualified, &verdict);
+                .show_verdict("↙", &qualified, &verdict);
         }
         self.path
             .pop();
@@ -1083,12 +1109,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         env: &mut Environment,
         ops: &'i [Operation<'i>],
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         let mut parallel_idx: usize = 0;
-        let mut last = Value::Unitus;
-        let mut failed: Option<Failure> = None;
-        let mut done_seen = false;
-        let mut skip_seen = false;
+        let mut rollup = Rollup::new();
         for op in ops {
             let outcome = match op {
                 Operation::Step { ordinal, .. } => {
@@ -1103,36 +1126,22 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
                 _ => self.walk(env, op)?,
             };
+            // A prose child contributes its value but no verdict, so it cannot
+            // make an otherwise-skipped sequence roll up as Done.
+            if let Operation::Prose(_) = op {
+                if let Conclusion::Completed(Outcome::Done(value)) = outcome {
+                    rollup.observe(value);
+                }
+                continue;
+            }
             match outcome {
-                Outcome::Done(value) => {
-                    done_seen = true;
-                    last = value;
-                }
-                Outcome::Skipped(value) => {
-                    skip_seen = true;
-                    last = value;
-                }
-                Outcome::Stopped => return Ok(Outcome::Stopped),
-                // A Throw is a hard failure mid-body; it propagates up to the
-                // enclosing step at once. A Fail is a step's recorded verdict; the
-                // sequence runs on to its siblings but carries the failure so the
-                // enclosing scope rolls up as failed (its sign-off may overrule).
-                Outcome::Throw(failure) => return Ok(Outcome::Throw(failure)),
-                Outcome::Failed(failure) => {
-                    if failed.is_none() {
-                        failed = Some(failure);
-                    }
-                }
+                // Stopped and Throw abandon the sequence at once; a Fail rolls up.
+                Conclusion::Stopping => return Ok(Conclusion::Stopping),
+                Conclusion::Throwing(failure) => return Ok(Conclusion::Throwing(failure)),
+                Conclusion::Completed(other) => rollup.absorb(other),
             }
         }
-        // Roll the children up by worst-wins precedence: any failure fails the
-        // sequence; otherwise a single green makes it Done; only an all-skipped
-        // (non-empty) sequence rolls up to Skip.
-        match failed {
-            Some(failure) => Ok(Outcome::Failed(failure)),
-            None if !done_seen && skip_seen => Ok(Outcome::Skipped(last)),
-            None => Ok(Outcome::Done(last)),
-        }
+        Ok(Conclusion::Completed(rollup.settle()))
     }
 
     fn walk_section(
@@ -1141,7 +1150,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         numeral: &'i str,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         self.path
             .push(PathSegment::Section(numeral));
         let qualified = self
@@ -1153,19 +1162,22 @@ impl<'i, D: Driver> Runner<'i, D> {
         {
             self.path
                 .pop();
-            return Ok(Outcome::Done(Value::Unitus));
+            return Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)));
         }
         self.begin_scope(&qualified)?;
         let result = self.perform_section(env, numeral, title, body);
         self.path
             .pop();
-        let computable = computable(body);
+        let kind = self.kind_of_scope(body);
         // A section is a structural scope: the user signs it off at its
         // close before the next sibling runs. A Quit or error walk skips the
         // prompt — the section did not complete.
         match result {
-            Ok(Outcome::Stopped) => Ok(Outcome::Stopped),
-            Ok(outcome) => self.seal_scope(&qualified, outcome, computable),
+            Ok(Conclusion::Stopping) => Ok(Conclusion::Stopping),
+            Ok(Conclusion::Completed(outcome)) => self.seal_scope(&qualified, outcome, kind),
+            Ok(Conclusion::Throwing(failure)) => {
+                self.seal_scope(&qualified, Outcome::Fail(failure), kind)
+            }
             Err(error) => Err(error),
         }
     }
@@ -1176,7 +1188,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         numeral: &'i str,
         title: Option<&'i Operation<'i>>,
         body: &'i Operation<'i>,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         let qualified = self
             .path
             .render();
@@ -1197,17 +1209,14 @@ impl<'i, D: Driver> Runner<'i, D> {
         env: &mut Environment,
         op: &'i Operation<'i>,
         parallel_index: usize,
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         let Operation::Step {
             ordinal,
             attributes,
-            source,
-            body,
-            responses,
             ..
         } = op
         else {
-            unreachable!("walk_step called with non-Step operation");
+            unreachable!(); // walk_step called with non-Step operation
         };
 
         for frame in attributes {
@@ -1224,7 +1233,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .path
             .render();
 
-        let result = self.perform_step(env, &qualified, ordinal, body, source, responses);
+        let result = self.perform_step(env, &qualified, op);
 
         self.path
             .pop();
@@ -1239,14 +1248,14 @@ impl<'i, D: Driver> Runner<'i, D> {
     // Walk the anonymous step-0 scope. Its `/0` address is bracketed
     // Begin…Done like a step's, so a completed prologue short-circuits on
     // resume (and rehydrates any bindings it made) rather than re-running its
-    // commands; unlike a step it takes no sign-off of its own, folding its
+    // commands; unlike a step it takes no closing prompt of its own, folding its
     // outcome into the enclosing procedure's seal.
     fn perform_prologue(
         &mut self,
         env: &mut Environment,
         qualified: &str,
         ops: &'i [Operation<'i>],
-    ) -> Result<Outcome, RunnerError> {
+    ) -> Result<Conclusion, RunnerError> {
         if let Some(value) = self
             .completed
             .get(qualified)
@@ -1265,36 +1274,45 @@ impl<'i, D: Driver> Runner<'i, D> {
             {
                 super::evaluator::bind_names(env, names, value.clone())?;
             }
-            return Ok(Outcome::Done(value));
+            return Ok(Conclusion::Completed(Outcome::Done(value)));
         }
 
         self.begin_scope(qualified)?;
-        let outcome = self.walk_sequence(env, ops)?;
-        if let Outcome::Stopped = outcome {
-            return Ok(outcome);
+        let conclusion = self.walk_sequence(env, ops)?;
+        if let Conclusion::Stopping = conclusion {
+            return Ok(conclusion);
         }
+        // Translation emits a Prologue only when the description carries real
+        // work (prose-only descriptions never become step 0)
         let record = Record {
             recorded: now_iso8601(),
             run_id: self
                 .appender
                 .run_id(),
             path: qualified.to_string(),
-            state: record_state(&outcome),
+            state: record_state(&conclusion),
         };
         self.appender
             .append(&record)?;
-        Ok(outcome)
+        Ok(conclusion)
     }
 
     fn perform_step(
         &mut self,
         env: &mut Environment,
         qualified: &str,
-        _ordinal: &Ordinal<'i>,
-        body: &'i Operation<'i>,
-        source: &'i language::Scope<'i>,
-        responses: &[&'i language::Response<'i>],
-    ) -> Result<Outcome, RunnerError> {
+        op: &'i Operation<'i>,
+    ) -> Result<Conclusion, RunnerError> {
+        let Operation::Step {
+            source,
+            body,
+            responses,
+            ..
+        } = op
+        else {
+            // perform_step called with non-Step operation
+            unreachable!();
+        };
         if let Some(value) = self
             .completed
             .get(qualified)
@@ -1311,7 +1329,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             } else if let Some(names) = binding_names(body) {
                 super::evaluator::bind_names(env, names, value.clone())?;
             }
-            return Ok(Outcome::Done(value));
+            return Ok(Conclusion::Completed(Outcome::Done(value)));
         }
 
         // Mark the start of work on this step before walking its body,
@@ -1352,12 +1370,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             Value::Unitus
         } else {
             match self.walk(env, body)? {
-                Outcome::Stopped => return Ok(Outcome::Stopped),
-                Outcome::Done(value) => value,
+                Conclusion::Stopping => return Ok(Conclusion::Stopping),
+                Conclusion::Completed(Outcome::Done(value)) => value,
                 // A rolled-up child failure signs off through `overrule`: the
                 // failure stands and propagates by default, but an interactive
                 // run may Override it to Done, severing the rollup.
-                Outcome::Failed(_) => {
+                Conclusion::Completed(Outcome::Fail(_)) => {
                     let input = self
                         .driver
                         .overrule(qualified, "→", Standing::Fail);
@@ -1365,76 +1383,79 @@ impl<'i, D: Driver> Runner<'i, D> {
                         return self.record_stop();
                     }
                     self.driver
-                        .settle("→", qualified, &input);
-                    let outcome = outcome_from(input);
+                        .show_verdict("→", qualified, &input);
+                    let conclusion = outcome_from(input);
                     let record = Record {
                         recorded: now_iso8601(),
                         run_id,
                         path: qualified.to_string(),
-                        state: record_state(&outcome),
+                        state: record_state(&conclusion),
                     };
                     self.appender
                         .append(&record)?;
-                    return Ok(outcome);
+                    return Ok(conclusion);
                 }
-                // The body settled itself — a declined command beat (Skip) or a
+                // The body recorded itself — a declined command beat (Skip) or a
                 // thrown exec failure (caught here as a Fail). Record and show
                 // its verdict without an acceptance prompt.
                 settled => {
-                    let settled = match settled {
-                        Outcome::Throw(failure) => Outcome::Failed(failure),
-                        other => other,
+                    let outcome = match settled {
+                        Conclusion::Throwing(failure) => Outcome::Fail(failure),
+                        Conclusion::Completed(other) => other,
+                        Conclusion::Stopping => unreachable!(), // Stopped returned above
                     };
+                    let conclusion = Conclusion::Completed(outcome);
                     let record = Record {
                         recorded: now_iso8601(),
                         run_id,
                         path: qualified.to_string(),
-                        state: record_state(&settled),
+                        state: record_state(&conclusion),
                     };
                     self.appender
                         .append(&record)?;
-                    let verdict = match &settled {
-                        Outcome::Skipped(_) => UserInput::Skip,
-                        Outcome::Failed(Failure::Aborted(reason)) => {
+                    let verdict = match &conclusion {
+                        Conclusion::Completed(Outcome::Skip(_)) => UserInput::Skip,
+                        Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason))) => {
                             UserInput::Fail(reason.clone())
                         }
-                        _ => unreachable!("only Skip and Fail reach the settled branch"),
+                        // only Skip and Fail reach the settled branch
+                        _ => unreachable!(),
                     };
                     self.driver
-                        .settle("→", qualified, &verdict);
-                    return Ok(settled);
+                        .show_verdict("→", qualified, &verdict);
+                    return Ok(conclusion);
                 }
             }
         };
 
         // A descriptive binding already took the user's input at its acquire
         // prompt; that value (or a bare <Enter>) is the step's verdict, so
-        // settle Done without a redundant acceptance prompt.
+        // record Done without a redundant acceptance prompt.
         if responses.is_empty() && binds_descriptively(body) {
-            let outcome = Outcome::Done(produced);
+            let conclusion = Conclusion::Completed(Outcome::Done(produced));
             self.driver
-                .settle("→", qualified, &verdict_from(&outcome));
+                .show_verdict("→", qualified, &verdict_from(&conclusion));
             let record = Record {
                 recorded: now_iso8601(),
                 run_id,
                 path: qualified.to_string(),
-                state: record_state(&outcome),
+                state: record_state(&conclusion),
             };
             self.appender
                 .append(&record)?;
-            return Ok(outcome);
+            return Ok(conclusion);
         }
 
         let choices: Vec<&str> = responses
             .iter()
             .map(|r| r.value)
             .collect();
-        let computable = computable(body);
+        let kind = self.kind_of_step(op);
         // `ask` consumes `produced`; keep a copy for a Skip to propagate.
         let propagate = produced.clone();
         let input = self
             .driver
-            .ask(qualified, &choices, produced, computable);
+            .ask(qualified, &choices, produced, kind);
 
         // Quit halts the walk; this step's Begin stands without a matching
         // outcome, so resume re-runs it.
@@ -1443,21 +1464,25 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
 
         self.driver
-            .settle("→", qualified, &input);
-        let outcome = match input {
-            UserInput::Skip => Outcome::Skipped(propagate),
+            .show_verdict("→", qualified, &input);
+        let conclusion = match input {
+            UserInput::Skip => Conclusion::Completed(Outcome::Skip(propagate)),
             other => outcome_from(other),
         };
         // Bind the chosen response to the step's name(s); a skip binds Unitus
         // so a later reference resolves, mirroring a descriptive acquire.
         if binding_via_response {
             if let Some(names) = binding_names(body) {
-                match &outcome {
-                    Outcome::Done(value) => {
-                        super::evaluator::bind_names(env, names, value.clone())?
+                if let Conclusion::Completed(outcome) = &conclusion {
+                    match outcome {
+                        Outcome::Done(value) => {
+                            super::evaluator::bind_names(env, names, value.clone())?
+                        }
+                        Outcome::Skip(_) => {
+                            super::evaluator::bind_names(env, names, Value::Unitus)?
+                        }
+                        _ => {}
                     }
-                    Outcome::Skipped(_) => super::evaluator::bind_names(env, names, Value::Unitus)?,
-                    _ => {}
                 }
             }
         }
@@ -1465,11 +1490,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             recorded: now_iso8601(),
             run_id,
             path: qualified.to_string(),
-            state: record_state(&outcome),
+            state: record_state(&conclusion),
         };
         self.appender
             .append(&record)?;
-        Ok(outcome)
+        Ok(conclusion)
     }
 
     /// Show a named procedure's heading on descent: the driver's `↘` enter line
@@ -1609,11 +1634,11 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         qualified: &str,
         outcome: Outcome,
-        computable: bool,
-    ) -> Result<Outcome, RunnerError> {
+        kind: Kind,
+    ) -> Result<Conclusion, RunnerError> {
         let standing = match &outcome {
-            Outcome::Failed(_) | Outcome::Throw(_) => Some(Standing::Fail),
-            Outcome::Skipped(_) => Some(Standing::Skip),
+            Outcome::Fail(_) => Some(Standing::Fail),
+            Outcome::Skip(_) => Some(Standing::Skip),
             _ => None,
         };
         if let Some(standing) = standing {
@@ -1624,7 +1649,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 return self.record_stop();
             }
             self.driver
-                .settle("↙", qualified, &input);
+                .show_verdict("↙", qualified, &input);
             let settled = outcome_from(input);
             let record = Record {
                 recorded: now_iso8601(),
@@ -1639,7 +1664,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             return Ok(settled);
         }
         let produced = match outcome {
-            Outcome::Done(value) | Outcome::Skipped(value) => value,
+            Outcome::Done(value) | Outcome::Skip(value) => value,
             _ => Value::Unitus,
         };
         let propagate = produced.clone();
@@ -1648,34 +1673,34 @@ impl<'i, D: Driver> Runner<'i, D> {
             .run_id();
         let input = self
             .driver
-            .seal(qualified, produced, computable);
+            .seal(qualified, produced, kind);
         if let UserInput::Quit = input {
             return self.record_stop();
         }
         self.driver
-            .settle("↙", qualified, &input);
-        let outcome = match input {
-            UserInput::Skip => Outcome::Skipped(propagate),
+            .show_verdict("↙", qualified, &input);
+        let conclusion = match input {
+            UserInput::Skip => Conclusion::Completed(Outcome::Skip(propagate)),
             other => outcome_from(other),
         };
         let record = Record {
             recorded: now_iso8601(),
             run_id,
             path: qualified.to_string(),
-            state: record_state(&outcome),
+            state: record_state(&conclusion),
         };
         self.appender
             .append(&record)?;
-        Ok(outcome)
+        Ok(conclusion)
     }
 
-    /// Settle an invocation declined at its acquire prompt: Skip and Fail
+    /// Record an invocation declined at its acquire prompt: Skip and Fail
     /// record the call's outcome at `qualified`; Quit stops the run.
-    fn abandon(&mut self, qualified: &str, input: UserInput) -> Result<Outcome, RunnerError> {
+    fn abandon(&mut self, qualified: &str, input: UserInput) -> Result<Conclusion, RunnerError> {
         if let UserInput::Quit = input {
             return self.record_stop();
         }
-        let outcome = outcome_from(input);
+        let conclusion = outcome_from(input);
         let run_id = self
             .appender
             .run_id();
@@ -1684,9 +1709,9 @@ impl<'i, D: Driver> Runner<'i, D> {
                 recorded: now_iso8601(),
                 run_id,
                 path: qualified.to_string(),
-                state: record_state(&outcome),
+                state: record_state(&conclusion),
             })?;
-        Ok(outcome)
+        Ok(conclusion)
     }
 
     /// Record a `Finish` at the root path, closing a run that walked to its end.
@@ -1705,7 +1730,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// Record a deliberate Stop at the root path and unwind the walk.
-    fn record_stop(&mut self) -> Result<Outcome, RunnerError> {
+    fn record_stop(&mut self) -> Result<Conclusion, RunnerError> {
         let run_id = self
             .appender
             .run_id();
@@ -1717,7 +1742,62 @@ impl<'i, D: Driver> Runner<'i, D> {
         };
         self.appender
             .append(&suspend)?;
-        Ok(Outcome::Stopped)
+        Ok(Conclusion::Stopping)
+    }
+
+    /// Classify an `Execute` by its builtin's `Nature`, resolving the target as
+    /// the dispatch does.
+    fn execute_kind(&self, exec: &Executable) -> Kind {
+        let nature = match &exec.target {
+            ExecutableRef::Resolved(id) => self
+                .library
+                .nature(*id),
+            _ => Nature::Pure,
+        };
+        match nature {
+            Nature::Pure => Kind::Computable,
+            Nature::Command => Kind::System,
+            Nature::Action => Kind::Action,
+        }
+    }
+
+    /// Classify a step by its final member: a step offering response choices is
+    /// a `Choice`; otherwise the value comes from the last operation, an ending
+    /// in prose being `Prose` and everything else `Computable`.
+    fn kind_of_step(&self, op: &Operation) -> Kind {
+        match op {
+            Operation::Step { responses, .. } if !responses.is_empty() => Kind::Choice,
+            Operation::Step { body, .. } => self.kind_of_step(body),
+            Operation::Sequence(ops) | Operation::Prologue(ops) => match ops.last() {
+                Some(last) => self.kind_of_step(last),
+                None => Kind::Prose,
+            },
+            Operation::Execute(exec) => self.execute_kind(exec),
+            Operation::Prose(_) => Kind::Prose,
+            _ => Kind::Computable,
+        }
+    }
+
+    /// A scope's Kind: `Computable` if any member holds work, else `Prose`. A
+    /// pure-prose scope is `Prose`, so an unattended run skips its close.
+    fn kind_of_scope(&self, op: &Operation) -> Kind {
+        match op {
+            Operation::Sequence(ops) | Operation::Prologue(ops) => {
+                if ops
+                    .iter()
+                    .any(|op| self.kind_of_scope(op) == Kind::Computable)
+                {
+                    Kind::Computable
+                } else {
+                    Kind::Prose
+                }
+            }
+            Operation::Step { body, .. } | Operation::Section { body, .. } => {
+                self.kind_of_scope(body)
+            }
+            Operation::Prose(_) => Kind::Prose,
+            _ => Kind::Computable,
+        }
     }
 }
 
@@ -1725,56 +1805,107 @@ fn describe_execute(function: &str) -> String {
     format!("{}()", function)
 }
 
-/// This is true when a body holds work to perform (that can be evaluated); a
-/// step whose definition is purely descriptive prose can and will have a
-/// Result, but is not computable.
-fn computable(op: &Operation) -> bool {
-    match op {
-        // A pure-prose body is not computable (this is fine!).
-        Operation::Sequence(ops) if ops.is_empty() => false,
-        Operation::Sequence(ops) | Operation::Prologue(ops) => ops
-            .iter()
-            .any(computable),
-        Operation::Step { body, .. } | Operation::Section { body, .. } => computable(body),
-        Operation::Prose(_) => false,
-        _ => true,
+/// Accumulates child outcomes into one worst-wins verdict: the rank climbs by
+/// `Standing` precedence (Fail > Done > Skip) while the value tracks last-seen.
+/// A `None` rank distinguishes an empty group (yields Done) from an all-skipped
+/// one (yields Skip).
+struct Rollup {
+    rank: Option<Standing>,
+    value: Value,
+    failure: Option<Failure>,
+}
+
+impl Rollup {
+    fn new() -> Self {
+        Rollup {
+            rank: None,
+            value: Value::Unitus,
+            failure: None,
+        }
+    }
+
+    fn absorb(&mut self, outcome: Outcome) {
+        let rank = match outcome {
+            Outcome::Done(value) => {
+                self.value = value;
+                Standing::Done
+            }
+            Outcome::Skip(value) => {
+                self.value = value;
+                Standing::Skip
+            }
+            Outcome::Fail(failure) => {
+                if self
+                    .failure
+                    .is_none()
+                {
+                    self.failure = Some(failure);
+                }
+                Standing::Fail
+            }
+        };
+        self.rank = Some(match self.rank {
+            Some(cur) => cur.max(rank),
+            None => rank,
+        });
+    }
+
+    /// Prose contributes its value but not a verdict, so surrounding prose never
+    /// masks a skipped Invoke.
+    fn observe(&mut self, value: Value) {
+        self.value = value;
+    }
+
+    fn settle(self) -> Outcome {
+        match self
+            .rank
+            .unwrap_or(Standing::Done)
+        {
+            Standing::Fail => Outcome::Fail(
+                self.failure
+                    .unwrap(),
+            ),
+            Standing::Skip => Outcome::Skip(self.value),
+            Standing::Done => Outcome::Done(self.value),
+        }
     }
 }
 
-/// Lift a `UserInput` from the prompt into the runner's `Outcome`. An Override
-/// settles `Done ()`, severing the rollup so the failed child below does not
-/// propagate past this node.
-fn outcome_from(input: UserInput) -> Outcome {
+/// Lift a `UserInput` from the prompt into a `Conclusion`. An Override records
+/// `Done ()`, severing the rollup so the failed child below does not propagate
+/// past this node. A Quit becomes `Stopped`.
+fn outcome_from(input: UserInput) -> Conclusion {
     match input {
-        UserInput::Done(value) => Outcome::Done(value),
-        UserInput::Override => Outcome::Done(Value::Unitus),
-        UserInput::Skip => Outcome::Skipped(Value::Unitus),
-        UserInput::Fail(reason) => Outcome::Failed(Failure::Aborted(reason)),
-        UserInput::Quit => Outcome::Stopped,
+        UserInput::Done(value) => Conclusion::Completed(Outcome::Done(value)),
+        UserInput::Override => Conclusion::Completed(Outcome::Done(Value::Unitus)),
+        UserInput::Skip => Conclusion::Completed(Outcome::Skip(Value::Unitus)),
+        UserInput::Fail(reason) => Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason))),
+        UserInput::Quit => Conclusion::Stopping,
     }
 }
 
-/// The closing line's verdict, rolling the run's final `Outcome` back into the
-/// `UserInput` glyph the driver renders — mirroring the entry procedure's
-/// sign-off. A `Done` shows `✓`, a `Skipped` `⊘`, a failure `✗`; the value and
+/// The closing line's verdict, rolling the run's final `Conclusion` back into
+/// the `UserInput` glyph the driver renders — mirroring the entry procedure's
+/// close. A `Done` shows `✓`, a `Skip` `⊘`, a failure `✗`; the value and
 /// reason are immaterial to the glyph.
-fn verdict_from(outcome: &Outcome) -> UserInput {
-    match outcome {
-        Outcome::Done(_) => UserInput::Done(Value::Unitus),
-        Outcome::Skipped(_) => UserInput::Skip,
+fn verdict_from(conclusion: &Conclusion) -> UserInput {
+    match conclusion {
+        Conclusion::Completed(Outcome::Done(_)) => UserInput::Done(Value::Unitus),
+        Conclusion::Completed(Outcome::Skip(_)) => UserInput::Skip,
         _ => UserInput::Fail(String::new()),
     }
 }
 
-/// Project the runner's in-memory `Outcome` into the on-disk `State` for the
-/// PFFTT file. A `Done` records its full value (serialized by the state codec),
-/// so a value bound with `~` rehydrates on resume. Quit is unreachable here:
-/// the caller filters it out before recording.
-fn record_state(outcome: &Outcome) -> State {
-    match outcome {
-        Outcome::Done(value) => State::Done(Some(value.clone())),
-        Outcome::Skipped(_) => State::Skip,
-        Outcome::Failed(Failure::Aborted(reason)) | Outcome::Throw(Failure::Aborted(reason)) => {
+/// Project a `Conclusion` into the on-disk `State` for the PFFTT file. A `Done`
+/// records its full value (serialized by the state codec), so a value bound
+/// with `~` rehydrates on resume. A thrown failure records Fail. Stopped is
+/// unreachable here: the caller filters it out before recording.
+fn record_state(conclusion: &Conclusion) -> State {
+    match conclusion {
+        Conclusion::Completed(Outcome::Done(value)) => State::Done(Some(value.clone())),
+        Conclusion::Completed(Outcome::Skip(_)) => State::Skip,
+        Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason)))
+        | Conclusion::Throwing(Failure::Aborted(reason)) => {
             if reason.is_empty() {
                 // The user failed the step without giving a reason; record the
                 // failure with no reason rather than an empty-string one.
@@ -1783,9 +1914,7 @@ fn record_state(outcome: &Outcome) -> State {
                 State::Fail(Some(super::state::fail_reason(reason)))
             }
         }
-        Outcome::Stopped => {
-            unreachable!("Stop is recorded as a lifecycle event, not a step result")
-        }
+        Conclusion::Stopping => unreachable!(), // Stop is recorded as a lifecycle event, not a step result
     }
 }
 

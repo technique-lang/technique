@@ -65,10 +65,9 @@ impl From<&language::Quantity<'_>> for Quantity {
 }
 
 /// Plain-text rendering of a Value, suitable for splicing into an
-/// interpolated string fragment or showing the operator in a step
-/// description prompt. Numeric formatting delegates to
-/// `crate::formatting`'s number renderer so the operator sees the
-/// same shape they would in source.
+/// interpolated string fragment or showing the user in a step description
+/// prompt. Numeric formatting delegates to `crate::formatting`'s number
+/// renderer so the user sees the same shape they would in source.
 ///
 /// Not intended for on-disk serialization.
 impl Display for Value {
