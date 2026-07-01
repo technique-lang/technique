@@ -286,7 +286,7 @@ impl<'i> Parser<'i> {
                             if is_section(self.source) {
                                 match self.read_section() {
                                     Ok(section) => {
-                                        if let Some(Element::Steps(ref mut steps, _)) = procedure
+                                        if let Some(Element::Steps(steps, _)) = procedure
                                             .elements
                                             .last_mut()
                                         {
