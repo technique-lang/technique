@@ -976,7 +976,7 @@ fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, rend
     let _ = writeln!(out, "{} {}", line, renderer.style(syntax, glyph));
 }
 
-/// Render an automatically-run shell command on one line: `{path} $ {script}`,
+/// Render an automatically-run shell command on one line: `→ {path} $ {script}`,
 /// the whole line dark grey like the trace chrome so it reads as announce
 /// rather than as the command's own output that follows. The `$` stands in for
 /// a shell prompt (distinct from the user's `▶` edit prompt). Trailing
@@ -984,7 +984,7 @@ fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, rend
 fn render_command<W: Write>(out: &mut W, qualified: &str, script: &str, renderer: &dyn Render) {
     let line = renderer.style(
         Syntax::Marker,
-        &format!("{} $ {}", qualified, script.trim_end()),
+        &format!("→ {} $ {}", qualified, script.trim_end()),
     );
     let _ = writeln!(out, "{}", line);
 }
