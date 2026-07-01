@@ -1028,6 +1028,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                 }
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
                 let items = super::evaluator::coerce_to_list(value)?;
+                // Roll the iterations up worst-wins: a failure fails the
+                // loop; otherwise a single Done makes it Done; an all-skipped
+                // (non-empty) loop rolls up to Skip.
+                let mut done_seen = false;
+                let mut skip_seen = false;
+                let mut failed: Option<Failure> = None;
                 for (i, item) in items
                     .into_iter()
                     .enumerate()

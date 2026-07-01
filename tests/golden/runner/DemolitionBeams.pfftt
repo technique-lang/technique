@@ -1,10 +1,10 @@
 2026-06-14T05:58:08.700Z 000001 / Start file://tests/samples/runner/DemolitionBeams.tq
 2026-06-14T05:58:08.700Z 000001 /remove_planet: Begin
 2026-06-14T05:58:08.700Z 000001 /remove_planet:/1 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/1 Done ()
+2026-06-14T05:58:08.700Z 000001 /remove_planet:/1 Skip
 2026-06-14T05:58:08.700Z 000001 /remove_planet:/2 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/2 Done ()
+2026-06-14T05:58:08.700Z 000001 /remove_planet:/2 Skip
 2026-06-14T05:58:08.700Z 000001 /remove_planet:/3 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/3 Done ()
-2026-06-14T05:58:08.700Z 000001 /remove_planet: Done ()
+2026-06-14T05:58:08.700Z 000001 /remove_planet:/3 Skip
+2026-06-14T05:58:08.700Z 000001 /remove_planet: Skip
 2026-06-14T05:58:08.700Z 000001 / Finish

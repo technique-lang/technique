@@ -5,71 +5,71 @@
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine: Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/a Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/a Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/a Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/b Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/b Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1/b Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/1 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/c Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/c Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/c Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/d Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/d Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/d Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/e Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/e Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2/e Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/2 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/f Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/f Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/f Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/g Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/g Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/g Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/h Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/h Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3/h Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/3 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/4 Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/4 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/4 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/5 Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/5 Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine: Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine:/5 Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I/setup_machine: Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/I Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II Invoke clean_patio:
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II/clean_patio: Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II/clean_patio: Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II/clean_patio: Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/II Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III Invoke tidy_up:
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up: Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/1 Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/1 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/1 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/2 Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/2 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/2 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/a Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/a Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/a Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/b Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/b Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/b Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/c Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/c Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3/c Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/3 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/d Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/d Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/d Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/e Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/e Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4/e Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/4 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/f Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/f Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/f Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/g Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/g Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5 Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5/g Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/5 Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6 Begin
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/h Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/h Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/h Skip
 2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/j Begin
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/j Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6 Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up: Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III Done ()
-2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning: Done ()
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6/j Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up:/6 Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III/tidy_up: Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning:/III Skip
+2026-06-14T05:58:08.773Z 000002 /high_pressure_cleaning: Skip
 2026-06-14T05:58:08.773Z 000002 / Finish
