@@ -51,7 +51,7 @@ pub enum UserInput {
     Quit,
 }
 
-/// The default verdict a node's rolled-up body leaves standing at its sign-off.
+/// The default verdict a node's rolled-up body leaves standing at its close.
 /// Declaration order encodes verdict precedence: Fail beats Done beats Skip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Standing {
@@ -81,7 +81,7 @@ pub trait Driver {
 
     /// Cross out of this document on the way out: the `⇐` boundary line carrying
     /// the document name, version, and run identifier (`/ NetworkProbe,1 000096`),
-    /// closed by the run's rolled-up verdict glyph just as a scope's `↙` sign-off
+    /// closed by the run's rolled-up verdict glyph just as a scope's `↙` close
     /// is. Quit renders no glyph.
     fn conclude(&mut self, label: &str, verdict: &UserInput);
 
@@ -117,7 +117,7 @@ pub trait Driver {
     /// before departing; the unattended drivers proceed with `Done`.
     fn depart(&mut self, qualified: &str) -> UserInput;
 
-    /// Settle an external invocation this run cannot perform (a `<uri>` call
+    /// Record an external invocation this run cannot perform (a `<uri>` call
     /// into another document or system). `Console` prompts the operator to
     /// attest it — `Done` if it was performed or recorded elsewhere, otherwise
     /// `Skip` / `Fail` / `Quit`. The unattended drivers return `Skip`: nothing
@@ -126,22 +126,22 @@ pub trait Driver {
     fn external(&mut self, qualified: &str) -> UserInput;
 
     /// Gate a shell `exec` on the user's command: show the `script` to be run
-    /// and settle on the user's verdict. `Done` means run it now; Skip / Fail
-    /// decline the run and settle the step; Quit stops. `Automatic` runs
+    /// and act on the user's verdict. `Done` means run it now; Skip / Fail
+    /// decline the run and record the step; Quit stops. `Automatic` runs
     /// unconditionally, returning `Done` without prompting.
     fn command(&mut self, qualified: &str, script: &str) -> UserInput;
 
     /// Present a physical `Action` (a `browser`-library call like
     /// `click("Actions")`) the user performs themselves: show the imperative
-    /// `verb` and its `label` read-only on the prompt line and settle on the
+    /// `verb` and its `label` read-only on the prompt line and act on the
     /// user's verdict. `Done` means they did it, leaving a compact `{name}()`
-    /// trace; Skip / Fail decline and settle the step; Quit stops. Unlike
+    /// trace; Skip / Fail decline and record the step; Quit stops. Unlike
     /// `command` there is no edit buffer. `Automatic` returns `Done` without
     /// prompting.
     fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput;
 
     /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
-    /// the section's sign-off closes with) followed by its prose heading —
+    /// the section's close marker) followed by its prose heading —
     /// numeral and title, e.g. `II. Check internet connectivity`.
     fn section(&mut self, qualified: &str, numeral: &str, title: &str);
 
@@ -384,7 +384,7 @@ impl Output for Silent {
 }
 
 /// The interactive verdict policy: prompt the user on the output's surface
-/// and read their keystrokes. The keystroke logic lives in `Interaction`. The
+/// and read their keystrokes. The keystroke logic lives in `Prompt`. The
 /// default is confirmation: `<Enter>` completes the step, accepting the
 /// default action or the body's current value intact; the `<Esc>` menu offers
 /// Skip, Fail, Quit, sometimes Override, and (for an editable scalar) Edit.
@@ -741,7 +741,7 @@ fn prompt(
     produced: Value,
 ) -> UserInput {
     let qualified = display_path(qualified);
-    let result = interact(out, Interaction::begin(choices, produced), |o, i| {
+    let result = interact(out, Prompt::begin(choices, produced), |o, i| {
         draw(o, &qualified, settle, i)
     });
     let _ = queue!(
@@ -760,7 +760,7 @@ fn prompt_overrule(
     standing: Standing,
 ) -> UserInput {
     let qualified = display_path(qualified);
-    let result = interact(out, Interaction::overrule(standing), |o, i| {
+    let result = interact(out, Prompt::overrule(standing), |o, i| {
         draw(o, &qualified, marker, i)
     });
     let _ = queue!(
@@ -784,7 +784,7 @@ fn prompt_action(
     label: &str,
 ) -> UserInput {
     let qualified = display_path(qualified);
-    let result = interact(out, Interaction::begin(&[], Value::Unitus), |o, i| {
+    let result = interact(out, Prompt::begin(&[], Value::Unitus), |o, i| {
         draw_action(o, &qualified, verb, label, i)
     });
     let _ = queue!(
@@ -815,7 +815,7 @@ fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> Use
     );
     let result = interact(
         out,
-        Interaction {
+        Prompt {
             field,
             menu: None,
             reason: None,
@@ -848,7 +848,7 @@ fn prompt_acquire(mut out: &mut dyn Write, label: &str, list: bool) -> UserInput
     let field = edit(String::new(), Value::Literali(String::new()), list);
     let result = interact(
         out,
-        Interaction {
+        Prompt {
             field,
             menu: None,
             reason: None,
@@ -870,8 +870,8 @@ fn prompt_acquire(mut out: &mut dyn Write, label: &str, list: bool) -> UserInput
 /// caller writes whatever record line it wants afterward.
 fn interact(
     mut out: &mut dyn Write,
-    mut interaction: Interaction,
-    mut render: impl FnMut(&mut dyn Write, &Interaction) -> io::Result<()>,
+    mut interaction: Prompt,
+    mut render: impl FnMut(&mut dyn Write, &Prompt) -> io::Result<()>,
 ) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
@@ -967,7 +967,7 @@ fn render_settle<W: Write>(
 }
 
 /// Render the run's closing `⇐` boundary line, the rolled-up verdict glyph
-/// following the label just as a scope's `↙` sign-off carries its own. Quit
+/// following the label just as a scope's `↙` close carries its own. Quit
 /// renders nothing, as in `render_settle`.
 fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, renderer: &dyn Render) {
     let (glyph, syntax) = match verdict_glyph(verdict) {
@@ -1124,7 +1124,7 @@ struct Reason {
 /// folds one key into the state, returning `Some(UserInput)` once the
 /// operator has settled on an outcome. `reason` is the Fail submenu, open only
 /// while `menu` rests on Fail.
-struct Interaction {
+struct Prompt {
     field: Field,
     menu: Option<usize>,
     reason: Option<Reason>,
@@ -1134,7 +1134,7 @@ struct Interaction {
     standing: Standing,
 }
 
-impl Interaction {
+impl Prompt {
     /// Seed an interaction with the supplied choices and a Value. The
     /// behaviour on pressing <Enter> is confirmation that the step is done,
     /// not data entry: `<Enter>` completes the step and the step's value is
@@ -1160,7 +1160,7 @@ impl Interaction {
                 active: 0,
             }
         };
-        Interaction {
+        Prompt {
             field,
             menu: None,
             reason: None,
@@ -1172,7 +1172,7 @@ impl Interaction {
     /// (`Fail` or `Skip`). No value to accept, so the field is a frozen Unit;
     /// the standing colours the `▶` and, on `Fail`, lights up `Override`.
     fn overrule(standing: Standing) -> Self {
-        Interaction {
+        Prompt {
             field: Field::Frozen {
                 produced: Value::Unitus,
             },
@@ -1446,7 +1446,7 @@ fn draw(
     mut out: &mut dyn Write,
     qualified: &str,
     settle: &str,
-    interaction: &Interaction,
+    interaction: &Prompt,
 ) -> io::Result<()> {
     queue!(
         &mut out,
@@ -1488,7 +1488,7 @@ fn draw_action(
     qualified: &str,
     verb: &str,
     label: &str,
-    interaction: &Interaction,
+    interaction: &Prompt,
 ) -> io::Result<()> {
     queue!(
         &mut out,
@@ -1516,7 +1516,7 @@ fn draw_action(
 /// by the step/command prompt and the action prompt.
 fn draw_tail(
     out: &mut dyn Write,
-    interaction: &Interaction,
+    interaction: &Prompt,
     prefix: u16,
 ) -> io::Result<(Option<u16>, u16)> {
     let mut cursor_col: Option<u16> = None;
@@ -1675,11 +1675,7 @@ fn render_choices(mut out: &mut dyn Write, choices: &[&str], active: usize) -> i
 /// Render the Esc-menu: the active item in reverse video, a disabled item (a
 /// greyed `Edit`) dimmed, the rest plain. The active item is always enabled, so
 /// reverse and dim never apply to the same item.
-fn render_menu(
-    mut out: &mut dyn Write,
-    interaction: &Interaction,
-    active: usize,
-) -> io::Result<()> {
+fn render_menu(mut out: &mut dyn Write, interaction: &Prompt, active: usize) -> io::Result<()> {
     for (i, item) in MENU
         .iter()
         .enumerate()
@@ -2177,10 +2173,10 @@ impl Driver for Mock {
         UserInput::Done(Value::Unitus)
     }
 
-    /// A scope sign-off auto-accepts (records `Done`) and records the event,
+    /// A scope close auto-accepts (records `Done`) and records the event,
     /// rather than draining the `ask` answer queue — the structural-scope
     /// close is orthogonal to the step verdicts a test drives. A test
-    /// asserting sign-off behaviour inspects the recorded `Seal` event.
+    /// asserting close behaviour inspects the recorded `Seal` event.
     fn seal(&mut self, qualified: &str, _produced: Value, _computable: bool) -> UserInput {
         self.events
             .push(Event::Seal {

@@ -12,7 +12,9 @@ use crate::resolution::resolve;
 use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
-use crate::runner::runner::{bind_parameters, render_argument_echo, Outcome, Runner, RunnerError};
+use crate::runner::runner::{
+    bind_parameters, render_argument_echo, Conclusion, Outcome, Runner, RunnerError,
+};
 use crate::runner::state::{parse_record, Appender, InvokeTarget, State, Store, Supplied};
 use crate::translation::translate;
 use crate::value::Value;
@@ -140,7 +142,7 @@ fn step_outcomes_recorded() {
     let outcome = runner
         .run(env)
         .expect("run");
-    assert_eq!(outcome, Outcome::Done(Value::Unitus));
+    assert_eq!(outcome, Conclusion::Completed(Outcome::Done(Value::Unitus)));
     let pfftt = fixture.pfftt_contents();
     let lines: Vec<&str> = pfftt
         .lines()
@@ -418,7 +420,7 @@ fn quit_propagates_and_stops_walking() {
     let outcome = runner
         .run(env)
         .expect("run");
-    assert_eq!(outcome, Outcome::Stopped);
+    assert_eq!(outcome, Conclusion::Stopping);
 
     let prompt = runner.into_driver();
     let step_fqns: Vec<&str> = prompt
@@ -745,7 +747,7 @@ cycle(s) : Situation -> Done
     let outcome = runner
         .run(Environment::new())
         .expect("run");
-    assert_eq!(outcome, Outcome::Stopped);
+    assert_eq!(outcome, Conclusion::Stopping);
 
     let pfftt = fixture.pfftt_contents();
     assert!(
@@ -1239,7 +1241,7 @@ check :
         .run(Environment::new())
         .expect("run");
     match outcome {
-        Outcome::Done(_) => {}
+        Conclusion::Completed(Outcome::Done(_)) => {}
         other => panic!("expected Done, got {:?}", other),
     }
     let trace = String::from_utf8(
@@ -1287,7 +1289,7 @@ check :
         .run(Environment::new())
         .expect("run");
     match outcome {
-        Outcome::Failed(_) => {}
+        Conclusion::Completed(Outcome::Fail(_)) => {}
         other => panic!("expected Failed, got {:?}", other),
     }
 
@@ -1341,7 +1343,7 @@ fn interactive_override_severs_the_rollup_to_done() {
         .run(Environment::new())
         .expect("run");
     match outcome {
-        Outcome::Done(_) => {}
+        Conclusion::Completed(Outcome::Done(_)) => {}
         other => panic!("expected Done after override, got {:?}", other),
     }
 }
@@ -1371,7 +1373,7 @@ fn interactive_accepting_a_failure_propagates() {
         .run(Environment::new())
         .expect("run");
     match outcome {
-        Outcome::Failed(_) => {}
+        Conclusion::Completed(Outcome::Fail(_)) => {}
         other => panic!("expected Failed, got {:?}", other),
     }
 }
@@ -2347,7 +2349,7 @@ test :
 
 #[test]
 fn automatic_records_done_for_computable_step_skip_for_prose() {
-    fn record_of(label: &str, body: Operation<'static>) -> (Outcome, State) {
+    fn record_of(label: &str, body: Operation<'static>) -> (Conclusion, State) {
         let mut fixture = StoreFixture::new(label);
         let program = anonymous_with_body(Operation::Sequence(vec![step(
             Ordinal::Dependent("1"),
@@ -2385,7 +2387,7 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     );
     assert_eq!(
         outcome,
-        Outcome::Done(Value::Literali("probe output".to_string()))
+        Conclusion::Completed(Outcome::Done(Value::Literali("probe output".to_string())))
     );
     assert_eq!(
         state,
@@ -2400,7 +2402,9 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     );
     assert_eq!(
         outcome,
-        Outcome::Done(Value::Literali("1: lo\n2: eth0\n3: wlan0".to_string()))
+        Conclusion::Completed(Outcome::Done(Value::Literali(
+            "1: lo\n2: eth0\n3: wlan0".to_string()
+        )))
     );
     assert_eq!(
         state,
@@ -2441,7 +2445,7 @@ fn sequence_value_is_last_member() {
         .expect("run");
     assert_eq!(
         outcome,
-        Outcome::Done(Value::Literali("second".to_string()))
+        Conclusion::Completed(Outcome::Done(Value::Literali("second".to_string())))
     );
 
     let pfftt = fixture.pfftt_contents();
@@ -2497,7 +2501,7 @@ fn deferred_invoke_is_prompted_and_recorded() {
     let outcome = runner
         .run(Environment::new())
         .expect("run");
-    assert_eq!(outcome, Outcome::Done(Value::Unitus));
+    assert_eq!(outcome, Conclusion::Completed(Outcome::Done(Value::Unitus)));
 
     // The operator was prompted about the external node, by its FQP.
     let prompt = runner.into_driver();
@@ -2910,7 +2914,7 @@ cleanup :
     let outcome = runner
         .run(Environment::new())
         .expect("resume must not raise UnboundVariable");
-    assert!(if let Outcome::Done(_) = outcome {
+    assert!(if let Conclusion::Completed(Outcome::Done(_)) = outcome {
         true
     } else {
         false
@@ -3006,7 +3010,7 @@ fn resume_restores_invoke_input_without_reprompting() {
     let outcome = runner
         .run(Environment::new())
         .expect("resume runs without re-acquiring");
-    assert!(if let Outcome::Done(_) = outcome {
+    assert!(if let Conclusion::Completed(Outcome::Done(_)) = outcome {
         true
     } else {
         false

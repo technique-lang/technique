@@ -3,7 +3,9 @@ use std::fs;
 use std::path::Path;
 
 use technique::parsing;
-use technique::runner::{Appender, Context, Environment, Headless, Library, Outcome, Runner};
+use technique::runner::{
+    Appender, Conclusion, Context, Environment, Headless, Library, Outcome, Runner,
+};
 use technique::translation;
 
 use crate::common::list_technique_documents;
@@ -113,10 +115,10 @@ fn ensure_run() {
             .skip(1)
             .collect();
 
-        // A pure-prose procedure legitimately finishes Skipped under the
-        // automatic driver; only a Failed or Stopped run is a test failure.
+        // A pure-prose procedure legitimately finishes Skip under the
+        // automatic driver; only a Fail or Stopped run is a test failure.
         let finished = match outcome {
-            Outcome::Done(_) | Outcome::Skipped(_) => true,
+            Conclusion::Completed(Outcome::Done(_)) | Conclusion::Completed(Outcome::Skip(_)) => true,
             _ => {
                 println!("File {:?} did not finish cleanly: {:?}", file, outcome);
                 false
