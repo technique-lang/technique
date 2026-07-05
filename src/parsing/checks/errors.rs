@@ -264,6 +264,32 @@ making_coffee :
 }
 
 #[test]
+fn invalid_literal_whitespace_parens() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { ( ) }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidLiteral(Span::new(39, 3)),
+    );
+}
+
+#[test]
+fn invalid_literal_parenthesised_expression() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do something { (x) }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidLiteral(Span::new(39, 3)),
+    );
+}
+
+#[test]
 fn invalid_invocation_in_repeat() {
     expect_error(
         r#"

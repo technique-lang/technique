@@ -579,6 +579,15 @@ expressions as parameters as required:
                 .to_string(),
             )
         }
+        ParsingError::InvalidLiteral(_) => (
+            "Invalid literal".to_string(),
+            r#"
+This is not a valid value. If you need to pass an empty value you probably
+want unit, written `()`.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidCodeBlock(_) => {
             let examples = vec![
                 Expression::Execution(

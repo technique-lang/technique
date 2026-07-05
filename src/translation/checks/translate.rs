@@ -613,6 +613,31 @@ run :
 }
 
 #[test]
+fn expression_unit_translates() {
+    // The unit literal `()` lowers to Operation::Unit.
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    ()
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Unit = &ops[0] else {
+        panic!("expected Unit, got {:?}", ops[0]);
+    };
+}
+
+#[test]
 fn expression_string_text_fragment_translates() {
     // A plain string literal becomes a single Text fragment.
     let source = r#"

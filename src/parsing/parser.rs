@@ -46,6 +46,7 @@ pub enum ParsingError {
     MixedSectionContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
+    InvalidLiteral(Span),
     InvalidCodeBlock(Span),
     InvalidStep(Span),
     InvalidSubstep(Span),
@@ -81,6 +82,7 @@ impl ParsingError {
             | ParsingError::MixedSectionContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
+            | ParsingError::InvalidLiteral(span)
             | ParsingError::InvalidCodeBlock(span)
             | ParsingError::InvalidStep(span)
             | ParsingError::InvalidSubstep(span)
@@ -1551,6 +1553,18 @@ impl<'i> Parser<'i> {
                         self.offset,
                         width,
                     )));
+                } else if text
+                    .trim()
+                    .is_empty()
+                {
+                    // Parentheses with nothing (`( )`) or a bare expression
+                    // inside (`(x)`) are not the unit literal `()` and there
+                    // is no grouping form, so this is a malformed literal.
+                    let width = content
+                        .find(')')
+                        .map(|close| close + 1)
+                        .unwrap_or(paren + 1);
+                    return Err(ParsingError::InvalidLiteral(Span::new(self.offset, width)));
                 } else {
                     return Err(ParsingError::InvalidFunction(Span::new(
                         self.offset,
