@@ -140,7 +140,6 @@ fn automatic_declines_action_and_choice_as_skip() {
             "/I/1",
             "click",
             "Click",
-            "Actions",
             &Value::Literali("Actions".to_string())
         ),
         UserInput::Skip
@@ -405,7 +404,6 @@ fn action_response_label_is_coloured() {
         &mut out,
         "I/1",
         "Scroll to",
-        "BOTTOM",
         &Value::Enumerati("BOTTOM".to_string()),
         &it,
     )
@@ -419,7 +417,6 @@ fn action_response_label_is_coloured() {
         &mut out,
         "I/1",
         "Type",
-        "hello",
         &Value::Literali("hello".to_string()),
         &it,
     )

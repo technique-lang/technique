@@ -416,10 +416,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                     }
                     Kind::Action => {
-                        let (verb, label, value) = self.action_parts(env, executable)?;
+                        let (verb, value) = self.action_parts(env, executable)?;
                         match self
                             .driver
-                            .action(&qualified, &function, &verb, &label, &value)
+                            .action(&qualified, &function, &verb, &value)
                         {
                             UserInput::Done(_) => {
                                 let value = super::evaluator::dispatch(
@@ -563,13 +563,13 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// An action's parts for the user to confirm: its imperative verb (the
-    /// library's `display` name, e.g. `Click`) and the bare label its single
-    /// argument evaluates to, with string literals shown unquoted.
+    /// library's `display` name, e.g. `Click`) and the value its single
+    /// argument evaluates to.
     fn action_parts(
         &mut self,
         env: &mut Environment,
         executable: &'i Executable<'i>,
-    ) -> Result<(String, String, Value), RunnerError> {
+    ) -> Result<(String, Value), RunnerError> {
         let verb = match &executable.target {
             ExecutableRef::Resolved(id) => self
                 .library
@@ -585,11 +585,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             Some(arg) => super::evaluator::evaluate(&self.library, &self.context, env, arg)?,
             None => Value::Unitus,
         };
-        let label = match &value {
-            Value::Literali(text) | Value::Enumerati(text) => text.clone(),
-            other => other.to_string(),
-        };
-        Ok((verb, label, value))
+        Ok((verb, value))
     }
 
     fn walk_invoke(

@@ -3,6 +3,7 @@ political_systems :
     click('Dictatorship')
     click('Theocracy')
     click('Democracy')
+    <the_wild>
     'Monarchy'
 }
 

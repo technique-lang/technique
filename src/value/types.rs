@@ -122,6 +122,17 @@ impl Display for Value {
     }
 }
 
+impl Value {
+    /// Unquoted text for a prompt label: `Literali`/`Enumerati` unwrap
+    /// their string, everything else falls back to `Display`.
+    pub fn label(&self) -> String {
+        match self {
+            Value::Literali(text) | Value::Enumerati(text) => text.clone(),
+            other => other.to_string(),
+        }
+    }
+}
+
 // Numeric rendering goes through `crate::formatting`'s number renderer.
 // To call into it we briefly reconstruct a borrowed `language::Numeric`
 impl Display for Numeric {
