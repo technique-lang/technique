@@ -1266,6 +1266,11 @@ impl<'i> Formatter<'i> {
                 }
                 self.add_fragment_reference(Syntax::Quote, "\"");
             }
+            Expression::Response(value, _) => {
+                self.add_fragment_reference(Syntax::Quote, "'");
+                self.add_fragment_reference(Syntax::Response, value);
+                self.add_fragment_reference(Syntax::Quote, "'");
+            }
             Expression::Number(numeric, _) => self.append_numeric(numeric),
             Expression::Multiline(lang, lines, _) => {
                 self.append_char('\n');

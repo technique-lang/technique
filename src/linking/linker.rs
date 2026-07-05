@@ -113,6 +113,7 @@ fn link_operation<'i>(
         }
         Operation::Variable(_)
         | Operation::Number(_)
+        | Operation::Response(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
         | Operation::Hole

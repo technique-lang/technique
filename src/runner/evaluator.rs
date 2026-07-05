@@ -113,6 +113,7 @@ fn kind(value: &Value) -> &'static str {
     match value {
         Value::Unitus => "unit",
         Value::Literali(_) => "string",
+        Value::Enumerati(_) => "response",
         Value::Quanticle(_) => "quantity",
         Value::Tabularum(_) => "tablet",
         Value::Arraeum(_) => "list",
@@ -147,6 +148,7 @@ pub fn evaluate<'i>(
                 )
             }),
         Operation::Number(n) => Ok(Value::Quanticle(Numeric::from(n))),
+        Operation::Response(value) => Ok(Value::Enumerati(value.to_string())),
         Operation::String(fragments) => {
             let mut text = String::new();
             for fragment in fragments {

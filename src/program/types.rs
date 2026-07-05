@@ -122,6 +122,7 @@ pub enum Operation<'i> {
     Variable(language::Identifier<'i>),
     Number(language::Numeric<'i>),
     String(Vec<Fragment<'i>>),
+    Response(&'i str),
     Multiline(Option<&'i str>, Vec<&'i str>),
     Tablet(Vec<Entry<'i>>),
     List(Vec<Operation<'i>>),

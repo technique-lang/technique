@@ -19,6 +19,7 @@ use crate::language;
 pub enum Value {
     Unitus,
     Literali(String),
+    Enumerati(String),
     Quanticle(Numeric),
     Tabularum(Vec<(String, Value)>),
     Arraeum(Vec<Value>),
@@ -75,6 +76,7 @@ impl Display for Value {
         match self {
             Value::Unitus => Ok(()),
             Value::Literali(text) => write!(f, "\"{}\"", text),
+            Value::Enumerati(text) => write!(f, "'{}'", text),
             Value::Quanticle(numeric) => write!(f, "{}", numeric),
             Value::Tabularum(pairs) => {
                 f.write_str("[")?;

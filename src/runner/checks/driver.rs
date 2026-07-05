@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::runner::driver::{
-    Automatic, Console, Driver, Event, Kind, Mock, Prompt, Standing, UserInput, draw, edit,
-    is_list_forma,
+    Automatic, Console, Driver, Event, Kind, Mock, Prompt, Standing, UserInput, draw, draw_action,
+    edit, is_list_forma,
 };
 use crate::value::{Numeric, Value};
 
@@ -136,7 +136,13 @@ fn automatic_declines_action_and_choice_as_skip() {
     // taken as Done just like a plain Computable.
     let mut p = Automatic::with_handle(Vec::new());
     assert_eq!(
-        p.action("/I/1", "click", "Click", "Actions"),
+        p.action(
+            "/I/1",
+            "click",
+            "Click",
+            "Actions",
+            &Value::Literali("Actions".to_string())
+        ),
         UserInput::Skip
     );
     assert_eq!(
@@ -385,6 +391,42 @@ fn esc_menu_disables_edit_for_unit_and_complex() {
         it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(UserInput::Skip)
     );
+}
+
+#[test]
+fn action_response_label_is_coloured() {
+    // A response literal argument (e.g. `scroll('BOTTOM')`) shows on the action
+    // line in the Response orange (0xf5, 0x79, 0x00), not the default white a
+    // plain string label gets.
+    let it = Prompt::begin(&[], Value::Unitus);
+
+    let mut out: Vec<u8> = Vec::new();
+    draw_action(
+        &mut out,
+        "I/1",
+        "Scroll to",
+        "BOTTOM",
+        &Value::Enumerati("BOTTOM".to_string()),
+        &it,
+    )
+    .expect("draw");
+    let coloured = String::from_utf8(out).expect("utf8");
+    assert!(coloured.contains("BOTTOM"));
+    assert!(coloured.contains("245;121;0"));
+
+    let mut out: Vec<u8> = Vec::new();
+    draw_action(
+        &mut out,
+        "I/1",
+        "Type",
+        "hello",
+        &Value::Literali("hello".to_string()),
+        &it,
+    )
+    .expect("draw");
+    let plain = String::from_utf8(out).expect("utf8");
+    assert!(plain.contains("hello"));
+    assert!(!plain.contains("245;121;0"));
 }
 
 #[test]

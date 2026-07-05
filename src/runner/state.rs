@@ -747,6 +747,7 @@ fn parse_optional_value(rest: Option<&str>) -> Result<Option<value::Value>, Reco
 //
 //   Unitus            -> ()
 //   Literali(s)       -> "<escaped>"
+//   Enumerati(s)      -> '<value>'
 //   Quanticle(n)      -> canonical numeric text (via formatting::render_numeric)
 //   Arraeum(items)    -> [item, item]       (empty: [])
 //   Tabularum(pairs)  -> ["label" = value]  (empty: [=], unambiguous vs [])
@@ -765,6 +766,11 @@ fn write_value(out: &mut String, value: &value::Value) {
             out.push('"');
             escape_literal(out, text);
             out.push('"');
+        }
+        value::Value::Enumerati(text) => {
+            out.push('\'');
+            out.push_str(text);
+            out.push('\'');
         }
         value::Value::Quanticle(numeric) => out.push_str(&render_value_numeric(numeric)),
         value::Value::Futurae(name) => {
@@ -867,6 +873,12 @@ pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError>
             let inner = &text[1..text.len() - 1];
             Ok(value::Value::Literali(unescape_literal(inner)?))
         }
+        '\'' => {
+            if text.len() < 2 || !text.ends_with('\'') {
+                return Err(RecordError::MalformedState);
+            }
+            Ok(value::Value::Enumerati(text[1..text.len() - 1].to_string()))
+        }
         '{' => {
             if !text.ends_with('}') {
                 return Err(RecordError::MalformedState);
@@ -931,12 +943,14 @@ pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError>
 }
 
 // Split `text` on `delim`, but only at top level: not inside double quotes
-// (honouring `\"` escapes), nor inside nested `[]`, `()`, or `{}`.
+// (honouring `\"` escapes), not inside single-quoted Enumerati values (which
+// carry no escapes or interior quote), nor inside nested `[]`, `()`, or `{}`.
 fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
     let mut parts = Vec::new();
     let bytes = text.as_bytes();
     let mut depth = 0i32;
     let mut in_quote = false;
+    let mut in_squote = false;
     let mut start = 0usize;
     let mut i = 0usize;
     while i < bytes.len() {
@@ -952,8 +966,16 @@ fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
             i += 1;
             continue;
         }
+        if in_squote {
+            if c == '\'' {
+                in_squote = false;
+            }
+            i += 1;
+            continue;
+        }
         match c {
             '"' => in_quote = true,
+            '\'' => in_squote = true,
             '[' | '(' | '{' => depth += 1,
             ']' | ')' | '}' => depth -= 1,
             _ if c == delim && depth == 0 => {
@@ -964,7 +986,7 @@ fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
         }
         i += 1;
     }
-    if in_quote || depth != 0 {
+    if in_quote || in_squote || depth != 0 {
         return Err(RecordError::MalformedState);
     }
     parts.push(&text[start..]);
@@ -981,6 +1003,7 @@ fn split_once_top_level_equals(text: &str) -> Option<(&str, &str)> {
     let bytes = text.as_bytes();
     let mut depth = 0i32;
     let mut in_quote = false;
+    let mut in_squote = false;
     let mut i = 0usize;
     while i < bytes.len() {
         let c = bytes[i] as char;
@@ -995,8 +1018,16 @@ fn split_once_top_level_equals(text: &str) -> Option<(&str, &str)> {
             i += 1;
             continue;
         }
+        if in_squote {
+            if c == '\'' {
+                in_squote = false;
+            }
+            i += 1;
+            continue;
+        }
         match c {
             '"' => in_quote = true,
+            '\'' => in_squote = true,
             '[' | '(' | '{' => depth += 1,
             ']' | ')' | '}' => depth -= 1,
             ' ' if depth == 0
@@ -1073,6 +1104,11 @@ mod codec_check {
         roundtrip(Value::Quanticle(Numeric::Integral(42)));
         roundtrip(Value::Quanticle(Numeric::Integral(-7)));
         roundtrip(Value::Quanticle(Numeric::Integral(0)));
+        roundtrip(Value::Enumerati("BOTTOM".to_string()));
+        assert_eq!(
+            serialize_value(&Value::Enumerati("BOTTOM".to_string())),
+            "'BOTTOM'"
+        );
     }
 
     #[test]
@@ -1098,6 +1134,15 @@ mod codec_check {
             "k".to_string(),
             Value::Literali("v".to_string()),
         )])]));
+        roundtrip(Value::Tabularum(vec![(
+            "system".to_string(),
+            Value::Enumerati("Monarchy".to_string()),
+        )]));
+        // A response value carrying a comma must not split mid-value.
+        roundtrip(Value::Arraeum(vec![
+            Value::Enumerati("Not applicable, see note".to_string()),
+            Value::Literali("after".to_string()),
+        ]));
         roundtrip(Value::Tabularum(vec![
             ("reason".to_string(), Value::Literali("boom".to_string())),
             ("count".to_string(), Value::Quanticle(Numeric::Integral(3))),

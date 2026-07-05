@@ -437,6 +437,7 @@ pub enum Piece<'i> {
 pub enum Expression<'i> {
     Variable(Identifier<'i>, Span),
     String(Vec<Piece<'i>>, Span),
+    Response(&'i str, Span),
     Number(Numeric<'i>, Span),
     Multiline(Option<&'i str>, Vec<&'i str>, Span),
     Repeat(Box<Expression<'i>>, Span),
@@ -456,6 +457,7 @@ impl PartialEq for Expression<'_> {
         match (self, other) {
             (Expression::Variable(a, _), Expression::Variable(b, _)) => a == b,
             (Expression::String(a, _), Expression::String(b, _)) => a == b,
+            (Expression::Response(a, _), Expression::Response(b, _)) => a == b,
             (Expression::Number(a, _), Expression::Number(b, _)) => a == b,
             (Expression::Multiline(a1, a2, _), Expression::Multiline(b1, b2, _)) => {
                 a1 == b1 && a2 == b2

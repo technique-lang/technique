@@ -1527,6 +1527,13 @@ impl<'i> Parser<'i> {
             })?;
             let span = self.span_since(start);
             Ok(Expression::String(parts, span))
+        } else if is_enum_response(content) {
+            let value =
+                self.take_block_chars("a response literal", '\'', '\'', false, |inner| {
+                    Ok(inner.source)
+                })?;
+            let span = self.span_since(start);
+            Ok(Expression::Response(value, span))
         } else if is_invocation(content) {
             let invocation = self.read_invocation()?;
             let span = self.span_since(start);
@@ -2590,6 +2597,16 @@ impl<'i> Parser<'i> {
                         })?;
                     let span = outer.span_since(param_start);
                     params.push(Expression::String(parts, span));
+                } else if content.starts_with('\'') {
+                    let value = outer.take_block_chars(
+                        "a response literal",
+                        '\'',
+                        '\'',
+                        false,
+                        |inner| Ok(inner.source),
+                    )?;
+                    let span = outer.span_since(param_start);
+                    params.push(Expression::Response(value, span));
                 } else if is_numeric_quantity(content) {
                     let numeric = outer.read_numeric_quantity()?;
                     let span = outer.span_since(param_start);

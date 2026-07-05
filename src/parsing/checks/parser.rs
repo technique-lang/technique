@@ -272,6 +272,30 @@ fn unit_as_expression() {
 }
 
 #[test]
+fn response_as_expression() {
+    // A single-quoted value is a response literal usable anywhere an
+    // expression is expected: bare in a code block, or as an argument.
+    let mut input = Parser::new();
+    input.initialize("'Monarchy'");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Response("Monarchy", Span::default()))
+    );
+
+    input.initialize("evaluate('Democracy')");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Execution(
+            Function {
+                target: Identifier::new("evaluate"),
+                parameters: vec![Expression::Response("Democracy", Span::default())]
+            },
+            Span::default()
+        ))
+    );
+}
+
+#[test]
 fn declaration_simple() {
     let mut input = Parser::new();
     input.initialize("making_coffee :");
