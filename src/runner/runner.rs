@@ -416,10 +416,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                         }
                     }
                     Kind::Action => {
-                        let (verb, label) = self.action_parts(env, executable)?;
+                        let (verb, value) = self.action_parts(env, executable)?;
                         match self
                             .driver
-                            .action(&qualified, &function, &verb, &label)
+                            .action(&qualified, &function, &verb, &value)
                         {
                             UserInput::Done(_) => {
                                 let value = super::evaluator::dispatch(
@@ -487,6 +487,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             } => self.walk_bind(env, names, value, inferred.as_ref()),
             Operation::Variable(_)
             | Operation::Number(_)
+            | Operation::Response(_)
             | Operation::String(_)
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
@@ -562,13 +563,13 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// An action's parts for the user to confirm: its imperative verb (the
-    /// library's `display` name, e.g. `Click`) and the bare label its single
-    /// argument evaluates to, with string literals shown unquoted.
+    /// library's `display` name, e.g. `Click`) and the value its single
+    /// argument evaluates to.
     fn action_parts(
         &mut self,
         env: &mut Environment,
         executable: &'i Executable<'i>,
-    ) -> Result<(String, String), RunnerError> {
+    ) -> Result<(String, Value), RunnerError> {
         let verb = match &executable.target {
             ExecutableRef::Resolved(id) => self
                 .library
@@ -577,19 +578,14 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .unwrap_or_else(|| self.executable_name(&executable.target)),
             _ => self.executable_name(&executable.target),
         };
-        let label = match executable
+        let value = match executable
             .arguments
             .first()
         {
-            Some(arg) => {
-                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
-                    Value::Literali(text) => text,
-                    other => other.to_string(),
-                }
-            }
-            None => String::new(),
+            Some(arg) => super::evaluator::evaluate(&self.library, &self.context, env, arg)?,
+            None => Value::Unitus,
         };
-        Ok((verb, label))
+        Ok((verb, value))
     }
 
     fn walk_invoke(

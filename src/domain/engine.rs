@@ -356,6 +356,7 @@ fn render_expression(expr: &Expression) -> String {
             }
             result
         }
+        Expression::Response(value, _) => format!("'{}'", value),
         Expression::Number(Numeric::Scientific(q), _) => q.to_string(),
         Expression::Number(Numeric::Integral(n), _) => n.to_string(),
         Expression::Pair(pair, _) => {

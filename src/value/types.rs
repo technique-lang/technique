@@ -19,6 +19,7 @@ use crate::language;
 pub enum Value {
     Unitus,
     Literali(String),
+    Enumerati(String),
     Quanticle(Numeric),
     Tabularum(Vec<(String, Value)>),
     Arraeum(Vec<Value>),
@@ -75,6 +76,7 @@ impl Display for Value {
         match self {
             Value::Unitus => Ok(()),
             Value::Literali(text) => write!(f, "\"{}\"", text),
+            Value::Enumerati(text) => write!(f, "'{}'", text),
             Value::Quanticle(numeric) => write!(f, "{}", numeric),
             Value::Tabularum(pairs) => {
                 f.write_str("[")?;
@@ -116,6 +118,17 @@ impl Display for Value {
                 f.write_str("]")
             }
             Value::Futurae(name) => write!(f, "{{{}}}", name),
+        }
+    }
+}
+
+impl Value {
+    /// Unquoted text for a prompt label: `Literali`/`Enumerati` unwrap
+    /// their string, everything else falls back to `Display`.
+    pub fn label(&self) -> String {
+        match self {
+            Value::Literali(text) | Value::Enumerati(text) => text.clone(),
+            other => other.to_string(),
         }
     }
 }

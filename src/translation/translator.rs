@@ -731,6 +731,7 @@ impl<'i> Translator<'i> {
                     .collect();
                 Operation::String(fragments)
             }
+            language::Expression::Response(value, _) => Operation::Response(value),
             language::Expression::Multiline(lang, lines, _) => {
                 Operation::Multiline(*lang, lines.clone())
             }

@@ -142,7 +142,7 @@ pub trait Driver {
     /// trace; Skip / Fail decline and record the step; Quit stops. Unlike
     /// `command` there is no edit buffer. `Automatic` returns `Done` without
     /// prompting.
-    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput;
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput;
 
     /// Open a Section: the grey `↘ /fqp` descent bracket (matching the `↙`
     /// the section's close marker) followed by its prose heading —
@@ -242,7 +242,7 @@ pub trait Verdict {
         qualified: &str,
         name: &str,
         verb: &str,
-        label: &str,
+        value: &Value,
     ) -> UserInput;
 
     fn acquire<O: Output>(
@@ -426,9 +426,9 @@ impl Verdict for Interactive {
         qualified: &str,
         name: &str,
         verb: &str,
-        label: &str,
+        value: &Value,
     ) -> UserInput {
-        prompt_action(out.surface(), qualified, name, verb, label)
+        prompt_action(out.surface(), qualified, name, verb, value)
     }
 
     fn acquire<O: Output>(
@@ -515,9 +515,9 @@ impl Verdict for Batch {
         _qualified: &str,
         _name: &str,
         verb: &str,
-        label: &str,
+        value: &Value,
     ) -> UserInput {
-        out.show_action(verb, label);
+        out.show_action(verb, &value.label());
         // An unattended run cannot attest a physical action was performed.
         UserInput::Skip
     }
@@ -620,9 +620,15 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .command(&mut self.out, qualified, script)
     }
 
-    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+    fn action(
+        &mut self,
+        qualified: &str,
+        name: &str,
+        verb: &str,
+        value: &Value,
+    ) -> UserInput {
         self.verdict
-            .action(&mut self.out, qualified, name, verb, label)
+            .action(&mut self.out, qualified, name, verb, value)
     }
 
     fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput {
@@ -779,11 +785,11 @@ fn prompt_action(
     qualified: &str,
     name: &str,
     verb: &str,
-    label: &str,
+    value: &Value,
 ) -> UserInput {
     let qualified = display_path(qualified);
     let result = interact(out, Prompt::begin(&[], Value::Unitus), |o, i| {
-        draw_action(o, &qualified, verb, label, i)
+        draw_action(o, &qualified, verb, value, i)
     });
     let _ = queue!(
         &mut out,
@@ -1485,9 +1491,10 @@ fn draw_action(
     mut out: &mut dyn Write,
     qualified: &str,
     verb: &str,
-    label: &str,
+    value: &Value,
     interaction: &Prompt,
 ) -> io::Result<()> {
+    let label = value.label();
     queue!(
         &mut out,
         cursor::MoveToColumn(0),
@@ -1498,10 +1505,17 @@ fn draw_action(
     write!(out, "{}", verb)?;
     queue!(&mut out, ResetColor)?;
     if !label.is_empty() {
-        write!(out, " {}", label)?;
+        match value {
+            Value::Enumerati(_) => {
+                queue!(&mut out, SetForegroundColor(RESPONSE))?;
+                write!(out, " {}", label)?;
+                queue!(&mut out, ResetColor)?;
+            }
+            _ => write!(out, " {}", label)?,
+        }
     }
     write!(out, " {} ", PROMPT_SYMBOL.blue())?;
-    let prefix = action_prefix_width(qualified, verb, label);
+    let prefix = action_prefix_width(qualified, verb, &label);
     let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
     place_cursor(out, cursor_col, end_col)
 }
@@ -1925,15 +1939,21 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .command(qualified, script)
     }
 
-    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+    fn action(
+        &mut self,
+        qualified: &str,
+        name: &str,
+        verb: &str,
+        value: &Value,
+    ) -> UserInput {
         self.emit(Trace::Execute {
             path: qualified.to_string(),
-            script: format!("{} {}", verb, label)
+            script: format!("{} {}", verb, value.label())
                 .trim_end()
                 .to_string(),
         });
         self.inner
-            .action(qualified, name, verb, label)
+            .action(qualified, name, verb, value)
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
@@ -2154,13 +2174,13 @@ impl Driver for Mock {
     /// Records the action and auto-confirms it (`Done`) without draining the
     /// answer queue — like `command`, an action is orthogonal to the step
     /// verdicts a test drives.
-    fn action(&mut self, qualified: &str, name: &str, verb: &str, label: &str) -> UserInput {
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput {
         self.events
             .push(Event::Action {
                 qualified: qualified.to_string(),
                 name: name.to_string(),
                 verb: verb.to_string(),
-                label: label.to_string(),
+                label: value.label(),
             });
         UserInput::Done(Value::Unitus)
     }

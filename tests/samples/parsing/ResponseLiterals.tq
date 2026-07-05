@@ -1,0 +1,22 @@
+political_systems :
+{
+    click('Dictatorship')
+    click('Theocracy')
+    click('Democracy')
+    <the_wild>
+    'Monarchy'
+}
+
+the_wild : [Animals] -> Freedom
+
+The wild open spaces of Connecticut are our destination. What will we find
+there?
+
+{
+    [
+        "monarch" = "King Julian the First"
+        "nation" = "Madagascar"
+        "system" = 'Monarchy'
+        "founded" = 2005
+    ]
+}
