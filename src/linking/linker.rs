@@ -115,7 +115,8 @@ fn link_operation<'i>(
         | Operation::Number(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
-        | Operation::Hole => {}
+        | Operation::Hole
+        | Operation::Unit => {}
     }
 }
 

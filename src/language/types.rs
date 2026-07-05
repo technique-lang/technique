@@ -447,6 +447,7 @@ pub enum Expression<'i> {
     Pair(Box<Pair<'i>>, Span),
     List(Vec<Expression<'i>>, Span),
     Hole(Span),
+    Unit(Span),
     Separator,
 }
 
@@ -471,6 +472,7 @@ impl PartialEq for Expression<'_> {
             (Expression::Pair(a, _), Expression::Pair(b, _)) => a == b,
             (Expression::List(a, _), Expression::List(b, _)) => a == b,
             (Expression::Hole(_), Expression::Hole(_)) => true,
+            (Expression::Unit(_), Expression::Unit(_)) => true,
             (Expression::Separator, Expression::Separator) => true,
             _ => false,
         }

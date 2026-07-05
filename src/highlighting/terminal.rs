@@ -37,6 +37,14 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(0x72, 0x9f, 0xcf))
                 .bold()
                 .to_string(),
+            Syntax::Hole => content // variable.hole.technique - #f57900 (orange) bold
+                .color(owo_colors::Rgb(0xf5, 0x79, 0x00))
+                .bold()
+                .to_string(),
+            Syntax::Unit => content // variable.unit.technique - #f57900 (orange) bold
+                .color(owo_colors::Rgb(0xf5, 0x79, 0x00))
+                .bold()
+                .to_string(),
             Syntax::Section => content // markup.heading.technique
                 .to_string(),
             Syntax::String => content // string - #4e9a06 (green) bold

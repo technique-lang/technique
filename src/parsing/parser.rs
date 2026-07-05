@@ -1511,6 +1511,10 @@ impl<'i> Parser<'i> {
             self.advance(1);
             let span = self.span_since(start);
             Ok(Expression::Hole(span))
+        } else if is_unit(content) {
+            self.advance(2);
+            let span = self.span_since(start);
+            Ok(Expression::Unit(span))
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
@@ -3254,6 +3258,10 @@ fn is_repeat_keyword(content: &str) -> bool {
     let re = regex!(r"^\s*repeat\s+");
 
     re.is_match(content)
+}
+
+fn is_unit(content: &str) -> bool {
+    content.starts_with("()")
 }
 
 fn is_function(content: &str) -> bool {
