@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::runner::runner::RunnerError;
 use crate::runner::state::{
-    fail_reason, format_record, parse_record, InvokeTarget, Record, RecordError, RunId, State,
-    Store, Supplied,
+    InvokeTarget, Record, RecordError, RunId, State, Store, Supplied, fail_reason, format_record,
+    parse_record,
 };
 use crate::value::Value;
 

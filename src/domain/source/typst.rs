@@ -1,6 +1,6 @@
 //! Typst serialization for source domain types.
 
-use crate::domain::serialize::{escape_string, Markup, Render};
+use crate::domain::serialize::{Markup, Render, escape_string};
 
 use super::types::{Document, Fragment};
 

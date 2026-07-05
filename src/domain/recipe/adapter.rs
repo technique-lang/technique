@@ -607,9 +607,11 @@ oven(temperature) :
         );
         assert_eq!(doc.steps[1].title, Some("Wait for cooking for 3 hr".into()));
         // oven procedure not inlined as children
-        assert!(doc.steps[0]
-            .children
-            .is_empty());
+        assert!(
+            doc.steps[0]
+                .children
+                .is_empty()
+        );
     }
 
     #[test]

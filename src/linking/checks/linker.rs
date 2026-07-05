@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::linking::{link, LinkingError};
+use crate::linking::{LinkingError, link};
 use crate::parsing;
 use crate::program::{Executable, ExecutableRef, Operation};
 use crate::runner::Library;

@@ -16,7 +16,7 @@ use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::style::{
     Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor, Stylize,
 };
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType};
+use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size};
 use crossterm::{cursor, queue};
 
 use super::path::display_path;

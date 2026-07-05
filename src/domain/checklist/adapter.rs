@@ -195,8 +195,8 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
 mod check {
     use std::path::Path;
 
-    use crate::domain::checklist::types::Item;
     use crate::domain::Adapter;
+    use crate::domain::checklist::types::Item;
     use crate::parsing;
 
     use super::ChecklistAdapter;

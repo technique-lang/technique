@@ -6,4 +6,4 @@
 
 mod resolver;
 
-pub use resolver::{resolve, ResolutionError};
+pub use resolver::{ResolutionError, resolve};

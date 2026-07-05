@@ -1,9 +1,9 @@
 //! Recipe domain — extracts ingredients and method steps from a Technique
 //! document describing a recipe.
 
+use crate::domain::Adapter;
 use crate::domain::recipe::adapter::RecipeAdapter;
 use crate::domain::serialize::{Markup, Render};
-use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
 

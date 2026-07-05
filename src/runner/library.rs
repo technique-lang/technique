@@ -9,7 +9,7 @@ use std::os::fd::AsFd;
 use std::process::{Command, Stdio};
 
 #[cfg(unix)]
-use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 use super::context::{Context, Stream};
 use super::runner::RunnerError;
@@ -287,7 +287,7 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
             return Err(RunnerError::InvalidArgument {
                 function: "exec",
                 expected: "a shell script string",
-            })
+            });
         }
     };
 

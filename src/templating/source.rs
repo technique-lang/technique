@@ -4,9 +4,9 @@
 //! produced by the code formatter. The Typst template maps each syntax
 //! tag to a colour and weight.
 
+use crate::domain::Adapter;
 use crate::domain::serialize::{Markup, Render};
 use crate::domain::source::adapter::SourceAdapter;
-use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
 

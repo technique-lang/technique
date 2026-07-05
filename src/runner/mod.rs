@@ -19,13 +19,13 @@ mod state;
 pub use context::Context;
 pub use driver::{Headless, Mode};
 pub use evaluator::Environment;
-pub use library::{library_for, Builtin, Library, Native};
+pub use library::{Builtin, Library, Native, library_for};
 pub use runner::{Conclusion, Outcome, Runner, RunnerError};
 pub use state::{Appender, RecordError, RunId};
 
 use driver::{Automatic, Console, Transcript};
 use runner::{bind_parameters, now_iso8601};
-use state::{construct_state_path, Record, State, Store};
+use state::{Record, State, Store, construct_state_path};
 
 const STORE_ROOT: &str = ".store";
 

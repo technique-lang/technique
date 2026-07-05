@@ -3,7 +3,7 @@
 
 mod translator;
 
-pub use translator::{translate, TranslationError};
+pub use translator::{TranslationError, translate};
 
 #[cfg(test)]
 #[path = "checks/translate.rs"]

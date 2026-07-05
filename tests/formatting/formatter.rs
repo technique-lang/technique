@@ -456,11 +456,11 @@ Record everything, with timestamps.
                                             subscopes: vec![Scope::DependentBlock {
                                                 ordinal: "a",
                                                 description: vec![Paragraph::new(vec![
-                                                Descriptive::Text(
-                                                    "Read specimen labels aloud, including patient",
-                                                ),
-                                                Descriptive::Text("name."),
-                                            ])],
+                                                    Descriptive::Text(
+                                                        "Read specimen labels aloud, including patient",
+                                                    ),
+                                                    Descriptive::Text("name."),
+                                                ])],
                                                 subscopes: vec![],
                                                 span: Span::default(),
                                             }],

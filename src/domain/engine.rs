@@ -620,9 +620,10 @@ mod check {
             "Ensure physical and digital safety",
         )]);
         assert_eq!(p.text(), "Ensure physical and digital safety");
-        assert!(p
-            .invocations()
-            .is_empty());
+        assert!(
+            p.invocations()
+                .is_empty()
+        );
         assert_eq!(p.content(), "Ensure physical and digital safety");
     }
 

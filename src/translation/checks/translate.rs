@@ -17,9 +17,11 @@ fn empty_input_yields_empty_program() {
     let path = Path::new("Test.tq");
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
-    assert!(program
-        .subroutines
-        .is_empty());
+    assert!(
+        program
+            .subroutines
+            .is_empty()
+    );
 }
 
 #[test]
@@ -819,9 +821,11 @@ other : X -> Y
         panic!("expected Invoke, got {:?}", ops[0]);
     };
     assert!(invocable.elided, "a bare call is elided");
-    assert!(invocable
-        .arguments
-        .is_empty());
+    assert!(
+        invocable
+            .arguments
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1629,9 +1633,11 @@ run :
     };
     assert_eq!(responses.len(), 2);
     assert_eq!(responses[0].value, "Yes");
-    assert!(responses[0]
-        .condition
-        .is_none());
+    assert!(
+        responses[0]
+            .condition
+            .is_none()
+    );
     assert_eq!(responses[1].value, "No");
     assert_eq!(responses[1].condition, Some("but tired"));
 }

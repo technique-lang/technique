@@ -2,9 +2,9 @@
 //! style of ISS crew procedures, with bordered tables, role designators, and
 //! structured command/verification layout.
 
+use crate::domain::Adapter;
 use crate::domain::nasa_esa_iss::adapter::NasaEsaIssAdapter;
 use crate::domain::serialize::{Markup, Render};
-use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
 

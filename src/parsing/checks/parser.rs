@@ -1159,7 +1159,9 @@ This is the first one.
             assert!(isolated_content.contains("first : A -> B"));
             assert!(isolated_content.contains("# The First"));
             assert!(isolated_content.contains("This is the first one."));
-            assert!(isolated_content.contains("1. Have you done the first thing in the first one?"));
+            assert!(
+                isolated_content.contains("1. Have you done the first thing in the first one?")
+            );
             assert!(isolated_content.contains("a. Do the first thing"));
             assert!(isolated_content.contains("2. Do the second thing"));
         }
@@ -2462,12 +2464,16 @@ fn parse_collecting_errors_basic() {
     let result = input.parse_collecting_errors();
     match result {
         Ok(document) => {
-            assert!(document
-                .header
-                .is_some());
-            assert!(document
-                .body
-                .is_some());
+            assert!(
+                document
+                    .header
+                    .is_some()
+            );
+            assert!(
+                document
+                    .body
+                    .is_some()
+            );
         }
         Err(_) => panic!("Expected successful parse for valid content"),
     }
@@ -2479,13 +2485,15 @@ fn parse_collecting_errors_basic() {
         Ok(_) => panic!("Expected errors for invalid content"),
         Err(errors) => {
             assert!(errors.len() > 0);
-            assert!(errors
-                .iter()
-                .any(|e| if let ParsingError::InvalidHeader(_) = e {
-                    true
-                } else {
-                    false
-                }));
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| if let ParsingError::InvalidHeader(_) = e {
+                        true
+                    } else {
+                        false
+                    })
+            );
         }
     }
 

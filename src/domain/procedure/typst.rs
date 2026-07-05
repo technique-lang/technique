@@ -1,6 +1,6 @@
 //! Typst serialization for procedure domain types.
 
-use crate::domain::serialize::{escape_string, render_prose_list, Markup, Render};
+use crate::domain::serialize::{Markup, Render, escape_string, render_prose_list};
 
 use super::types::{Document, Node, Response};
 

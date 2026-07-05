@@ -5,9 +5,9 @@
 //! model preserves hierarchy. Sections with ordinals, role groups as
 //! distinct items rather than step annotations, and nested children.
 
+use crate::domain::Adapter;
 use crate::domain::procedure::adapter::ProcedureAdapter;
 use crate::domain::serialize::{Markup, Render};
-use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
 

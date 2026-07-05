@@ -742,11 +742,11 @@ before_leaving :
                                             subscopes: vec![Scope::DependentBlock {
                                                 ordinal: "a",
                                                 description: vec![Paragraph::new(vec![
-                                                Descriptive::Text(
-                                                    "Read specimen labels aloud, including patient"
-                                                ),
-                                                Descriptive::Text("name.")
-                                            ])],
+                                                    Descriptive::Text(
+                                                        "Read specimen labels aloud, including patient"
+                                                    ),
+                                                    Descriptive::Text("name.")
+                                                ])],
 
                                                 subscopes: vec![],
                                                 span: Span::default(),
@@ -784,11 +784,11 @@ before_leaving :
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "a",
                                         description: vec![Paragraph::new(vec![
-                                        Descriptive::Text(
-                                            "What are the key concerns for recovery and management"
-                                        ),
-                                        Descriptive::Text("of this patient?")
-                                    ])],
+                                            Descriptive::Text(
+                                                "What are the key concerns for recovery and management"
+                                            ),
+                                            Descriptive::Text("of this patient?")
+                                        ])],
 
                                         subscopes: vec![],
                                         span: Span::default(),
@@ -803,11 +803,11 @@ before_leaving :
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "b",
                                         description: vec![Paragraph::new(vec![
-                                        Descriptive::Text(
-                                            "What are the key concerns for recovery and management"
-                                        ),
-                                        Descriptive::Text("of this patient?")
-                                    ])],
+                                            Descriptive::Text(
+                                                "What are the key concerns for recovery and management"
+                                            ),
+                                            Descriptive::Text("of this patient?")
+                                        ])],
 
                                         subscopes: vec![],
                                         span: Span::default(),
@@ -822,11 +822,11 @@ before_leaving :
                                     subscopes: vec![Scope::DependentBlock {
                                         ordinal: "c",
                                         description: vec![Paragraph::new(vec![
-                                        Descriptive::Text(
-                                            "What are the key concerns for recovery and management"
-                                        ),
-                                        Descriptive::Text("of this patient?")
-                                    ])],
+                                            Descriptive::Text(
+                                                "What are the key concerns for recovery and management"
+                                            ),
+                                            Descriptive::Text("of this patient?")
+                                        ])],
 
                                         subscopes: vec![],
                                         span: Span::default(),

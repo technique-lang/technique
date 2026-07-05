@@ -1398,7 +1398,7 @@ impl<'i> Parser<'i> {
                 return Err(ParsingError::Expected(
                     Span::new(self.offset, 0),
                     "section header",
-                ))
+                ));
             }
         };
 

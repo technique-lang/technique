@@ -13,9 +13,9 @@ use crate::runner::driver::{Automatic, Event, Mock, UserInput};
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{
-    bind_parameters, render_argument_echo, Conclusion, Outcome, Runner, RunnerError,
+    Conclusion, Outcome, Runner, RunnerError, bind_parameters, render_argument_echo,
 };
-use crate::runner::state::{parse_record, Appender, InvokeTarget, State, Store, Supplied};
+use crate::runner::state::{Appender, InvokeTarget, State, Store, Supplied, parse_record};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -1308,9 +1308,11 @@ check :
             }
         });
     assert!(step_one_failed, "step 1 should record Fail");
-    assert!(records
-        .iter()
-        .any(|r| r.path == "/check:/2"));
+    assert!(
+        records
+            .iter()
+            .any(|r| r.path == "/check:/2")
+    );
 }
 
 const ONE_FAILED_STEP: &str = r#"
@@ -1433,15 +1435,16 @@ Prepare the ground { exec("true") } before the steps.
             zero[zero.len() - 1]
         );
     };
-    assert!(zero
-        .iter()
-        .any(|state| {
-            if let State::Execute { .. } = state {
-                true
-            } else {
-                false
-            }
-        }));
+    assert!(
+        zero.iter()
+            .any(|state| {
+                if let State::Execute { .. } = state {
+                    true
+                } else {
+                    false
+                }
+            })
+    );
 }
 
 #[test]
@@ -2113,9 +2116,10 @@ test :
 
     // No parameters and no args: empty environment, no error.
     let env = bind_parameters(&program, &[]).expect("bind");
-    assert!(env
-        .lookup("anything")
-        .is_none());
+    assert!(
+        env.lookup("anything")
+            .is_none()
+    );
 }
 
 #[test]

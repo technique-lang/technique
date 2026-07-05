@@ -11,7 +11,7 @@ use lsp_types::{
     Position, PublishDiagnosticsParams, Range, SymbolInformation, SymbolKind, TextEdit, Uri,
     WorkspaceFolder, WorkspaceSymbolParams,
 };
-use serde_json::{from_value, to_value, Value};
+use serde_json::{Value, from_value, to_value};
 use technique::formatting::Identity;
 use technique::language::{Document, Technique};
 use tracing::{debug, error, info, warn};
@@ -19,7 +19,7 @@ use tracing::{debug, error, info, warn};
 use crate::highlighting;
 use crate::parsing;
 use crate::parsing::ParsingError;
-use crate::problem::{calculate_column_number, calculate_line_number, Present};
+use crate::problem::{Present, calculate_column_number, calculate_line_number};
 
 pub struct TechniqueLanguageServer {
     /// Map from URI to document content

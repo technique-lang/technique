@@ -1,6 +1,6 @@
 //! Typst serialization for checklist domain types.
 
-use crate::domain::serialize::{render_prose_list, Markup, Render};
+use crate::domain::serialize::{Markup, Render, render_prose_list};
 
 use super::types::{Document, Item, Procedure, Response, Section, Step};
 

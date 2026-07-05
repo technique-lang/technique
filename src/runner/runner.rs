@@ -961,7 +961,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     UserInput::Fail(reason) => {
                         return Ok(Conclusion::Completed(Outcome::Fail(Failure::Aborted(
                             reason,
-                        ))))
+                        ))));
                     }
                     UserInput::Override => unreachable!(), // an acquire prompt never offers Override
                     UserInput::Quit => return self.record_stop(),

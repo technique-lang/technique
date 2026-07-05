@@ -1,7 +1,7 @@
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
-use crate::runner::evaluator::{coerce_to_list, combine, evaluate, Environment};
+use crate::runner::evaluator::{Environment, coerce_to_list, combine, evaluate};
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value;

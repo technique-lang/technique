@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::language;
 use crate::parsing;
 use crate::program::{ExecutableRef, Operation, SubroutineId, SubroutineRef};
-use crate::resolution::{resolve, ResolutionError};
+use crate::resolution::{ResolutionError, resolve};
 use crate::translation::translate;
 
 #[test]

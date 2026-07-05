@@ -1,5 +1,5 @@
 use crate::language::{Attribute, Identifier, Span};
-use crate::runner::path::{display_path, PathSegment, QualifiedPath};
+use crate::runner::path::{PathSegment, QualifiedPath, display_path};
 
 #[test]
 fn empty_stack_renders_root() {

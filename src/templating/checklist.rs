@@ -5,9 +5,9 @@
 //! assignments are inherited downward (an `@surgeon` scope annotates its
 //! child steps) rather than forming structural containers.
 
+use crate::domain::Adapter;
 use crate::domain::checklist::adapter::ChecklistAdapter;
 use crate::domain::serialize::{Markup, Render};
-use crate::domain::Adapter;
 use crate::language;
 use crate::templating::template::Template;
 

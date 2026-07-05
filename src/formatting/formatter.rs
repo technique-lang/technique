@@ -1875,12 +1875,16 @@ mod check {
         println!("  Current syntax: {:?}", output.current);
 
         // The number should be in fragments, buffer should be empty
-        assert!(!output
-            .fragments
-            .is_empty());
-        assert!(output
-            .buffer
-            .is_empty());
+        assert!(
+            !output
+                .fragments
+                .is_empty()
+        );
+        assert!(
+            output
+                .buffer
+                .is_empty()
+        );
         assert_eq!(output.current, Syntax::Neutral);
     }
 }

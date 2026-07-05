@@ -14,9 +14,9 @@
 
 use std::collections::HashMap;
 
+use crate::domain::Adapter;
 use crate::domain::procedure::adapter::ProcedureAdapter;
 use crate::domain::procedure::types::{Document, Node};
-use crate::domain::Adapter;
 use crate::language;
 
 pub struct NasaEsaIssAdapter;

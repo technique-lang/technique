@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use crate::parsing;
-use crate::translation::{translate, TranslationError};
+use crate::translation::{TranslationError, translate};
 
 #[test]
 fn duplicate_procedure_name() {

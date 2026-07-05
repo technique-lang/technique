@@ -3,4 +3,4 @@
 
 mod linker;
 
-pub use linker::{link, LinkingError};
+pub use linker::{LinkingError, link};
