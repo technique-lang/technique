@@ -145,7 +145,8 @@ fn resolve_operation<'i>(
         | Operation::Number(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
-        | Operation::Hole => {}
+        | Operation::Hole
+        | Operation::Unit => {}
     }
 }
 
@@ -211,7 +212,8 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
         | Operation::Number(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
-        | Operation::Hole => {}
+        | Operation::Hole
+        | Operation::Unit => {}
     }
 }
 
@@ -271,7 +273,8 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
         | Operation::Number(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
-        | Operation::Hole => {}
+        | Operation::Hole
+        | Operation::Unit => {}
     }
 }
 
@@ -362,7 +365,8 @@ fn check_scope<'i>(
         Operation::Number(_)
         | Operation::Multiline(_, _)
         | Operation::Prose(_)
-        | Operation::Hole => {}
+        | Operation::Hole
+        | Operation::Unit => {}
     }
 }
 

@@ -492,7 +492,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Tablet(_)
             | Operation::List(_)
             | Operation::Prose(_)
-            | Operation::Hole => {
+            | Operation::Hole
+            | Operation::Unit => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Conclusion::Completed(Outcome::Done(value)))
             }

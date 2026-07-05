@@ -46,6 +46,7 @@ pub enum ParsingError {
     MixedSectionContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
+    InvalidLiteral(Span),
     InvalidCodeBlock(Span),
     InvalidStep(Span),
     InvalidSubstep(Span),
@@ -81,6 +82,7 @@ impl ParsingError {
             | ParsingError::MixedSectionContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
+            | ParsingError::InvalidLiteral(span)
             | ParsingError::InvalidCodeBlock(span)
             | ParsingError::InvalidStep(span)
             | ParsingError::InvalidSubstep(span)
@@ -1511,6 +1513,10 @@ impl<'i> Parser<'i> {
             self.advance(1);
             let span = self.span_since(start);
             Ok(Expression::Hole(span))
+        } else if is_unit(content) {
+            self.advance(2);
+            let span = self.span_since(start);
+            Ok(Expression::Unit(span))
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
@@ -1547,6 +1553,18 @@ impl<'i> Parser<'i> {
                         self.offset,
                         width,
                     )));
+                } else if text
+                    .trim()
+                    .is_empty()
+                {
+                    // Parentheses with nothing (`( )`) or a bare expression
+                    // inside (`(x)`) are not the unit literal `()` and there
+                    // is no grouping form, so this is a malformed literal.
+                    let width = content
+                        .find(')')
+                        .map(|close| close + 1)
+                        .unwrap_or(paren + 1);
+                    return Err(ParsingError::InvalidLiteral(Span::new(self.offset, width)));
                 } else {
                     return Err(ParsingError::InvalidFunction(Span::new(
                         self.offset,
@@ -3254,6 +3272,10 @@ fn is_repeat_keyword(content: &str) -> bool {
     let re = regex!(r"^\s*repeat\s+");
 
     re.is_match(content)
+}
+
+fn is_unit(content: &str) -> bool {
+    content.starts_with("()")
 }
 
 fn is_function(content: &str) -> bool {

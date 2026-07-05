@@ -235,6 +235,43 @@ fn hole_as_expression() {
 }
 
 #[test]
+fn unit_as_expression() {
+    // Exactly `()` is the unit literal. It must not be confused with a
+    // function call `name()`, an invocation `<name>()`, or parens that
+    // enclose whitespace or content.
+    let mut input = Parser::new();
+    input.initialize("()");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Unit(Span::default()))
+    );
+
+    input.initialize("name()");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Execution(
+            Function {
+                target: Identifier::new("name"),
+                parameters: vec![]
+            },
+            Span::default()
+        ))
+    );
+
+    input.initialize("<name>()");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Application(
+            Invocation {
+                target: Target::Local(Identifier::new("name")),
+                parameters: Some(vec![])
+            },
+            Span::default()
+        ))
+    );
+}
+
+#[test]
 fn declaration_simple() {
     let mut input = Parser::new();
     input.initialize("making_coffee :");
@@ -2755,6 +2792,22 @@ fn descriptive_binding_parenthesised_tuple() {
         }
         _ => panic!("Last element should be a tuple binding"),
     }
+}
+
+#[test]
+fn descriptive_prose_parens_stay_text() {
+    // A bare `()` in ordinary prose is plain text, not the unit literal.
+    let mut input = Parser::new();
+    input.initialize("Some prose with () in it.\n");
+    let paragraphs = input
+        .read_descriptive()
+        .unwrap();
+
+    let descriptives = &paragraphs[0].0;
+    let Descriptive::Text(text) = &descriptives[0] else {
+        panic!("expected Text, got {:?}", descriptives[0]);
+    };
+    assert_eq!(*text, "Some prose with () in it.");
 }
 
 #[test]

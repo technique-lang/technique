@@ -832,6 +832,7 @@ impl<'i> Translator<'i> {
                 }
             }
             language::Expression::Hole(_) => Operation::Hole,
+            language::Expression::Unit(_) => Operation::Unit,
             language::Expression::Separator => Operation::Sequence(Vec::new()),
         }
     }

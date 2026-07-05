@@ -128,6 +128,7 @@ pub enum Operation<'i> {
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
     Hole,
+    Unit,
     Prose(&'i str),
     Sequence(Vec<Operation<'i>>),
     /// The executable work hoisted from a procedure's description is an

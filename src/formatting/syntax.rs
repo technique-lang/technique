@@ -13,6 +13,8 @@ pub enum Syntax {
     StepItem,
     CodeBlock,
     Variable,
+    Hole,
+    Unit,
     Section,
     String,
     Numeric,

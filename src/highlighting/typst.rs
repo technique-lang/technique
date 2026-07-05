@@ -23,6 +23,8 @@ impl Render for Typst {
             Syntax::StepItem => markup("weight: \"bold\"", &content),
             Syntax::CodeBlock => markup("fill: rgb(0x99, 0x99, 0x99), weight: \"bold\"", &content),
             Syntax::Variable => markup("fill: rgb(0x72, 0x9f, 0xcf), weight: \"bold\"", &content),
+            Syntax::Hole => markup("fill: rgb(0xf5, 0x79, 0x00), weight: \"bold\"", &content),
+            Syntax::Unit => markup("fill: rgb(0xf5, 0x79, 0x00), weight: \"bold\"", &content),
             Syntax::Section => markup("", &content),
             Syntax::String => markup("fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\"", &content),
             Syntax::Numeric => markup("fill: rgb(0xad, 0x7f, 0xa8), weight: \"bold\"", &content),
