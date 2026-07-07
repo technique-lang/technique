@@ -1407,6 +1407,144 @@ echo "Done"```) }"#,
 }
 
 #[test]
+fn function_arguments_accept_compound_expressions() {
+    // A nested tuple, list, or call each count as one argument.
+    let mut input = Parser::new();
+
+    input.initialize("{ thing((a, b, c)) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("thing"),
+                parameters: vec![Expression::Tuple(
+                    vec![
+                        Expression::Variable(Identifier::new("a"), Span::default()),
+                        Expression::Variable(Identifier::new("b"), Span::default()),
+                        Expression::Variable(Identifier::new("c"), Span::default())
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+
+    // Same names as three loose arguments: arity 3, not arity 1.
+    input.initialize("{ thing(a, b, c) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("thing"),
+                parameters: vec![
+                    Expression::Variable(Identifier::new("a"), Span::default()),
+                    Expression::Variable(Identifier::new("b"), Span::default()),
+                    Expression::Variable(Identifier::new("c"), Span::default())
+                ]
+            },
+            Span::default()
+        )])
+    );
+
+    input.initialize("{ thing([a, b]) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("thing"),
+                parameters: vec![Expression::List(
+                    vec![
+                        Expression::Variable(Identifier::new("a"), Span::default()),
+                        Expression::Variable(Identifier::new("b"), Span::default())
+                    ],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+
+    input.initialize("{ thing(other(x)) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("thing"),
+                parameters: vec![Expression::Execution(
+                    Function {
+                        target: Identifier::new("other"),
+                        parameters: vec![Expression::Variable(
+                            Identifier::new("x"),
+                            Span::default()
+                        )]
+                    },
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn multiline_argument_content_not_split_by_internal_separators() {
+    // A comma inside a ``` block is content, not an argument separator.
+    let mut input = Parser::new();
+
+    input.initialize(
+        r#"{ exec(```bash
+ls -la, please
+```) }"#,
+    );
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Some("bash"),
+                    vec!["ls -la, please"],
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+
+    // A multiline argument followed by a genuine second argument: two
+    // parameters, not scrambled.
+    input.initialize(
+        r#"{ combine(```bash
+echo "hello, world"
+```, "second, arg") }"#,
+    );
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("combine"),
+                parameters: vec![
+                    Expression::Multiline(
+                        Some("bash"),
+                        vec!["echo \"hello, world\""],
+                        Span::default()
+                    ),
+                    Expression::String(vec![Piece::Text("second, arg")], Span::default())
+                ]
+            },
+            Span::default()
+        )])
+    );
+}
+
+#[test]
 fn multiline() {
     let mut input = Parser::new();
 
@@ -1782,6 +1920,92 @@ fn lists() {
             ],
             Span::default()
         )])
+    );
+
+    // A comma inside a ``` multiline element does not split the list.
+    input.initialize(
+        r#"{ [ ```bash
+ls -la, please
+``` ] }"#,
+    );
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::List(
+            vec![Expression::Multiline(
+                Some("bash"),
+                vec!["ls -la, please"],
+                Span::default()
+            )],
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn tuples() {
+    // Unlike lists, tuples are comma-only — no newline form.
+    let mut input = Parser::new();
+
+    input.initialize(r#"{ ( 2, "mice" ) }"#);
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Tuple(
+            vec![
+                Expression::Number(Numeric::Integral(2), Span::default()),
+                Expression::String(vec![Piece::Text("mice")], Span::default())
+            ],
+            Span::default()
+        )])
+    );
+
+    // Three or more elements
+    input.initialize("{ (1, 2, 3) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Tuple(
+            vec![
+                Expression::Number(Numeric::Integral(1), Span::default()),
+                Expression::Number(Numeric::Integral(2), Span::default()),
+                Expression::Number(Numeric::Integral(3), Span::default())
+            ],
+            Span::default()
+        )])
+    );
+
+    // A nested tuple's comma doesn't split the outer list.
+    input.initialize(r#"{ [ (1, "a"), (2, "b") ] }"#);
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::List(
+            vec![
+                Expression::Tuple(
+                    vec![
+                        Expression::Number(Numeric::Integral(1), Span::default()),
+                        Expression::String(vec![Piece::Text("a")], Span::default())
+                    ],
+                    Span::default()
+                ),
+                Expression::Tuple(
+                    vec![
+                        Expression::Number(Numeric::Integral(2), Span::default()),
+                        Expression::String(vec![Piece::Text("b")], Span::default())
+                    ],
+                    Span::default()
+                )
+            ],
+            Span::default()
+        )])
+    );
+
+    // Exactly `()` remains the unit literal, not a zero-element tuple.
+    input.initialize("()");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Unit(Span::default()))
     );
 }
 

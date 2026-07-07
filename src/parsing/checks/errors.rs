@@ -264,7 +264,7 @@ making_coffee :
 }
 
 #[test]
-fn invalid_literal_whitespace_parens() {
+fn invalid_tuple_whitespace_parens() {
     expect_error(
         r#"
 making_coffee :
@@ -272,12 +272,12 @@ making_coffee :
     1. Do something { ( ) }
             "#
         .trim_ascii(),
-        ParsingError::InvalidLiteral(Span::new(39, 3)),
+        ParsingError::InvalidTuple(Span::new(39, 3)),
     );
 }
 
 #[test]
-fn invalid_literal_parenthesised_expression() {
+fn invalid_tuple_parenthesised_expression() {
     expect_error(
         r#"
 making_coffee :
@@ -285,7 +285,7 @@ making_coffee :
     1. Do something { (x) }
             "#
         .trim_ascii(),
-        ParsingError::InvalidLiteral(Span::new(39, 3)),
+        ParsingError::InvalidTuple(Span::new(39, 3)),
     );
 }
 

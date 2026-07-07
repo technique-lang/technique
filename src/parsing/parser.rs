@@ -46,7 +46,7 @@ pub enum ParsingError {
     MixedSectionContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
-    InvalidLiteral(Span),
+    InvalidTuple(Span),
     InvalidCodeBlock(Span),
     InvalidStep(Span),
     InvalidSubstep(Span),
@@ -82,7 +82,7 @@ impl ParsingError {
             | ParsingError::MixedSectionContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
-            | ParsingError::InvalidLiteral(span)
+            | ParsingError::InvalidTuple(span)
             | ParsingError::InvalidCodeBlock(span)
             | ParsingError::InvalidStep(span)
             | ParsingError::InvalidSubstep(span)
@@ -622,12 +622,21 @@ impl<'i> Parser<'i> {
         Ok(results)
     }
 
-    /// Split the current content (assumed to be inside bracket delimiters
-    /// representing a list) interior into elements, breaking on each
-    /// top-level comma or newline. Separators nested within parentheses,
-    /// brackets, or string literals do not split. Empty chunks (a trailing
-    /// comma, a blank line) are skipped.
-    fn take_elements<A, F>(&mut self, function: F) -> Result<Vec<A>, ParsingError>
+    /// Split content into elements at each top-level comma (and, if
+    /// `allow_newline`, each top-level newline too — lists/tablets allow
+    /// either, tuples/arguments are comma-only). Separators inside parens,
+    /// brackets, strings, or a ``` multiline block don't split.
+    ///
+    /// Slices each element out before parsing it, rather than parsing
+    /// incrementally and checking what follows, because some readers
+    /// reached from `read_expression` (e.g. `read_numeric_integral`, and
+    /// the `is_binding`/`is_numeric_integral` predicates) assume they're
+    /// handed exactly one isolated token and anchor to its end.
+    fn take_elements<A, F>(
+        &mut self,
+        allow_newline: bool,
+        function: F,
+    ) -> Result<Vec<A>, ParsingError>
     where
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
     {
@@ -638,6 +647,8 @@ impl<'i> Parser<'i> {
         let mut start = 0;
         let mut depth = 0i32;
         let mut in_string = false;
+        let mut in_multiline = false;
+        let mut backticks = 0u8;
 
         let mut cut = |outer: &mut Parser<'i>, chunk: &'i str| -> Result<(), ParsingError> {
             let trimmed = chunk.trim_ascii();
@@ -654,12 +665,27 @@ impl<'i> Parser<'i> {
         };
 
         for (i, c) in content.char_indices() {
+            if c == '`' {
+                backticks += 1;
+                if backticks == 3 {
+                    in_multiline = !in_multiline;
+                    backticks = 0;
+                }
+                continue;
+            }
+            backticks = 0;
+
             match c {
+                _ if in_multiline => {}
                 '"' => in_string = !in_string,
                 _ if in_string => {}
                 '(' | '[' => depth += 1,
                 ')' | ']' => depth -= 1,
-                ',' | '\n' if depth == 0 => {
+                ',' if depth == 0 => {
+                    cut(self, &content[start..i])?;
+                    start = i + c.len_utf8();
+                }
+                '\n' if depth == 0 && allow_newline => {
                     cut(self, &content[start..i])?;
                     start = i + c.len_utf8();
                 }
@@ -1517,6 +1543,19 @@ impl<'i> Parser<'i> {
             self.advance(2);
             let span = self.span_since(start);
             Ok(Expression::Unit(span))
+        } else if content.starts_with('(') {
+            self.read_tuple_literal()
+        } else if content.starts_with("```") {
+            let (lang, lines) = self
+                .take_block_delimited("```", |inner| inner.parse_multiline_content())
+                .map_err(|err| match err {
+                    ParsingError::Expected(span, "the corresponding end delimiter") => {
+                        ParsingError::InvalidMultiline(Span::new(span.offset, 0))
+                    }
+                    _ => err,
+                })?;
+            let span = self.span_since(start);
+            Ok(Expression::Multiline(lang, lines, span))
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
@@ -1560,18 +1599,6 @@ impl<'i> Parser<'i> {
                         self.offset,
                         width,
                     )));
-                } else if text
-                    .trim()
-                    .is_empty()
-                {
-                    // Parentheses with nothing (`( )`) or a bare expression
-                    // inside (`(x)`) are not the unit literal `()` and there
-                    // is no grouping form, so this is a malformed literal.
-                    let width = content
-                        .find(')')
-                        .map(|close| close + 1)
-                        .unwrap_or(paren + 1);
-                    return Err(ParsingError::InvalidLiteral(Span::new(self.offset, width)));
                 } else {
                     return Err(ParsingError::InvalidFunction(Span::new(
                         self.offset,
@@ -1760,7 +1787,7 @@ impl<'i> Parser<'i> {
     fn read_bracket_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         let start = self.offset;
         let elements = self.take_block_chars("a list", '[', ']', true, |outer| {
-            outer.take_elements(|inner| {
+            outer.take_elements(true, |inner| {
                 if is_pair(inner.source) {
                     let pair_start = inner.offset;
                     let label = inner
@@ -1778,6 +1805,21 @@ impl<'i> Parser<'i> {
         })?;
         let span = self.span_since(start);
         Ok(Expression::List(elements, span))
+    }
+
+    /// Read a tuple: two or more comma-separated expressions in
+    /// parentheses. A single element (or none) isn't a tuple; use unit
+    /// `()` for an empty value.
+    fn read_tuple_literal(&mut self) -> Result<Expression<'i>, ParsingError> {
+        let start = self.offset;
+        let elements = self.take_block_chars("a tuple", '(', ')', true, |outer| {
+            outer.take_elements(false, |inner| inner.read_expression())
+        })?;
+        if elements.len() < 2 {
+            return Err(ParsingError::InvalidTuple(self.span_since(start)));
+        }
+        let span = self.span_since(start);
+        Ok(Expression::Tuple(elements, span))
     }
 
     fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError> {
@@ -1889,17 +1931,10 @@ impl<'i> Parser<'i> {
 
     /// Parse a simple integral number
     fn read_numeric_integral(&mut self) -> Result<Numeric<'i>, ParsingError> {
-        let content = self.source;
-
-        if let Ok(amount) = content
-            .trim_ascii()
-            .parse::<i64>()
-        {
-            self.advance(content.len());
-            Ok(Numeric::Integral(amount))
-        } else {
-            Err(ParsingError::InvalidIntegral(Span::new(self.offset, 0)))
-        }
+        let decimal = self
+            .read_decimal_part()
+            .map_err(|_| ParsingError::InvalidIntegral(Span::new(self.offset, 0)))?;
+        Ok(Numeric::Integral(decimal.number))
     }
 
     /// Parse a scientific quantity with units
@@ -2552,102 +2587,12 @@ impl<'i> Parser<'i> {
         Ok((lang, result))
     }
 
-    /// Consume parameters to an invocation or function. Specifically, look
-    /// for the form
-    ///
-    /// ( one, 2, "three", ```bash echo "four"``` )
-    ///
-    /// and return a Vec with an Expression for each parameter in the list. Most however,
-    /// will either be
-    ///
-    /// ( a, b, c )
-    ///
-    /// or
-    ///
-    /// ( ```lang some content``` )
-    ///
+    /// Consume parameters to an invocation or function: a parenthesised,
+    /// comma-separated list of full expressions, e.g. `(a, b, other(c))`.
+    /// Unlike a list, there's no newline form.
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
         self.take_block_chars("parameters for a function", '(', ')', true, |outer| {
-            let mut params = Vec::new();
-
-            loop {
-                outer.trim_whitespace();
-
-                let content = outer.source;
-                if content.is_empty() {
-                    break;
-                }
-
-                let param_start = outer.offset;
-                if content.starts_with("```") {
-                    let (lang, lines) = outer
-                        .take_block_delimited("```", |inner| inner.parse_multiline_content())
-                        .map_err(|err| match err {
-                            ParsingError::Expected(span, "the corresponding end delimiter") => {
-                                ParsingError::InvalidMultiline(Span::new(span.offset, 0))
-                            }
-                            _ => err,
-                        })?;
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::Multiline(lang, lines, span));
-                } else if content.starts_with("\"") {
-                    let parts =
-                        outer.take_block_chars("a string literal", '"', '"', false, |inner| {
-                            inner.parse_string_pieces(inner.source)
-                        })?;
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::String(parts, span));
-                } else if content.starts_with('\'') {
-                    let value = outer.take_block_chars(
-                        "a response literal",
-                        '\'',
-                        '\'',
-                        false,
-                        |inner| Ok(inner.source),
-                    )?;
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::Response(value, span));
-                } else if is_numeric_quantity(content) {
-                    let numeric = outer.read_numeric_quantity()?;
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::Number(numeric, span));
-                } else if is_numeric_integral(content)
-                    || content
-                        .as_bytes()
-                        .first()
-                        .is_some_and(|b| b.is_ascii_digit())
-                    || content.starts_with('-')
-                        && content
-                            .as_bytes()
-                            .get(1)
-                            .is_some_and(|b| b.is_ascii_digit())
-                {
-                    let decimal = outer.read_decimal_part()?;
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::Number(Numeric::Integral(decimal.number), span));
-                } else if content.starts_with('?') {
-                    outer.advance(1);
-                    let span = outer.span_since(param_start);
-                    params.push(Expression::Hole(span));
-                } else {
-                    let name = outer.read_identifier()?;
-                    let span = name.span;
-                    params.push(Expression::Variable(name, span));
-                }
-
-                // Handle comma separation
-                outer.trim_whitespace();
-                if outer
-                    .source
-                    .starts_with(',')
-                {
-                    outer.advance(1);
-                } else {
-                    break;
-                }
-            }
-
-            Ok(params)
+            outer.take_elements(false, |inner| inner.read_expression())
         })
     }
 

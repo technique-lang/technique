@@ -185,6 +185,13 @@ pub fn evaluate<'i>(
             }
             Ok(Value::Arraeum(values))
         }
+        Operation::Tuple(items) => {
+            let mut values = Vec::with_capacity(items.len());
+            for item in items {
+                values.push(evaluate(library, context, env, item)?);
+            }
+            Ok(Value::Parametriq(values))
+        }
         Operation::Bind { names, value, .. } => {
             let v = evaluate(library, context, env, value)?;
             bind_names(env, names, v)?;

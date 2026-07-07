@@ -1328,6 +1328,7 @@ impl<'i> Formatter<'i> {
             }
             Expression::Pair(pair, _) => self.append_pair(pair),
             Expression::List(elements, _) => self.append_list(elements),
+            Expression::Tuple(elements, _) => self.append_tuple(elements),
             Expression::Hole(_) => {
                 self.add_fragment_reference(Syntax::Hole, "?");
             }
@@ -1505,12 +1506,26 @@ impl<'i> Formatter<'i> {
         {
             if i > 0 {
                 self.add_fragment_reference(Syntax::Structure, ",");
+                self.add_fragment_reference(Syntax::Neutral, " ");
             }
-            self.add_fragment_reference(Syntax::Neutral, " ");
             self.append_expression(element);
         }
-        self.add_fragment_reference(Syntax::Neutral, " ");
         self.add_fragment_reference(Syntax::Structure, "]");
+    }
+
+    fn append_tuple(&mut self, elements: &'i Vec<Expression>) {
+        self.add_fragment_reference(Syntax::Structure, "(");
+        for (i, element) in elements
+            .iter()
+            .enumerate()
+        {
+            if i > 0 {
+                self.add_fragment_reference(Syntax::Structure, ",");
+                self.add_fragment_reference(Syntax::Neutral, " ");
+            }
+            self.append_expression(element);
+        }
+        self.add_fragment_reference(Syntax::Structure, ")");
     }
 }
 
