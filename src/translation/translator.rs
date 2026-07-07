@@ -557,7 +557,8 @@ impl<'i> Translator<'i> {
                 | [expr @ language::Expression::String(..)]
                 | [expr @ language::Expression::Multiline(..)]
                 | [expr @ language::Expression::Pair(..)]
-                | [expr @ language::Expression::List(..)] => {
+                | [expr @ language::Expression::List(..)]
+                | [expr @ language::Expression::Tuple(..)] => {
                     Some(Fragment::Interpolation(self.translate_expression(expr)))
                 }
                 // A multi-statement block, or any executable single statement,
@@ -793,6 +794,13 @@ impl<'i> Translator<'i> {
                         .collect();
                     Operation::List(items)
                 }
+            }
+            language::Expression::Tuple(elements, _) => {
+                let items = elements
+                    .iter()
+                    .map(|element| self.translate_expression(element))
+                    .collect();
+                Operation::Tuple(items)
             }
             language::Expression::Application(invocation, _) => {
                 Operation::Invoke(self.translate_invocation(invocation))

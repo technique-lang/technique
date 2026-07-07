@@ -106,7 +106,7 @@ fn link_operation<'i>(
                 link_operation(&mut entry.value, library, problems);
             }
         }
-        Operation::List(items) => {
+        Operation::List(items) | Operation::Tuple(items) => {
             for item in items {
                 link_operation(item, library, problems);
             }

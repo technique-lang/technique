@@ -620,13 +620,7 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .command(&mut self.out, qualified, script)
     }
 
-    fn action(
-        &mut self,
-        qualified: &str,
-        name: &str,
-        verb: &str,
-        value: &Value,
-    ) -> UserInput {
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput {
         self.verdict
             .action(&mut self.out, qualified, name, verb, value)
     }
@@ -1939,13 +1933,7 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .command(qualified, script)
     }
 
-    fn action(
-        &mut self,
-        qualified: &str,
-        name: &str,
-        verb: &str,
-        value: &Value,
-    ) -> UserInput {
+    fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput {
         self.emit(Trace::Execute {
             path: qualified.to_string(),
             script: format!("{} {}", verb, value.label())

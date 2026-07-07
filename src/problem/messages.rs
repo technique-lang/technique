@@ -579,15 +579,33 @@ expressions as parameters as required:
                 .to_string(),
             )
         }
-        ParsingError::InvalidLiteral(_) => (
-            "Invalid literal".to_string(),
-            r#"
-This is not a valid value. If you need to pass an empty value you probably
-want unit, written `()`.
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
+        ParsingError::InvalidTuple(_) => {
+            let examples = vec![
+                Expression::Tuple(
+                    vec![
+                        Expression::Number(Numeric::Integral(2), Span::default()),
+                        Expression::String(vec![Piece::Text("mice")], Span::default()),
+                    ],
+                    Span::default(),
+                ),
+                Expression::Unit(Span::default()),
+            ];
+
+            (
+                "Invalid tuple syntax".to_string(),
+                format!(
+                    r#"
+A tuple needs two or more values separated by commas, like {}.
+Parentheses around a single value aren't necessary; just write the
+value on its own. For an empty value use unit, written {}.
+                    "#,
+                    examples[0].present(renderer),
+                    examples[1].present(renderer),
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         ParsingError::InvalidCodeBlock(_) => {
             let examples = vec![
                 Expression::Execution(

@@ -369,6 +369,13 @@ fn render_expression(expr: &Expression) -> String {
                 .collect();
             format!("[{}]", items.join(", "))
         }
+        Expression::Tuple(elements, _) => {
+            let items: Vec<_> = elements
+                .iter()
+                .map(render_expression)
+                .collect();
+            format!("({})", items.join(", "))
+        }
         Expression::Hole(_) => "?".to_string(),
         Expression::Unit(_) => "()".to_string(),
         Expression::Separator => String::new(),

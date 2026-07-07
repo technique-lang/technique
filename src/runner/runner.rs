@@ -492,6 +492,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Multiline(_, _)
             | Operation::Tablet(_)
             | Operation::List(_)
+            | Operation::Tuple(_)
             | Operation::Prose(_)
             | Operation::Hole
             | Operation::Unit => {

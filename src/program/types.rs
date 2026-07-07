@@ -126,6 +126,7 @@ pub enum Operation<'i> {
     Multiline(Option<&'i str>, Vec<&'i str>),
     Tablet(Vec<Entry<'i>>),
     List(Vec<Operation<'i>>),
+    Tuple(Vec<Operation<'i>>),
     Invoke(Invocable<'i>),
     Execute(Executable<'i>),
     Hole,

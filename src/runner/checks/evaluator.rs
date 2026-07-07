@@ -166,9 +166,51 @@ fn sequence_evaluation() {
     assert_eq!(v, value::Value::Unitus);
 }
 
-// Build a Parametriq of three values by reducing a wrapped construction.
-// Simplest path: pre-stuff env with a Parametriq, then bind a tuple of names
-// to a Variable that looks it up.
+#[test]
+fn tuple_literal_evaluates_to_parametriq() {
+    let library = Library::core();
+    let context = Context::native(false);
+    let mut env = Environment::new();
+    let tuple = Operation::Tuple(vec![
+        Operation::Number(LangNumeric::Integral(2)),
+        Operation::String(vec![Fragment::Text("mice")]),
+    ]);
+    let v = evaluate(&library, &context, &mut env, &tuple).expect("evaluated");
+    assert_eq!(
+        v,
+        value::Value::Parametriq(vec![
+            value::Value::Quanticle(value::Numeric::Integral(2)),
+            value::Value::Literali("mice".to_string()),
+        ])
+    );
+}
+
+#[test]
+fn tuple_literal_binds_directly() {
+    // `(2, "mice") ~ (count, kind)` end to end.
+    let library = Library::core();
+    let context = Context::native(false);
+    let mut env = Environment::new();
+    let names = [Identifier::new("count"), Identifier::new("kind")];
+    let bind = Operation::Bind {
+        names: &names,
+        value: Box::new(Operation::Tuple(vec![
+            Operation::Number(LangNumeric::Integral(2)),
+            Operation::String(vec![Fragment::Text("mice")]),
+        ])),
+        inferred: None,
+    };
+    let result = evaluate(&library, &context, &mut env, &bind).expect("evaluated");
+    assert_eq!(result, value::Value::Unitus);
+    assert_eq!(
+        env.lookup("count"),
+        Some(&value::Value::Quanticle(value::Numeric::Integral(2)))
+    );
+    assert_eq!(
+        env.lookup("kind"),
+        Some(&value::Value::Literali("mice".to_string()))
+    );
+}
 
 #[test]
 fn multi_name_bind_destructures_parametriq() {

@@ -774,8 +774,8 @@ impl TechniqueLanguageServer {
                     "Invalid function call".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
-                ParsingError::InvalidLiteral(_) => {
-                    ("Invalid literal".to_string(), DiagnosticSeverity::ERROR)
+                ParsingError::InvalidTuple(_) => {
+                    ("Invalid tuple".to_string(), DiagnosticSeverity::ERROR)
                 }
                 ParsingError::InvalidCodeBlock(_) => {
                     ("Invalid code block".to_string(), DiagnosticSeverity::ERROR)
