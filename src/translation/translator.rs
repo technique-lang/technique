@@ -229,8 +229,8 @@ impl<'i> Translator<'i> {
                     }
                 }
                 language::Element::CodeBlock(expressions, subscopes, _) => {
-                    match self.translate_loop_block(expressions, subscopes, &[]) {
-                        Some(loop_op) => ops.push(loop_op),
+                    match self.translate_control_block(expressions, subscopes, &[]) {
+                        Some(control_op) => ops.push(control_op),
                         None => {
                             for expression in expressions {
                                 ops.push(self.translate_expression(expression));
@@ -379,8 +379,8 @@ impl<'i> Translator<'i> {
                 expressions,
                 subscopes,
                 ..
-            } => match self.translate_loop_block(expressions, subscopes, attrs) {
-                Some(loop_op) => loop_op,
+            } => match self.translate_control_block(expressions, subscopes, attrs) {
+                Some(control_op) => control_op,
                 None => {
                     let mut ops = Vec::new();
                     for expression in expressions {
@@ -396,10 +396,11 @@ impl<'i> Translator<'i> {
         }
     }
 
-    // Build the `Loop` for a foreach or repeat code block, its subscopes
-    // forming the body. Returns None for any other code block, which the
-    // caller translates as a plain sequence of its expressions.
-    fn translate_loop_block(
+    // Build the `Loop` for a foreach or repeat code block, or the `Within`
+    // for a within block, its subscopes forming the body. Returns None for
+    // any other code block, which the caller translates as a plain sequence
+    // of its expressions.
+    fn translate_control_block(
         &mut self,
         expressions: &'i [language::Expression<'i>],
         subscopes: &'i [language::Scope<'i>],
@@ -433,6 +434,21 @@ impl<'i> Translator<'i> {
                 Some(Operation::Loop {
                     names: &[],
                     over: None,
+                    body: Box::new(Operation::Sequence(body_ops)),
+                    responses,
+                })
+            }
+            language::Expression::Within(inner, _) => {
+                // `within <budget>` governs the subscopes beneath it, the way
+                // `foreach`'s source does: the budget is a separate field,
+                // not part of the body.
+                let mut body_ops = Vec::new();
+                let mut responses = Vec::new();
+                for sub in subscopes {
+                    self.append_attributes(&mut body_ops, &mut responses, sub, attrs);
+                }
+                Some(Operation::Within {
+                    bound: Box::new(self.translate_expression(inner)),
                     body: Box::new(Operation::Sequence(body_ops)),
                     responses,
                 })
@@ -826,6 +842,13 @@ impl<'i> Translator<'i> {
             language::Expression::Foreach(names, source, _) => Operation::Loop {
                 names,
                 over: Some(Box::new(self.translate_expression(source))),
+                body: Box::new(Operation::Sequence(Vec::new())),
+                responses: Vec::new(),
+            },
+            // Standalone Within, likewise: the body is supplied by the
+            // enclosing CodeBlock's subscopes when one is present.
+            language::Expression::Within(bound, _) => Operation::Within {
+                bound: Box::new(self.translate_expression(bound)),
                 body: Box::new(Operation::Sequence(Vec::new())),
                 responses: Vec::new(),
             },
