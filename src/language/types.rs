@@ -253,6 +253,10 @@ pub enum Descriptive<'i> {
     CodeInline(Vec<Expression<'i>>),
     Application(Invocation<'i>),
     Binding(Box<Descriptive<'i>>, Vec<Identifier<'i>>),
+    // A naked `$(...)` cost, distinct from CodeInline so the formatter can
+    // tell it apart from an author-written `{ $(...) }` and preserve braces
+    // (or their absence) exactly as written.
+    Cost(Expression<'i>),
 }
 
 // types for Steps within procedures
@@ -443,6 +447,7 @@ pub enum Expression<'i> {
     Repeat(Box<Expression<'i>>, Span),
     Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>, Span),
     Within(Box<Expression<'i>>, Span),
+    Cost(Box<Expression<'i>>, Span),
     Application(Invocation<'i>, Span),
     Execution(Function<'i>, Span),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
@@ -469,6 +474,7 @@ impl PartialEq for Expression<'_> {
                 a1 == b1 && a2 == b2
             }
             (Expression::Within(a, _), Expression::Within(b, _)) => a == b,
+            (Expression::Cost(a, _), Expression::Cost(b, _)) => a == b,
             (Expression::Application(a, _), Expression::Application(b, _)) => a == b,
             (Expression::Execution(a, _), Expression::Execution(b, _)) => a == b,
             (Expression::Binding(a1, a2, _), Expression::Binding(b1, b2, _)) => {

@@ -344,6 +344,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 names, over, body, ..
             } => self.walk_loop(env, names, over.as_deref(), body),
             Operation::Within { bound, body, .. } => self.walk_within(env, bound, body),
+            // Walk the inner expression (so a `$(<call>)` runs); its resulting
+            // value becomes the step's own value, same as any other operation
+            // — a Cost is not special at runtime, only a marker in the IR for
+            // a future static analysis over declared costs.
+            Operation::Cost(inner) => self.walk(env, inner),
             Operation::Invoke(invocable) => self.walk_invoke(env, invocable),
             Operation::Execute(executable) => {
                 let function = self.executable_name(&executable.target);

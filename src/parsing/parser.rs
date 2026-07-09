@@ -1533,6 +1533,8 @@ impl<'i> Parser<'i> {
             self.read_foreach_expression()
         } else if is_within_keyword(content) {
             self.read_within_expression()
+        } else if content.starts_with('$') {
+            self.read_cost_expression()
         } else if content.starts_with("foreach ") {
             // Malformed foreach expression
             return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
@@ -1759,6 +1761,17 @@ impl<'i> Parser<'i> {
 
         let span = self.span_since(start);
         Ok(Expression::Within(Box::new(expression), span))
+    }
+
+    fn read_cost_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        // Parse "$(<expression>)"
+        let start = self.offset;
+        self.trim_whitespace();
+        self.advance(1); // consume '$'
+        let inner =
+            self.take_block_chars("a cost", '(', ')', true, |outer| outer.read_expression())?;
+        let span = self.span_since(start);
+        Ok(Expression::Cost(Box::new(inner), span))
     }
 
     fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
@@ -2489,9 +2502,32 @@ impl<'i> Parser<'i> {
                                     } else {
                                         content.push(Descriptive::Application(invocation));
                                     }
+                                } else if c == '$'
+                                    && parser
+                                        .source
+                                        .starts_with("$(")
+                                {
+                                    let cost = parser.read_cost_expression()?;
+                                    parser.trim_whitespace();
+                                    if parser.peek_next_char() == Some('~') {
+                                        parser.advance(1);
+                                        parser.trim_whitespace();
+                                        let variables = parser.read_binding_identifiers()?;
+                                        content.push(Descriptive::Binding(
+                                            Box::new(Descriptive::Cost(cost)),
+                                            variables,
+                                        ));
+                                    } else {
+                                        content.push(Descriptive::Cost(cost));
+                                    }
+                                } else if c == '$' {
+                                    // A bare '$' not opening a cost is literal text.
+                                    parser.advance(1);
+                                    content.push(Descriptive::Text("$"));
                                 } else {
-                                    let text =
-                                        parser.take_until(&['{', '<', '~', '\n'], |inner| {
+                                    let text = parser.take_until(
+                                        &['{', '<', '$', '~', '\n'],
+                                        |inner| {
                                             let content = inner
                                                 .source
                                                 .trim_ascii();
@@ -2502,7 +2538,8 @@ impl<'i> Parser<'i> {
                                                 ));
                                             }
                                             Ok(content)
-                                        })?;
+                                        },
+                                    )?;
                                     if text.is_empty() {
                                         continue;
                                     } else if parser.peek_next_char() == Some('~') {

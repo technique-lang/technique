@@ -507,6 +507,16 @@ impl<'i> Formatter<'i> {
         }
     }
 
+    /// Render a naked `$(...)` cost with no surrounding braces — distinct
+    /// from `render_inline_code`, which always wraps in `{ }` because it
+    /// only ever renders an author-written `CodeInline`.
+    fn render_cost(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
+        let mut sub = self.subformatter();
+        sub.append_expression(expr);
+        sub.flush_current();
+        sub.fragments
+    }
+
     /// Render a `;`-separated code block inline: `{ a; b }`, with `;` for
     /// each of the separators.
     fn render_inline_block(&self, exprs: &'i [Expression]) -> Vec<(Syntax, Cow<'i, str>)> {
@@ -576,6 +586,9 @@ impl<'i> Formatter<'i> {
             }
             Descriptive::Application(invocation) => {
                 sub.append_application(invocation);
+            }
+            Descriptive::Cost(expr) => {
+                sub.append_expression(expr);
             }
             Descriptive::Binding(_, _) => {
                 sub.append_str("<<nested binding>>");
@@ -1015,6 +1028,15 @@ impl<'i> Formatter<'i> {
                     }
                     line.add_binding(inner_descriptive, variables);
                 }
+                Descriptive::Cost(expr) => {
+                    if !line
+                        .current
+                        .is_empty()
+                    {
+                        line.add_atomic(syntax, " ");
+                    }
+                    line.add_cost(expr);
+                }
             }
             after_construct = true;
         }
@@ -1326,6 +1348,11 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Keyword, "within");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
+            }
+            Expression::Cost(expression, _) => {
+                self.add_fragment_reference(Syntax::Structure, "$(");
+                self.append_expression(expression);
+                self.add_fragment_reference(Syntax::Structure, ")");
             }
             Expression::Foreach(variables, expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "foreach");
@@ -1720,6 +1747,15 @@ impl<'a, 'i> Line<'a, 'i> {
         let fragments = self
             .output
             .render_inline_code(expr);
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
+    }
+
+    fn add_cost(&mut self, expr: &'i Expression) {
+        let fragments = self
+            .output
+            .render_cost(expr);
         for (syntax, content) in fragments {
             self.add_no_wrap(syntax, content);
         }

@@ -130,6 +130,7 @@ fn resolve_operation<'i>(
             resolve_operation(bound, known, arities, problems);
             resolve_operation(body, known, arities, problems);
         }
+        Operation::Cost(inner) => resolve_operation(inner, known, arities, problems),
         Operation::Bind { value, .. } => resolve_operation(value, known, arities, problems),
         Operation::Execute(executable) => {
             for arg in &mut executable.arguments {
@@ -186,6 +187,7 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
             gather_iterated(body, iterated);
         }
         Operation::Bind { value, .. } => gather_iterated(value, iterated),
+        Operation::Cost(inner) => gather_iterated(inner, iterated),
         Operation::Sequence(ops)
         | Operation::List(ops)
         | Operation::Tuple(ops)
@@ -255,6 +257,7 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             mark_iterated(bound, iterated);
             mark_iterated(body, iterated);
         }
+        Operation::Cost(inner) => mark_iterated(inner, iterated),
         Operation::Sequence(ops)
         | Operation::List(ops)
         | Operation::Tuple(ops)
@@ -356,6 +359,7 @@ fn check_scope<'i>(
             check_scope(bound, scope, problems);
             check_scope(body, scope, problems);
         }
+        Operation::Cost(inner) => check_scope(inner, scope, problems),
         Operation::Sequence(ops)
         | Operation::List(ops)
         | Operation::Tuple(ops)

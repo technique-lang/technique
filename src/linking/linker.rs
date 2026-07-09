@@ -97,6 +97,7 @@ fn link_operation<'i>(
             link_operation(bound, library, problems);
             link_operation(body, library, problems);
         }
+        Operation::Cost(inner) => link_operation(inner, library, problems),
         Operation::Bind { value, .. } => link_operation(value, library, problems),
         Operation::String(fragments) => {
             for fragment in fragments {

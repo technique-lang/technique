@@ -300,6 +300,9 @@ fn render_expression(expr: &Expression) -> String {
         Expression::Within(inner, _) => {
             format!("within {}", render_expression(inner))
         }
+        Expression::Cost(inner, _) => {
+            format!("$({})", render_expression(inner))
+        }
         Expression::Foreach(ids, inner, _) => {
             let vars = if ids.len() == 1 {
                 ids[0]

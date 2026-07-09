@@ -164,6 +164,9 @@ pub enum Operation<'i> {
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
     },
+    /// A `$(...)` cost evaluates its inner expression, then constructs a
+    /// Resource-typed value (e.g. `Intratempse`) from the result.
+    Cost(Box<Operation<'i>>),
     Bind {
         names: &'i [language::Identifier<'i>],
         value: Box<Operation<'i>>,

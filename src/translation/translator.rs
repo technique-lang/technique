@@ -583,6 +583,7 @@ impl<'i> Translator<'i> {
             },
             language::Descriptive::Application(_) => None,
             language::Descriptive::Binding(inner, _) => self.fragment_from_descriptive(inner),
+            language::Descriptive::Cost(_) => None,
         }
     }
 
@@ -632,6 +633,7 @@ impl<'i> Translator<'i> {
                     inferred: None,
                 })
             }
+            language::Descriptive::Cost(expr) => Some(self.translate_expression(expr)),
         }
     }
 
@@ -852,6 +854,9 @@ impl<'i> Translator<'i> {
                 body: Box::new(Operation::Sequence(Vec::new())),
                 responses: Vec::new(),
             },
+            language::Expression::Cost(inner, _) => {
+                Operation::Cost(Box::new(self.translate_expression(inner)))
+            }
             language::Expression::Binding(value, names, span) => {
                 if let language::Expression::Repeat(_, _) = value.as_ref() {
                     self.problems
