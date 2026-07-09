@@ -1144,12 +1144,13 @@ impl<'i> Parser<'i> {
             } else if is_code_block(content) {
                 match parser.read_code_block() {
                     Ok(expressions) => {
-                        // A loop code block owns the steps below it as its body,
-                        // the way an attribute block owns its scope; `read_scopes`
-                        // stops at a trailing description, leaving it to be flagged.
-                        // A plain code block owns nothing, so following content
-                        // stays at this level.
-                        let subscopes = if is_loop_block(&expressions) {
+                        // A control-structure code block owns the steps below
+                        // it as its body, the way an attribute block owns its
+                        // scope; `read_scopes` stops at a trailing
+                        // description, leaving it to be flagged. A plain code
+                        // block owns nothing, so following content stays at
+                        // this level.
+                        let subscopes = if is_control_structure(&expressions) {
                             match parser.read_scopes() {
                                 Ok(subscopes) => subscopes,
                                 Err(error) => {
@@ -1530,6 +1531,8 @@ impl<'i> Parser<'i> {
             self.read_repeat_expression()
         } else if is_foreach_keyword(content) {
             self.read_foreach_expression()
+        } else if is_within_keyword(content) {
+            self.read_within_expression()
         } else if content.starts_with("foreach ") {
             // Malformed foreach expression
             return Err(ParsingError::InvalidForeach(Span::new(self.offset, 0)));
@@ -1744,6 +1747,18 @@ impl<'i> Parser<'i> {
 
         let span = self.span_since(start);
         Ok(Expression::Repeat(Box::new(expression), span))
+    }
+
+    fn read_within_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
+        // Parse "within <expression>"
+        let start = self.offset;
+        self.advance(6);
+        self.trim_whitespace();
+
+        let expression = self.read_expression()?;
+
+        let span = self.span_since(start);
+        Ok(Expression::Within(Box::new(expression), span))
     }
 
     fn read_binding_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
@@ -2400,7 +2415,7 @@ impl<'i> Parser<'i> {
                     || is_enum_response(line)
                     || malformed_step_pattern(line)
                     || malformed_response_pattern(line)
-                    || is_loop_block_line(line)
+                    || is_control_structure_line(line)
             },
             |outer| {
                 let mut results = vec![];
@@ -3189,29 +3204,29 @@ fn is_code_block(content: &str) -> bool {
     re.is_match(content)
 }
 
-/// Does this line open a control-structure code block (`{ foreach ... }` or
-/// `{ repeat ... }`)? Only a control structure owns the substeps below it and
-/// so opens a scope; otherwise a plain expression block (literal value,
-/// function call, tablet etc) is inline.
-fn is_loop_block_line(content: &str) -> bool {
+/// Does this line open a control-structure code block (`{ foreach ... }`,
+/// `{ repeat ... }`, or `{ within ... }`)? Only a control structure owns the
+/// substeps below it and so opens a scope; otherwise a plain expression block
+/// (literal value, function call, tablet etc) is inline.
+fn is_control_structure_line(content: &str) -> bool {
     if let Some(rest) = content
         .trim_ascii_start()
         .strip_prefix('{')
     {
-        is_foreach_keyword(rest) || is_repeat_keyword(rest)
+        is_foreach_keyword(rest) || is_repeat_keyword(rest) || is_within_keyword(rest)
     } else {
         false
     }
 }
 
-/// Is this code block is a control structure (`foreach` or `repeat`) which
-/// owns the steps below it as its body. A plain code does not.
-fn is_loop_block(expressions: &[Expression]) -> bool {
+/// Is this code block a control structure (`foreach`, `repeat`, or `within`)
+/// which owns the steps below it as its body. A plain code block does not.
+fn is_control_structure(expressions: &[Expression]) -> bool {
     if expressions.len() != 1 {
         return false;
     }
     match &expressions[0] {
-        Expression::Foreach(..) | Expression::Repeat(..) => true,
+        Expression::Foreach(..) | Expression::Repeat(..) | Expression::Within(..) => true,
         _ => false,
     }
 }
@@ -3232,6 +3247,12 @@ fn is_foreach_keyword(content: &str) -> bool {
 
 fn is_repeat_keyword(content: &str) -> bool {
     let re = regex!(r"^\s*repeat\s+");
+
+    re.is_match(content)
+}
+
+fn is_within_keyword(content: &str) -> bool {
+    let re = regex!(r"^\s*within\s+");
 
     re.is_match(content)
 }

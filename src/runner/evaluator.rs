@@ -214,6 +214,7 @@ pub fn evaluate<'i>(
         | Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }
+        | Operation::Within { .. }
         | Operation::Invoke(_) => Ok(Value::Unitus),
     }
 }

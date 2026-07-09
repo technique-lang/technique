@@ -113,6 +113,7 @@ pub struct Runner<'i, D: Driver> {
     inputs: HashMap<String, Vec<Supplied>>,
     driver: D,
     path: QualifiedPath<'i>,
+    constraints: Vec<Value>,
     library: Library,
     context: Context,
     document: Option<String>,
@@ -133,6 +134,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             inputs: HashMap::new(),
             driver,
             path: QualifiedPath::new(),
+            constraints: Vec::new(),
             library,
             context: Context::native(false),
             document: None,
@@ -341,6 +343,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             Operation::Loop {
                 names, over, body, ..
             } => self.walk_loop(env, names, over.as_deref(), body),
+            Operation::Within { bound, body, .. } => self.walk_within(env, bound, body),
             Operation::Invoke(invocable) => self.walk_invoke(env, invocable),
             Operation::Execute(executable) => {
                 let function = self.executable_name(&executable.target);
