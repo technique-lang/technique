@@ -814,7 +814,11 @@ fn prompt_action(
         Clear(ClearType::CurrentLine)
     );
     if let UserInput::Done(_) = &result {
-        let _ = writeln!(out, "{}", format!("» {} {}()", qualified, name).dark_grey());
+        let _ = writeln!(
+            out,
+            "{}",
+            format!("» {} {}()", qualified, name).with(MARKER_GREY)
+        );
     }
     let _ = out.flush();
     result
@@ -856,7 +860,11 @@ fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> Use
         } else {
             script.trim_end()
         };
-        let _ = writeln!(out, "{}", format!("→ {} $ {}", qualified, ran).dark_grey());
+        let _ = writeln!(
+            out,
+            "{}",
+            format!("→ {} $ {}", qualified, ran).with(MARKER_GREY)
+        );
     }
     let _ = out.flush();
     result
@@ -1506,7 +1514,7 @@ fn draw(
     write!(
         out,
         "{} {} ",
-        format!("{} {}", settle, qualified).dark_grey(),
+        format!("{} {}", settle, qualified).with(MARKER_GREY),
         symbol,
     )?;
     let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
@@ -1528,7 +1536,7 @@ fn draw_action(
         cursor::MoveToColumn(0),
         Clear(ClearType::CurrentLine)
     )?;
-    write!(out, "{} ", format!("» {}", qualified).dark_grey())?;
+    write!(out, "{} ", format!("» {}", qualified).with(MARKER_GREY))?;
     queue!(&mut out, SetForegroundColor(LIGHT_BROWN))?;
     write!(out, "{}", verb)?;
     queue!(&mut out, ResetColor)?;
@@ -1683,6 +1691,15 @@ const LIGHT_BROWN: Color = Color::Rgb {
     r: 0xc8,
     g: 0x96,
     b: 0x4b,
+};
+
+/// The grey the `Terminal` renderer uses, mirrored here so live-prompt chrome
+/// matches it. We explicitly do NOT use crossterm's named colours to ensure
+/// correct rendering.
+const MARKER_GREY: Color = Color::Rgb {
+    r: 0x55,
+    g: 0x57,
+    b: 0x53,
 };
 
 /// Render a horizontal row of Response options in the formatter's orange, the
