@@ -809,6 +809,70 @@ a list of tuples.
                 .to_string(),
             )
         }
+        ParsingError::InvalidCost(_) => {
+            let examples = vec![
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 2,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "minutes",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 5,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "GBP",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+                Expression::Cost(
+                    Box::new(Expression::Execution(
+                        Function {
+                            target: Identifier::new("expected_duration"),
+                            parameters: vec![Expression::Variable(
+                                Identifier::new("demolition"),
+                                Span::default(),
+                            )],
+                        },
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+            ];
+
+            (
+                "Incomplete cost literal".to_string(),
+                format!(
+                    r#"
+The $(...) syntax constructs a cost. It must either be a literal such
+as {} or {}, or contain an expression that evaluates
+to a cost (or to a quantity which can be interpreted as a cost).
+Something like {} would be reasonable.
+                    "#,
+                    examples[0].present(renderer),
+                    examples[1].present(renderer),
+                    examples[2].present(renderer)
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         ParsingError::InvalidResponse(_) => {
             let examples = vec![
                 vec![
@@ -1392,6 +1456,15 @@ to use the values from a tablet convert them into a list first with the
 values() function. There is also a labels() function to get each of the
 tablet's labels, and pairs() to get a sequence of tuples of labels and values
 you can iterate over.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
+        RunnerError::InvalidCost => (
+            "Cost literal syntax requires a Quantity".to_string(),
+            r#"
+The $(...) syntax constructs a Cost value out of a Quantity, but the
+expression inside these parentheses evaluated to something else.
             "#
             .trim_ascii()
             .to_string(),

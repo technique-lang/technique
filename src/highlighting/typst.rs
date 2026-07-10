@@ -28,6 +28,7 @@ impl Render for Typst {
             Syntax::Section => markup("", &content),
             Syntax::String => markup("fill: rgb(0x4e, 0x9a, 0x06), weight: \"bold\"", &content),
             Syntax::Numeric => markup("fill: rgb(0xad, 0x7f, 0xa8), weight: \"bold\"", &content),
+            Syntax::Cost => markup("fill: rgb(0xa4, 0x00, 0x00), weight: \"bold\"", &content),
             Syntax::Response => markup("fill: rgb(0xf5, 0x79, 0x00), weight: \"bold\"", &content),
             Syntax::Invocation => markup("fill: rgb(0x3b, 0x5d, 0x7d), weight: \"bold\"", &content),
             Syntax::Title => markup("weight: \"bold\"", &content),

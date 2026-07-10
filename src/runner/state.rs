@@ -749,6 +749,7 @@ fn parse_optional_value(rest: Option<&str>) -> Result<Option<value::Value>, Reco
 //   Literali(s)       -> "<escaped>"
 //   Enumerati(s)      -> '<value>'
 //   Quanticle(n)      -> canonical numeric text (via formatting::render_numeric)
+//   Intratempse(n)    -> $(<canonical numeric text>), mirroring source syntax
 //   Arraeum(items)    -> [item, item]       (empty: [])
 //   Tabularum(pairs)  -> ["label" = value]  (empty: [=], unambiguous vs [])
 //   Parametriq(vals)  -> (val, val)
@@ -773,6 +774,11 @@ fn write_value(out: &mut String, value: &value::Value) {
             out.push('\'');
         }
         value::Value::Quanticle(numeric) => out.push_str(&render_value_numeric(numeric)),
+        value::Value::Intratempse(numeric) => {
+            out.push_str("$(");
+            out.push_str(&render_value_numeric(numeric));
+            out.push(')');
+        }
         value::Value::Futurae(name) => {
             out.push('{');
             out.push_str(name);
@@ -934,6 +940,14 @@ pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError>
                 }
                 Ok(value::Value::Arraeum(items))
             }
+        }
+        '$' => {
+            if !text.starts_with("$(") || !text.ends_with(')') {
+                return Err(RecordError::MalformedState);
+            }
+            let inner = &text[2..text.len() - 1];
+            let n = crate::parsing::parse_numeric(inner).ok_or(RecordError::MalformedState)?;
+            Ok(value::Value::Intratempse(value::Numeric::from(&n)))
         }
         _ => {
             let n = crate::parsing::parse_numeric(text).ok_or(RecordError::MalformedState)?;

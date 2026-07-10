@@ -115,6 +115,7 @@ fn kind(value: &Value) -> &'static str {
         Value::Literali(_) => "string",
         Value::Enumerati(_) => "response",
         Value::Quanticle(_) => "quantity",
+        Value::Intratempse(_) => "resource",
         Value::Tabularum(_) => "tablet",
         Value::Arraeum(_) => "list",
         Value::Parametriq(_) => "tuple",

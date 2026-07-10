@@ -2016,6 +2016,34 @@ fn foreach_over_non_list_errors_unbound_is_empty() {
 }
 
 #[test]
+fn cost_of_non_quantity_value_errors_invalid_cost() {
+    // $(...) constructs an Intratempse from its inner expression's value; a
+    // bare string is not a quantity, so it cannot become a cost.
+    let cost_op = Operation::Cost(Box::new(Operation::String(vec![Fragment::Text(
+        "not a quantity",
+    )])));
+    let mut sub = Subroutine::anonymous();
+    sub.body = cost_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut fixture = StoreFixture::new("cost-non-quantity");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        Mock::new(),
+        Library::stub(),
+    );
+    match runner.run(Environment::new()) {
+        Err(RunnerError::InvalidCost) => {}
+        other => panic!("expected InvalidCost, got {:?}", other),
+    }
+}
+
+#[test]
 fn bind_parameters_arity_and_errors() {
     // Procedure with two parameters and matching arity: the returned
     // Environment contains both parameter bindings in `Value::Literali`

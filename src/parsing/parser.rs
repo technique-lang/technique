@@ -54,6 +54,7 @@ pub enum ParsingError {
     InvalidResponse(Span),
     InvalidMultiline(Span),
     InvalidForeach(Span),
+    InvalidCost(Span),
     InvalidIntegral(Span),
     InvalidQuantity(Span),
     InvalidQuantityDecimal(Span),
@@ -90,6 +91,7 @@ impl ParsingError {
             | ParsingError::InvalidResponse(span)
             | ParsingError::InvalidMultiline(span)
             | ParsingError::InvalidForeach(span)
+            | ParsingError::InvalidCost(span)
             | ParsingError::InvalidIntegral(span)
             | ParsingError::InvalidQuantity(span)
             | ParsingError::InvalidQuantityDecimal(span)
@@ -1768,8 +1770,16 @@ impl<'i> Parser<'i> {
         let start = self.offset;
         self.trim_whitespace();
         self.advance(1); // consume '$'
-        let inner =
-            self.take_block_chars("a cost", '(', ')', true, |outer| outer.read_expression())?;
+        let inner = self.take_block_chars("a cost", '(', ')', true, |outer| {
+            outer.trim_whitespace();
+            if outer
+                .source
+                .is_empty()
+            {
+                return Err(ParsingError::InvalidCost(Span::new(outer.offset, 0)));
+            }
+            outer.read_expression()
+        })?;
         let span = self.span_since(start);
         Ok(Expression::Cost(Box::new(inner), span))
     }

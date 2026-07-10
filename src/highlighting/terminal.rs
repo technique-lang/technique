@@ -55,6 +55,10 @@ impl Render for Terminal {
                 .color(owo_colors::Rgb(0xad, 0x7f, 0xa8))
                 .bold()
                 .to_string(),
+            Syntax::Cost => content // number.technique.cost - #a40000 (dull red) bold
+                .color(owo_colors::Rgb(0xa4, 0x00, 0x00))
+                .bold()
+                .to_string(),
             Syntax::Response => content // string.quoted.single.technique
                 .color(owo_colors::Rgb(0xf5, 0x79, 0x00))
                 .bold()
