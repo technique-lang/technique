@@ -1214,7 +1214,7 @@ sequence), not a mix of the two.
 /// internal references and variable scoping are resolved.
 pub fn generate_resolution_error<'i>(
     error: &ResolutionError<'i>,
-    _renderer: &dyn Render,
+    renderer: &dyn Render,
 ) -> (String, String) {
     match error {
         ResolutionError::UnresolvedProcedure(Identifier { value: name, .. }) => (
@@ -1255,6 +1255,88 @@ result bound by a binding or loop within it.
             .trim_ascii()
             .to_string(),
         ),
+        ResolutionError::InvalidCostLiteral(_) => {
+            let examples = vec![
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 2,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "minutes",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 5,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "pounds",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 5,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "GBP",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+                Expression::Cost(
+                    Box::new(Expression::Number(
+                        Numeric::Scientific(Quantity {
+                            mantissa: Decimal {
+                                number: 6,
+                                precision: 0,
+                            },
+                            uncertainty: None,
+                            magnitude: None,
+                            symbol: "pints",
+                        }),
+                        Span::default(),
+                    )),
+                    Span::default(),
+                ),
+            ];
+
+            (
+                "Cost literal requires a Quantity".to_string(),
+                format!(
+                    r#"
+The $(...) syntax constructs a Cost value out of a Quantity, but the value
+supplied isn't one. You can specify a time, as in the {} demolition
+will take, a currency like {} or {} indicating the what you pay
+at the bar, or an amount, for example {} being reasonable at lunchtime.
+                    "#,
+                    examples[0].present(renderer),
+                    examples[1].present(renderer),
+                    examples[2].present(renderer),
+                    examples[3].present(renderer)
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
     }
 }
 

@@ -451,3 +451,51 @@ split :
     // The tuple bind is skipped, so no single-name `regions` bind exists to mark.
     assert!(inferred_for(&program.subroutines[0].body, "regions").is_none());
 }
+
+#[test]
+fn cost_literal_string_is_invalid() {
+    // $(...) wrapping a literal that plainly isn't a quantity is a static
+    // resolution error — the string can never become a Quantity.
+    let source = r#"
+% technique v1
+
+bad_cost :
+
+1.  Do a thing $("not a quantity")
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    let errors = resolve(&mut program).expect_err("resolve should fail");
+
+    assert_eq!(errors.len(), 1);
+    let ResolutionError::InvalidCostLiteral(span) = &errors[0] else {
+        panic!("expected InvalidCostLiteral, got {:?}", errors[0]);
+    };
+    assert_eq!(
+        span.offset,
+        source
+            .find("$(")
+            .expect("$( in source"),
+        "span points at the cost literal"
+    );
+}
+
+#[test]
+fn cost_call_is_not_checked_statically() {
+    // A call's return shape isn't known until it runs, so $(...) wrapping one
+    // resolves cleanly even though it can't be verified as a quantity yet.
+    let source = r#"
+% technique v1
+
+good_cost :
+
+1.  Do a thing $(duration())
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+}

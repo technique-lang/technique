@@ -18,6 +18,11 @@ pub enum ResolutionError<'i> {
     /// A read that doesn't match any variable in scope (neither a parameter
     /// of the procedure nor a name bound by a binding or loop within it).
     UnboundVariable { variable: language::Identifier<'i> },
+    /// A `$(...)` cost whose inner expression is a literal that plainly isn't
+    /// a quantity`. If an expression is here its return value isn't known
+    /// until runtime, so that case is left to the runtime
+    /// `RunnerError::InvalidCost` check instead.
+    InvalidCostLiteral(Span),
 }
 
 impl<'i> ResolutionError<'i> {
@@ -26,6 +31,7 @@ impl<'i> ResolutionError<'i> {
             ResolutionError::UnresolvedProcedure(id) => id.span,
             ResolutionError::ProcedureArityMismatch { procedure, .. } => procedure.span,
             ResolutionError::UnboundVariable { variable } => variable.span,
+            ResolutionError::InvalidCostLiteral(span) => *span,
         }
     }
 }
@@ -62,6 +68,7 @@ pub fn resolve<'i>(program: &mut Program<'i>) -> Result<(), Vec<ResolutionError<
     }
     for subroutine in &program.subroutines {
         check_bindings(subroutine, &mut problems);
+        check_costs(&subroutine.body, &mut problems);
     }
     if problems.is_empty() {
         Ok(())
@@ -404,6 +411,92 @@ fn check_scope<'i>(
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
+    }
+}
+
+// Flag a $(...) cost whose inner expression is a literal that plainly isn't a
+// quantity. A call, invocation, variable read, or bind has no statically
+// known result, so those are left unchecked here — a bad value from one of
+// those surfaces at runtime as RunnerError::InvalidCost instead.
+fn check_costs<'i>(op: &Operation<'i>, problems: &mut Vec<ResolutionError<'i>>) {
+    match op {
+        Operation::Cost(inner, span) => {
+            if literal_not_a_quantity(inner) {
+                problems.push(ResolutionError::InvalidCostLiteral(*span));
+            }
+            check_costs(inner, problems);
+        }
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
+            for op in ops {
+                check_costs(op, problems);
+            }
+        }
+        Operation::Section { title, body, .. } => {
+            if let Some(title) = title {
+                check_costs(title, problems);
+            }
+            check_costs(body, problems);
+        }
+        Operation::Step { body, .. } => check_costs(body, problems),
+        Operation::Loop { over, body, .. } => {
+            if let Some(over) = over {
+                check_costs(over, problems);
+            }
+            check_costs(body, problems);
+        }
+        Operation::Within { bound, body, .. } => {
+            check_costs(bound, problems);
+            check_costs(body, problems);
+        }
+        Operation::Bind { value, .. } => check_costs(value, problems),
+        Operation::Invoke(invocable, _) => {
+            for arg in &invocable.arguments {
+                check_costs(arg, problems);
+            }
+        }
+        Operation::Execute(executable, _) => {
+            for arg in &executable.arguments {
+                check_costs(arg, problems);
+            }
+        }
+        Operation::String(fragments, _) => {
+            for fragment in fragments {
+                if let Fragment::Interpolation(op) = fragment {
+                    check_costs(op, problems);
+                }
+            }
+        }
+        Operation::Tablet(entries, _) => {
+            for entry in entries {
+                check_costs(&entry.value, problems);
+            }
+        }
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
+    }
+}
+
+// Whether `op` is a literal — not a call — known without evaluation to not be
+// a quantity.
+fn literal_not_a_quantity(op: &Operation) -> bool {
+    match op {
+        Operation::String(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Tablet(_, _)
+        | Operation::List(_, _)
+        | Operation::Tuple(_, _)
+        | Operation::Unit(_)
+        | Operation::Hole(_) => true,
+        _ => false,
     }
 }
 
