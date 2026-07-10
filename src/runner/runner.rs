@@ -316,8 +316,8 @@ impl<'i, D: Driver> Runner<'i, D> {
         op: &'i Operation<'i>,
     ) -> Result<Conclusion, RunnerError> {
         match op {
-            Operation::Sequence(ops) => self.walk_sequence(env, ops),
-            Operation::Prologue(ops) => {
+            Operation::Sequence(ops, _) => self.walk_sequence(env, ops),
+            Operation::Prologue(ops, _) => {
                 self.path
                     .push(PathSegment::Prologue);
                 let qualified = self
@@ -347,15 +347,15 @@ impl<'i, D: Driver> Runner<'i, D> {
             Operation::Within { bound, body, .. } => self.walk_within(env, bound, body),
             // Walk the inner expression (so a `$(<call>)` runs), then
             // construct the Cost value from its result.
-            Operation::Cost(inner) => match self.walk(env, inner)? {
+            Operation::Cost(inner, _) => match self.walk(env, inner)? {
                 Conclusion::Completed(Outcome::Done(Value::Quanticle(numeric))) => Ok(
                     Conclusion::Completed(Outcome::Done(Value::Intratempse(numeric))),
                 ),
                 Conclusion::Completed(Outcome::Done(_)) => Err(RunnerError::InvalidCost),
                 other => Ok(other),
             },
-            Operation::Invoke(invocable) => self.walk_invoke(env, invocable),
-            Operation::Execute(executable) => {
+            Operation::Invoke(invocable, _) => self.walk_invoke(env, invocable),
+            Operation::Execute(executable, _) => {
                 let function = self.executable_name(&executable.target);
                 let qualified = self
                     .path
@@ -497,18 +497,19 @@ impl<'i, D: Driver> Runner<'i, D> {
                 names,
                 value,
                 inferred,
+                ..
             } => self.walk_bind(env, names, value, inferred.as_ref()),
-            Operation::Variable(_)
-            | Operation::Number(_)
-            | Operation::Response(_)
-            | Operation::String(_)
-            | Operation::Multiline(_, _)
-            | Operation::Tablet(_)
-            | Operation::List(_)
-            | Operation::Tuple(_)
-            | Operation::Prose(_)
-            | Operation::Hole
-            | Operation::Unit => {
+            Operation::Variable(_, _)
+            | Operation::Number(_, _)
+            | Operation::Response(_, _)
+            | Operation::String(_, _)
+            | Operation::Multiline(_, _, _)
+            | Operation::Tablet(_, _)
+            | Operation::List(_, _)
+            | Operation::Tuple(_, _)
+            | Operation::Prose(_, _)
+            | Operation::Hole(_)
+            | Operation::Unit(_) => {
                 let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Conclusion::Completed(Outcome::Done(value)))
             }
@@ -565,7 +566,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         let mut parts = Vec::new();
         for arg in arguments {
             let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
-            let part = if let Operation::Variable(id) = arg {
+            let part = if let Operation::Variable(id, _) = arg {
                 format!("{} ~ {}", value, id.value)
             } else {
                 value.to_string()
@@ -730,7 +731,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             let bind = params
                                 .get(i)
                                 .map(|p| p.value);
-                            if let Operation::Hole = arg {
+                            if let Operation::Hole(_) = arg {
                                 let value = match recorded
                                     .as_ref()
                                     .and_then(|r| r.get(taken))
@@ -928,7 +929,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         value: &'i Operation<'i>,
         inferred: Option<&'i language::Genus<'i>>,
     ) -> Result<Conclusion, RunnerError> {
-        let descriptive = if let Operation::Sequence(ops) = value {
+        let descriptive = if let Operation::Sequence(ops, _) = value {
             ops.is_empty()
         } else {
             false
@@ -1040,7 +1041,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // iterates nothing rather than aborting the run. The name is
                 // statically in scope (resolution guarantees it); it simply has
                 // no value yet at runtime.
-                if let Operation::Variable(id) = expr {
+                if let Operation::Variable(id, _) = expr {
                     if env
                         .lookup(id.value)
                         .is_none()
@@ -1152,7 +1153,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             };
             // A prose child contributes its value but no verdict, so it cannot
             // make an otherwise-skipped sequence roll up as Done.
-            if let Operation::Prose(_) = op {
+            if let Operation::Prose(_, _) = op {
                 if let Conclusion::Completed(Outcome::Done(value)) = outcome {
                     rollup.observe(value);
                 }
@@ -1793,12 +1794,12 @@ impl<'i, D: Driver> Runner<'i, D> {
         match op {
             Operation::Step { responses, .. } if !responses.is_empty() => Kind::Choice,
             Operation::Step { body, .. } => self.kind_of_step(body),
-            Operation::Sequence(ops) | Operation::Prologue(ops) => match ops.last() {
+            Operation::Sequence(ops, _) | Operation::Prologue(ops, _) => match ops.last() {
                 Some(last) => self.kind_of_step(last),
                 None => Kind::Prose,
             },
-            Operation::Execute(exec) => self.execute_kind(exec),
-            Operation::Prose(_) => Kind::Prose,
+            Operation::Execute(exec, _) => self.execute_kind(exec),
+            Operation::Prose(_, _) => Kind::Prose,
             _ => Kind::Computable,
         }
     }
@@ -1807,7 +1808,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// pure-prose scope is `Prose`, so an unattended run skips its close.
     fn kind_of_scope(&self, op: &Operation) -> Kind {
         match op {
-            Operation::Sequence(ops) | Operation::Prologue(ops) => {
+            Operation::Sequence(ops, _) | Operation::Prologue(ops, _) => {
                 if ops
                     .iter()
                     .any(|op| self.kind_of_scope(op) == Kind::Computable)
@@ -1820,7 +1821,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             Operation::Step { body, .. } | Operation::Section { body, .. } => {
                 self.kind_of_scope(body)
             }
-            Operation::Prose(_) => Kind::Prose,
+            Operation::Prose(_, _) => Kind::Prose,
             _ => Kind::Computable,
         }
     }
@@ -1949,7 +1950,7 @@ fn record_state(conclusion: &Conclusion) -> State {
 fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>]> {
     match op {
         Operation::Bind { names, .. } => Some(names),
-        Operation::Sequence(ops) => ops
+        Operation::Sequence(ops, _) => ops
             .iter()
             .find_map(binding_names),
         _ => None,
@@ -1964,16 +1965,16 @@ fn binding_names<'i>(op: &Operation<'i>) -> Option<&'i [language::Identifier<'i>
 fn binds_descriptively(op: &Operation) -> bool {
     match op {
         Operation::Bind { value, .. } => {
-            if let Operation::Sequence(ops) = value.as_ref() {
+            if let Operation::Sequence(ops, _) = value.as_ref() {
                 ops.is_empty()
             } else {
                 false
             }
         }
-        Operation::Sequence(ops) => {
+        Operation::Sequence(ops, _) => {
             let mut bound = false;
             for op in ops {
-                if let Operation::Prose(_) = op {
+                if let Operation::Prose(_, _) = op {
                     continue;
                 }
                 if binds_descriptively(op) {
@@ -1995,7 +1996,7 @@ fn binds_descriptively(op: &Operation) -> bool {
 fn nests_work(op: &Operation) -> bool {
     match op {
         Operation::Loop { .. } | Operation::Step { .. } => true,
-        Operation::Sequence(ops) => ops
+        Operation::Sequence(ops, _) => ops
             .iter()
             .any(nests_work),
         _ => false,

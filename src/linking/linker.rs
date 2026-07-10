@@ -50,7 +50,7 @@ fn link_operation<'i>(
     problems: &mut Vec<LinkingError<'i>>,
 ) {
     match op {
-        Operation::Execute(executable) => {
+        Operation::Execute(executable, _) => {
             if let ExecutableRef::Unresolved(id) = &executable.target {
                 match library.resolve(id.value) {
                     Some(exec_id) => {
@@ -75,12 +75,12 @@ fn link_operation<'i>(
                 link_operation(arg, library, problems);
             }
         }
-        Operation::Invoke(invocable) => {
+        Operation::Invoke(invocable, _) => {
             for arg in &mut invocable.arguments {
                 link_operation(arg, library, problems);
             }
         }
-        Operation::Sequence(ops) | Operation::Prologue(ops) => {
+        Operation::Sequence(ops, _) | Operation::Prologue(ops, _) => {
             for op in ops {
                 link_operation(op, library, problems);
             }
@@ -97,32 +97,32 @@ fn link_operation<'i>(
             link_operation(bound, library, problems);
             link_operation(body, library, problems);
         }
-        Operation::Cost(inner) => link_operation(inner, library, problems),
+        Operation::Cost(inner, _) => link_operation(inner, library, problems),
         Operation::Bind { value, .. } => link_operation(value, library, problems),
-        Operation::String(fragments) => {
+        Operation::String(fragments, _) => {
             for fragment in fragments {
                 if let Fragment::Interpolation(op) = fragment {
                     link_operation(op, library, problems);
                 }
             }
         }
-        Operation::Tablet(entries) => {
+        Operation::Tablet(entries, _) => {
             for entry in entries {
                 link_operation(&mut entry.value, library, problems);
             }
         }
-        Operation::List(items) | Operation::Tuple(items) => {
+        Operation::List(items, _) | Operation::Tuple(items, _) => {
             for item in items {
                 link_operation(item, library, problems);
             }
         }
-        Operation::Variable(_)
-        | Operation::Number(_)
-        | Operation::Response(_)
-        | Operation::Multiline(_, _)
-        | Operation::Prose(_)
-        | Operation::Hole
-        | Operation::Unit => {}
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
     }
 }
 

@@ -29,7 +29,7 @@ pub fn translate<'i>(document: &'i Document<'i>) -> Result<Program<'i>, Vec<Tran
             for scope in scopes {
                 translator.append_attributes(&mut ops, &mut responses, scope, &[]);
             }
-            wrapper.body = Operation::Sequence(ops);
+            wrapper.body = Operation::Sequence(ops, Span::default());
             wrapper.responses = responses;
             translator
                 .program
@@ -212,14 +212,14 @@ impl<'i> Translator<'i> {
         if prologue
             .iter()
             .any(|op| {
-                if let Operation::Prose(_) = op {
+                if let Operation::Prose(_, _) = op {
                     false
                 } else {
                     true
                 }
             })
         {
-            ops.push(Operation::Prologue(prologue));
+            ops.push(Operation::Prologue(prologue, procedure.span));
         }
         for element in &procedure.elements {
             match element {
@@ -244,7 +244,7 @@ impl<'i> Translator<'i> {
                 _ => {}
             }
         }
-        let body = Operation::Sequence(ops);
+        let body = Operation::Sequence(ops, procedure.span);
 
         let entry = &mut self
             .program
@@ -286,7 +286,7 @@ impl<'i> Translator<'i> {
                 numeral,
                 title,
                 body,
-                ..
+                span,
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
@@ -307,7 +307,7 @@ impl<'i> Translator<'i> {
                             let invoked = body_ops
                                 .iter()
                                 .any(|op| {
-                                    if let Operation::Invoke(invocable) = op {
+                                    if let Operation::Invoke(invocable, _) = op {
                                         invocable.target
                                             == SubroutineRef::Unresolved(procedure.name)
                                     } else {
@@ -315,11 +315,14 @@ impl<'i> Translator<'i> {
                                     }
                                 });
                             if !invoked {
-                                body_ops.push(Operation::Invoke(Invocable {
-                                    target: SubroutineRef::Unresolved(procedure.name),
-                                    arguments: Vec::new(),
-                                    elided: true,
-                                }));
+                                body_ops.push(Operation::Invoke(
+                                    Invocable {
+                                        target: SubroutineRef::Unresolved(procedure.name),
+                                        arguments: Vec::new(),
+                                        elided: true,
+                                    },
+                                    *span,
+                                ));
                             }
                         }
                     }
@@ -331,15 +334,16 @@ impl<'i> Translator<'i> {
                 Operation::Section {
                     numeral,
                     title: title_op,
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 }
             }
             language::Scope::DependentBlock {
                 ordinal,
                 description,
                 subscopes,
-                ..
+                span,
             } => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
@@ -349,13 +353,15 @@ impl<'i> Translator<'i> {
                     ordinal: Ordinal::Dependent(ordinal),
                     attributes: attrs.to_vec(),
                     source: scope,
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 }
             }
             language::Scope::ParallelBlock {
                 description,
                 subscopes,
+                span,
                 ..
             } => {
                 let mut body_ops = Vec::new();
@@ -366,8 +372,9 @@ impl<'i> Translator<'i> {
                     ordinal: Ordinal::Parallel,
                     attributes: attrs.to_vec(),
                     source: scope,
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 }
             }
             // AttributeBlock and ResponseBlock are intercepted by
@@ -378,7 +385,7 @@ impl<'i> Translator<'i> {
             language::Scope::CodeBlock {
                 expressions,
                 subscopes,
-                ..
+                span,
             } => match self.translate_control_block(expressions, subscopes, attrs) {
                 Some(control_op) => control_op,
                 None => {
@@ -390,7 +397,7 @@ impl<'i> Translator<'i> {
                     for sub in subscopes {
                         self.append_attributes(&mut ops, &mut responses, sub, attrs);
                     }
-                    Operation::Sequence(ops)
+                    Operation::Sequence(ops, *span)
                 }
             },
         }
@@ -410,7 +417,7 @@ impl<'i> Translator<'i> {
             return None;
         }
         match &expressions[0] {
-            language::Expression::Foreach(names, source, _) => {
+            language::Expression::Foreach(names, source, span) => {
                 let mut body_ops = Vec::new();
                 let mut responses = Vec::new();
                 for sub in subscopes {
@@ -419,11 +426,12 @@ impl<'i> Translator<'i> {
                 Some(Operation::Loop {
                     names,
                     over: Some(Box::new(self.translate_expression(source))),
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 })
             }
-            language::Expression::Repeat(inner, _) => {
+            language::Expression::Repeat(inner, span) => {
                 // `repeat <thing>` does `<thing>` over and over: the inline
                 // expression is the loop body. Any subscopes follow it.
                 let mut body_ops = vec![self.translate_expression(inner)];
@@ -434,11 +442,12 @@ impl<'i> Translator<'i> {
                 Some(Operation::Loop {
                     names: &[],
                     over: None,
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 })
             }
-            language::Expression::Within(inner, _) => {
+            language::Expression::Within(inner, span) => {
                 // `within <budget>` governs the subscopes beneath it, the way
                 // `foreach`'s source does: the budget is a separate field,
                 // not part of the body.
@@ -449,8 +458,9 @@ impl<'i> Translator<'i> {
                 }
                 Some(Operation::Within {
                     bound: Box::new(self.translate_expression(inner)),
-                    body: Box::new(Operation::Sequence(body_ops)),
+                    body: Box::new(Operation::Sequence(body_ops, *span)),
                     responses,
+                    span: *span,
                 })
             }
             _ => None,
@@ -473,7 +483,7 @@ impl<'i> Translator<'i> {
             ..
         }) = body_ops.last_mut()
         {
-            if let Operation::Sequence(loop_body) = body.as_mut() {
+            if let Operation::Sequence(loop_body, _) = body.as_mut() {
                 if loop_body.is_empty() {
                     for sub in subscopes {
                         self.append_attributes(loop_body, loop_responses, sub, attrs);
@@ -495,12 +505,12 @@ impl<'i> Translator<'i> {
         ops: &mut Vec<Operation<'i>>,
         title: &'i language::Paragraph<'i>,
     ) {
-        let language::Paragraph(descriptives, _) = title;
+        let language::Paragraph(descriptives, span) = title;
         for descriptive in descriptives {
-            match self.executable_from_descriptive(descriptive) {
+            match self.executable_from_descriptive(descriptive, *span) {
                 // A multi-statement code block hoists its statements directly,
                 // one operation per call, rather than nesting in a Sequence.
-                Some(Operation::Sequence(inner)) => ops.extend(inner),
+                Some(Operation::Sequence(inner, _)) => ops.extend(inner),
                 Some(op) => ops.push(op),
                 None => {}
             }
@@ -516,14 +526,14 @@ impl<'i> Translator<'i> {
         paragraphs: &'i [language::Paragraph<'i>],
     ) {
         for paragraph in paragraphs {
-            let language::Paragraph(descriptives, _) = paragraph;
+            let language::Paragraph(descriptives, span) = paragraph;
             for descriptive in descriptives {
                 if let language::Descriptive::Text(text) = descriptive {
-                    ops.push(Operation::Prose(text));
+                    ops.push(Operation::Prose(text, *span));
                     continue;
                 }
-                match self.executable_from_descriptive(descriptive) {
-                    Some(Operation::Sequence(inner)) => ops.extend(inner),
+                match self.executable_from_descriptive(descriptive, *span) {
+                    Some(Operation::Sequence(inner, _)) => ops.extend(inner),
                     Some(op) => ops.push(op),
                     None => {}
                 }
@@ -539,7 +549,7 @@ impl<'i> Translator<'i> {
     // string literals translated elsewhere preserve whitespace verbatim and
     // are not affected by this rule.
     fn translate_paragraph(&mut self, paragraph: &'i language::Paragraph<'i>) -> Operation<'i> {
-        let language::Paragraph(descriptives, _) = paragraph;
+        let language::Paragraph(descriptives, span) = paragraph;
         let mut fragments = Vec::with_capacity(
             descriptives
                 .len()
@@ -553,7 +563,7 @@ impl<'i> Translator<'i> {
                 fragments.push(fragment);
             }
         }
-        Operation::String(fragments)
+        Operation::String(fragments, *span)
     }
 
     // The display fragment for a descriptive, or `None` when it renders no
@@ -593,10 +603,14 @@ impl<'i> Translator<'i> {
     /// value before the description can be rendered, just as much as an
     /// Application does); Binding captures a result. The description
     /// Paragraph stays borrowed on the enclosing Step for the renderer to
-    /// fill the CodeInline holes from these Operations' results.
+    /// fill the CodeInline holes from these Operations' results. `span` is
+    /// the enclosing Paragraph's span, used for constructs (Application,
+    /// Binding, a multi-statement CodeInline) with no finer-grained span of
+    /// their own.
     fn executable_from_descriptive(
         &mut self,
         descriptive: &'i language::Descriptive<'i>,
+        span: Span,
     ) -> Option<Operation<'i>> {
         match descriptive {
             language::Descriptive::Text(_) => None,
@@ -616,21 +630,23 @@ impl<'i> Translator<'i> {
                 match ops.len() {
                     0 => None,
                     1 => ops.pop(),
-                    _ => Some(Operation::Sequence(ops)),
+                    _ => Some(Operation::Sequence(ops, span)),
                 }
             }
-            language::Descriptive::Application(invocation) => {
-                Some(Operation::Invoke(self.translate_invocation(invocation)))
-            }
+            language::Descriptive::Application(invocation) => Some(Operation::Invoke(
+                self.translate_invocation(invocation),
+                span,
+            )),
             // Naked binding `text ~ var` or `<call> ~ var`.
             language::Descriptive::Binding(inner, names) => {
                 let value = self
-                    .executable_from_descriptive(inner)
-                    .unwrap_or_else(|| Operation::Sequence(Vec::new()));
+                    .executable_from_descriptive(inner, span)
+                    .unwrap_or_else(|| Operation::Sequence(Vec::new(), span));
                 Some(Operation::Bind {
                     names: names.as_slice(),
                     value: Box::new(value),
                     inferred: None,
+                    span,
                 })
             }
             language::Descriptive::Cost(expr) => Some(self.translate_expression(expr)),
@@ -736,9 +752,9 @@ impl<'i> Translator<'i> {
 
     fn translate_expression(&mut self, expression: &'i language::Expression<'i>) -> Operation<'i> {
         match expression {
-            language::Expression::Variable(id, _) => Operation::Variable(*id),
-            language::Expression::Number(numeric, _) => Operation::Number(*numeric),
-            language::Expression::String(pieces, _) => {
+            language::Expression::Variable(id, span) => Operation::Variable(*id, *span),
+            language::Expression::Number(numeric, span) => Operation::Number(*numeric, *span),
+            language::Expression::String(pieces, span) => {
                 let fragments = pieces
                     .iter()
                     .map(|piece| match piece {
@@ -748,20 +764,23 @@ impl<'i> Translator<'i> {
                         }
                     })
                     .collect();
-                Operation::String(fragments)
+                Operation::String(fragments, *span)
             }
-            language::Expression::Response(value, _) => Operation::Response(value),
-            language::Expression::Multiline(lang, lines, _) => {
-                Operation::Multiline(*lang, lines.clone())
+            language::Expression::Response(value, span) => Operation::Response(value, *span),
+            language::Expression::Multiline(lang, lines, span) => {
+                Operation::Multiline(*lang, lines.clone(), *span)
             }
-            language::Expression::Pair(pair, _) => {
+            language::Expression::Pair(pair, span) => {
                 // A standalone labelled value widens to a single-entry
                 // tablet, mirroring the way a bare value widens to a
                 // single-element list.
-                Operation::Tablet(vec![Entry {
-                    label: pair.label,
-                    value: self.translate_expression(&pair.value),
-                }])
+                Operation::Tablet(
+                    vec![Entry {
+                        label: pair.label,
+                        value: self.translate_expression(&pair.value),
+                    }],
+                    *span,
+                )
             }
             language::Expression::List(elements, span) => {
                 let labelled = elements
@@ -804,58 +823,64 @@ impl<'i> Translator<'i> {
                             }
                         })
                         .collect();
-                    Operation::Tablet(entries)
+                    Operation::Tablet(entries, *span)
                 } else {
                     let items = elements
                         .iter()
                         .map(|element| self.translate_expression(element))
                         .collect();
-                    Operation::List(items)
+                    Operation::List(items, *span)
                 }
             }
-            language::Expression::Tuple(elements, _) => {
+            language::Expression::Tuple(elements, span) => {
                 let items = elements
                     .iter()
                     .map(|element| self.translate_expression(element))
                     .collect();
-                Operation::Tuple(items)
+                Operation::Tuple(items, *span)
             }
-            language::Expression::Application(invocation, _) => {
-                Operation::Invoke(self.translate_invocation(invocation))
+            language::Expression::Application(invocation, span) => {
+                Operation::Invoke(self.translate_invocation(invocation), *span)
             }
-            language::Expression::Execution(function, _) => Operation::Execute(Executable {
-                target: ExecutableRef::Unresolved(function.target),
-                arguments: function
-                    .parameters
-                    .iter()
-                    .map(|expr| self.translate_expression(expr))
-                    .collect(),
-            }),
-            language::Expression::Repeat(body, _) => Operation::Loop {
+            language::Expression::Execution(function, span) => Operation::Execute(
+                Executable {
+                    target: ExecutableRef::Unresolved(function.target),
+                    arguments: function
+                        .parameters
+                        .iter()
+                        .map(|expr| self.translate_expression(expr))
+                        .collect(),
+                },
+                *span,
+            ),
+            language::Expression::Repeat(body, span) => Operation::Loop {
                 names: &[],
                 over: None,
                 body: Box::new(self.translate_expression(body)),
                 responses: Vec::new(),
+                span: *span,
             },
             // Standalone Foreach has no body in the AST; the body is supplied
             // by the enclosing CodeBlock's subscopes when one is present (see
             // CodeBlock translation). As a bare expression we emit a Loop
             // with an empty Sequence body.
-            language::Expression::Foreach(names, source, _) => Operation::Loop {
+            language::Expression::Foreach(names, source, span) => Operation::Loop {
                 names,
                 over: Some(Box::new(self.translate_expression(source))),
-                body: Box::new(Operation::Sequence(Vec::new())),
+                body: Box::new(Operation::Sequence(Vec::new(), *span)),
                 responses: Vec::new(),
+                span: *span,
             },
             // Standalone Within, likewise: the body is supplied by the
             // enclosing CodeBlock's subscopes when one is present.
-            language::Expression::Within(bound, _) => Operation::Within {
+            language::Expression::Within(bound, span) => Operation::Within {
                 bound: Box::new(self.translate_expression(bound)),
-                body: Box::new(Operation::Sequence(Vec::new())),
+                body: Box::new(Operation::Sequence(Vec::new(), *span)),
                 responses: Vec::new(),
+                span: *span,
             },
-            language::Expression::Cost(inner, _) => {
-                Operation::Cost(Box::new(self.translate_expression(inner)))
+            language::Expression::Cost(inner, span) => {
+                Operation::Cost(Box::new(self.translate_expression(inner)), *span)
             }
             language::Expression::Binding(value, names, span) => {
                 if let language::Expression::Repeat(_, _) = value.as_ref() {
@@ -866,11 +891,12 @@ impl<'i> Translator<'i> {
                     names,
                     value: Box::new(self.translate_expression(value)),
                     inferred: None,
+                    span: *span,
                 }
             }
-            language::Expression::Hole(_) => Operation::Hole,
-            language::Expression::Unit(_) => Operation::Unit,
-            language::Expression::Separator => Operation::Sequence(Vec::new()),
+            language::Expression::Hole(span) => Operation::Hole(*span),
+            language::Expression::Unit(span) => Operation::Unit(*span),
+            language::Expression::Separator => Operation::Sequence(Vec::new(), Span::default()),
         }
     }
 

@@ -139,7 +139,7 @@ pub fn evaluate<'i>(
     op: &Operation<'i>,
 ) -> Result<Value, RunnerError> {
     match op {
-        Operation::Variable(id) => env
+        Operation::Variable(id, _) => env
             .lookup(id.value)
             .cloned()
             .ok_or_else(|| {
@@ -148,9 +148,9 @@ pub fn evaluate<'i>(
                         .to_string(),
                 )
             }),
-        Operation::Number(n) => Ok(Value::Quanticle(Numeric::from(n))),
-        Operation::Response(value) => Ok(Value::Enumerati(value.to_string())),
-        Operation::String(fragments) => {
+        Operation::Number(n, _) => Ok(Value::Quanticle(Numeric::from(n))),
+        Operation::Response(value, _) => Ok(Value::Enumerati(value.to_string())),
+        Operation::String(fragments, _) => {
             let mut text = String::new();
             for fragment in fragments {
                 match fragment {
@@ -165,8 +165,8 @@ pub fn evaluate<'i>(
             }
             Ok(Value::Literali(text))
         }
-        Operation::Multiline(_, lines) => Ok(Value::Literali(lines.join("\n"))),
-        Operation::Tablet(entries) => {
+        Operation::Multiline(_, lines, _) => Ok(Value::Literali(lines.join("\n"))),
+        Operation::Tablet(entries, _) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {
                 let v = evaluate(library, context, env, &entry.value)?;
@@ -179,14 +179,14 @@ pub fn evaluate<'i>(
             }
             Ok(Value::Tabularum(pairs))
         }
-        Operation::List(items) => {
+        Operation::List(items, _) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
                 values.push(evaluate(library, context, env, item)?);
             }
             Ok(Value::Arraeum(values))
         }
-        Operation::Tuple(items) => {
+        Operation::Tuple(items, _) => {
             let mut values = Vec::with_capacity(items.len());
             for item in items {
                 values.push(evaluate(library, context, env, item)?);
@@ -198,26 +198,26 @@ pub fn evaluate<'i>(
             bind_names(env, names, v)?;
             Ok(Value::Unitus)
         }
-        Operation::Sequence(ops) => {
+        Operation::Sequence(ops, _) => {
             let mut last = Value::Unitus;
             for child in ops {
                 last = evaluate(library, context, env, child)?;
             }
             Ok(last)
         }
-        Operation::Execute(executable) => dispatch(library, context, env, executable, None),
+        Operation::Execute(executable, _) => dispatch(library, context, env, executable, None),
         // A `?` reached outside a procedure invocation has no parameter name
         // to defer against; it stands for an as-yet-unsupplied value.
-        Operation::Hole => Ok(Value::Futurae(String::new())),
-        Operation::Unit => Ok(Value::Unitus),
-        Operation::Prose(_)
-        | Operation::Prologue(_)
+        Operation::Hole(_) => Ok(Value::Futurae(String::new())),
+        Operation::Unit(_) => Ok(Value::Unitus),
+        Operation::Prose(_, _)
+        | Operation::Prologue(_, _)
         | Operation::Section { .. }
         | Operation::Step { .. }
         | Operation::Loop { .. }
         | Operation::Within { .. }
-        | Operation::Cost(_)
-        | Operation::Invoke(_) => Ok(Value::Unitus),
+        | Operation::Cost(_, _)
+        | Operation::Invoke(_, _) => Ok(Value::Unitus),
     }
 }
 

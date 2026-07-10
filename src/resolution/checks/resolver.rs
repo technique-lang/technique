@@ -176,10 +176,10 @@ helper : X -> Y
         })
         .expect("helper present");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invocable) = &ops[0] else {
+    let Operation::Invoke(invocable, _) = &ops[0] else {
         panic!("expected Invoke");
     };
     let SubroutineRef::Resolved(SubroutineId(idx)) = invocable.target else {
@@ -219,10 +219,10 @@ main(x) :
         })
         .expect("main present");
 
-    let Operation::Sequence(ops) = &program.subroutines[main_idx].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[main_idx].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invocable) = &ops[0] else {
+    let Operation::Invoke(invocable, _) = &ops[0] else {
         panic!("expected Invoke");
     };
     let SubroutineRef::Resolved(_) = invocable.target else {
@@ -251,10 +251,10 @@ run :
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execute(executable) = &ops[0] else {
+    let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute, got {:?}", ops[0]);
     };
     let ExecutableRef::Unresolved(target) = &executable.target else {
@@ -372,7 +372,7 @@ fn inferred_for<'a>(op: &'a Operation<'a>, name: &str) -> Option<&'a Option<lang
         Operation::Bind { value, .. } | Operation::Step { body: value, .. } => {
             inferred_for(value, name)
         }
-        Operation::Sequence(ops) | Operation::List(ops) => ops
+        Operation::Sequence(ops, _) | Operation::List(ops, _) => ops
             .iter()
             .find_map(|op| inferred_for(op, name)),
         Operation::Loop { over, body, .. } => over

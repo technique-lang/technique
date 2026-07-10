@@ -198,7 +198,7 @@ I. First section
     let program = translate(&document).expect("translate");
 
     let body = &program.subroutines[0].body;
-    let Operation::Sequence(ops) = body else {
+    let Operation::Sequence(ops, _) = body else {
         panic!("expected Sequence, got {:?}", body);
     };
     assert_eq!(ops.len(), 1);
@@ -213,7 +213,7 @@ I. First section
     };
     assert_eq!(*numeral, "I");
     assert!(title.is_some());
-    let Operation::Sequence(inner) = section_body.as_ref() else {
+    let Operation::Sequence(inner, _) = section_body.as_ref() else {
         panic!("expected inner Sequence");
     };
     assert!(inner.is_empty());
@@ -248,7 +248,7 @@ inner : () -> ()
         .collect();
     assert_eq!(names, vec![Some("outer"), Some("inner")]);
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 1);
@@ -258,12 +258,12 @@ inner : () -> ()
     else {
         panic!("expected Section");
     };
-    let Operation::Sequence(inner) = section_body.as_ref() else {
+    let Operation::Sequence(inner, _) = section_body.as_ref() else {
         panic!("expected inner Sequence");
     };
     // A procedures-bodied section descends into its first procedure.
     assert_eq!(inner.len(), 1);
-    let Operation::Invoke(invocable) = &inner[0] else {
+    let Operation::Invoke(invocable, _) = &inner[0] else {
         panic!("expected Invoke, got {:?}", inner[0]);
     };
     assert_eq!(invocable.target, SubroutineRef::Resolved(SubroutineId(1)));
@@ -285,7 +285,7 @@ II. Second
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 2);
@@ -315,7 +315,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 2);
@@ -348,7 +348,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 2);
@@ -381,7 +381,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 1);
@@ -395,7 +395,7 @@ make_coffee :
     };
     assert_eq!(*outer, "1");
 
-    let Operation::Sequence(inner) = outer_body.as_ref() else {
+    let Operation::Sequence(inner, _) = outer_body.as_ref() else {
         panic!("expected inner Sequence");
     };
     let inner_ordinals: Vec<&str> = inner
@@ -424,7 +424,7 @@ fn top_level_steps_populate_anonymous_wrapper_body() {
     let program = translate(&document).expect("translate");
 
     assert_eq!(program.subroutines[0].name, None);
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     assert_eq!(ops.len(), 2);
@@ -445,7 +445,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     // AttributeBlock disappears: only the Step appears at this level.
@@ -476,7 +476,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { attributes, .. } = &ops[0] else {
@@ -500,7 +500,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { attributes, .. } = &ops[0] else {
@@ -528,7 +528,7 @@ make_coffee :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step {
@@ -541,7 +541,7 @@ make_coffee :
     };
     assert!(outer_attrs.is_empty(), "outer step has no attributes");
 
-    let Operation::Sequence(inner) = outer_body.as_ref() else {
+    let Operation::Sequence(inner, _) = outer_body.as_ref() else {
         panic!("expected inner Sequence");
     };
     // inner[0] is the outer step's own prose; the substep follows.
@@ -575,10 +575,10 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Variable(id) = &ops[0] else {
+    let Operation::Variable(id, _) = &ops[0] else {
         panic!("expected Variable, got {:?}", ops[0]);
     };
     assert_eq!(id.value, "x");
@@ -600,10 +600,10 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Number(numeric) = &ops[0] else {
+    let Operation::Number(numeric, _) = &ops[0] else {
         panic!("expected Number, got {:?}", ops[0]);
     };
     let language::Numeric::Integral(n) = numeric else {
@@ -629,10 +629,10 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Unit = &ops[0] else {
+    let Operation::Unit(_) = &ops[0] else {
         panic!("expected Unit, got {:?}", ops[0]);
     };
 }
@@ -654,13 +654,13 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execute(executable) = &ops[0] else {
+    let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute");
     };
-    let Operation::String(fragments) = &executable.arguments[0] else {
+    let Operation::String(fragments, _) = &executable.arguments[0] else {
         panic!("expected String");
     };
     assert_eq!(fragments.len(), 1);
@@ -689,13 +689,13 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execute(executable) = &ops[0] else {
+    let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute");
     };
-    let Operation::String(fragments) = &executable.arguments[0] else {
+    let Operation::String(fragments, _) = &executable.arguments[0] else {
         panic!("expected String");
     };
     assert_eq!(fragments.len(), 3);
@@ -706,7 +706,7 @@ run :
     let Fragment::Interpolation(inner) = &fragments[1] else {
         panic!("expected Interpolation fragment, got {:?}", fragments[1]);
     };
-    let Operation::Variable(id) = inner else {
+    let Operation::Variable(id, _) = inner else {
         panic!("expected Variable inside interpolation");
     };
     assert_eq!(id.value, "name");
@@ -732,10 +732,10 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execute(executable) = &ops[0] else {
+    let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute, got {:?}", ops[0]);
     };
     let ExecutableRef::Unresolved(target) = &executable.target else {
@@ -768,10 +768,10 @@ other : X -> Y
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invocable) = &ops[0] else {
+    let Operation::Invoke(invocable, _) = &ops[0] else {
         panic!("expected Invoke, got {:?}", ops[0]);
     };
     assert_eq!(
@@ -802,13 +802,13 @@ other : X -> Y
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invocable) = &ops[0] else {
+    let Operation::Invoke(invocable, _) = &ops[0] else {
         panic!("expected Invoke, got {:?}", ops[0]);
     };
-    let [Operation::Hole] = invocable
+    let [Operation::Hole(_)] = invocable
         .arguments
         .as_slice()
     else {
@@ -839,10 +839,10 @@ other : X -> Y
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Invoke(invocable) = &ops[0] else {
+    let Operation::Invoke(invocable, _) = &ops[0] else {
         panic!("expected Invoke, got {:?}", ops[0]);
     };
     assert!(invocable.elided, "a bare call is elided");
@@ -869,7 +869,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Bind { names, value, .. } = &ops[0] else {
@@ -877,7 +877,7 @@ run :
     };
     assert_eq!(names.len(), 1);
     assert_eq!(names[0].value, "answer");
-    let Operation::Number(_) = value.as_ref() else {
+    let Operation::Number(_, _) = value.as_ref() else {
         panic!("expected Number value");
     };
 }
@@ -901,10 +901,10 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Tablet(entries) = &ops[0] else {
+    let Operation::Tablet(entries, _) = &ops[0] else {
         panic!("expected Tablet, got {:?}", ops[0]);
     };
     assert_eq!(entries.len(), 2);
@@ -928,15 +928,15 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::List(items) = &ops[0] else {
+    let Operation::List(items, _) = &ops[0] else {
         panic!("expected List, got {:?}", ops[0]);
     };
     assert_eq!(items.len(), 3);
     for item in items {
-        let Operation::Number(_) = item else {
+        let Operation::Number(_, _) = item else {
             panic!("expected Number element, got {:?}", item);
         };
     }
@@ -959,7 +959,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Loop {
@@ -972,7 +972,7 @@ run :
     assert_eq!(names[0].value, "node");
     assert!(over.is_some(), "foreach has a source");
 
-    let Operation::Sequence(inner) = body.as_ref() else {
+    let Operation::Sequence(inner, _) = body.as_ref() else {
         panic!("expected inner Sequence");
     };
     assert_eq!(inner.len(), 2);
@@ -996,14 +996,14 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Loop { names, body, .. } = &ops[0] else {
         panic!("expected Loop, got {:?}", ops[0]);
     };
     assert_eq!(names[0].value, "node");
-    let Operation::Sequence(inner) = body.as_ref() else {
+    let Operation::Sequence(inner, _) = body.as_ref() else {
         panic!("expected inner Sequence");
     };
     assert_eq!(inner.len(), 2);
@@ -1025,7 +1025,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Loop { names, .. } = &ops[0] else {
@@ -1053,13 +1053,13 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 1);
@@ -1068,7 +1068,7 @@ run :
     };
     assert_eq!(names.len(), 1);
     assert_eq!(names[0].value, "situation");
-    let Operation::Sequence(inner) = value.as_ref() else {
+    let Operation::Sequence(inner, _) = value.as_ref() else {
         panic!("expected empty Sequence as binding value");
     };
     assert!(inner.is_empty());
@@ -1091,13 +1091,13 @@ helper : () -> Result
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 2);
@@ -1105,7 +1105,7 @@ helper : () -> Result
         panic!("expected Bind");
     };
     assert_eq!(names[0].value, "outcome");
-    let Operation::Invoke(_) = value.as_ref() else {
+    let Operation::Invoke(_, _) = value.as_ref() else {
         panic!("expected Invoke as binding value");
     };
 }
@@ -1128,18 +1128,18 @@ helper : () -> Result
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     // [Prose("Do"), Invoke, Prose("first.")] — the invoke sits between prose.
     assert_eq!(body_ops.len(), 3);
-    let Operation::Invoke(_) = &body_ops[1] else {
+    let Operation::Invoke(_, _) = &body_ops[1] else {
         panic!("expected Invoke, got {:?}", body_ops[1]);
     };
 }
@@ -1160,17 +1160,17 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 1);
-    let Operation::Prose(text) = &body_ops[0] else {
+    let Operation::Prose(text, _) = &body_ops[0] else {
         panic!("expected Prose, got {:?}", body_ops[0]);
     };
     assert_eq!(*text, "Just a plain step with no executable bits.");
@@ -1192,17 +1192,17 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 2);
-    let Operation::Execute(_) = &body_ops[1] else {
+    let Operation::Execute(_, _) = &body_ops[1] else {
         panic!("expected Execute, got {:?}", body_ops[1]);
     };
 }
@@ -1224,17 +1224,17 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(body_ops) = body.as_ref() else {
+    let Operation::Sequence(body_ops, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     assert_eq!(body_ops.len(), 2);
-    let Operation::Variable(id) = &body_ops[1] else {
+    let Operation::Variable(id, _) = &body_ops[1] else {
         panic!("expected Variable, got {:?}", body_ops[1]);
     };
     assert_eq!(id.value, "x");
@@ -1260,18 +1260,18 @@ init : () -> ()
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     // Prologue from the description, then the explicit Step.
     assert_eq!(ops.len(), 2);
-    let Operation::Prologue(prologue) = &ops[0] else {
+    let Operation::Prologue(prologue, _) = &ops[0] else {
         panic!("expected Prologue, got {:?}", ops[0]);
     };
     let invokes = prologue
         .iter()
         .filter(|op| {
-            if let Operation::Invoke(_) = op {
+            if let Operation::Invoke(_, _) = op {
                 true
             } else {
                 false
@@ -1299,7 +1299,7 @@ check :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { responses, .. } = &ops[0] else {
@@ -1324,7 +1324,7 @@ check :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { responses, .. } = &ops[0] else {
@@ -1352,7 +1352,7 @@ check :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { responses, .. } = &ops[0] else {
@@ -1381,7 +1381,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step {
@@ -1397,7 +1397,7 @@ run :
         "responses do not lift onto the enclosing Step"
     );
 
-    let Operation::Sequence(step_body) = body.as_ref() else {
+    let Operation::Sequence(step_body, _) = body.as_ref() else {
         panic!("expected Sequence");
     };
     let Operation::Loop {
@@ -1432,13 +1432,13 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
-    let Operation::Execute(executable) = &ops[0] else {
+    let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute");
     };
-    let Operation::Multiline(lang, lines) = &executable.arguments[0] else {
+    let Operation::Multiline(lang, lines, _) = &executable.arguments[0] else {
         panic!("expected Multiline, got {:?}", executable.arguments[0]);
     };
     assert_eq!(*lang, Some("bash"));
@@ -1465,7 +1465,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Loop {
@@ -1473,6 +1473,7 @@ run :
         over,
         body,
         responses,
+        ..
     } = &ops[0]
     else {
         panic!("expected Loop, got {:?}", ops[0]);
@@ -1480,10 +1481,10 @@ run :
     assert!(names.is_empty());
     assert!(over.is_none(), "repeat has no `over` source");
     assert!(responses.is_empty());
-    let Operation::Sequence(inner) = body.as_ref() else {
+    let Operation::Sequence(inner, _) = body.as_ref() else {
         panic!("expected Sequence body");
     };
-    let [Operation::Number(_)] = inner.as_slice() else {
+    let [Operation::Number(_, _)] = inner.as_slice() else {
         panic!(
             "expected the repeated expression in the body, got {:?}",
             inner
@@ -1511,7 +1512,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Loop {
@@ -1525,11 +1526,11 @@ run :
     let Some(over) = over else {
         panic!("foreach has an `over` source");
     };
-    let Operation::Variable(id) = over.as_ref() else {
+    let Operation::Variable(id, _) = over.as_ref() else {
         panic!("expected Variable as `over`");
     };
     assert_eq!(id.value, "xs");
-    let Operation::Sequence(inner) = body.as_ref() else {
+    let Operation::Sequence(inner, _) = body.as_ref() else {
         panic!("expected empty Sequence body");
     };
     assert!(inner.is_empty());
@@ -1558,13 +1559,13 @@ delete_rds_instance :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body, .. } = &ops[0] else {
         panic!("expected Step");
     };
-    let Operation::Sequence(step_body) = body.as_ref() else {
+    let Operation::Sequence(step_body, _) = body.as_ref() else {
         panic!("expected Step body Sequence");
     };
     // A plain code block is inline: its expressions hoist directly into the
@@ -1572,7 +1573,7 @@ delete_rds_instance :
     let names: Vec<&str> = step_body
         .iter()
         .filter_map(|op| match op {
-            Operation::Execute(executable) => {
+            Operation::Execute(executable, _) => {
                 let ExecutableRef::Unresolved(target) = &executable.target else {
                     panic!("expected Unresolved, got {:?}", executable.target);
                 };
@@ -1606,19 +1607,19 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { body: outer, .. } = &ops[0] else {
         panic!("expected outer Step");
     };
-    let Operation::Sequence(outer_ops) = outer.as_ref() else {
+    let Operation::Sequence(outer_ops, _) = outer.as_ref() else {
         panic!("expected Sequence");
     };
     let Operation::Step { body: substep, .. } = &outer_ops[1] else {
         panic!("expected substep");
     };
-    let Operation::Sequence(sub_ops) = substep.as_ref() else {
+    let Operation::Sequence(sub_ops, _) = substep.as_ref() else {
         panic!("expected Sequence");
     };
     let ordinals: Vec<&str> = sub_ops
@@ -1650,7 +1651,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { responses, .. } = &ops[0] else {
@@ -1687,7 +1688,7 @@ run :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Step { responses, .. } = &ops[0] else {
@@ -1762,13 +1763,13 @@ init : () -> ()
         })
         .expect("init declared");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Section { body, .. } = &ops[0] else {
         panic!("expected Section");
     };
-    let Operation::Sequence(section_body) = body.as_ref() else {
+    let Operation::Sequence(section_body, _) = body.as_ref() else {
         panic!("expected Section body Sequence");
     };
     // The title's hoisted `<init>` Application is the section's single entry:
@@ -1779,7 +1780,7 @@ init : () -> ()
         1,
         "title's Application is the sole entry"
     );
-    let Operation::Invoke(invocable) = &section_body[0] else {
+    let Operation::Invoke(invocable, _) = &section_body[0] else {
         panic!("expected Invoke, got {:?}", section_body[0]);
     };
     let SubroutineRef::Resolved(SubroutineId(idx)) = invocable.target else {
@@ -1806,18 +1807,18 @@ init : () -> ()
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
 
-    let Operation::Sequence(ops) = &program.subroutines[0].body else {
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
         panic!("expected Sequence");
     };
     let Operation::Section { body, .. } = &ops[0] else {
         panic!("expected Section");
     };
-    let Operation::Sequence(section_body) = body.as_ref() else {
+    let Operation::Sequence(section_body, _) = body.as_ref() else {
         panic!("expected Section body Sequence");
     };
     // The title's value-read, then the descent into `init`.
     assert_eq!(section_body.len(), 2);
-    let Operation::Invoke(invocable) = &section_body[1] else {
+    let Operation::Invoke(invocable, _) = &section_body[1] else {
         panic!("expected Invoke, got {:?}", section_body[1]);
     };
     assert_eq!(invocable.target, SubroutineRef::Resolved(SubroutineId(1)));
