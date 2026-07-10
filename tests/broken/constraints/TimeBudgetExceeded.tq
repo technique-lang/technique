@@ -1,4 +1,4 @@
-roast_turkey(i) : Ingredients -> Turkey
+roast_turkey :
 
 # Roast Turkey
 
@@ -6,4 +6,4 @@ roast_turkey(i) : Ingredients -> Turkey
         { within 30 minutes }
             1.  Set oven temperature $(10 minutes)
             2.  Place bacon strips onto bird
-            3.  Put bird into oven
+            3.  Put bird into oven $(2 hours)

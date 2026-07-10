@@ -507,6 +507,16 @@ impl<'i> Formatter<'i> {
         }
     }
 
+    /// Render a naked `$(...)` cost with no surrounding braces — distinct
+    /// from `render_inline_code`, which always wraps in `{ }` because it
+    /// only ever renders an author-written `CodeInline`.
+    fn render_cost(&self, expr: &'i Expression) -> Vec<(Syntax, Cow<'i, str>)> {
+        let mut sub = self.subformatter();
+        sub.append_expression(expr);
+        sub.flush_current();
+        sub.fragments
+    }
+
     /// Render a `;`-separated code block inline: `{ a; b }`, with `;` for
     /// each of the separators.
     fn render_inline_block(&self, exprs: &'i [Expression]) -> Vec<(Syntax, Cow<'i, str>)> {
@@ -576,6 +586,9 @@ impl<'i> Formatter<'i> {
             }
             Descriptive::Application(invocation) => {
                 sub.append_application(invocation);
+            }
+            Descriptive::Cost(expr) => {
+                sub.append_expression(expr);
             }
             Descriptive::Binding(_, _) => {
                 sub.append_str("<<nested binding>>");
@@ -1015,6 +1028,15 @@ impl<'i> Formatter<'i> {
                     }
                     line.add_binding(inner_descriptive, variables);
                 }
+                Descriptive::Cost(expr) => {
+                    if !line
+                        .current
+                        .is_empty()
+                    {
+                        line.add_atomic(syntax, " ");
+                    }
+                    line.add_cost(expr);
+                }
             }
             after_construct = true;
         }
@@ -1327,6 +1349,15 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }
+            Expression::Cost(expression, _) => {
+                self.add_fragment_reference(Syntax::Structure, "$(");
+                if let Expression::Number(numeric, _) = expression.as_ref() {
+                    self.append_numeric_as(numeric, Syntax::Cost);
+                } else {
+                    self.append_expression(expression);
+                }
+                self.add_fragment_reference(Syntax::Structure, ")");
+            }
             Expression::Foreach(variables, expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "foreach");
                 self.add_fragment_reference(Syntax::Neutral, " ");
@@ -1380,36 +1411,47 @@ impl<'i> Formatter<'i> {
     }
 
     pub fn append_numeric(&mut self, numeric: &'i Numeric) {
+        self.append_numeric_as(numeric, Syntax::Numeric);
+    }
+
+    /// `append_numeric`, but styled as `syntax` throughout instead of always
+    /// `Syntax::Numeric` — used to render the quantity inside a `$(...)` cost
+    /// literal in its own colour.
+    fn append_numeric_as(&mut self, numeric: &'i Numeric, syntax: Syntax) {
         match numeric {
-            Numeric::Integral(num) => self.add_fragment_string(Syntax::Numeric, num.to_string()),
-            Numeric::Scientific(quantity) => self.append_quantity(quantity),
+            Numeric::Integral(num) => self.add_fragment_string(syntax, num.to_string()),
+            Numeric::Scientific(quantity) => self.append_quantity_as(quantity, syntax),
         }
     }
 
     pub fn append_quantity(&mut self, quantity: &'i Quantity) {
+        self.append_quantity_as(quantity, Syntax::Numeric);
+    }
+
+    fn append_quantity_as(&mut self, quantity: &'i Quantity, syntax: Syntax) {
         // Format the mantissa
-        self.add_fragment_string(Syntax::Numeric, format!("{}", quantity.mantissa));
+        self.add_fragment_string(syntax, format!("{}", quantity.mantissa));
 
         // Add uncertainty if present
         if let Some(uncertainty) = &quantity.uncertainty {
             self.add_fragment_reference(Syntax::Neutral, " ");
-            self.add_fragment_reference(Syntax::Numeric, "±");
+            self.add_fragment_reference(syntax, "±");
             self.add_fragment_reference(Syntax::Neutral, " ");
-            self.add_fragment_string(Syntax::Numeric, format!("{}", uncertainty));
+            self.add_fragment_string(syntax, format!("{}", uncertainty));
         }
 
         // Add magnitude if present
         if let Some(magnitude) = &quantity.magnitude {
             self.add_fragment_reference(Syntax::Neutral, " ");
-            self.add_fragment_reference(Syntax::Numeric, "×");
+            self.add_fragment_reference(syntax, "×");
             self.add_fragment_reference(Syntax::Neutral, " ");
-            self.add_fragment_reference(Syntax::Numeric, "10");
-            self.add_fragment_string(Syntax::Numeric, to_superscript(*magnitude));
+            self.add_fragment_reference(syntax, "10");
+            self.add_fragment_string(syntax, to_superscript(*magnitude));
         }
 
         // Add unit symbol
         self.add_fragment_reference(Syntax::Neutral, " ");
-        self.add_fragment_reference(Syntax::Numeric, quantity.symbol);
+        self.add_fragment_reference(syntax, quantity.symbol);
     }
 
     pub fn append_application(&mut self, invocation: &'i Invocation) {
@@ -1720,6 +1762,15 @@ impl<'a, 'i> Line<'a, 'i> {
         let fragments = self
             .output
             .render_inline_code(expr);
+        for (syntax, content) in fragments {
+            self.add_no_wrap(syntax, content);
+        }
+    }
+
+    fn add_cost(&mut self, expr: &'i Expression) {
+        let fragments = self
+            .output
+            .render_cost(expr);
         for (syntax, content) in fragments {
             self.add_no_wrap(syntax, content);
         }

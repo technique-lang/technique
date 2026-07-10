@@ -11,6 +11,7 @@
 // own the data.
 
 use crate::language;
+use crate::language::Span;
 
 /// Top-level Technique translated to a runnable program.
 #[derive(Debug, Eq, PartialEq, Default)]
@@ -71,7 +72,7 @@ impl<'i> Subroutine<'i> {
             description: &[],
             parameters: None,
             signature: None,
-            body: Operation::Sequence(Vec::new()),
+            body: Operation::Sequence(Vec::new(), Span::default()),
             responses: Vec::new(),
             locale: Vec::new(),
         }
@@ -100,7 +101,7 @@ impl<'i> Subroutine<'i> {
             description: &[],
             parameters: None,
             signature: None,
-            body: Operation::Sequence(Vec::new()),
+            body: Operation::Sequence(Vec::new(), Span::default()),
             responses: Vec::new(),
             locale: Vec::new(),
         }
@@ -119,30 +120,31 @@ impl<'i> Subroutine<'i> {
 /// the `runner::Environment`.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Operation<'i> {
-    Variable(language::Identifier<'i>),
-    Number(language::Numeric<'i>),
-    String(Vec<Fragment<'i>>),
-    Response(&'i str),
-    Multiline(Option<&'i str>, Vec<&'i str>),
-    Tablet(Vec<Entry<'i>>),
-    List(Vec<Operation<'i>>),
-    Tuple(Vec<Operation<'i>>),
-    Invoke(Invocable<'i>),
-    Execute(Executable<'i>),
-    Hole,
-    Unit,
-    Prose(&'i str),
-    Sequence(Vec<Operation<'i>>),
+    Variable(language::Identifier<'i>, Span),
+    Number(language::Numeric<'i>, Span),
+    String(Vec<Fragment<'i>>, Span),
+    Response(&'i str, Span),
+    Multiline(Option<&'i str>, Vec<&'i str>, Span),
+    Tablet(Vec<Entry<'i>>, Span),
+    List(Vec<Operation<'i>>, Span),
+    Tuple(Vec<Operation<'i>>, Span),
+    Invoke(Invocable<'i>, Span),
+    Execute(Executable<'i>, Span),
+    Hole(Span),
+    Unit(Span),
+    Prose(&'i str, Span),
+    Sequence(Vec<Operation<'i>>, Span),
     /// The executable work hoisted from a procedure's description is an
     /// anonymous "step 0". Present only when the description carries
     /// instructions, not for prose alone. Its outcome folds into the
     /// procedure's own sign-off rather than prompting itself.
-    Prologue(Vec<Operation<'i>>),
+    Prologue(Vec<Operation<'i>>, Span),
     Section {
         numeral: &'i str,
         title: Option<Box<Operation<'i>>>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
+        span: Span,
     },
     Step {
         ordinal: Ordinal<'i>,
@@ -150,12 +152,14 @@ pub enum Operation<'i> {
         source: &'i language::Scope<'i>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
+        span: Span,
     },
     Loop {
         names: &'i [language::Identifier<'i>],
         over: Option<Box<Operation<'i>>>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
+        span: Span,
     },
     /// A `within` block is _not_ generative like `Loop`, but a predicate
     /// governing a run-once body.
@@ -163,14 +167,47 @@ pub enum Operation<'i> {
         bound: Box<Operation<'i>>,
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
+        span: Span,
     },
+    /// A `$(...)` cost evaluates its inner expression, then constructs a
+    /// Resource-typed value (e.g. `Intratempse`) from the result.
+    Cost(Box<Operation<'i>>, Span),
     Bind {
         names: &'i [language::Identifier<'i>],
         value: Box<Operation<'i>>,
         /// Inferred shape of the bound value, set in resolution: a wildcard
         /// list `[*]` when the name is iterated by a `foreach`, else `None`.
         inferred: Option<language::Genus<'i>>,
+        span: Span,
     },
+}
+
+impl<'i> Operation<'i> {
+    pub fn span(&self) -> Span {
+        match self {
+            Operation::Variable(_, span)
+            | Operation::Number(_, span)
+            | Operation::String(_, span)
+            | Operation::Response(_, span)
+            | Operation::Multiline(_, _, span)
+            | Operation::Tablet(_, span)
+            | Operation::List(_, span)
+            | Operation::Tuple(_, span)
+            | Operation::Invoke(_, span)
+            | Operation::Execute(_, span)
+            | Operation::Hole(span)
+            | Operation::Unit(span)
+            | Operation::Prose(_, span)
+            | Operation::Sequence(_, span)
+            | Operation::Prologue(_, span)
+            | Operation::Section { span, .. }
+            | Operation::Step { span, .. }
+            | Operation::Loop { span, .. }
+            | Operation::Within { span, .. }
+            | Operation::Cost(_, span)
+            | Operation::Bind { span, .. } => *span,
+        }
+    }
 }
 
 /// A step's lexical kind. `Dependent` carries the verbatim ordinal string as

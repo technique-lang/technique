@@ -801,6 +801,10 @@ impl TechniqueLanguageServer {
                     "Invalid foreach expression".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
+                ParsingError::InvalidCost(_) => (
+                    "Invalid cost literal".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidIntegral(_) => (
                     "Invalid integral number".to_string(),
                     DiagnosticSeverity::ERROR,

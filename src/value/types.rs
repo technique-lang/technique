@@ -21,6 +21,7 @@ pub enum Value {
     Literali(String),
     Enumerati(String),
     Quanticle(Numeric),
+    Intratempse(Numeric),
     Tabularum(Vec<(String, Value)>),
     Arraeum(Vec<Value>),
     Parametriq(Vec<Value>),
@@ -78,6 +79,7 @@ impl Display for Value {
             Value::Literali(text) => write!(f, "\"{}\"", text),
             Value::Enumerati(text) => write!(f, "'{}'", text),
             Value::Quanticle(numeric) => write!(f, "{}", numeric),
+            Value::Intratempse(numeric) => write!(f, "$({})", numeric),
             Value::Tabularum(pairs) => {
                 f.write_str("[")?;
                 for (i, (label, value)) in pairs

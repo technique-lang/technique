@@ -109,6 +109,7 @@ fn step(ordinal: Ordinal<'static>, body: Operation<'static>) -> Operation<'stati
         source: scope_for(ordinal),
         body: Box::new(body),
         responses: Vec::new(),
+        span: language::Span::default(),
     }
 }
 
@@ -125,10 +126,13 @@ fn anonymous_with_body(body: Operation<'static>) -> Program<'static> {
 #[test]
 fn step_outcomes_recorded() {
     let mut fixture = StoreFixture::new("step-done");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
+    let body = Operation::Sequence(
+        vec![step(
+            Ordinal::Dependent("1"),
+            Operation::Sequence(vec![], language::Span::default()),
+        )],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::new(
@@ -168,10 +172,13 @@ fn step_outcomes_recorded() {
     };
 
     let mut fixture = StoreFixture::new("step-skip");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
+    let body = Operation::Sequence(
+        vec![step(
+            Ordinal::Dependent("1"),
+            Operation::Sequence(vec![], language::Span::default()),
+        )],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Skip]);
     let mut runner = Runner::new(
@@ -199,10 +206,13 @@ fn step_outcomes_recorded() {
     assert_eq!(record.state, State::Skip);
 
     let mut fixture = StoreFixture::new("step-fail");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
+    let body = Operation::Sequence(
+        vec![step(
+            Ordinal::Dependent("1"),
+            Operation::Sequence(vec![], language::Span::default()),
+        )],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Fail("cable unplugged".to_string())]);
     let mut runner = Runner::new(
@@ -241,10 +251,13 @@ fn empty_fail_reason_records_none() {
     // Failing a step without giving a reason records Fail with no reason at
     // all, not an empty-string reason tablet.
     let mut fixture = StoreFixture::new("fail-no-reason");
-    let body = Operation::Sequence(vec![step(
-        Ordinal::Dependent("1"),
-        Operation::Sequence(vec![]),
-    )]);
+    let body = Operation::Sequence(
+        vec![step(
+            Ordinal::Dependent("1"),
+            Operation::Sequence(vec![], language::Span::default()),
+        )],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Fail(String::new())]);
     let mut runner = Runner::new(
@@ -320,10 +333,19 @@ helper :
 #[test]
 fn two_steps_prompted_in_source_order() {
     let mut fixture = StoreFixture::new("two-steps");
-    let body = Operation::Sequence(vec![
-        step(Ordinal::Dependent("1"), Operation::Sequence(vec![])),
-        step(Ordinal::Dependent("2"), Operation::Sequence(vec![])),
-    ]);
+    let body = Operation::Sequence(
+        vec![
+            step(
+                Ordinal::Dependent("1"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+            step(
+                Ordinal::Dependent("2"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+        ],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([
@@ -360,10 +382,19 @@ fn two_steps_prompted_in_source_order() {
 #[test]
 fn pre_completed_step_short_circuits() {
     let mut fixture = StoreFixture::new("short-circuit");
-    let body = Operation::Sequence(vec![
-        step(Ordinal::Dependent("1"), Operation::Sequence(vec![])),
-        step(Ordinal::Dependent("2"), Operation::Sequence(vec![])),
-    ]);
+    let body = Operation::Sequence(
+        vec![
+            step(
+                Ordinal::Dependent("1"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+            step(
+                Ordinal::Dependent("2"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+        ],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
 
     // Pre-mark step 1 completed; the walker should skip its prompt
@@ -402,10 +433,19 @@ fn pre_completed_step_short_circuits() {
 #[test]
 fn quit_propagates_and_stops_walking() {
     let mut fixture = StoreFixture::new("quit-propagates");
-    let body = Operation::Sequence(vec![
-        step(Ordinal::Dependent("1"), Operation::Sequence(vec![])),
-        step(Ordinal::Dependent("2"), Operation::Sequence(vec![])),
-    ]);
+    let body = Operation::Sequence(
+        vec![
+            step(
+                Ordinal::Dependent("1"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+            step(
+                Ordinal::Dependent("2"),
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+        ],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([UserInput::Quit]);
@@ -460,13 +500,20 @@ fn section_walking() {
     use crate::program::Fragment;
 
     let mut fixture = StoreFixture::new("section-no-title");
-    let inner = step(Ordinal::Dependent("1"), Operation::Sequence(vec![]));
-    let body = Operation::Sequence(vec![Operation::Section {
-        numeral: "I",
-        title: None,
-        body: Box::new(Operation::Sequence(vec![inner])),
-        responses: Vec::new(),
-    }]);
+    let inner = step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![], language::Span::default()),
+    );
+    let body = Operation::Sequence(
+        vec![Operation::Section {
+            numeral: "I",
+            title: None,
+            body: Box::new(Operation::Sequence(vec![inner], language::Span::default())),
+            responses: Vec::new(),
+            span: language::Span::default(),
+        }],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::new(
@@ -519,14 +566,21 @@ fn section_walking() {
     assert_eq!(step_fqns, vec!["/I/1"]);
 
     let mut fixture = StoreFixture::new("section-with-title");
-    let title = Operation::String(vec![Fragment::Text("Setup")]);
-    let inner = step(Ordinal::Dependent("1"), Operation::Sequence(vec![]));
-    let body = Operation::Sequence(vec![Operation::Section {
-        numeral: "I",
-        title: Some(Box::new(title)),
-        body: Box::new(Operation::Sequence(vec![inner])),
-        responses: Vec::new(),
-    }]);
+    let title = Operation::String(vec![Fragment::Text("Setup")], language::Span::default());
+    let inner = step(
+        Ordinal::Dependent("1"),
+        Operation::Sequence(vec![], language::Span::default()),
+    );
+    let body = Operation::Sequence(
+        vec![Operation::Section {
+            numeral: "I",
+            title: Some(Box::new(title)),
+            body: Box::new(Operation::Sequence(vec![inner], language::Span::default())),
+            responses: Vec::new(),
+            span: language::Span::default(),
+        }],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let prompt = Mock::with_answers([UserInput::Done(Value::Unitus)]);
     let mut runner = Runner::new(
@@ -558,10 +612,19 @@ fn section_walking() {
 #[test]
 fn parallel_step_index_starts_at_one() {
     let mut fixture = StoreFixture::new("parallel-index");
-    let body = Operation::Sequence(vec![
-        step(Ordinal::Parallel, Operation::Sequence(vec![])),
-        step(Ordinal::Parallel, Operation::Sequence(vec![])),
-    ]);
+    let body = Operation::Sequence(
+        vec![
+            step(
+                Ordinal::Parallel,
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+            step(
+                Ordinal::Parallel,
+                Operation::Sequence(vec![], language::Span::default()),
+            ),
+        ],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
 
     let prompt = Mock::with_answers([
@@ -1456,9 +1519,13 @@ fn loop_inside_step_produces_one_result() {
     // enclosing Step records exactly one Result.
     let loop_op = Operation::Loop {
         names: &[],
-        over: Some(Box::new(Operation::Variable(Identifier::new("empty")))),
-        body: Box::new(Operation::Sequence(vec![])),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("empty"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(vec![], language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let the_step = Operation::Step {
         ordinal: Ordinal::Dependent("1"),
@@ -1466,8 +1533,9 @@ fn loop_inside_step_produces_one_result() {
         source: scope_for(Ordinal::Dependent("1")),
         body: Box::new(loop_op),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
-    let body = Operation::Sequence(vec![the_step]);
+    let body = Operation::Sequence(vec![the_step], language::Span::default());
     let program = anonymous_with_body(body);
 
     let mut env = Environment::new();
@@ -1513,14 +1581,16 @@ fn repeat_loops_until_quit() {
         ordinal: Ordinal::Dependent("1"),
         attributes: Vec::new(),
         source: scope_for(Ordinal::Dependent("1")),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let loop_op = Operation::Loop {
         names: &[],
         over: None,
-        body: Box::new(Operation::Sequence(vec![inner])),
+        body: Box::new(Operation::Sequence(vec![inner], language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let program = anonymous_with_body(loop_op);
 
@@ -1569,16 +1639,24 @@ fn foreach_walks_body_once_per_list_element() {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     // `names` borrows from the IR, so the array must outlive the program.
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
-        over: Some(Box::new(Operation::Variable(Identifier::new("items")))),
-        body: Box::new(Operation::Sequence(vec![substep])),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("items"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(
+            vec![substep],
+            language::Span::default(),
+        )),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -1667,22 +1745,30 @@ fn foreach_over_seq_builtin_runs() {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let names = [Identifier::new("n")];
-    let over = Operation::Execute(Executable {
-        target: ExecutableRef::Resolved(seq),
-        arguments: vec![
-            Operation::Number(LangNumeric::Integral(1)),
-            Operation::Number(LangNumeric::Integral(3)),
-        ],
-    });
+    let over = Operation::Execute(
+        Executable {
+            target: ExecutableRef::Resolved(seq),
+            arguments: vec![
+                Operation::Number(LangNumeric::Integral(1), language::Span::default()),
+                Operation::Number(LangNumeric::Integral(3), language::Span::default()),
+            ],
+        },
+        language::Span::default(),
+    );
     let loop_op = Operation::Loop {
         names: &names,
         over: Some(Box::new(over)),
-        body: Box::new(Operation::Sequence(vec![substep])),
+        body: Box::new(Operation::Sequence(
+            vec![substep],
+            language::Span::default(),
+        )),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -1753,16 +1839,24 @@ fn foreach_destructures_tuple_elements() {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     // `names` borrows from the IR, so the array must outlive the program.
     let names = [Identifier::new("first"), Identifier::new("second")];
     let loop_op = Operation::Loop {
         names: &names,
-        over: Some(Box::new(Operation::Variable(Identifier::new("pairs")))),
-        body: Box::new(Operation::Sequence(vec![substep])),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("pairs"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(
+            vec![substep],
+            language::Span::default(),
+        )),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -1829,15 +1923,23 @@ fn foreach_widens_primitive_to_singleton() {
         ordinal: Ordinal::Dependent("a"),
         attributes: Vec::new(),
         source: scope_with(Ordinal::Dependent("a"), source_paragraphs),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
-        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
-        body: Box::new(Operation::Sequence(vec![substep])),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("source"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(
+            vec![substep],
+            language::Span::default(),
+        )),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -1882,12 +1984,22 @@ fn foreach_over_unit_iterates_nothing() {
     // sequence or a pure-prose step). Unit is the absence of a value, so the
     // loop iterates over nothing: the body never runs and the run completes.
     let names = [Identifier::new("item")];
-    let substep = step(Ordinal::Dependent("a"), Operation::Sequence(Vec::new()));
+    let substep = step(
+        Ordinal::Dependent("a"),
+        Operation::Sequence(Vec::new(), language::Span::default()),
+    );
     let loop_op = Operation::Loop {
         names: &names,
-        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
-        body: Box::new(Operation::Sequence(vec![substep])),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("source"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(
+            vec![substep],
+            language::Span::default(),
+        )),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -1934,9 +2046,13 @@ fn foreach_over_non_list_errors_unbound_is_empty() {
     let names = [Identifier::new("item")];
     let loop_op = Operation::Loop {
         names: &names,
-        over: Some(Box::new(Operation::Variable(Identifier::new("source")))),
-        body: Box::new(Operation::Sequence(Vec::new())),
+        over: Some(Box::new(Operation::Variable(
+            Identifier::new("source"),
+            language::Span::default(),
+        ))),
+        body: Box::new(Operation::Sequence(Vec::new(), language::Span::default())),
         responses: Vec::new(),
+        span: language::Span::default(),
     };
     let mut sub = Subroutine::anonymous();
     sub.body = loop_op;
@@ -2013,6 +2129,38 @@ fn foreach_over_non_list_errors_unbound_is_empty() {
             _ => false,
         });
     assert!(!ran, "loop body must not run when source is unbound");
+}
+
+#[test]
+fn cost_of_non_quantity_value_errors_invalid_cost() {
+    // $(...) constructs an Intratempse from its inner expression's value; a
+    // bare string is not a quantity, so it cannot become a cost.
+    let cost_op = Operation::Cost(
+        Box::new(Operation::String(
+            vec![Fragment::Text("not a quantity")],
+            language::Span::default(),
+        )),
+        language::Span::default(),
+    );
+    let mut sub = Subroutine::anonymous();
+    sub.body = cost_op;
+    let mut program = Program::new();
+    program
+        .subroutines
+        .push(sub);
+
+    let mut fixture = StoreFixture::new("cost-non-quantity");
+    let mut runner = Runner::new(
+        &program,
+        fixture.take_appender(),
+        HashMap::new(),
+        Mock::new(),
+        Library::stub(),
+    );
+    match runner.run(Environment::new()) {
+        Err(RunnerError::InvalidCost) => {}
+        other => panic!("expected InvalidCost, got {:?}", other),
+    }
 }
 
 #[test]
@@ -2353,10 +2501,10 @@ test :
 fn automatic_records_done_for_computable_step_skip_for_prose() {
     fn record_of(label: &str, body: Operation<'static>) -> (Conclusion, State) {
         let mut fixture = StoreFixture::new(label);
-        let program = anonymous_with_body(Operation::Sequence(vec![step(
-            Ordinal::Dependent("1"),
-            body,
-        )]));
+        let program = anonymous_with_body(Operation::Sequence(
+            vec![step(Ordinal::Dependent("1"), body)],
+            language::Span::default(),
+        ));
         let mut runner = Runner::new(
             &program,
             fixture.take_appender(),
@@ -2385,7 +2533,10 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     // A single-line value computes and records Done with the literal.
     let (outcome, state) = record_of(
         "automatic-records-value",
-        Operation::String(vec![Fragment::Text("probe output")]),
+        Operation::String(
+            vec![Fragment::Text("probe output")],
+            language::Span::default(),
+        ),
     );
     assert_eq!(
         outcome,
@@ -2400,7 +2551,10 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     // escapes the newlines so the value stays on one record line.
     let (outcome, state) = record_of(
         "multiline-records-value",
-        Operation::String(vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")]),
+        Operation::String(
+            vec![Fragment::Text("1: lo\n2: eth0\n3: wlan0")],
+            language::Span::default(),
+        ),
     );
     assert_eq!(
         outcome,
@@ -2416,7 +2570,10 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
     );
 
     // A pure-prose step (empty body) has nothing to compute and records Skip.
-    let (_, state) = record_of("automatic-empty-body", Operation::Sequence(vec![]));
+    let (_, state) = record_of(
+        "automatic-empty-body",
+        Operation::Sequence(vec![], language::Span::default()),
+    );
     assert_eq!(state, State::Skip);
 }
 
@@ -2424,16 +2581,19 @@ fn automatic_records_done_for_computable_step_skip_for_prose() {
 fn sequence_value_is_last_member() {
     // A body sequence takes the last member's value, not the first or a fold.
     let mut fixture = StoreFixture::new("sequence-last-member");
-    let body = Operation::Sequence(vec![
-        step(
-            Ordinal::Dependent("1"),
-            Operation::String(vec![Fragment::Text("first")]),
-        ),
-        step(
-            Ordinal::Dependent("2"),
-            Operation::String(vec![Fragment::Text("second")]),
-        ),
-    ]);
+    let body = Operation::Sequence(
+        vec![
+            step(
+                Ordinal::Dependent("1"),
+                Operation::String(vec![Fragment::Text("first")], language::Span::default()),
+            ),
+            step(
+                Ordinal::Dependent("2"),
+                Operation::String(vec![Fragment::Text("second")], language::Span::default()),
+            ),
+        ],
+        language::Span::default(),
+    );
     let program = anonymous_with_body(body);
     let mut runner = Runner::new(
         &program,
@@ -2477,12 +2637,15 @@ fn deferred_invoke_is_prompted_and_recorded() {
             value: "https://example.com/probe",
             span: language::Span::default(),
         };
-        let invoke = Operation::Invoke(Invocable {
-            target: SubroutineRef::Deferred(external),
-            arguments: Vec::new(),
-            elided: true,
-        });
-        anonymous_with_body(Operation::Sequence(vec![invoke]))
+        let invoke = Operation::Invoke(
+            Invocable {
+                target: SubroutineRef::Deferred(external),
+                arguments: Vec::new(),
+                elided: true,
+            },
+            language::Span::default(),
+        );
+        anonymous_with_body(Operation::Sequence(vec![invoke], language::Span::default()))
     }
 
     // The user confirms the departure, then marks the external procedure

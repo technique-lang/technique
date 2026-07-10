@@ -296,6 +296,69 @@ fn response_as_expression() {
 }
 
 #[test]
+fn cost_as_expression() {
+    // `$(<expression>)` is a cost literal usable wherever an expression is
+    // expected: bare in a code block, or as an invocation argument.
+    let mut input = Parser::new();
+    input.initialize("$(10 minutes)");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Cost(
+            Box::new(Expression::Number(
+                Numeric::Scientific(Quantity {
+                    mantissa: Decimal {
+                        number: 10,
+                        precision: 0
+                    },
+                    uncertainty: None,
+                    magnitude: None,
+                    symbol: "minutes"
+                }),
+                Span::default()
+            )),
+            Span::default()
+        ))
+    );
+
+    // The argument is any expression, not just a literal quantity.
+    input.initialize("$(calculate())");
+    assert_eq!(
+        input.read_expression(),
+        Ok(Expression::Cost(
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::new("calculate"),
+                    parameters: vec![]
+                },
+                Span::default()
+            )),
+            Span::default()
+        ))
+    );
+}
+
+#[test]
+fn cost_in_code_block() {
+    // A cost is a single expression inside braces: `{ $(calculate()) }`.
+    let mut input = Parser::new();
+    input.initialize("{ $(calculate()) }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Cost(
+            Box::new(Expression::Execution(
+                Function {
+                    target: Identifier::new("calculate"),
+                    parameters: vec![]
+                },
+                Span::default()
+            )),
+            Span::default()
+        )])
+    );
+}
+
+#[test]
 fn declaration_simple() {
     let mut input = Parser::new();
     input.initialize("making_coffee :");

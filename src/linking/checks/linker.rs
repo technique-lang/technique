@@ -12,8 +12,8 @@ use crate::translation::translate;
 
 fn first_execute<'a, 'i>(op: &'a Operation<'i>) -> Option<&'a Executable<'i>> {
     match op {
-        Operation::Execute(executable) => Some(executable),
-        Operation::Sequence(ops) => ops
+        Operation::Execute(executable, _) => Some(executable),
+        Operation::Sequence(ops, _) => ops
             .iter()
             .find_map(first_execute),
         Operation::Section { body, .. } => first_execute(body),
@@ -23,10 +23,10 @@ fn first_execute<'a, 'i>(op: &'a Operation<'i>) -> Option<&'a Executable<'i>> {
             .and_then(first_execute)
             .or_else(|| first_execute(body)),
         Operation::Bind { value, .. } => first_execute(value),
-        Operation::Tablet(entries) => entries
+        Operation::Tablet(entries, _) => entries
             .iter()
             .find_map(|entry| first_execute(&entry.value)),
-        Operation::List(items) => items
+        Operation::List(items, _) => items
             .iter()
             .find_map(first_execute),
         _ => None,

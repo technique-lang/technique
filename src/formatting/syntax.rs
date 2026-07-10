@@ -18,6 +18,7 @@ pub enum Syntax {
     Section,
     String,
     Numeric,
+    Cost,
     Response,
     Invocation,
     Title,

@@ -37,6 +37,39 @@ pub struct Decimal {
     pub precision: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resource<'i> {
+    Time(Quantity<'i>),
+    Currency(Quantity<'i>),
+    Amount(Quantity<'i>),
+}
+
+/// Classify a Quantity as a Time, Currency, or (fallback) Amount resource,
+/// wrapping it in the matching variant by its unit symbol.
+pub fn classify_resource(quantity: Quantity<'_>) -> Resource<'_> {
+    let symbol = quantity.symbol;
+    let singular = symbol
+        .strip_suffix('s')
+        .unwrap_or(symbol);
+
+    let time = ["year", "month", "week", "day", "hour", "minute", "second"];
+    if time.contains(&singular) {
+        return Resource::Time(quantity);
+    }
+
+    let currency = ["dollar", "pound", "euro", "yen"];
+    if currency.contains(&singular) {
+        return Resource::Currency(quantity);
+    }
+
+    let codes = ["CAD", "USD", "AUD", "SGD", "HKD", "GBP", "EUR", "JPY"];
+    if codes.contains(&symbol) {
+        return Resource::Currency(quantity);
+    }
+
+    Resource::Amount(quantity)
+}
+
 /// Parse a string as a Quantity if it matches the expected format
 pub fn parse_quantity(input: &str) -> Option<Quantity<'_>> {
     // Look for patterns that indicate a quantity:
@@ -372,6 +405,99 @@ mod check {
         assert!(parse_quantity("4 ± 1.5").is_none()); // No units after uncertainty
         assert!(parse_quantity("").is_none()); // Empty string
         assert!(parse_quantity("   ").is_none()); // Just whitespace
+    }
+
+    fn q(symbol: &str) -> Quantity<'_> {
+        Quantity {
+            mantissa: Decimal {
+                number: 1,
+                precision: 0,
+            },
+            uncertainty: None,
+            magnitude: None,
+            symbol,
+        }
+    }
+
+    #[test]
+    fn classify_time_units() {
+        assert_eq!(classify_resource(q("year")), Resource::Time(q("year")));
+        assert_eq!(classify_resource(q("years")), Resource::Time(q("years")));
+        assert_eq!(classify_resource(q("month")), Resource::Time(q("month")));
+        assert_eq!(classify_resource(q("months")), Resource::Time(q("months")));
+        assert_eq!(classify_resource(q("week")), Resource::Time(q("week")));
+        assert_eq!(classify_resource(q("weeks")), Resource::Time(q("weeks")));
+        assert_eq!(classify_resource(q("day")), Resource::Time(q("day")));
+        assert_eq!(classify_resource(q("days")), Resource::Time(q("days")));
+        assert_eq!(classify_resource(q("hour")), Resource::Time(q("hour")));
+        assert_eq!(classify_resource(q("hours")), Resource::Time(q("hours")));
+        assert_eq!(classify_resource(q("minute")), Resource::Time(q("minute")));
+        assert_eq!(
+            classify_resource(q("minutes")),
+            Resource::Time(q("minutes"))
+        );
+        assert_eq!(classify_resource(q("second")), Resource::Time(q("second")));
+        assert_eq!(
+            classify_resource(q("seconds")),
+            Resource::Time(q("seconds"))
+        );
+    }
+
+    #[test]
+    fn classify_currency_words() {
+        assert_eq!(
+            classify_resource(q("dollar")),
+            Resource::Currency(q("dollar"))
+        );
+        assert_eq!(
+            classify_resource(q("dollars")),
+            Resource::Currency(q("dollars"))
+        );
+        assert_eq!(
+            classify_resource(q("pound")),
+            Resource::Currency(q("pound"))
+        );
+        assert_eq!(
+            classify_resource(q("pounds")),
+            Resource::Currency(q("pounds"))
+        );
+        assert_eq!(classify_resource(q("euro")), Resource::Currency(q("euro")));
+        assert_eq!(
+            classify_resource(q("euros")),
+            Resource::Currency(q("euros"))
+        );
+        assert_eq!(classify_resource(q("yen")), Resource::Currency(q("yen")));
+    }
+
+    #[test]
+    fn classify_currency_codes_and_yen() {
+        assert_eq!(classify_resource(q("CAD")), Resource::Currency(q("CAD")));
+        assert_eq!(classify_resource(q("USD")), Resource::Currency(q("USD")));
+        assert_eq!(classify_resource(q("AUD")), Resource::Currency(q("AUD")));
+        assert_eq!(classify_resource(q("SGD")), Resource::Currency(q("SGD")));
+        assert_eq!(classify_resource(q("HKD")), Resource::Currency(q("HKD")));
+        assert_eq!(classify_resource(q("GBP")), Resource::Currency(q("GBP")));
+        assert_eq!(classify_resource(q("EUR")), Resource::Currency(q("EUR")));
+        assert_eq!(classify_resource(q("JPY")), Resource::Currency(q("JPY")));
+    }
+
+    #[test]
+    fn classify_pluralized_codes_are_amounts() {
+        assert_eq!(classify_resource(q("HKDs")), Resource::Amount(q("HKDs")));
+        assert_eq!(classify_resource(q("USDs")), Resource::Amount(q("USDs")));
+    }
+
+    #[test]
+    fn classify_everything_else_is_amount() {
+        assert_eq!(classify_resource(q("kg")), Resource::Amount(q("kg")));
+        assert_eq!(
+            classify_resource(q("breadsticks")),
+            Resource::Amount(q("breadsticks"))
+        );
+        assert_eq!(
+            classify_resource(q("widgets")),
+            Resource::Amount(q("widgets"))
+        );
     }
 
     #[test]

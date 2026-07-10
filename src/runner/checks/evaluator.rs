@@ -1,4 +1,4 @@
-use crate::language::{Identifier, Numeric as LangNumeric};
+use crate::language::{Identifier, Numeric as LangNumeric, Span};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
 use crate::runner::evaluator::{Environment, coerce_to_list, combine, evaluate};
@@ -10,7 +10,7 @@ use crate::value;
 fn variable_lookup() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Variable(Identifier::new("missing"));
+    let op = Operation::Variable(Identifier::new("missing"), Span::default());
     let mut env = Environment::new();
     match evaluate(&library, &context, &mut env, &op) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "missing"),
@@ -22,7 +22,7 @@ fn variable_lookup() {
         "name".to_string(),
         value::Value::Literali("World".to_string()),
     );
-    let op = Operation::Variable(Identifier::new("name"));
+    let op = Operation::Variable(Identifier::new("name"), Span::default());
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("World".to_string()));
 }
@@ -31,7 +31,7 @@ fn variable_lookup() {
 fn number_evaluates_to_quanticle() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Number(LangNumeric::Integral(42));
+    let op = Operation::Number(LangNumeric::Integral(42), Span::default());
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Quanticle(value::Numeric::Integral(42)));
@@ -46,18 +46,30 @@ fn string_interpolation() {
         "name".to_string(),
         value::Value::Literali("World".to_string()),
     );
-    let op = Operation::String(vec![
-        Fragment::Text("Hello, "),
-        Fragment::Interpolation(Operation::Variable(Identifier::new("name"))),
-        Fragment::Text("!"),
-    ]);
+    let op = Operation::String(
+        vec![
+            Fragment::Text("Hello, "),
+            Fragment::Interpolation(Operation::Variable(
+                Identifier::new("name"),
+                Span::default(),
+            )),
+            Fragment::Text("!"),
+        ],
+        Span::default(),
+    );
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("Hello, World!".to_string()));
 
-    let op = Operation::String(vec![
-        Fragment::Text("hi "),
-        Fragment::Interpolation(Operation::Variable(Identifier::new("nope"))),
-    ]);
+    let op = Operation::String(
+        vec![
+            Fragment::Text("hi "),
+            Fragment::Interpolation(Operation::Variable(
+                Identifier::new("nope"),
+                Span::default(),
+            )),
+        ],
+        Span::default(),
+    );
     let mut env = Environment::new();
     match evaluate(&library, &context, &mut env, &op) {
         Err(RunnerError::UnboundVariable(name)) => assert_eq!(name, "nope"),
@@ -69,7 +81,7 @@ fn string_interpolation() {
 fn multiline_joins_with_newlines() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Multiline(None, vec!["foo", "bar", "baz"]);
+    let op = Operation::Multiline(None, vec!["foo", "bar", "baz"], Span::default());
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("foo\nbar\nbaz".to_string()));
@@ -79,16 +91,19 @@ fn multiline_joins_with_newlines() {
 fn tablet_entries_evaluate() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Tablet(vec![
-        Entry {
-            label: "name",
-            value: Operation::String(vec![Fragment::Text("Kowalski")]),
-        },
-        Entry {
-            label: "count",
-            value: Operation::Number(LangNumeric::Integral(7)),
-        },
-    ]);
+    let op = Operation::Tablet(
+        vec![
+            Entry {
+                label: "name",
+                value: Operation::String(vec![Fragment::Text("Kowalski")], Span::default()),
+            },
+            Entry {
+                label: "count",
+                value: Operation::Number(LangNumeric::Integral(7), Span::default()),
+            },
+        ],
+        Span::default(),
+    );
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(
@@ -110,11 +125,14 @@ fn tablet_entries_evaluate() {
 fn list_elements_evaluate() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::List(vec![
-        Operation::Number(LangNumeric::Integral(1)),
-        Operation::Number(LangNumeric::Integral(4)),
-        Operation::Number(LangNumeric::Integral(9)),
-    ]);
+    let op = Operation::List(
+        vec![
+            Operation::Number(LangNumeric::Integral(1), Span::default()),
+            Operation::Number(LangNumeric::Integral(4), Span::default()),
+            Operation::Number(LangNumeric::Integral(9), Span::default()),
+        ],
+        Span::default(),
+    );
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(
@@ -134,11 +152,15 @@ fn bind_extends_env_for_subsequent_lookup() {
     let names = [Identifier::new("greeting")];
     let bind = Operation::Bind {
         names: &names,
-        value: Box::new(Operation::String(vec![Fragment::Text("Hello")])),
+        value: Box::new(Operation::String(
+            vec![Fragment::Text("Hello")],
+            Span::default(),
+        )),
         inferred: None,
+        span: Span::default(),
     };
-    let lookup = Operation::Variable(Identifier::new("greeting"));
-    let seq = Operation::Sequence(vec![bind, lookup]);
+    let lookup = Operation::Variable(Identifier::new("greeting"), Span::default());
+    let seq = Operation::Sequence(vec![bind, lookup], Span::default());
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Literali("Hello".to_string()));
@@ -151,16 +173,19 @@ fn bind_extends_env_for_subsequent_lookup() {
 fn sequence_evaluation() {
     let library = Library::core();
     let context = Context::native(false);
-    let seq = Operation::Sequence(vec![
-        Operation::Number(LangNumeric::Integral(1)),
-        Operation::Number(LangNumeric::Integral(2)),
-        Operation::Number(LangNumeric::Integral(3)),
-    ]);
+    let seq = Operation::Sequence(
+        vec![
+            Operation::Number(LangNumeric::Integral(1), Span::default()),
+            Operation::Number(LangNumeric::Integral(2), Span::default()),
+            Operation::Number(LangNumeric::Integral(3), Span::default()),
+        ],
+        Span::default(),
+    );
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Quanticle(value::Numeric::Integral(3)));
 
-    let seq = Operation::Sequence(vec![]);
+    let seq = Operation::Sequence(vec![], Span::default());
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &seq).expect("evaluated");
     assert_eq!(v, value::Value::Unitus);
@@ -171,10 +196,13 @@ fn tuple_literal_evaluates_to_parametriq() {
     let library = Library::core();
     let context = Context::native(false);
     let mut env = Environment::new();
-    let tuple = Operation::Tuple(vec![
-        Operation::Number(LangNumeric::Integral(2)),
-        Operation::String(vec![Fragment::Text("mice")]),
-    ]);
+    let tuple = Operation::Tuple(
+        vec![
+            Operation::Number(LangNumeric::Integral(2), Span::default()),
+            Operation::String(vec![Fragment::Text("mice")], Span::default()),
+        ],
+        Span::default(),
+    );
     let v = evaluate(&library, &context, &mut env, &tuple).expect("evaluated");
     assert_eq!(
         v,
@@ -194,11 +222,15 @@ fn tuple_literal_binds_directly() {
     let names = [Identifier::new("count"), Identifier::new("kind")];
     let bind = Operation::Bind {
         names: &names,
-        value: Box::new(Operation::Tuple(vec![
-            Operation::Number(LangNumeric::Integral(2)),
-            Operation::String(vec![Fragment::Text("mice")]),
-        ])),
+        value: Box::new(Operation::Tuple(
+            vec![
+                Operation::Number(LangNumeric::Integral(2), Span::default()),
+                Operation::String(vec![Fragment::Text("mice")], Span::default()),
+            ],
+            Span::default(),
+        )),
         inferred: None,
+        span: Span::default(),
     };
     let result = evaluate(&library, &context, &mut env, &bind).expect("evaluated");
     assert_eq!(result, value::Value::Unitus);
@@ -232,8 +264,12 @@ fn multi_name_bind_destructures_parametriq() {
     ];
     let bind = Operation::Bind {
         names: &names,
-        value: Box::new(Operation::Variable(Identifier::new("triple"))),
+        value: Box::new(Operation::Variable(
+            Identifier::new("triple"),
+            Span::default(),
+        )),
         inferred: None,
+        span: Span::default(),
     };
     let result = evaluate(&library, &context, &mut env, &bind).expect("evaluated");
     assert_eq!(result, value::Value::Unitus);
@@ -270,8 +306,12 @@ fn multi_name_bind_wrong_arity_errors() {
     ];
     let bind = Operation::Bind {
         names: &names,
-        value: Box::new(Operation::Variable(Identifier::new("pair"))),
+        value: Box::new(Operation::Variable(
+            Identifier::new("pair"),
+            Span::default(),
+        )),
         inferred: None,
+        span: Span::default(),
     };
     match evaluate(&library, &context, &mut env, &bind) {
         Err(RunnerError::BindArityMismatch { expected, actual }) => {
@@ -294,8 +334,12 @@ fn multi_name_bind_against_scalar_errors_as_not_tuple() {
     let names = [Identifier::new("a"), Identifier::new("b")];
     let bind = Operation::Bind {
         names: &names,
-        value: Box::new(Operation::Variable(Identifier::new("scalar"))),
+        value: Box::new(Operation::Variable(
+            Identifier::new("scalar"),
+            Span::default(),
+        )),
         inferred: None,
+        span: Span::default(),
     };
     match evaluate(&library, &context, &mut env, &bind) {
         Err(RunnerError::BindNotTuple { expected }) => {
@@ -312,13 +356,16 @@ fn execute_dispatches_resolved_builtin() {
     let id = library
         .resolve("seq")
         .expect("seq registered");
-    let op = Operation::Execute(Executable {
-        target: ExecutableRef::Resolved(id),
-        arguments: vec![
-            Operation::Number(LangNumeric::Integral(1)),
-            Operation::Number(LangNumeric::Integral(3)),
-        ],
-    });
+    let op = Operation::Execute(
+        Executable {
+            target: ExecutableRef::Resolved(id),
+            arguments: vec![
+                Operation::Number(LangNumeric::Integral(1), Span::default()),
+                Operation::Number(LangNumeric::Integral(3), Span::default()),
+            ],
+        },
+        Span::default(),
+    );
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(
@@ -335,10 +382,13 @@ fn execute_dispatches_resolved_builtin() {
 fn execute_unresolved_function_errors() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Execute(Executable {
-        target: ExecutableRef::Unresolved(Identifier::new("click")),
-        arguments: Vec::new(),
-    });
+    let op = Operation::Execute(
+        Executable {
+            target: ExecutableRef::Unresolved(Identifier::new("click")),
+            arguments: Vec::new(),
+        },
+        Span::default(),
+    );
     let mut env = Environment::new();
     let Err(RunnerError::UnknownFunction(name)) = evaluate(&library, &context, &mut env, &op)
     else {

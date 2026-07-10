@@ -18,6 +18,11 @@ pub enum ResolutionError<'i> {
     /// A read that doesn't match any variable in scope (neither a parameter
     /// of the procedure nor a name bound by a binding or loop within it).
     UnboundVariable { variable: language::Identifier<'i> },
+    /// A `$(...)` cost whose inner expression is a literal that plainly isn't
+    /// a quantity`. If an expression is here its return value isn't known
+    /// until runtime, so that case is left to the runtime
+    /// `RunnerError::InvalidCost` check instead.
+    InvalidCostLiteral(Span),
 }
 
 impl<'i> ResolutionError<'i> {
@@ -26,6 +31,7 @@ impl<'i> ResolutionError<'i> {
             ResolutionError::UnresolvedProcedure(id) => id.span,
             ResolutionError::ProcedureArityMismatch { procedure, .. } => procedure.span,
             ResolutionError::UnboundVariable { variable } => variable.span,
+            ResolutionError::InvalidCostLiteral(span) => *span,
         }
     }
 }
@@ -62,6 +68,7 @@ pub fn resolve<'i>(program: &mut Program<'i>) -> Result<(), Vec<ResolutionError<
     }
     for subroutine in &program.subroutines {
         check_bindings(subroutine, &mut problems);
+        check_costs(&subroutine.body, &mut problems);
     }
     if problems.is_empty() {
         Ok(())
@@ -77,7 +84,7 @@ fn resolve_operation<'i>(
     problems: &mut Vec<ResolutionError<'i>>,
 ) {
     match op {
-        Operation::Invoke(invocable) => {
+        Operation::Invoke(invocable, _) => {
             if let SubroutineRef::Unresolved(id) = &invocable.target {
                 match known.get(id.value) {
                     Some(sub_id) => {
@@ -105,10 +112,10 @@ fn resolve_operation<'i>(
                 resolve_operation(arg, known, arities, problems);
             }
         }
-        Operation::Sequence(ops)
-        | Operation::List(ops)
-        | Operation::Tuple(ops)
-        | Operation::Prologue(ops) => {
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
             for op in ops {
                 resolve_operation(op, known, arities, problems);
             }
@@ -130,31 +137,32 @@ fn resolve_operation<'i>(
             resolve_operation(bound, known, arities, problems);
             resolve_operation(body, known, arities, problems);
         }
+        Operation::Cost(inner, _) => resolve_operation(inner, known, arities, problems),
         Operation::Bind { value, .. } => resolve_operation(value, known, arities, problems),
-        Operation::Execute(executable) => {
+        Operation::Execute(executable, _) => {
             for arg in &mut executable.arguments {
                 resolve_operation(arg, known, arities, problems);
             }
         }
-        Operation::String(fragments) => {
+        Operation::String(fragments, _) => {
             for fragment in fragments {
                 if let Fragment::Interpolation(op) = fragment {
                     resolve_operation(op, known, arities, problems);
                 }
             }
         }
-        Operation::Tablet(entries) => {
+        Operation::Tablet(entries, _) => {
             for entry in entries {
                 resolve_operation(&mut entry.value, known, arities, problems);
             }
         }
-        Operation::Variable(_)
-        | Operation::Number(_)
-        | Operation::Response(_)
-        | Operation::Multiline(_, _)
-        | Operation::Prose(_)
-        | Operation::Hole
-        | Operation::Unit => {}
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
     }
 }
 
@@ -174,7 +182,7 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
     match op {
         Operation::Loop { over, body, .. } => {
             if let Some(over) = over {
-                if let Operation::Variable(id) = over.as_ref() {
+                if let Operation::Variable(id, _) = over.as_ref() {
                     iterated.insert(id.value);
                 }
                 gather_iterated(over, iterated);
@@ -186,10 +194,11 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
             gather_iterated(body, iterated);
         }
         Operation::Bind { value, .. } => gather_iterated(value, iterated),
-        Operation::Sequence(ops)
-        | Operation::List(ops)
-        | Operation::Tuple(ops)
-        | Operation::Prologue(ops) => {
+        Operation::Cost(inner, _) => gather_iterated(inner, iterated),
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
             for op in ops {
                 gather_iterated(op, iterated);
             }
@@ -201,35 +210,35 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
             gather_iterated(body, iterated);
         }
         Operation::Step { body, .. } => gather_iterated(body, iterated),
-        Operation::Invoke(invocable) => {
+        Operation::Invoke(invocable, _) => {
             for arg in &invocable.arguments {
                 gather_iterated(arg, iterated);
             }
         }
-        Operation::Execute(executable) => {
+        Operation::Execute(executable, _) => {
             for arg in &executable.arguments {
                 gather_iterated(arg, iterated);
             }
         }
-        Operation::String(fragments) => {
+        Operation::String(fragments, _) => {
             for fragment in fragments {
                 if let Fragment::Interpolation(op) = fragment {
                     gather_iterated(op, iterated);
                 }
             }
         }
-        Operation::Tablet(entries) => {
+        Operation::Tablet(entries, _) => {
             for entry in entries {
                 gather_iterated(&entry.value, iterated);
             }
         }
-        Operation::Variable(_)
-        | Operation::Number(_)
-        | Operation::Response(_)
-        | Operation::Multiline(_, _)
-        | Operation::Prose(_)
-        | Operation::Hole
-        | Operation::Unit => {}
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
     }
 }
 
@@ -239,6 +248,7 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             names,
             value,
             inferred,
+            ..
         } => {
             if names.len() == 1 && iterated.contains(names[0].value) {
                 *inferred = Some(language::Genus::List(language::Forma::new("*")));
@@ -255,10 +265,11 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             mark_iterated(bound, iterated);
             mark_iterated(body, iterated);
         }
-        Operation::Sequence(ops)
-        | Operation::List(ops)
-        | Operation::Tuple(ops)
-        | Operation::Prologue(ops) => {
+        Operation::Cost(inner, _) => mark_iterated(inner, iterated),
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
             for op in ops {
                 mark_iterated(op, iterated);
             }
@@ -270,35 +281,35 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             mark_iterated(body, iterated);
         }
         Operation::Step { body, .. } => mark_iterated(body, iterated),
-        Operation::Invoke(invocable) => {
+        Operation::Invoke(invocable, _) => {
             for arg in &mut invocable.arguments {
                 mark_iterated(arg, iterated);
             }
         }
-        Operation::Execute(executable) => {
+        Operation::Execute(executable, _) => {
             for arg in &mut executable.arguments {
                 mark_iterated(arg, iterated);
             }
         }
-        Operation::String(fragments) => {
+        Operation::String(fragments, _) => {
             for fragment in fragments {
                 if let Fragment::Interpolation(op) = fragment {
                     mark_iterated(op, iterated);
                 }
             }
         }
-        Operation::Tablet(entries) => {
+        Operation::Tablet(entries, _) => {
             for entry in entries {
                 mark_iterated(&mut entry.value, iterated);
             }
         }
-        Operation::Variable(_)
-        | Operation::Number(_)
-        | Operation::Response(_)
-        | Operation::Multiline(_, _)
-        | Operation::Prose(_)
-        | Operation::Hole
-        | Operation::Unit => {}
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
     }
 }
 
@@ -325,7 +336,7 @@ fn check_scope<'i>(
     problems: &mut Vec<ResolutionError<'i>>,
 ) {
     match op {
-        Operation::Variable(id) => {
+        Operation::Variable(id, _) => {
             if !scope.contains(id.value) {
                 problems.push(ResolutionError::UnboundVariable { variable: *id });
             }
@@ -356,10 +367,11 @@ fn check_scope<'i>(
             check_scope(bound, scope, problems);
             check_scope(body, scope, problems);
         }
-        Operation::Sequence(ops)
-        | Operation::List(ops)
-        | Operation::Tuple(ops)
-        | Operation::Prologue(ops) => {
+        Operation::Cost(inner, _) => check_scope(inner, scope, problems),
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
             for op in ops {
                 check_scope(op, scope, problems);
             }
@@ -371,34 +383,120 @@ fn check_scope<'i>(
             check_scope(body, scope, problems);
         }
         Operation::Step { body, .. } => check_scope(body, scope, problems),
-        Operation::Invoke(invocable) => {
+        Operation::Invoke(invocable, _) => {
             for arg in &invocable.arguments {
                 check_scope(arg, scope, problems);
             }
         }
-        Operation::Execute(executable) => {
+        Operation::Execute(executable, _) => {
             for arg in &executable.arguments {
                 check_scope(arg, scope, problems);
             }
         }
-        Operation::String(fragments) => {
+        Operation::String(fragments, _) => {
             for fragment in fragments {
                 if let Fragment::Interpolation(op) = fragment {
                     check_scope(op, scope, problems);
                 }
             }
         }
-        Operation::Tablet(entries) => {
+        Operation::Tablet(entries, _) => {
             for entry in entries {
                 check_scope(&entry.value, scope, problems);
             }
         }
-        Operation::Number(_)
-        | Operation::Response(_)
-        | Operation::Multiline(_, _)
-        | Operation::Prose(_)
-        | Operation::Hole
-        | Operation::Unit => {}
+        Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
+    }
+}
+
+// Flag a $(...) cost whose inner expression is a literal that plainly isn't a
+// quantity. A call, invocation, variable read, or bind has no statically
+// known result, so those are left unchecked here — a bad value from one of
+// those surfaces at runtime as RunnerError::InvalidCost instead.
+fn check_costs<'i>(op: &Operation<'i>, problems: &mut Vec<ResolutionError<'i>>) {
+    match op {
+        Operation::Cost(inner, span) => {
+            if literal_not_a_quantity(inner) {
+                problems.push(ResolutionError::InvalidCostLiteral(*span));
+            }
+            check_costs(inner, problems);
+        }
+        Operation::Sequence(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _)
+        | Operation::Prologue(ops, _) => {
+            for op in ops {
+                check_costs(op, problems);
+            }
+        }
+        Operation::Section { title, body, .. } => {
+            if let Some(title) = title {
+                check_costs(title, problems);
+            }
+            check_costs(body, problems);
+        }
+        Operation::Step { body, .. } => check_costs(body, problems),
+        Operation::Loop { over, body, .. } => {
+            if let Some(over) = over {
+                check_costs(over, problems);
+            }
+            check_costs(body, problems);
+        }
+        Operation::Within { bound, body, .. } => {
+            check_costs(bound, problems);
+            check_costs(body, problems);
+        }
+        Operation::Bind { value, .. } => check_costs(value, problems),
+        Operation::Invoke(invocable, _) => {
+            for arg in &invocable.arguments {
+                check_costs(arg, problems);
+            }
+        }
+        Operation::Execute(executable, _) => {
+            for arg in &executable.arguments {
+                check_costs(arg, problems);
+            }
+        }
+        Operation::String(fragments, _) => {
+            for fragment in fragments {
+                if let Fragment::Interpolation(op) = fragment {
+                    check_costs(op, problems);
+                }
+            }
+        }
+        Operation::Tablet(entries, _) => {
+            for entry in entries {
+                check_costs(&entry.value, problems);
+            }
+        }
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
+    }
+}
+
+// Whether `op` is a literal — not a call — known without evaluation to not be
+// a quantity.
+fn literal_not_a_quantity(op: &Operation) -> bool {
+    match op {
+        Operation::String(_, _)
+        | Operation::Response(_, _)
+        | Operation::Multiline(_, _, _)
+        | Operation::Tablet(_, _)
+        | Operation::List(_, _)
+        | Operation::Tuple(_, _)
+        | Operation::Unit(_)
+        | Operation::Hole(_) => true,
+        _ => false,
     }
 }
 
