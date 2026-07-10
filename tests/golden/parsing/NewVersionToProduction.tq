@@ -1,0 +1,250 @@
+% technique v1
+& procedure
+
+new_version_to_production :
+
+# New Version of Wishing Well code to Live
+
+Promotion of Wishing Well 2.1.0 - 18 Sep 2004, 0515 hrs EST.
+
+I. Preparation
+
+preparation :
+
+# Preparation
+
+0500 hrs; Andrew, Kermit, Beaker, Fozzie, Gonzo on site.
+
+    1.  In office; setup; coordination
+        @all
+            a.  Computers on, connections established
+    2.  Safety steps
+        @beaker
+            a.  Backup properties files
+            b.  Take smtp4:25 out-of-service in load balancer to allow its
+                queues to fall to zero
+        @fozzie
+            a.  Verify nightly database backups and scripts ran ok
+        @kermit
+            a.  Call ROC advise scheduled outage
+            b.  Email to Customer Alert advising downtime
+    3.  Verification
+        @all
+            a.  Review procedure (Coffee Table)
+            b.  Return to workstations and report to Kermit ready to Begin
+        @kermit
+            a.  Poll ready
+            b.  Go/NoGo to Begin
+
+II. Take Site Down
+
+take_site_down :
+
+# Take Site Down
+
+0515 hrs; start time critical due to expected duration of database scripts.
+
+    4.  Enter Maintenance Mode
+        @beaker
+            a.  Web and Wap Maintenance pages activated (smtp1:80 in-service
+                in load balancer; web1:80 and web2:80 out-of-service)
+        @fozzie
+            a.  Put IVRs into Maintenance Mode
+    5.  Down Services
+        @beaker
+            a.  Stop all VMs less IVRs
+            b.  Stop HA Clustered Filesystem on oracle2, then
+            c.  Stop HA Clustered Filesystem on oracle1
+            d.  Ensure RAID filesystems still mounted on oracle1
+        @fozzie
+            a.  Stop Apache on web1, web2
+    6.  Verification
+        @kermit
+            a.  Verify VMs down (less IVR VMs)
+            b.  Verify volume manager status
+            c.  Verify Maintenance mode (Web, Wap and IVR)
+            d.  Go/NoGo for Upgrade
+            e.  Change CVS branch control file to HEAD
+
+III. Upgrade to 2.1
+
+upgrade :
+
+# Upgrade to 2.1
+
+    7.  Database scripts and Package revs
+        @fozzie + @gonzo
+            a.  Take an export dump of live database
+            b.  Stop database
+            c.  Database into Exclusive mode
+            d.  Begin database change script
+            e.  Manually change SMPP data
+        @beaker
+            a.  Install new packages on servers storage2, oracle1, oracle2,
+                dns, message1
+            b.  Install new packages on servers web1, web2, servlet1, servlet2
+            c.  Install new packages on servers smtp1, smtp2, smtp3, smtp4,
+                ivr1, ivr2
+            d.  Verify CVS checkouts switched to HEAD
+            e.  Delete compiled class files on servlet machines
+            f.  Deploy properties file changes and new files
+        @kermit
+            a.  Deploy custom jars
+            b.  Deploy SMPP changes to web1, web2
+            c.  DNS changes for smpp.wish-well-corp.net
+    8.  Verification
+        @kermit
+            a.  Verify database changes complete
+            b.  Report steps complete
+            c.  Spot check package versions, object/relational mappings, and
+                properties files
+            d.  Go/NoGo for Restart and System Test
+
+IV. System maintenance
+
+system_maintenance :
+
+# System maintenance: Change server SCSI cables
+
+Approx 0630, Sam the Eagle out in Docklands.
+
+    9.  Halt machines
+        @fozzie
+            a.  Stop oracle databases REPORTING, STAGE, PREVIEW on oracle2
+            b.  Stop oracle databases WISH on oracle1
+            c.  Stop cluster manager on oracle2, oracle1
+            d.  Console, halt oracle1, oracle2
+        @beaker
+            a.  Stop cluster manager on storage2, storage1
+            b.  Console, halt storage1, storage2
+    10. Change server SCSI cables
+        @sam_the_eagle
+            a.  Contact Kermit by Phone and Instant Messenger
+            b.  Remove HVD SCSI cables
+            c.  Install LVD SCSI cables
+    11. Restart machines
+        @fozzie
+            a.  Console, boot oracle1, oracle2
+            b.  Start cluster manager
+            c.  Start WISH database on oracle1
+            d.  Verify database
+        @beaker
+            a.  Console, boot storage1, storage2
+            b.  Start cluster manager
+            c.  Verify NFS
+
+V. Initial Restart and System Test
+
+restart_and_test :
+
+# Initial Restart and System Test
+
+    12. Restart VMs
+        @beaker
+            a.  Start queue server VM on message1
+            b.  Manually start queue server on message1 command console
+            c.  Open 8088 (Web), 8080 (IM) in Resonate 172.16.2.10 VIP
+        @fozzie
+            a.  Start Apache on web1, web2
+            b.  Start all other VMs less smtp, ivr
+    13. Verification
+        @beaker
+            a.  Monitor message1 queue server, robot server VM logs
+        @fozzie
+            a.  Monitor servlet1,2 resin VM logs
+            b.  Hit servlet1:8081 and servlet2:8081 to test individual Resin
+                VMs
+        @kermit
+            a.  Verify VMs up (less ivr, smtp)
+            b.  Monitor web1,2 imserver VM logs
+            c.  Hit web1:8088 and web2:8088 to test individual web servers
+            d.  Attempt login
+            e.  Send test message
+            f.  Go/NoGo to begin Integrity testing
+
+VI. Initial Integrity Test
+
+integrity_test :
+
+# Initial Integrity Test and follow on Restarts
+
+Expected approx 0630 hrs; John Denver, Animal on site. Scotty the Chief
+Engineer and Engineering Department Leads assisting as available.
+
+    14. Initial testing
+        @animal
+            a.  Begin integrity test: Web, Wap, IM
+        @john_denver
+        @kermit
+            a.  Channel and Microsite Ports as requested
+        @all
+            a.  General testing
+    15. Restart IVRs
+        @beaker
+            a.  Restart ivr1,2 ports 8800, 8802 ivrserver VMs using idle
+                command
+    16. Verification
+        @beaker
+            a.  Monitor ivr1,2 ivrserver0,1 VM logs
+        @kermit
+            a.  Monitor ivr1,2 ports 8800, 8802 admin console
+            b.  Verify IVRs still in Maintenance Mode
+    17. Testing continues: IVRs
+        @animal
+            a.  Integrity test: IVR, calling 1800 998 119
+    18. Start single email filter for testing
+        @beaker
+            a.  Restart smtp4 email filter only
+            b.  Monitor smtp4 Qmail log and email filter VM log
+    19. Verification
+        @beaker
+            a.  Test non-handle email
+            b.  Test handle email to email filter
+        @kermit
+            a.  Verify smtp1,2,3 emailadapters still down
+            b.  Verify smtp4 emailadapter up
+            c.  Go/NoGo to begin email Integrity tests
+    20. Testing continues: email and SMS
+        @animal
+            a.  Integrity test: individual and group email via smtp4
+    21. Final Verification
+        @kermit
+            a.  Recommend Go for going Live
+        @john_denver
+            a.  Report Integrity test complete
+            b.  Recommend Go for going Live
+        @scotty
+            a.  Recommend Go for going Live
+        @andrew
+            a.  Go/NoGo for going Live
+
+VII. Go Live
+
+go_live :
+
+# Go Live
+
+    22. Restart remaining VMs
+        @beaker
+            a.  Restart smtp1,2,3 emailadapters
+    23. Deactivate Maintenance Mode
+        @beaker
+            a.  Deactivate Web, Wap Maintenance pages in load balancer,
+                bringing web1:80 and web2:80 in-service
+            b.  Restart oracle1 then oracle2 Veritas
+        @fozzie
+            a.  Deactivate Maintenance Mode (IVRs)
+    24. Verification
+        @all
+            a.  Continue testing, now on www:80 (not 8088) and on 1800 116 342
+        @beaker
+            a.  Monitor smtp1,2,3 Qmail log and emailadapter VM log
+        @kermit
+            a.  Verify Maintenance mode deactivated
+            b.  Verify smtp1,2,3 email filters up
+            c.  Verify IVR lines active using web monitor
+            d.  Verify cluster manager and load balancer status
+            e.  Call NOC, request resume normal monitoring
+            f.  Email to All Staff advising Live back up
+            g.  Declare no rollback
+            h.  Go/NoGo for Follow on work

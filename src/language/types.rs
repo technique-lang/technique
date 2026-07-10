@@ -442,6 +442,7 @@ pub enum Expression<'i> {
     Multiline(Option<&'i str>, Vec<&'i str>, Span),
     Repeat(Box<Expression<'i>>, Span),
     Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>, Span),
+    Within(Box<Expression<'i>>, Span),
     Application(Invocation<'i>, Span),
     Execution(Function<'i>, Span),
     Binding(Box<Expression<'i>>, Vec<Identifier<'i>>, Span),
@@ -467,6 +468,7 @@ impl PartialEq for Expression<'_> {
             (Expression::Foreach(a1, a2, _), Expression::Foreach(b1, b2, _)) => {
                 a1 == b1 && a2 == b2
             }
+            (Expression::Within(a, _), Expression::Within(b, _)) => a == b,
             (Expression::Application(a, _), Expression::Application(b, _)) => a == b,
             (Expression::Execution(a, _), Expression::Execution(b, _)) => a == b,
             (Expression::Binding(a1, a2, _), Expression::Binding(b1, b2, _)) => {

@@ -317,6 +317,30 @@ fn is_tablet_list_expr(expr: &Expression) -> bool {
     }
 }
 
+/// Whether a code block's expressions render as a single inline line
+/// (`{ expr }`) rather than the multi-line block form. A `;`-separated
+/// sequence and any single non-tablet expression (a value, a control
+/// structure like `foreach`/`repeat`/`within`, ...) are inline; a tablet
+/// literal is not.
+fn is_inline_code_block(expressions: &[Expression]) -> bool {
+    let has_separator = expressions
+        .iter()
+        .any(|e| {
+            if let Expression::Separator = e {
+                true
+            } else {
+                false
+            }
+        });
+    if has_separator {
+        true
+    } else if expressions.len() == 1 {
+        !is_tablet_list_expr(&expressions[0])
+    } else {
+        false
+    }
+}
+
 struct Formatter<'i> {
     fragments: Vec<(Syntax, Cow<'i, str>)>,
     nesting: u8,
@@ -1091,8 +1115,13 @@ impl<'i> Formatter<'i> {
                     return;
                 }
 
-                let is_code = if let Scope::CodeBlock { .. } = subscopes[0] {
-                    true
+                // A multi-line code block (a tablet literal) stays flush
+                // with the attribute line, its braces already providing
+                // visual grouping; a single-line code block — whether a bare
+                // value/call or a control structure (foreach/repeat/within)
+                // — gets a normal indent like any other subscope.
+                let keep_flush = if let Scope::CodeBlock { expressions, .. } = &subscopes[0] {
+                    !is_inline_code_block(expressions)
                 } else {
                     false
                 };
@@ -1103,7 +1132,7 @@ impl<'i> Formatter<'i> {
                 self.append_attributes(attributes);
                 self.add_fragment_reference(Syntax::Newline, "\n");
 
-                if !is_code {
+                if !keep_flush {
                     self.increase(4);
                 }
                 self.append_scope(&subscopes[0]);
@@ -1113,7 +1142,7 @@ impl<'i> Formatter<'i> {
                     self.append_scope(scope);
                 }
 
-                if !is_code {
+                if !keep_flush {
                     self.decrease(4);
                 }
             }
@@ -1122,22 +1151,7 @@ impl<'i> Formatter<'i> {
                 subscopes: substeps,
                 ..
             } => {
-                let has_separator = expressions
-                    .iter()
-                    .any(|e| {
-                        if let Expression::Separator = e {
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                let inline = if has_separator {
-                    true
-                } else if expressions.len() == 1 {
-                    !is_tablet_list_expr(&expressions[0])
-                } else {
-                    false
-                };
+                let inline = is_inline_code_block(expressions);
 
                 if inline {
                     self.indent();
@@ -1305,6 +1319,11 @@ impl<'i> Formatter<'i> {
             }
             Expression::Repeat(expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "repeat");
+                self.add_fragment_reference(Syntax::Neutral, " ");
+                self.append_expression(expression);
+            }
+            Expression::Within(expression, _) => {
+                self.add_fragment_reference(Syntax::Keyword, "within");
                 self.add_fragment_reference(Syntax::Neutral, " ");
                 self.append_expression(expression);
             }

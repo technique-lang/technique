@@ -157,6 +157,13 @@ pub enum Operation<'i> {
         body: Box<Operation<'i>>,
         responses: Vec<&'i language::Response<'i>>,
     },
+    /// A `within` block is _not_ generative like `Loop`, but a predicate
+    /// governing a run-once body.
+    Within {
+        bound: Box<Operation<'i>>,
+        body: Box<Operation<'i>>,
+        responses: Vec<&'i language::Response<'i>>,
+    },
     Bind {
         names: &'i [language::Identifier<'i>],
         value: Box<Operation<'i>>,

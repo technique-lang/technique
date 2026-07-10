@@ -126,6 +126,10 @@ fn resolve_operation<'i>(
             }
             resolve_operation(body, known, arities, problems);
         }
+        Operation::Within { bound, body, .. } => {
+            resolve_operation(bound, known, arities, problems);
+            resolve_operation(body, known, arities, problems);
+        }
         Operation::Bind { value, .. } => resolve_operation(value, known, arities, problems),
         Operation::Execute(executable) => {
             for arg in &mut executable.arguments {
@@ -175,6 +179,10 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
                 }
                 gather_iterated(over, iterated);
             }
+            gather_iterated(body, iterated);
+        }
+        Operation::Within { bound, body, .. } => {
+            gather_iterated(bound, iterated);
             gather_iterated(body, iterated);
         }
         Operation::Bind { value, .. } => gather_iterated(value, iterated),
@@ -241,6 +249,10 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
             if let Some(over) = over {
                 mark_iterated(over, iterated);
             }
+            mark_iterated(body, iterated);
+        }
+        Operation::Within { bound, body, .. } => {
+            mark_iterated(bound, iterated);
             mark_iterated(body, iterated);
         }
         Operation::Sequence(ops)
@@ -338,6 +350,10 @@ fn check_scope<'i>(
             for name in *names {
                 scope.insert(name.value);
             }
+            check_scope(body, scope, problems);
+        }
+        Operation::Within { bound, body, .. } => {
+            check_scope(bound, scope, problems);
             check_scope(body, scope, problems);
         }
         Operation::Sequence(ops)

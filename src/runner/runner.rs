@@ -113,6 +113,7 @@ pub struct Runner<'i, D: Driver> {
     inputs: HashMap<String, Vec<Supplied>>,
     driver: D,
     path: QualifiedPath<'i>,
+    constraints: Vec<Value>,
     library: Library,
     context: Context,
     document: Option<String>,
@@ -133,6 +134,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             inputs: HashMap::new(),
             driver,
             path: QualifiedPath::new(),
+            constraints: Vec::new(),
             library,
             context: Context::native(false),
             document: None,
@@ -223,11 +225,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             self.begin_scope(&qualified)?;
             if params.is_empty() {
                 self.driver
-                    .enter(&qualified);
+                    .enter(&qualified, "");
             } else {
-                let echo = render_argument_echo(&qualified, params, &env);
+                let echo = render_argument_echo(params, &env);
                 self.driver
-                    .enter(&echo);
+                    .enter(&qualified, &echo);
             }
             let declaration = crate::formatting::formatter::render_declaration(
                 name,
@@ -341,6 +343,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             Operation::Loop {
                 names, over, body, ..
             } => self.walk_loop(env, names, over.as_deref(), body),
+            Operation::Within { bound, body, .. } => self.walk_within(env, bound, body),
             Operation::Invoke(invocable) => self.walk_invoke(env, invocable),
             Operation::Execute(executable) => {
                 let function = self.executable_name(&executable.target);
@@ -544,11 +547,10 @@ impl<'i, D: Driver> Runner<'i, D> {
     fn render_deferred_echo(
         &self,
         env: &mut Environment,
-        qualified: &str,
         arguments: &[Operation<'i>],
     ) -> Result<String, RunnerError> {
         if arguments.is_empty() {
-            return Ok(qualified.to_string());
+            return Ok(String::new());
         }
         let mut parts = Vec::new();
         for arg in arguments {
@@ -560,7 +562,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             };
             parts.push(part);
         }
-        Ok(format!("{} ({})", qualified, parts.join(", ")))
+        Ok(format!("({})", parts.join(", ")))
     }
 
     /// An action's parts for the user to confirm: its imperative verb (the
@@ -660,7 +662,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let caller = self
                         .path
                         .render();
-                    let invoked = format!("{} <{}>", caller, name);
+                    let invoked = format!("<{}>", name);
 
                     let formae = render_parameter_formae(subroutine.signature);
 
@@ -694,7 +696,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                     .clone(),
                                 None => match self
                                     .driver
-                                    .acquire(&invoked, bind, forma)
+                                    .acquire(&caller, &invoked, bind, forma)
                                 {
                                     UserInput::Done(value) => value,
                                     other => return self.abandon(&lexical, other),
@@ -732,7 +734,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                             .map(|s| s.as_str());
                                         match self
                                             .driver
-                                            .acquire(&invoked, bind, forma)
+                                            .acquire(&caller, &invoked, bind, forma)
                                         {
                                             UserInput::Done(value) => value,
                                             other => return self.abandon(&lexical, other),
@@ -859,10 +861,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.begin_scope(&qualified)?;
                 // Prompt at the departure, echoing the arguments flowing into
                 // the external Technque.
-                let echo = self.render_deferred_echo(env, &qualified, &invocable.arguments)?;
+                let echo = self.render_deferred_echo(env, &invocable.arguments)?;
                 let embarked = self
                     .driver
-                    .depart(&echo);
+                    .depart(&qualified, &echo);
                 let input = match embarked {
                     UserInput::Quit => {
                         self.path
@@ -935,15 +937,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 Some(text) => Some(text.as_str()),
                 None => None,
             };
-            // Set the acquired `(name : forma)` off from the path with a
-            // trailing space; an invocation prompt instead glues its arguments
-            // straight to the `<callee>`.
-            let prompt = format!("{qualified} ");
             let mut acquired = Vec::with_capacity(names.len());
             for name in names {
                 match self
                     .driver
-                    .acquire(&prompt, Some(name.value), forma)
+                    .acquire(&qualified, "", Some(name.value), forma)
                 {
                     UserInput::Done(value) => acquired.push(value),
                     UserInput::Skip => {
@@ -1066,6 +1064,24 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
+    /// Walk a `within` block's body once. The budget is evaluated up front
+    /// and pushed onto `self.constraints` for the duration of the body walk,
+    /// so every enclosed step's prompt line can announce it.
+    fn walk_within(
+        &mut self,
+        env: &mut Environment,
+        bound: &'i Operation<'i>,
+        body: &'i Operation<'i>,
+    ) -> Result<Conclusion, RunnerError> {
+        let budget = super::evaluator::evaluate(&self.library, &self.context, env, bound)?;
+        self.constraints
+            .push(budget);
+        let result = self.walk(env, body);
+        self.constraints
+            .pop();
+        result
+    }
+
     /// Walk one pass of a loop body within its `[number]` iteration scope,
     /// bracketing it with `↘`/`↙` chrome. The `↘` line echoes the loop
     /// variable(s) bound for this pass, in the same `value ~ name` form used
@@ -1082,9 +1098,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         let qualified = self
             .path
             .render();
-        let echo = render_iteration_echo(&qualified, names, env);
+        let echo = render_iteration_echo(names, env);
         self.driver
-            .enter(&echo);
+            .enter(&qualified, &echo);
         let result = self.walk(env, body);
         let verdict = match &result {
             Ok(Conclusion::Completed(Outcome::Done(_))) => Some(UserInput::Done(Value::Unitus)),
@@ -1356,8 +1372,9 @@ impl<'i, D: Driver> Runner<'i, D> {
         let depth = self
             .path
             .depth();
+        let text = render_constraints(&self.constraints).unwrap_or_default();
         self.driver
-            .step(qualified, &step_text, depth);
+            .step(qualified, &text, &step_text, depth);
 
         // A descriptive binding on a step with response choices takes its value
         // from the chosen response, not a separate acquire: skip the body walk
@@ -1510,11 +1527,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             .unwrap_or(&[]);
         if params.is_empty() {
             self.driver
-                .enter(qualified);
+                .enter(qualified, "");
         } else {
-            let echo = render_argument_echo(qualified, params, env);
+            let echo = render_argument_echo(params, env);
             self.driver
-                .enter(&echo);
+                .enter(qualified, &echo);
         }
         let declaration = crate::formatting::formatter::render_declaration(
             name,
@@ -1975,30 +1992,37 @@ fn nests_work(op: &Operation) -> bool {
     }
 }
 
-/// Render a procedure's qualified path with arguments bound to each parameter
-/// in `value ~ name` form, e.g. `connectivity_check: ([] ~ e, 0 ~ s)`. The
-/// qualified path already carries its trailing `:`.
-fn render_argument_echo(
-    qualified: &str,
-    params: &[language::Identifier],
-    env: &Environment,
-) -> String {
-    format!("{} ({})", qualified, render_bindings(params, env))
+/// Render a procedure's bound arguments in `value ~ name` form, e.g.
+/// `([] ~ e, 0 ~ s)`, to announce alongside the qualified path.
+fn render_argument_echo(params: &[language::Identifier], env: &Environment) -> String {
+    format!("({})", render_bindings(params, env))
 }
 
-/// Append a loop iteration's bound variable(s) to its path in `value ~ name`
-/// form, e.g. `cleanup_ec2:/3/[1] ("i-1234" ~ instance)` — a string value
-/// shows quoted. A `repeat` with no iteration variable echoes the bare path.
-fn render_iteration_echo(
-    qualified: &str,
-    names: &[language::Identifier],
-    env: &Environment,
-) -> String {
+/// Render a loop iteration's bound variable(s) in `value ~ name` form, e.g.
+/// `("i-1234" ~ instance)` — a string value shows quoted — to announce
+/// alongside the iteration's path. Empty when `repeat` binds no name.
+fn render_iteration_echo(names: &[language::Identifier], env: &Environment) -> String {
     if names.is_empty() {
-        qualified.to_string()
+        String::new()
     } else {
-        format!("{} ({})", qualified, render_bindings(names, env))
+        format!("({})", render_bindings(names, env))
     }
+}
+
+/// Render the enclosing `within` budgets as a `$(...)`-annotated suffix for a
+/// step's prompt line, set off from the path with a space like an acquire
+/// prompt's `(name : forma)` — an announcement, not part of the addressable
+/// path. `None` when no `within` block encloses the step.
+fn render_constraints(constraints: &[Value]) -> Option<String> {
+    if constraints.is_empty() {
+        return None;
+    }
+    let rendered = constraints
+        .iter()
+        .map(|budget| format!("$({budget})"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(rendered)
 }
 
 /// Comma-join a set of bindings in `value ~ name` form with each value read

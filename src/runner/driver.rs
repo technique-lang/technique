@@ -80,11 +80,11 @@ pub trait Driver {
     /// markers like `→` stay at the left margin. The implementation displays
     /// them; it does not block waiting for input — the walker calls `ask` for
     /// that separately.
-    fn step(&mut self, qualified: &str, description: &str, depth: usize);
+    fn step(&mut self, qualified: &str, text: &str, description: &str, depth: usize);
 
     /// Announce descent into a named scope — a Section or an invoked
     /// subroutine — with its Qualified Name (the `↘` marker).
-    fn enter(&mut self, qualified: &str);
+    fn enter(&mut self, qualified: &str, text: &str);
 
     /// Cross into this document on the way in: the `⇒` boundary line carrying
     /// the document name, version, and run identifier (`/ NetworkProbe,1 000096`).
@@ -119,7 +119,7 @@ pub trait Driver {
     /// `settle` closes with the verdict. The same document-boundary crossing the
     /// run's own `commence`/`conclude` makes, one level down. `Quit` abandons
     /// before departing; the unattended drivers proceed with `Done`.
-    fn depart(&mut self, qualified: &str) -> UserInput;
+    fn depart(&mut self, qualified: &str, text: &str) -> UserInput;
 
     /// Record an external invocation this run cannot perform (a `<uri>` call
     /// into another document or system). `Console` prompts the user to
@@ -174,7 +174,13 @@ pub trait Driver {
 
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
     /// abandon the call, Quit stops the run.
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput;
+    fn acquire(
+        &mut self,
+        qualified: &str,
+        text: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput;
 
     /// The syntax renderer for highlighting source fragments shown to the
     /// user — the ANSI `Terminal` when colouring, otherwise `Identity`.
@@ -186,8 +192,8 @@ pub trait Driver {
 /// `Batch` verdict still displays for a point it decides without prompting;
 /// `surface` hands an interactive verdict the raw sink to prompt on.
 pub trait Output {
-    fn step(&mut self, qualified: &str, description: &str, depth: usize);
-    fn enter(&mut self, qualified: &str);
+    fn step(&mut self, qualified: &str, text: &str, description: &str, depth: usize);
+    fn enter(&mut self, qualified: &str, text: &str);
     fn commence(&mut self, label: &str);
     fn conclude(&mut self, label: &str, verdict: &UserInput);
     fn display(&mut self, content: &str);
@@ -249,11 +255,12 @@ pub trait Verdict {
         &mut self,
         out: &mut O,
         qualified: &str,
+        text: &str,
         name: Option<&str>,
         forma: Option<&str>,
     ) -> UserInput;
 
-    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput;
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput;
 
     fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput;
 
@@ -274,18 +281,22 @@ pub struct Visual<W: Write> {
 }
 
 impl<W: Write> Output for Visual<W> {
-    fn step(&mut self, fqn: &str, description: &str, depth: usize) {
+    fn step(&mut self, fqn: &str, text: &str, description: &str, depth: usize) {
         render_step(
             &mut self.output,
-            &display_path(fqn),
+            &announce(&display_path(fqn), text),
             description,
             depth,
             self.renderer,
         );
     }
 
-    fn enter(&mut self, qualified: &str) {
-        render_enter(&mut self.output, &display_path(qualified), self.renderer);
+    fn enter(&mut self, qualified: &str, text: &str) {
+        render_enter(
+            &mut self.output,
+            &announce(&display_path(qualified), text),
+            self.renderer,
+        );
         let _ = writeln!(self.output);
     }
 
@@ -366,8 +377,8 @@ pub struct Silent {
 }
 
 impl Output for Silent {
-    fn step(&mut self, _qualified: &str, _description: &str, _depth: usize) {}
-    fn enter(&mut self, _qualified: &str) {}
+    fn step(&mut self, _qualified: &str, _text: &str, _description: &str, _depth: usize) {}
+    fn enter(&mut self, _qualified: &str, _text: &str) {}
     fn commence(&mut self, _label: &str) {}
     fn conclude(&mut self, _label: &str, _verdict: &UserInput) {}
     fn display(&mut self, _content: &str) {}
@@ -435,23 +446,28 @@ impl Verdict for Interactive {
         &mut self,
         out: &mut O,
         qualified: &str,
+        text: &str,
         name: Option<&str>,
         forma: Option<&str>,
     ) -> UserInput {
+        // The trailing space before `(name : forma)` is unconditional, same
+        // as when `text` is empty: {qualified} {name : forma}.
         let label = format!(
-            "{}({} : {})",
+            "{} {}({} : {})",
             display_path(qualified),
+            text,
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
         prompt_acquire(out.surface(), &label, is_list_forma(forma))
     }
 
-    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
-        let input = prompt(out.surface(), qualified, "⇒", &[], Value::Unitus);
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput {
+        let announced = announce(qualified, text);
+        let input = prompt(out.surface(), &announced, "⇒", &[], Value::Unitus);
         if let UserInput::Quit = input {
         } else {
-            out.show_depart(qualified);
+            out.show_depart(&announced);
         }
         input
     }
@@ -526,14 +542,15 @@ impl Verdict for Batch {
         &mut self,
         _out: &mut O,
         _qualified: &str,
+        _text: &str,
         _name: Option<&str>,
         _forma: Option<&str>,
     ) -> UserInput {
         UserInput::Done(Value::Unitus)
     }
 
-    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
-        out.show_depart(qualified);
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput {
+        out.show_depart(&announce(qualified, text));
         UserInput::Done(Value::Unitus)
     }
 
@@ -565,14 +582,14 @@ pub struct Interface<O: Output, V: Verdict> {
 }
 
 impl<O: Output, V: Verdict> Driver for Interface<O, V> {
-    fn step(&mut self, qualified: &str, description: &str, depth: usize) {
+    fn step(&mut self, qualified: &str, text: &str, description: &str, depth: usize) {
         self.out
-            .step(qualified, description, depth);
+            .step(qualified, text, description, depth);
     }
 
-    fn enter(&mut self, qualified: &str) {
+    fn enter(&mut self, qualified: &str, text: &str) {
         self.out
-            .enter(qualified);
+            .enter(qualified, text);
     }
 
     fn commence(&mut self, label: &str) {
@@ -605,9 +622,9 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .ask(&mut self.out, qualified, choices, produced, kind)
     }
 
-    fn depart(&mut self, qualified: &str) -> UserInput {
+    fn depart(&mut self, qualified: &str, text: &str) -> UserInput {
         self.verdict
-            .depart(&mut self.out, qualified)
+            .depart(&mut self.out, qualified, text)
     }
 
     fn external(&mut self, qualified: &str) -> UserInput {
@@ -640,9 +657,15 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .show_verdict(marker, qualified, verdict);
     }
 
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+    fn acquire(
+        &mut self,
+        qualified: &str,
+        text: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput {
         self.verdict
-            .acquire(&mut self.out, qualified, name, forma)
+            .acquire(&mut self.out, qualified, text, name, forma)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -791,7 +814,11 @@ fn prompt_action(
         Clear(ClearType::CurrentLine)
     );
     if let UserInput::Done(_) = &result {
-        let _ = writeln!(out, "{}", format!("» {} {}()", qualified, name).dark_grey());
+        let _ = writeln!(
+            out,
+            "{}",
+            format!("» {} {}()", qualified, name).with(MARKER_GREY)
+        );
     }
     let _ = out.flush();
     result
@@ -833,7 +860,11 @@ fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> Use
         } else {
             script.trim_end()
         };
-        let _ = writeln!(out, "{}", format!("→ {} $ {}", qualified, ran).dark_grey());
+        let _ = writeln!(
+            out,
+            "{}",
+            format!("→ {} $ {}", qualified, ran).with(MARKER_GREY)
+        );
     }
     let _ = out.flush();
     result
@@ -916,6 +947,17 @@ fn write_indented_by<W: Write>(out: &mut W, text: &str, depth: usize) {
 
 fn write_marker_line<W: Write>(out: &mut W, text: &str, renderer: &dyn Render) {
     let _ = writeln!(out, "{}", renderer.style(Syntax::Marker, text));
+}
+
+/// Glue an extra annotation onto a displayed path with a trailing space, the
+/// way an acquire prompt sets `(name : forma)` off from its path — empty
+/// `text` leaves `qualified` untouched.
+fn announce(qualified: &str, text: &str) -> String {
+    if text.is_empty() {
+        qualified.to_string()
+    } else {
+        format!("{} {}", qualified, text)
+    }
 }
 
 /// Render a step's `→` line and description. The marker stays at the left
@@ -1472,7 +1514,7 @@ fn draw(
     write!(
         out,
         "{} {} ",
-        format!("{} {}", settle, qualified).dark_grey(),
+        format!("{} {}", settle, qualified).with(MARKER_GREY),
         symbol,
     )?;
     let (cursor_col, end_col) = draw_tail(out, interaction, prefix)?;
@@ -1494,7 +1536,7 @@ fn draw_action(
         cursor::MoveToColumn(0),
         Clear(ClearType::CurrentLine)
     )?;
-    write!(out, "{} ", format!("» {}", qualified).dark_grey())?;
+    write!(out, "{} ", format!("» {}", qualified).with(MARKER_GREY))?;
     queue!(&mut out, SetForegroundColor(LIGHT_BROWN))?;
     write!(out, "{}", verb)?;
     queue!(&mut out, ResetColor)?;
@@ -1649,6 +1691,15 @@ const LIGHT_BROWN: Color = Color::Rgb {
     r: 0xc8,
     g: 0x96,
     b: 0x4b,
+};
+
+/// The grey the `Terminal` renderer uses, mirrored here so live-prompt chrome
+/// matches it. We explicitly do NOT use crossterm's named colours to ensure
+/// correct rendering.
+const MARKER_GREY: Color = Color::Rgb {
+    r: 0x55,
+    g: 0x57,
+    b: 0x53,
 };
 
 /// Render a horizontal row of Response options in the formatter's orange, the
@@ -1867,20 +1918,20 @@ impl<D, W: Write> Transcript<D, W> {
 }
 
 impl<D: Driver, W: Write> Driver for Transcript<D, W> {
-    fn step(&mut self, qualified: &str, description: &str, depth: usize) {
+    fn step(&mut self, qualified: &str, text: &str, description: &str, depth: usize) {
         self.emit(Trace::Enter {
-            path: qualified.to_string(),
+            path: announce(qualified, text),
         });
         self.inner
-            .step(qualified, description, depth);
+            .step(qualified, text, description, depth);
     }
 
-    fn enter(&mut self, qualified: &str) {
+    fn enter(&mut self, qualified: &str, text: &str) {
         self.emit(Trace::Enter {
-            path: qualified.to_string(),
+            path: announce(qualified, text),
         });
         self.inner
-            .enter(qualified);
+            .enter(qualified, text);
     }
 
     fn commence(&mut self, label: &str) {
@@ -1911,9 +1962,9 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
         outcome
     }
 
-    fn depart(&mut self, qualified: &str) -> UserInput {
+    fn depart(&mut self, qualified: &str, text: &str) -> UserInput {
         self.inner
-            .depart(qualified)
+            .depart(qualified, text)
     }
 
     fn external(&mut self, qualified: &str) -> UserInput {
@@ -1965,17 +2016,23 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .show_verdict(marker, qualified, verdict);
     }
 
-    fn acquire(&mut self, qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+    fn acquire(
+        &mut self,
+        qualified: &str,
+        text: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput {
         let outcome = self
             .inner
-            .acquire(qualified, name, forma);
+            .acquire(qualified, text, name, forma);
         let supplied = if let UserInput::Done(value) = &outcome {
             value.clone()
         } else {
             Value::Unitus
         };
         self.emit(Trace::Acquire {
-            path: qualified.to_string(),
+            path: announce(qualified, text),
             name: name.map(|n| n.to_string()),
             forma: forma.map(|f| f.to_string()),
             supplied,
@@ -2072,18 +2129,18 @@ impl Mock {
 
 #[cfg(test)]
 impl Driver for Mock {
-    fn step(&mut self, fqn: &str, description: &str, _depth: usize) {
+    fn step(&mut self, fqn: &str, text: &str, description: &str, _depth: usize) {
         self.events
             .push(Event::Step {
-                qualified: fqn.to_string(),
+                qualified: announce(fqn, text),
                 description: description.to_string(),
             });
     }
 
-    fn enter(&mut self, fqn: &str) {
+    fn enter(&mut self, fqn: &str, text: &str) {
         self.events
             .push(Event::Enter {
-                qualified: fqn.to_string(),
+                qualified: announce(fqn, text),
             });
     }
 
@@ -2130,7 +2187,7 @@ impl Driver for Mock {
             .expect("Mock::ask called with no canned answers remaining")
     }
 
-    fn depart(&mut self, _qualified: &str) -> UserInput {
+    fn depart(&mut self, _qualified: &str, _text: &str) -> UserInput {
         self.answers
             .pop_front()
             .expect("Mock::depart called with no canned answers remaining")
@@ -2201,7 +2258,13 @@ impl Driver for Mock {
 
     fn show_verdict(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
 
-    fn acquire(&mut self, _qualified: &str, name: Option<&str>, forma: Option<&str>) -> UserInput {
+    fn acquire(
+        &mut self,
+        _qualified: &str,
+        _text: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+    ) -> UserInput {
         self.events
             .push(Event::Acquire {
                 name: name.map(|n| n.to_string()),

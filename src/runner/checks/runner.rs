@@ -2147,11 +2147,8 @@ connectivity_check(e, s, address) :
         .unwrap()
         .parameters
         .unwrap();
-    let echo = render_argument_echo("connectivity_check:", params, &env);
-    assert_eq!(
-        echo,
-        "connectivity_check: ([] ~ e, 0 ~ s, \"10 Downing Street\" ~ address)"
-    );
+    let echo = render_argument_echo(params, &env);
+    assert_eq!(echo, "([] ~ e, 0 ~ s, \"10 Downing Street\" ~ address)");
 }
 
 #[test]
