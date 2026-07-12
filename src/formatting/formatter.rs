@@ -1347,7 +1347,11 @@ impl<'i> Formatter<'i> {
             Expression::Within(expression, _) => {
                 self.add_fragment_reference(Syntax::Keyword, "within");
                 self.add_fragment_reference(Syntax::Neutral, " ");
-                self.append_expression(expression);
+                if let Expression::Number(numeric, _) = expression.as_ref() {
+                    self.append_numeric_as(numeric, Syntax::Cost);
+                } else {
+                    self.append_expression(expression);
+                }
             }
             Expression::Cost(expression, _) => {
                 self.add_fragment_reference(Syntax::Structure, "$(");
