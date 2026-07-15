@@ -1,0 +1,7 @@
+% technique v1
+
+twenty_first_century :
+
+Unfortunately this test will fail in the Twenty-Second century.
+
+    1.  This should output "20" { exec("date -u +%C") ~ t ; t }
