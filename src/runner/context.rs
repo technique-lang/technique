@@ -93,7 +93,6 @@ impl Context {
     /// Pass a complete, already known, text string through to the user. This
     /// is just a convenience over `write()` for whole messages such as status
     /// lines or announcements.
-    #[allow(dead_code)]
     pub fn emit(&self, message: &str) -> io::Result<()> {
         self.write(message.as_bytes())
     }

@@ -363,13 +363,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                 let run_id = self
                     .appender
                     .run_id();
-                // A `Command` builtin (e.g. `exec`) is executed by the host;
-                // the user vets it: show the editable script and run it only on
-                // their say-so. An `Action` (e.g. `click`) is a physical
-                // interaction the user performs themselves: show the call
-                // read-only to confirm. Either way Skip or Fail declines and
-                // records the step; Quit stops. `Pure` builtins just announce
-                // and run.
+                // `Command` (e.g. `exec()`) and `Instant` (e.g. `now()`)
+                // builtins run on the host; `Command` is vetted on an
+                // editable prompt, `Instant` runs unvetted (see below).
+                // `Action` is a physical step the user confirms read-only.
+                // Either way Skip or Fail declines and records the step; Quit
+                // stops. `Pure` builtins just announce and run.
+                let nature = self.executable_nature(executable);
                 let kind = self.execute_kind(executable);
                 // Pure builtins record nothing; only effectful calls are traced.
                 let effectful = if let Kind::Computable = kind {
@@ -389,6 +389,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                         })?;
                 }
                 let outcome = match kind {
+                    // Nothing to vet, and cannot fail, so we skip the command
+                    // prompt.
+                    Kind::System if nature == Nature::Instant => {
+                        let value = super::evaluator::dispatch(
+                            &self.library,
+                            &self.context,
+                            env,
+                            executable,
+                            None,
+                        )?;
+                        Ok(Conclusion::Completed(Outcome::Done(value)))
+                    }
                     Kind::System => {
                         let script = self.script_text(env, executable)?;
                         match self
@@ -1771,18 +1783,22 @@ impl<'i, D: Driver> Runner<'i, D> {
         Ok(Conclusion::Stopping)
     }
 
-    /// Classify an `Execute` by its builtin's `Nature`, resolving the target as
-    /// the dispatch does.
-    fn execute_kind(&self, exec: &Executable) -> Kind {
-        let nature = match &exec.target {
+    /// The Nature of an Executable's resolved target; `Pure` if unresolved.
+    fn executable_nature(&self, exec: &Executable) -> Nature {
+        match &exec.target {
             ExecutableRef::Resolved(id) => self
                 .library
                 .nature(*id),
             _ => Nature::Pure,
-        };
-        match nature {
+        }
+    }
+
+    /// Classify an `Execute` by its builtin's `Nature`, resolving the target as
+    /// the dispatch does.
+    fn execute_kind(&self, exec: &Executable) -> Kind {
+        match self.executable_nature(exec) {
             Nature::Pure => Kind::Computable,
-            Nature::Command => Kind::System,
+            Nature::Command | Nature::Instant => Kind::System,
             Nature::Action => Kind::Action,
         }
     }

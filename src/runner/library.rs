@@ -22,15 +22,16 @@ use crate::value::{Numeric, Value};
 /// it.
 pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 
-/// How a builtin is presented to the user. `Pure` computes a value and just
-/// runs. `Command` is executed by the host environment; the user vets it on an
-/// editable prompt before it runs (`exec`). `Action` is a physical interaction
-/// the user performs themselves (`click`, `select`): shown read-only to
-/// confirm, never edited.
+/// How a builtin is presented to the user. `Pure` just runs. `Command` (e.g.
+/// `exec()`) is host-run and vetted on an editable prompt. `Instant`
+/// (`now()`) is host-run too but has nothing to vet and can't fail, so it
+/// runs unvetted while still being traced like `Command`. `Action`s (such as
+/// `click()`, `select()`) are a physical step the user confirms read-only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nature {
     Pure,
     Command,
+    Instant,
     Action,
 }
 
@@ -117,7 +118,7 @@ impl Library {
                 name: "now",
                 display: None,
                 arity: 0,
-                nature: Nature::Pure,
+                nature: Nature::Instant,
                 function: now,
             },
         ]
@@ -176,8 +177,8 @@ impl Library {
         self.functions[id.0].display
     }
 
-    /// How the function at `id` is presented: `Pure`, host `Command`, or
-    /// physical `Action`.
+    /// How the function at `id` is presented: `Pure`, host `Command` or
+    /// `Instant`, or physical `Action`.
     pub fn nature(&self, id: ExecutableId) -> Nature {
         self.functions[id.0].nature
     }
@@ -461,10 +462,14 @@ fn tee(
     Ok(())
 }
 
-/// `now()` — the current wall-clock time as an ISO 8601 string. A read of
-/// external state, hence part of the system layer rather than `core`.
-fn now(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
-    Ok(Value::Literali(super::runner::now_iso8601()))
+/// `now()` — the current wall-clock time as an ISO 8601 string, emitted
+/// through Context the same way `exec` tees its output.
+fn now(context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+    let text = super::runner::now_iso8601();
+    context
+        .emit(&format!("{}\n", text))
+        .map_err(RunnerError::ExecError)?;
+    Ok(Value::Literali(text))
 }
 
 /// A browser-library action: the user performs the UI manipulation when the
@@ -549,7 +554,7 @@ impl Library {
                     name: "now",
                     display: None,
                     arity: 0,
-                    nature: Nature::Pure,
+                    nature: Nature::Instant,
                     function: unit,
                 },
                 Builtin {
