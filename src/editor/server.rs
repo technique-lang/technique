@@ -880,7 +880,175 @@ fn offset_to_position(text: &str, offset: usize) -> Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lsp_server::{ErrorCode, RequestId, ResponseKind};
+    use lsp_types::TextDocumentItem;
+    use std::cell::RefCell;
+    use std::convert::Infallible;
     use technique::language::Span;
+
+    fn collecting_sender(
+        messages: &RefCell<Vec<Message>>,
+    ) -> impl Fn(Message) -> Result<(), Infallible> + '_ {
+        move |msg| {
+            messages
+                .borrow_mut()
+                .push(msg);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_handle_request_unknown_method_returns_error() {
+        let mut server = TechniqueLanguageServer::new(InitializeParams::default());
+        let messages = RefCell::new(Vec::new());
+        let sender = collecting_sender(&messages);
+
+        let request = Request::new(
+            RequestId::from(1),
+            "textDocument/nonsense".to_string(),
+            Value::Null,
+        );
+        server
+            .handle_request(request, &sender)
+            .unwrap();
+        drop(sender);
+
+        let messages = messages.into_inner();
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            Message::Response(response) => {
+                assert_eq!(response.id, RequestId::from(1));
+                match &response.response_kind {
+                    ResponseKind::Err { error } => {
+                        assert_eq!(error.code, ErrorCode::MethodNotFound as i32);
+                    }
+                    ResponseKind::Ok { .. } => panic!("expected an error response"),
+                }
+            }
+            _ => panic!("expected a Response message"),
+        }
+    }
+
+    #[test]
+    fn test_handle_request_shutdown_returns_ok() {
+        let mut server = TechniqueLanguageServer::new(InitializeParams::default());
+        let messages = RefCell::new(Vec::new());
+        let sender = collecting_sender(&messages);
+
+        let request = Request::new(RequestId::from(2), "shutdown".to_string(), Value::Null);
+        server
+            .handle_request(request, &sender)
+            .unwrap();
+        drop(sender);
+
+        let messages = messages.into_inner();
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            Message::Response(response) => {
+                assert_eq!(response.id, RequestId::from(2));
+                match &response.response_kind {
+                    ResponseKind::Ok { result } => assert_eq!(*result, Value::Null),
+                    ResponseKind::Err { .. } => panic!("expected an ok response"),
+                }
+            }
+            _ => panic!("expected a Response message"),
+        }
+    }
+
+    #[test]
+    fn test_handle_notification_did_open_publishes_diagnostics() {
+        let mut server = TechniqueLanguageServer::new(InitializeParams::default());
+        let messages = RefCell::new(Vec::new());
+        let sender = collecting_sender(&messages);
+
+        let uri: Uri = "file:///Broken.tq"
+            .parse()
+            .unwrap();
+        let text = "making_coffee : Ingredients Coffee\n\nmakingCoffee :\n".to_string();
+        let params = DidOpenTextDocumentParams {
+            text_document: TextDocumentItem::new(uri, "technique".to_string(), 1, text),
+        };
+        let notification = Notification::new(
+            "textDocument/didOpen".to_string(),
+            to_value(params).unwrap(),
+        );
+        server
+            .handle_notification(notification, &sender)
+            .unwrap();
+        drop(sender);
+
+        let messages = messages.into_inner();
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            Message::Notification(notification) => {
+                assert_eq!(notification.method, "textDocument/publishDiagnostics");
+                let params: PublishDiagnosticsParams = from_value(
+                    notification
+                        .params
+                        .clone(),
+                )
+                .unwrap();
+                assert!(
+                    !params
+                        .diagnostics
+                        .is_empty()
+                );
+            }
+            _ => panic!("expected a Notification message"),
+        }
+    }
+
+    #[test]
+    fn test_workspace_symbol_finds_procedure_indexed_from_workspace_folder() {
+        let uri: Uri = format!("file://{}/examples/minimal", env!("CARGO_MANIFEST_DIR"))
+            .parse()
+            .unwrap();
+        let params = InitializeParams {
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri,
+                name: "minimal".to_string(),
+            }]),
+            ..Default::default()
+        };
+        let mut server = TechniqueLanguageServer::new(params);
+        let messages = RefCell::new(Vec::new());
+        let sender = collecting_sender(&messages);
+
+        let request = Request::new(
+            RequestId::from(3),
+            "workspace/symbol".to_string(),
+            to_value(WorkspaceSymbolParams {
+                query: "making_coffee".to_string(),
+                ..Default::default()
+            })
+            .unwrap(),
+        );
+        server
+            .handle_request(request, &sender)
+            .unwrap();
+        drop(sender);
+
+        let messages = messages.into_inner();
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            Message::Response(response) => match &response.response_kind {
+                ResponseKind::Ok { result } => {
+                    let symbols: Option<Vec<SymbolInformation>> =
+                        from_value(result.clone()).unwrap();
+                    let symbols = symbols.unwrap();
+                    assert!(
+                        symbols
+                            .iter()
+                            .any(|symbol| symbol
+                                .name
+                                .starts_with("making_coffee"))
+                    );
+                }
+                ResponseKind::Err { .. } => panic!("expected an ok response"),
+            },
+            _ => panic!("expected a Response message"),
+        }
+    }
 
     #[test]
     fn test_calculate_str_offsets() {
