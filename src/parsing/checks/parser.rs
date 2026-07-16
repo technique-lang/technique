@@ -2281,6 +2281,32 @@ fn tuple_binding_expression() {
 }
 
 #[test]
+fn binding_followed_by_use_in_same_code_block() {
+    let mut input = Parser::new();
+    input.initialize("{ now() ~ t ; t }");
+
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![
+            Expression::Binding(
+                Box::new(Expression::Execution(
+                    Function {
+                        target: Identifier::new("now"),
+                        parameters: vec![]
+                    },
+                    Span::default()
+                )),
+                vec![Identifier::new("t")],
+                Span::default()
+            ),
+            Expression::Separator,
+            Expression::Variable(Identifier::new("t"), Span::default())
+        ])
+    );
+}
+
+#[test]
 fn test_repeat_expression() {
     let mut input = Parser::new();
     input.initialize("{ repeat count }");

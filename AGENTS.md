@@ -235,16 +235,17 @@ Input -> Output`. The signature part `Input -> Output` is optional. The `:`
   `@waiter + ^milliways`); the special `@*` resets the scope. Attributes
   are effectively parallel steps and create scopes within which parallel or
   dependent steps can be nested.
-- This is invalid:
+- This is well-formed but semantically incorrect:
 
 ```technique
 invalid :
   - Top level parallel step
       - nested parallel substep
 ```
-
-because there is no way for the parser to differentiate between the two.
-
+  the author's intent was to nest parallel steps but this is not possible to
+  articulate in Technique because; there is no way for the parser to
+  differentiate between the two. Unfortunately we cannot generate an error for
+  this because of being whitespace agnostic.
 - The free form descriptive text can be escaped to code using an inline code block, delimited with braces `{ ... }`
 - Within code blocks there are basic control flow: `repeat`, `foreach` loops.
 - Within code blocks there are function calls to builtin functions: `exec()`

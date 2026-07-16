@@ -66,7 +66,7 @@ pub enum Kind {
     Prose,      // descriptive text; unit value
     Computable, // a value will be computed with no external side effect
     // (invoke, bind, literal, Pure builtin)
-    System, // an external command the host runs, e.g exec()
+    System, // something the host runs, e.g. exec(), now()
     Action, // an act a human performs e.g. click())
     Choice, // a response the user must select
 }

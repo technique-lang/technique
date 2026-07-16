@@ -3320,7 +3320,8 @@ fn is_function(content: &str) -> bool {
 }
 
 fn is_binding(content: &str) -> bool {
-    let re = regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*$");
+    let re =
+        regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*(;|$)");
 
     re.is_match(content)
 }

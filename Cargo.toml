@@ -1,6 +1,6 @@
 [package]
 name = "technique"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2024"
 description = "A domain specific language for procedures."
 authors = [ "Andrew Cowie" ]
@@ -11,14 +11,12 @@ license = "MIT"
 clap = { version = "4.5.16", features = [ "wrap_help" ] }
 crossterm = "0.29"
 ignore = "0.4"
-lsp-server = "0.8.0"
+lsp-server = "0.9.0"
 lsp-types = "0.97"
 owo-colors = "4"
 regex = "1.11.1"
-serde = { version = "1.0.209", features = [ "derive" ] }
 serde_json = "1.0"
-time = { version = "0.3", features = [ "formatting" ] }
-tinytemplate = "1.2.1"
+time = "0.3"
 
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }

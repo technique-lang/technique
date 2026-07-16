@@ -1,0 +1,8 @@
+2026-07-15T09:14:13.639Z 000114 / Start file:///home/andrew/src/technique-lang/technique/tests/golden/runner/Century.tq?library=system
+2026-07-15T09:14:13.640Z 000114 /twenty_first_century: Begin
+2026-07-15T09:14:13.640Z 000114 /twenty_first_century:/1 Begin
+2026-07-15T09:14:13.640Z 000114 /twenty_first_century:/1 Execute exec()
+2026-07-15T09:14:13.652Z 000114 /twenty_first_century:/1 Return "20"
+2026-07-15T09:14:13.652Z 000114 /twenty_first_century:/1 Done "20"
+2026-07-15T09:14:13.652Z 000114 /twenty_first_century: Done "20"
+2026-07-15T09:14:13.652Z 000114 / Finish
