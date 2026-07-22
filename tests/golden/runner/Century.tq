@@ -5,3 +5,9 @@ twenty_first_century :
 Unfortunately this test will fail in the Twenty-Second century.
 
     1.  This should output "20" { exec("date -u +%C") ~ t ; t }
+
+happiness :
+{
+    "Small green pieces of paper" ~ money
+    money
+}

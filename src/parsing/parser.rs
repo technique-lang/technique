@@ -647,10 +647,6 @@ impl<'i> Parser<'i> {
         let mut results = Vec::new();
 
         let mut start = 0;
-        let mut depth = 0i32;
-        let mut in_string = false;
-        let mut in_multiline = false;
-        let mut backticks = 0u8;
 
         let mut cut = |outer: &mut Parser<'i>, chunk: &'i str| -> Result<(), ParsingError> {
             let trimmed = chunk.trim_ascii();
@@ -666,28 +662,13 @@ impl<'i> Parser<'i> {
             Ok(())
         };
 
-        for (i, c) in content.char_indices() {
-            if c == '`' {
-                backticks += 1;
-                if backticks == 3 {
-                    in_multiline = !in_multiline;
-                    backticks = 0;
-                }
-                continue;
-            }
-            backticks = 0;
-
+        for (i, c) in top_level_chars(content) {
             match c {
-                _ if in_multiline => {}
-                '"' => in_string = !in_string,
-                _ if in_string => {}
-                '(' | '[' => depth += 1,
-                ')' | ']' => depth -= 1,
-                ',' if depth == 0 => {
+                ',' => {
                     cut(self, &content[start..i])?;
                     start = i + c.len_utf8();
                 }
-                '\n' if depth == 0 && allow_newline => {
+                '\n' if allow_newline => {
                     cut(self, &content[start..i])?;
                     start = i + c.len_utf8();
                 }
@@ -1518,9 +1499,11 @@ impl<'i> Parser<'i> {
             .source
             .trim_ascii_start();
 
-        if is_binding(content) {
+        let statement = &content[..locate_statement_end(content)];
+
+        if is_binding(statement) {
             self.read_binding_expression()
-        } else if malformed_binding_pattern(content) {
+        } else if malformed_binding_pattern(statement) {
             if let Some(tilde_pos) = self
                 .source
                 .find('~')
@@ -3319,17 +3302,67 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
-fn is_binding(content: &str) -> bool {
-    let re =
-        regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*(;|$)");
+// Iterate the `(offset, char)` pairs of `content` that sit at the top level —
+// not nested inside `()`/`[]`, a `"..."` string, or a ``` multiline fence.
+// Shared by take_elements() and locate_statement_end() so the two don't drift.
+fn top_level_chars(content: &str) -> impl Iterator<Item = (usize, char)> + '_ {
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut in_multiline = false;
+    let mut backticks = 0u8;
 
-    re.is_match(content)
+    content
+        .char_indices()
+        .filter_map(move |(i, c)| {
+            if c == '`' {
+                backticks += 1;
+                if backticks == 3 {
+                    in_multiline = !in_multiline;
+                    backticks = 0;
+                }
+                return None;
+            }
+            backticks = 0;
+
+            match c {
+                _ if in_multiline => None,
+                '"' => {
+                    in_string = !in_string;
+                    None
+                }
+                _ if in_string => None,
+                '(' | '[' => {
+                    depth += 1;
+                    None
+                }
+                ')' | ']' => {
+                    depth -= 1;
+                    None
+                }
+                _ if depth == 0 => Some((i, c)),
+                _ => None,
+            }
+        })
 }
 
-fn malformed_binding_pattern(content: &str) -> bool {
+// Bound the current statement so is_binding()'s trailing `$` can't reach past it into a later one.
+fn locate_statement_end(content: &str) -> usize {
+    top_level_chars(content)
+        .find(|&(_, c)| c == ';' || c == '\n')
+        .map(|(i, _)| i)
+        .unwrap_or(content.len())
+}
+
+fn is_binding(statement: &str) -> bool {
+    let re = regex!(r"~\s+([a-z][a-z0-9_]*|\([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*\))\s*$");
+
+    re.is_match(statement)
+}
+
+fn malformed_binding_pattern(statement: &str) -> bool {
     // Detect ~ identifier, identifier (missing parentheses)
     let re = regex!(r"~\s+[a-z][a-z0-9_]*\s*,\s*[a-z]");
-    re.is_match(content)
+    re.is_match(statement)
 }
 
 fn is_step_dependent(content: &str) -> bool {

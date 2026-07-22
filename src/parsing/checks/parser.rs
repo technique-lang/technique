@@ -2307,6 +2307,56 @@ fn binding_followed_by_use_in_same_code_block() {
 }
 
 #[test]
+fn binding_followed_by_use_separated_by_newline_only() {
+    let mut input = Parser::new();
+    input.initialize("{\n    now() ~ t\n    t\n}");
+
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![
+            Expression::Binding(
+                Box::new(Expression::Execution(
+                    Function {
+                        target: Identifier::new("now"),
+                        parameters: vec![]
+                    },
+                    Span::default()
+                )),
+                vec![Identifier::new("t")],
+                Span::default()
+            ),
+            Expression::Variable(Identifier::new("t"), Span::default())
+        ])
+    );
+}
+
+#[test]
+fn statement_before_later_binding_not_mistaken_for_binding() {
+    let mut input = Parser::new();
+    input.initialize("{\n    now()\n    x ~ t\n}");
+
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![
+            Expression::Execution(
+                Function {
+                    target: Identifier::new("now"),
+                    parameters: vec![]
+                },
+                Span::default()
+            ),
+            Expression::Binding(
+                Box::new(Expression::Variable(Identifier::new("x"), Span::default())),
+                vec![Identifier::new("t")],
+                Span::default()
+            )
+        ])
+    );
+}
+
+#[test]
 fn test_repeat_expression() {
     let mut input = Parser::new();
     input.initialize("{ repeat count }");
