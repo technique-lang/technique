@@ -1,0 +1,6 @@
+% technique v1
+
+record :
+{
+    [ "answer" = 42, 99 ]
+}

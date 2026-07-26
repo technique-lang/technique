@@ -75,12 +75,6 @@ pub enum TranslationError<'i> {
     BoundRepeat {
         at: Span,
     },
-    /// A list mixing labelled pairs (`"label" = value`) with bare values is
-    /// neither a tablet nor a plain list. The two forms can't be combined in
-    /// one set of brackets.
-    HeterogenousList {
-        at: Span,
-    },
 }
 
 impl<'i> TranslationError<'i> {
@@ -91,7 +85,6 @@ impl<'i> TranslationError<'i> {
             TranslationError::InterleavedDescription { at, .. } => *at,
             TranslationError::SignatureParameterMismatch { procedure, .. } => procedure.span,
             TranslationError::BoundRepeat { at } => *at,
-            TranslationError::HeterogenousList { at } => *at,
         }
     }
 }
@@ -584,6 +577,7 @@ impl<'i> Translator<'i> {
                 | [expr @ language::Expression::Multiline(..)]
                 | [expr @ language::Expression::Pair(..)]
                 | [expr @ language::Expression::List(..)]
+                | [expr @ language::Expression::Tablet(..)]
                 | [expr @ language::Expression::Tuple(..)] => {
                     Some(Fragment::Interpolation(self.translate_expression(expr)))
                 }
@@ -782,55 +776,22 @@ impl<'i> Translator<'i> {
                     *span,
                 )
             }
+            language::Expression::Tablet(pairs, span) => {
+                let entries = pairs
+                    .iter()
+                    .map(|pair| Entry {
+                        label: pair.label,
+                        value: self.translate_expression(&pair.value),
+                    })
+                    .collect();
+                Operation::Tablet(entries, *span)
+            }
             language::Expression::List(elements, span) => {
-                let labelled = elements
+                let items = elements
                     .iter()
-                    .any(|element| {
-                        if let language::Expression::Pair(..) = element {
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                let unlabelled = elements
-                    .iter()
-                    .any(|element| {
-                        if let language::Expression::Pair(..) = element {
-                            false
-                        } else {
-                            true
-                        }
-                    });
-
-                if labelled && unlabelled {
-                    self.problems
-                        .push(TranslationError::HeterogenousList { at: *span });
-                }
-
-                // All elements labelled: a tablet. Otherwise (including the
-                // empty list and the mixed-content recovery case) a list.
-                if labelled && !unlabelled {
-                    let entries = elements
-                        .iter()
-                        .filter_map(|element| {
-                            if let language::Expression::Pair(pair, _) = element {
-                                Some(Entry {
-                                    label: pair.label,
-                                    value: self.translate_expression(&pair.value),
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    Operation::Tablet(entries, *span)
-                } else {
-                    let items = elements
-                        .iter()
-                        .map(|element| self.translate_expression(element))
-                        .collect();
-                    Operation::List(items, *span)
-                }
+                    .map(|element| self.translate_expression(element))
+                    .collect();
+                Operation::List(items, *span)
             }
             language::Expression::Tuple(elements, span) => {
                 let items = elements

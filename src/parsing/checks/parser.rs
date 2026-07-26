@@ -1,10 +1,5 @@
 use super::*;
 
-/// Test helper: a labelled value (`"label" = value`) with a default span.
-fn pair<'i>(label: &'i str, value: Expression<'i>) -> Expression<'i> {
-    Expression::Pair(Box::new(Pair { label, value }), Span::default())
-}
-
 #[test]
 fn magic_line() {
     let mut input = Parser::new();
@@ -1794,18 +1789,16 @@ echo test
 fn tablets() {
     let mut input = Parser::new();
 
-    // Tablets are lists whose elements are all labelled values.
-
     // Test simple single-entry tablet
     input.initialize(r#"{ ["name" = "Johannes Grammerly"] }"#);
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::List(
-            vec![pair(
-                "name",
-                Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
-            )],
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: "name",
+                value: Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
+            }],
             Span::default()
         )])
     );
@@ -1820,16 +1813,19 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::List(
+        Ok(vec![Expression::Tablet(
             vec![
-                pair(
-                    "name",
-                    Expression::String(vec![Piece::Text("Alice of Chains")], Span::default())
-                ),
-                pair(
-                    "age",
-                    Expression::String(vec![Piece::Text("29")], Span::default())
-                )
+                Pair {
+                    label: "name",
+                    value: Expression::String(
+                        vec![Piece::Text("Alice of Chains")],
+                        Span::default()
+                    )
+                },
+                Pair {
+                    label: "age",
+                    value: Expression::String(vec![Piece::Text("29")], Span::default())
+                }
             ],
             Span::default()
         )])
@@ -1846,26 +1842,26 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::List(
+        Ok(vec![Expression::Tablet(
             vec![
-                pair(
-                    "answer",
-                    Expression::Number(Numeric::Integral(42), Span::default())
-                ),
-                pair(
-                    "message",
-                    Expression::Variable(Identifier::new("msg"), Span::default())
-                ),
-                pair(
-                    "timestamp",
-                    Expression::Execution(
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42), Span::default())
+                },
+                Pair {
+                    label: "message",
+                    value: Expression::Variable(Identifier::new("msg"), Span::default())
+                },
+                Pair {
+                    label: "timestamp",
+                    value: Expression::Execution(
                         Function {
                             target: Identifier::new("now"),
                             parameters: vec![]
                         },
                         Span::default()
                     )
-                )
+                }
             ],
             Span::default()
         )])
@@ -1875,6 +1871,19 @@ fn tablets() {
     input.initialize("{ [] }");
     let result = input.read_code_block();
     assert_eq!(result, Ok(vec![Expression::List(vec![], Span::default())]));
+
+    // whereas `[=]` is the empty tablet
+    input.initialize("{ [=] }");
+    let result = input.read_code_block();
+    assert_eq!(
+        result,
+        Ok(vec![Expression::Tablet(vec![], Span::default())])
+    );
+
+    // written exactly, the same way unit is `()` and not `( )`
+    input.initialize("{ [ = ] }");
+    let result = input.read_code_block();
+    assert!(result.is_err());
 
     // Test tablet with interpolated string values
     input.initialize(
@@ -1886,19 +1895,19 @@ fn tablets() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::List(
+        Ok(vec![Expression::Tablet(
             vec![
-                pair(
-                    "context",
-                    Expression::String(
+                Pair {
+                    label: "context",
+                    value: Expression::String(
                         vec![Piece::Text("Details about the thing")],
                         Span::default()
                     )
-                ),
-                pair(
-                    "status",
-                    Expression::Variable(Identifier::new("active"), Span::default())
-                )
+                },
+                Pair {
+                    label: "status",
+                    value: Expression::Variable(Identifier::new("active"), Span::default())
+                }
             ],
             Span::default()
         )])
@@ -2081,16 +2090,16 @@ fn tablet_inline_commas() {
     let result = input.read_code_block();
     assert_eq!(
         result,
-        Ok(vec![Expression::List(
+        Ok(vec![Expression::Tablet(
             vec![
-                pair(
-                    "answer",
-                    Expression::Number(Numeric::Integral(42), Span::default())
-                ),
-                pair(
-                    "truth",
-                    Expression::String(vec![Piece::Text("yes")], Span::default())
-                )
+                Pair {
+                    label: "answer",
+                    value: Expression::Number(Numeric::Integral(42), Span::default())
+                },
+                Pair {
+                    label: "truth",
+                    value: Expression::String(vec![Piece::Text("yes")], Span::default())
+                }
             ],
             Span::default()
         )])
@@ -2098,27 +2107,21 @@ fn tablet_inline_commas() {
 }
 
 #[test]
-fn bracket_mixed_pairs_and_values_parses() {
+fn bracket_mixed_pairs_and_values_rejected() {
     let mut input = Parser::new();
 
-    // The parser makes no tablet/list judgement: a bracket mixing a labelled
-    // value with a bare value parses as a list with mixed elements. Rejecting
-    // it is a translation-stage concern.
-    input.initialize(r#"{ [ "answer" = 42, 99 ] }"#);
-    let result = input.read_code_block();
-    assert_eq!(
-        result,
-        Ok(vec![Expression::List(
-            vec![
-                pair(
-                    "answer",
-                    Expression::Number(Numeric::Integral(42), Span::default())
-                ),
-                Expression::Number(Numeric::Integral(99), Span::default())
-            ],
-            Span::default()
-        )])
-    );
+    // A bracket mixing a labelled value with a bare value is neither a tablet
+    // nor a list. Everything needed to decide sits between the brackets, so
+    // the parser rejects it rather than deferring to a later phase.
+    input.initialize("% technique v1\nrun :\n{ [ \"answer\" = 42, 99 ] }");
+    let errors = input
+        .parse_collecting_errors()
+        .expect_err("mixed bracket content should fail to parse");
+
+    assert_eq!(errors.len(), 1);
+    let ParsingError::MixedBracketContent(_) = &errors[0] else {
+        panic!("expected MixedBracketContent, got {:?}", errors[0]);
+    };
 }
 
 #[test]
