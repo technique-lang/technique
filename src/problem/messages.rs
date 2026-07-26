@@ -503,6 +503,18 @@ can write a helper procedure that follows
             .trim_ascii()
             .to_string(),
         ),
+        ParsingError::MixedBracketContent(_) => (
+            "Bracket mixes List and Tablet syntax".to_string(),
+            r#"
+A `[...]` literal must be either a Tablet (every entry in the list a
+`"label" = value` pair) or a List (entries are actual values in
+sequence), not a mix of the two.
+
+An empty List is written `[]`. An empty Tablet is written `[=]`.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidInvocation(_) => {
             let examples = vec![
                 Invocation {
@@ -1193,16 +1205,6 @@ requires.
             r#"
 A `repeat` runs indefinitely and produces no value, so its result
 cannot be bound to a variable.
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
-        TranslationError::HeterogenousList { .. } => (
-            "Mixed List and Tablet syntax".to_string(),
-            r#"
-A `[...]` literal must be either a Tablet (every entry in the list a
-`"label" = value` pair) or a List (entries are actual values in
-sequence), not a mix of the two.
             "#
             .trim_ascii()
             .to_string(),

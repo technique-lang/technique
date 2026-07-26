@@ -913,6 +913,43 @@ run :
 }
 
 #[test]
+fn expression_empty_tablet_translates() {
+    let source = r#"
+% technique v1
+
+run :
+
+{
+    [=] ~ empty
+    [] ~ nothing
+}
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
+        panic!("expected Sequence");
+    };
+    let Operation::Bind { value: tablet, .. } = &ops[0] else {
+        panic!("expected Bind, got {:?}", ops[0]);
+    };
+    let Operation::Tablet(entries, _) = tablet.as_ref() else {
+        panic!("expected Tablet, got {:?}", tablet);
+    };
+    assert!(entries.is_empty());
+
+    let Operation::Bind { value: list, .. } = &ops[1] else {
+        panic!("expected Bind, got {:?}", ops[1]);
+    };
+    let Operation::List(items, _) = list.as_ref() else {
+        panic!("expected List, got {:?}", list);
+    };
+    assert!(items.is_empty());
+}
+
+#[test]
 fn expression_list_translates() {
     let source = r#"
 % technique v1

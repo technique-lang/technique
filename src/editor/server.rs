@@ -766,6 +766,10 @@ impl TechniqueLanguageServer {
                     "Section content must be steps or procedures".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
+                ParsingError::MixedBracketContent(_) => (
+                    "Must either be a list (values) or a tablet (labelled pairs), not a mix of the two".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidInvocation(_) => (
                     "Invalid procedure Invocation".to_string(),
                     DiagnosticSeverity::ERROR,

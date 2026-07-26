@@ -336,31 +336,25 @@ We must take action!
                                     Span::default(),
                                 )],
                                 subscopes: vec![Scope::CodeBlock {
-                                    expressions: vec![Expression::List(
+                                    expressions: vec![Expression::Tablet(
                                         vec![
-                                            Expression::Pair(
-                                                Box::new(Pair {
-                                                    label: "timestamp",
-                                                    value: Expression::Execution(
-                                                        Function {
-                                                            target: Identifier::new("now"),
-                                                            parameters: vec![],
-                                                        },
-                                                        Span::default(),
-                                                    ),
-                                                }),
-                                                Span::default(),
-                                            ),
-                                            Expression::Pair(
-                                                Box::new(Pair {
-                                                    label: "message",
-                                                    value: Expression::Variable(
-                                                        Identifier::new("msg"),
-                                                        Span::default(),
-                                                    ),
-                                                }),
-                                                Span::default(),
-                                            ),
+                                            Pair {
+                                                label: "timestamp",
+                                                value: Expression::Execution(
+                                                    Function {
+                                                        target: Identifier::new("now"),
+                                                        parameters: vec![],
+                                                    },
+                                                    Span::default(),
+                                                ),
+                                            },
+                                            Pair {
+                                                label: "message",
+                                                value: Expression::Variable(
+                                                    Identifier::new("msg"),
+                                                    Span::default(),
+                                                ),
+                                            },
                                         ],
                                         Span::default(),
                                     )],

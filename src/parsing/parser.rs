@@ -44,6 +44,7 @@ pub enum ParsingError {
     InvalidDeclaration(Span),
     InvalidSection(Span),
     MixedSectionContent(Span),
+    MixedBracketContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
     InvalidTuple(Span),
@@ -81,6 +82,7 @@ impl ParsingError {
             | ParsingError::InvalidDeclaration(span)
             | ParsingError::InvalidSection(span)
             | ParsingError::MixedSectionContent(span)
+            | ParsingError::MixedBracketContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
             | ParsingError::InvalidTuple(span)
@@ -1801,12 +1803,19 @@ impl<'i> Parser<'i> {
         Ok(Expression::Binding(Box::new(expression), identifiers, span))
     }
 
-    /// Read a list. Elements are comma or newline-separated expressions. An
-    /// element is of the form `"label" = value` for a labelled tablet value
-    /// (an `Expression::Pair`) or without a label as an indexed list element
-    /// (an `Expression:List`).
+    /// Read a bracket literal. Elements are comma or newline-separated
+    /// expressions. If every element is of the form `"label" = value` that
+    /// makes it an `Expression::Tablet`. If there are no labels at all that
+    /// makes an `Expression::List`. Mixing the two is an error and is
+    /// reported as MixedBracketContent.
     fn read_bracket_expression(&mut self) -> Result<Expression<'i>, ParsingError> {
         let start = self.offset;
+
+        if is_empty_tablet(self.source) {
+            self.advance(3);
+            return Ok(Expression::Tablet(vec![], self.span_since(start)));
+        }
+
         let elements = self.take_block_chars("a list", '[', ']', true, |outer| {
             outer.take_elements(true, |inner| {
                 if is_pair(inner.source) {
@@ -1825,7 +1834,40 @@ impl<'i> Parser<'i> {
             })
         })?;
         let span = self.span_since(start);
-        Ok(Expression::List(elements, span))
+
+        let labelled = elements
+            .iter()
+            .filter(|element| {
+                if let Expression::Pair(_, _) = element {
+                    true
+                } else {
+                    false
+                }
+            })
+            .count();
+
+        if labelled == 0 {
+            return Ok(Expression::List(elements, span));
+        }
+
+        if labelled < elements.len() {
+            self.problems
+                .push(ParsingError::MixedBracketContent(span));
+            return Ok(Expression::List(elements, span));
+        }
+
+        let pairs = elements
+            .into_iter()
+            .map(|element| {
+                // every element is labelled, tested just above
+                let Expression::Pair(pair, _) = element else {
+                    unreachable!()
+                };
+                *pair
+            })
+            .collect();
+
+        Ok(Expression::Tablet(pairs, span))
     }
 
     /// Read a tuple: two or more comma-separated expressions in
@@ -3479,6 +3521,12 @@ fn is_pair(content: &str) -> bool {
             .starts_with('='),
         None => false,
     }
+}
+
+/// Detect the empty tablet literal `[=]`. A bare `[]` is the empty list; the
+/// `=` is what distinguishes the two.
+fn is_empty_tablet(content: &str) -> bool {
+    content.starts_with("[=]")
 }
 
 fn is_attribute_assignment(input: &str) -> bool {

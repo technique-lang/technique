@@ -146,26 +146,18 @@ impl<'i> Scope<'i> {
         }
     }
 
-    /// Returns the tablet pairs if this is a CodeBlock containing a single
-    /// list whose elements are all labelled values.
+    /// Returns the tablet entries if this is a CodeBlock containing a single
+    /// tablet.
     pub fn tablet(&self) -> Option<Vec<&Pair<'i>>> {
         match self {
             Scope::CodeBlock { expressions, .. } => {
-                if expressions.len() == 1 {
-                    if let Expression::List(elements, _) = &expressions[0] {
-                        let pairs: Vec<&Pair<'i>> = elements
-                            .iter()
-                            .filter_map(|element| {
-                                if let Expression::Pair(pair, _) = element {
-                                    Some(pair.as_ref())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        if !pairs.is_empty() && pairs.len() == elements.len() {
-                            return Some(pairs);
-                        }
+                if let [Expression::Tablet(pairs, _)] = expressions.as_slice() {
+                    if !pairs.is_empty() {
+                        return Some(
+                            pairs
+                                .iter()
+                                .collect(),
+                        );
                     }
                 }
                 None
@@ -382,6 +374,16 @@ fn render_expression(expr: &Expression) -> String {
                 .collect();
             format!("({})", items.join(", "))
         }
+        Expression::Tablet(pairs, _) => {
+            if pairs.is_empty() {
+                return "[=]".to_string();
+            }
+            let entries: Vec<_> = pairs
+                .iter()
+                .map(|pair| format!("\"{}\" = {}", pair.label, render_expression(&pair.value)))
+                .collect();
+            format!("[{}]", entries.join(", "))
+        }
         Expression::Hole(_) => "?".to_string(),
         Expression::Unit(_) => "()".to_string(),
         Expression::Separator => String::new(),
@@ -407,26 +409,20 @@ impl<'i> Paragraph<'i> {
         targets
     }
 
-    /// Returns tablet pairs if a `CodeInline` in this paragraph is a single
-    /// list whose elements are all labelled values.
+    /// Returns tablet entries if a `CodeInline` in this paragraph is a single
+    /// tablet.
     pub fn tablet(&self) -> Option<Vec<&Pair<'i>>> {
         for d in &self.0 {
             if let Descriptive::CodeInline(exprs) = d {
-                let [Expression::List(elements, _)] = exprs.as_slice() else {
+                let [Expression::Tablet(pairs, _)] = exprs.as_slice() else {
                     continue;
                 };
-                let pairs: Vec<&Pair<'i>> = elements
-                    .iter()
-                    .filter_map(|element| {
-                        if let Expression::Pair(pair, _) = element {
-                            Some(pair.as_ref())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                if !pairs.is_empty() && pairs.len() == elements.len() {
-                    return Some(pairs);
+                if !pairs.is_empty() {
+                    return Some(
+                        pairs
+                            .iter()
+                            .collect(),
+                    );
                 }
             }
         }
