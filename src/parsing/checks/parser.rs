@@ -1238,7 +1238,19 @@ fn test_potential_procedure_declaration_is_superset() {
     assert!(is_procedure_declaration("f : B"));
     assert!(potential_procedure_declaration("MyProcedure :"));
     assert!(potential_procedure_declaration("my_proc(a, b :"));
-    assert!(potential_procedure_declaration("f(:"));
+    assert!(potential_procedure_declaration("f( :"));
+
+    // A declaration sets its colon apart from the name; prose punctuates the
+    // other way and so is never one, wherever it appears
+    assert!(is_procedure_declaration("foo : A -> B"));
+    assert!(is_procedure_declaration("foo   : A -> B"));
+    assert!(is_procedure_declaration("foo\t: A -> B"));
+    assert!(is_procedure_declaration("    foo : A -> B"));
+    assert!(!is_procedure_declaration("foo: A -> B"));
+    assert!(!potential_procedure_declaration("foo: A -> B"));
+
+    // ... except that a missing name has nothing to stand apart from
+    assert!(potential_procedure_declaration(": Ingredients -> Coffee"));
 
     // Edge cases with whitespace
     assert!(!is_procedure_declaration("  :")); // No name

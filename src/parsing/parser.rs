@@ -3114,13 +3114,20 @@ where
 /// example it must not match " a. And now: do something" or "b. Proceed
 /// with:".
 ///
-/// This function, however, is permissive. It identifies lines that could be
-/// intended as procedure declarations (including malformed ones) so that
-/// proper validation and error messages can be provided during the actual
-/// parsing phase.
+/// The name must be an identifier and the colon must stand apart from it. The
+/// signature is not validated here; `f : B` is a declaration whose signature is
+/// wrong, which read_signature() will address once we commit to reading it.
 fn is_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
         Some((before, _after)) => {
+            // a declaration is written `name : signature`, with the colon
+            // standing apart from the name. Prose punctuates the other way, as
+            // in `Warning: Important`, and so is never a declaration. A missing
+            // name has nothing to stand apart from
+            if !before.is_empty() && !before.ends_with([' ', '\t']) {
+                return false;
+            }
+
             let before = before.trim_ascii();
 
             // Check if the name part is valid
@@ -3176,8 +3183,19 @@ fn begins_procedure_declaration(content: &str) -> bool {
 /// preventing us from attempting to parse it as a separate procedure and
 /// reporting what turns out to be a better error.
 fn potential_procedure_declaration(content: &str) -> bool {
-    match content.split_once(':') {
+    let line = content
+        .lines()
+        .next()
+        .unwrap_or("");
+
+    match line.split_once(':') {
         Some((before, after)) => {
+            // as in is_procedure_declaration(), a declaration sets its colon
+            // apart from the name; prose does not
+            if !before.is_empty() && !before.ends_with([' ', '\t']) {
+                return false;
+            }
+
             let before = before.trim_ascii();
 
             // Empty before colon -> only a declaration if there's something after
@@ -3188,10 +3206,10 @@ fn potential_procedure_declaration(content: &str) -> bool {
             }
 
             // If it's a step patterns then it's not a procedure declaration!
-            if is_step_dependent(content)
-                || is_step_parallel(content)
-                || is_substep_dependent(content)
-                || is_substep_parallel(content)
+            if is_step_dependent(line)
+                || is_step_parallel(line)
+                || is_substep_dependent(line)
+                || is_substep_parallel(line)
             {
                 return false;
             }
