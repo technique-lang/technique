@@ -576,8 +576,13 @@ impl<'i> Parser<'i> {
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
     {
         let content = self.source;
+
+        // a delimiter inside a literal is that literal's text, not ours
+        let mut literals = Literals::new();
         let end_pos = content
-            .find(pattern)
+            .char_indices()
+            .find(|&(i, c)| !literals.opaque(&content[i..]) && pattern.contains(&c))
+            .map(|(i, _)| i)
             .unwrap_or(content.len());
 
         let block = &content[..end_pos];
