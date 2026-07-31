@@ -3025,17 +3025,30 @@ check_proxy :
 }
 
 #[test]
-fn masking_literals_preserves_length() {
-    assert_eq!(mask_literals("exec(\"a:b\")"), "exec(\"   \")");
-    assert_eq!(mask_literals("a ```x:y``` b"), "a           b");
-    assert_eq!(mask_literals("plain : text"), "plain : text");
+fn literals_are_opaque_to_a_scan() {
+    // what a line scanner sees once the content of any literal is blanked out
+    fn mask(text: &str) -> String {
+        let mut literals = Literals::new();
+        text.char_indices()
+            .map(|(i, c)| if literals.opaque(&text[i..]) { ' ' } else { c })
+            .collect()
+    }
 
-    // A `"` string ends at the line ending, so an unbalanced quote cannot
+    assert_eq!(mask("plain : text"), "plain : text");
+    assert_eq!(mask("exec(\"a : b\")"), "exec(\"     \")");
+
+    // the delimiters survive, so a malformed response is still recognisable
+    assert_eq!(mask("\"Yes\" | \"No\""), "\"   \" | \"  \"");
+
+    // a `"` string ends at the line ending, so an unbalanced quote cannot
     // swallow everything that follows it
-    assert_eq!(mask_literals("say \"oops\nfoo :"), "say \"    \nfoo :");
+    assert_eq!(mask("say \"oops\nfoo :"), "say \"    \nfoo :");
 
     // ... whereas a fence deliberately does span lines
-    assert_eq!(mask_literals("```\nfoo :\n```"), "             ");
+    assert_eq!(mask("```\nfoo :\n```"), "             ");
+
+    // a run of backticks longer than the delimiter is content past the third
+    assert_eq!(mask("````x```"), "        ");
 }
 
 #[test]
