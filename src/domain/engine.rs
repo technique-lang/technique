@@ -248,11 +248,6 @@ impl<'i> Response<'i> {
     pub fn value(&self) -> &'i str {
         self.value
     }
-
-    /// Returns the optional condition.
-    pub fn condition(&self) -> Option<&'i str> {
-        self.condition
-    }
 }
 
 /// Render an Expression as human-readable text.

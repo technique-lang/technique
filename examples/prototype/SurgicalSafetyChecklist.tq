@@ -34,10 +34,12 @@ before_anesthesia :
     5.  Does the patient have a:
         -   Known allergy?
                 'No' | 'Yes'
-        -   Difficult airway or aspiration risk?
-                'No' | 'Yes' and equipment/assistance available
-        -   Risk of blood loss > 500 mL?
-                'No' | 'Yes' and two IVs planned and fluids available
+        -   Difficult airway or aspiration risk? If so, ensure equipment and
+            assistance available.
+                'No' | 'Yes'
+        -   Risk of blood loss > 500 mL? If so, plan for two IVs and ensure
+            fluids available.
+                'No' | 'Yes'
 
 before_incision :
 

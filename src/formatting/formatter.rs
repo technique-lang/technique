@@ -132,10 +132,6 @@ pub fn render_response<'i>(response: &'i Response, renderer: &dyn Render) -> Str
     sub.add_fragment_reference(Syntax::Quote, "'");
     sub.add_fragment_reference(Syntax::Response, response.value);
     sub.add_fragment_reference(Syntax::Quote, "'");
-    if let Some(condition) = response.condition {
-        sub.add_fragment_reference(Syntax::Neutral, " ");
-        sub.add_fragment_reference(Syntax::Description, condition);
-    }
     render_fragments(&sub.fragments, renderer)
 }
 
@@ -1089,11 +1085,6 @@ impl<'i> Formatter<'i> {
             self.add_fragment_reference(Syntax::Quote, "'");
             self.add_fragment_reference(Syntax::Response, response.value);
             self.add_fragment_reference(Syntax::Quote, "'");
-
-            if let Some(text) = response.condition {
-                self.add_fragment_reference(Syntax::Neutral, " ");
-                self.add_fragment_reference(Syntax::Description, text);
-            }
         }
         self.append_char('\n');
     }

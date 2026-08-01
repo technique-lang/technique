@@ -118,9 +118,6 @@ fn nodes_from_scope(scope: &language::Scope) -> Vec<Node> {
                     value: response
                         .value()
                         .to_string(),
-                    condition: response
-                        .condition()
-                        .map(String::from),
                 });
             }
             children.extend(nodes_from_scope(child));
@@ -168,9 +165,6 @@ fn node_from_step(scope: &language::Scope) -> Node {
                 value: response
                     .value()
                     .to_string(),
-                condition: response
-                    .condition()
-                    .map(String::from),
             });
         }
         children.extend(nodes_from_scope(subscope));

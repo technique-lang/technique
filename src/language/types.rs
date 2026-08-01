@@ -389,13 +389,12 @@ impl PartialEq for Scope<'_> {
 #[derive(Eq, Debug)]
 pub struct Response<'i> {
     pub value: &'i str,
-    pub condition: Option<&'i str>,
     pub span: Span,
 }
 
 impl PartialEq for Response<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.value == other.value && self.condition == other.condition
+        self.value == other.value
     }
 }
 
@@ -655,8 +654,10 @@ pub fn validate_response(input: &str) -> Option<Response<'_>> {
         return None;
     }
 
-    // Handle conditions like 'Yes and equipment available'
-    let re = regex!(r"^'(.*?)'(?:\s+(.+))?$");
+    // A response is the quoted value and nothing else. There has to be one,
+    // and it must not be padded as `'Yes'` and `' Yes '` would differ but
+    // render identically.
+    let re = regex!(r"^'([^'\s](?:[^']*[^'\s])?)'$");
     let cap = re.captures(input)?;
 
     let value = cap
@@ -664,14 +665,8 @@ pub fn validate_response(input: &str) -> Option<Response<'_>> {
         .unwrap()
         .as_str();
 
-    let condition = match cap.get(2) {
-        Some(two) => Some(two.as_str()),
-        None => None,
-    };
-
     Some(Response {
         value,
-        condition,
         span: Span::default(),
     })
 }

@@ -157,9 +157,6 @@ fn step_from_scope(scope: &language::Scope, inherited_role: Option<&str>) -> Ste
                 value: response
                     .value()
                     .to_string(),
-                condition: response
-                    .condition()
-                    .map(String::from),
             });
         }
         children.extend(steps_from_scope(subscope, inherited_role));
@@ -275,29 +272,6 @@ checks :
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].role, Some("surgeon".into()));
         assert_eq!(steps[1].role, Some("surgeon".into()));
-    }
-
-    #[test]
-    fn responses_with_conditions() {
-        let doc = extract(trim(
-            r#"
-checks :
-
-    1. Is the patient ready?
-            'Yes' | 'No' if complications
-            "#,
-        ));
-        let proc = as_procedure(&doc.items[0]);
-        let step = &proc.steps[0];
-        assert_eq!(
-            step.responses
-                .len(),
-            2
-        );
-        assert_eq!(step.responses[0].value, "Yes");
-        assert_eq!(step.responses[0].condition, None);
-        assert_eq!(step.responses[1].value, "No");
-        assert_eq!(step.responses[1].condition, Some("if complications".into()));
     }
 
     #[test]

@@ -1219,21 +1219,26 @@ impl<'i> Parser<'i> {
                 self.problems
                     .push(ParsingError::InvalidStep(Span::new(parser.offset, 0)));
                 parser.skip_to_next_line();
+            } else if is_enum_response(content) || malformed_response_pattern(content) {
+                // Responses answer a step, so there is nothing here for them to
+                // belong to. Say so rather than let read_descriptive() stop at
+                // the line and the text below it be dropped.
+                self.problems
+                    .push(ParsingError::InvalidResponse(Span::new(parser.offset, 0)));
+                parser.skip_to_next_line();
             } else {
                 match parser.take_block_lines(
-                    |line| {
-                        !is_step(line)
-                            && !is_procedure_title(line)
-                            && !is_code_block(line)
-                            && !malformed_step_pattern(line)
-                            && !is_attribute_pattern(line)
-                    },
+                    // this line is descriptive text, so the block starts here
+                    |_| true,
+                    // and runs until...
                     |line| {
                         is_step(line)
                             || is_procedure_title(line)
                             || is_code_block(line)
                             || malformed_step_pattern(line)
                             || is_attribute_pattern(line)
+                            || is_enum_response(line)
+                            || malformed_response_pattern(line)
                     },
                     |inner| {
                         let content = inner.source;
@@ -3541,7 +3546,7 @@ fn is_subsubstep_dependent(content: &str) -> bool {
 }
 
 fn is_enum_response(content: &str) -> bool {
-    let re = regex!(r"^\s*'.+?'");
+    let re = regex!(r"^\s*'");
     re.is_match(content)
 }
 

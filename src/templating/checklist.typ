@@ -43,9 +43,8 @@
     }
 }
 
-#let render-response(value: none, condition: none) = {
-    if condition != none [ _#value #condition _]
-    else [ _#value _]
+#let render-response(value: none) = {
+    [ _#value _]
 }
 
 #let render-step(ordinal: none, title: none, body: (), role: none, responses: none, children: none) = {

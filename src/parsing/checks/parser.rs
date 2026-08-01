@@ -724,7 +724,8 @@ fn step_detection() {
     assert!(is_enum_response("  'No'"));
     assert!(is_enum_response("'Not Applicable'"));
     assert!(!is_enum_response("Yes"));
-    assert!(!is_enum_response("'unclosed"));
+    // a line beginning with a single quote is responses, well formed or not
+    assert!(is_enum_response("'unclosed"));
 }
 
 #[test]
@@ -950,7 +951,7 @@ fn multiple_steps_with_substeps() {
 
 #[test]
 fn is_step_with_failing_input() {
-    let test_input = "1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No' but I have an excuse\n2. Do the second thing in the first one.";
+    let test_input = "1. Have you done the first thing in the first one?\n    a. Do the first thing. Then ask yourself if you are done:\n        'Yes' | 'No'\n2. Do the second thing in the first one.";
 
     // Test each line that should be a step
     assert!(is_step_dependent(
@@ -964,9 +965,7 @@ fn is_step_with_failing_input() {
     assert!(!is_step_dependent(
         "    a. Do the first thing. Then ask yourself if you are done:"
     ));
-    assert!(!is_step_dependent(
-        "        'Yes' | 'No' but I have an excuse"
-    ));
+    assert!(!is_step_dependent("        'Yes' | 'No'"));
 
     // Finally, test content over multiple lines
     assert!(is_step_dependent(test_input));
@@ -980,7 +979,7 @@ fn read_step_with_content() {
         r#"
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     );
@@ -1004,12 +1003,10 @@ fn read_step_with_content() {
                     responses: vec![
                         Response {
                             value: "Yes",
-                            condition: None,
                             span: Span::default()
                         },
                         Response {
                             value: "No",
-                            condition: Some("but I have an excuse"),
                             span: Span::default()
                         }
                     ],
@@ -1041,7 +1038,7 @@ This is the first one.
 
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     );
@@ -1079,7 +1076,7 @@ fn take_block_lines_with_is_step() {
         r#"
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     );
@@ -1113,7 +1110,7 @@ fn is_step_line_by_line() {
     let lines = [
         "1. Have you done the first thing in the first one?",
         "    a. Do the first thing. Then ask yourself if you are done:",
-        "        'Yes' | 'No' but I have an excuse",
+        "        'Yes' | 'No'",
         "2. Do the second thing in the first one.",
     ];
 
@@ -1148,7 +1145,7 @@ This is the first one.
 
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     );
@@ -1301,7 +1298,7 @@ This is the first one.
 
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     );
@@ -2513,17 +2510,14 @@ fn splitting_by() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "Maybe",
-                condition: None,
                 span: Span::default()
             }
         ])
@@ -2541,7 +2535,6 @@ fn reading_responses() {
         result,
         Ok(vec![Response {
             value: "Yes",
-            condition: None,
             span: Span::default()
         }])
     );
@@ -2554,12 +2547,10 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None,
                 span: Span::default()
             }
         ])
@@ -2573,33 +2564,23 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Yes",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "No",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "Not Applicable",
-                condition: None,
                 span: Span::default()
             }
         ])
     );
 
-    // Test response with condition
+    // A response is the quoted value and nothing else
     input.initialize("'Yes' and equipment available");
     let result = input.read_responses();
-    assert_eq!(
-        result,
-        Ok(vec![Response {
-            value: "Yes",
-            condition: Some("and equipment available"),
-            span: Span::default()
-        }])
-    );
+    assert_eq!(result, Err(ParsingError::InvalidResponse(Span::new(0, 0))));
 
     // Test responses with whitespace
     input.initialize("  'Option A'  |  'Option B'  ");
@@ -2609,12 +2590,10 @@ fn reading_responses() {
         Ok(vec![
             Response {
                 value: "Option A",
-                condition: None,
                 span: Span::default()
             },
             Response {
                 value: "Option B",
-                condition: None,
                 span: Span::default()
             }
         ])

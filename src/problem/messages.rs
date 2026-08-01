@@ -693,7 +693,7 @@ it may be used by output templates when rendering the procedure.
             .to_string(),
         ),
         ParsingError::InvalidStep(_) => (
-            "Invalid step format".to_string(),
+            "Invalid step ordinal".to_string(),
             r#"
 Steps must start with a number or lower-case letter (in the case of dependent
 steps and sub-steps, respectively) followed by a '.':
@@ -713,7 +713,7 @@ dash. They can be done in either order, or concurrently:
             .to_string(),
         ),
         ParsingError::InvalidSubstep(_) => (
-            "Invalid substep format".to_string(),
+            "Invalid substep ordinal".to_string(),
             r#"
 Substeps can be nested below top-level dependent steps or top-level parallel
 steps. So both of these are valid:
@@ -890,41 +890,35 @@ Something like {} would be reasonable.
                 vec![
                     Response {
                         value: "Rock",
-                        condition: None,
                         span: Span::default(),
                     },
                     Response {
                         value: "Paper",
-                        condition: None,
                         span: Span::default(),
                     },
                     Response {
                         value: "Scissors",
-                        condition: None,
                         span: Span::default(),
                     },
                 ],
                 vec![Response {
                     value: "Confirmed",
-                    condition: None,
                     span: Span::default(),
                 }],
                 vec![
                     Response {
                         value: "Yes",
-                        condition: Some("but with explanation"),
                         span: Span::default(),
                     },
                     Response {
                         value: "No",
-                        condition: None,
                         span: Span::default(),
                     },
                 ],
             ];
 
             (
-                "Invalid response format".to_string(),
+                "Invalid response literal".to_string(),
                 format!(
                     r#"
 The fixed choices that are valid for the result of a given step can be

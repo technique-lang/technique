@@ -217,7 +217,7 @@ first : A -> B
 This is the first one.
 
 1. Have you done the first thing in the first one?
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     ));
@@ -251,12 +251,10 @@ This is the first one.
                                 responses: vec![
                                     Response {
                                         value: "Yes",
-                                        condition: None,
                                         span: Span::default()
                                     },
                                     Response {
                                         value: "No",
-                                        condition: Some("but I have an excuse"),
                                         span: Span::default()
                                     }
                                 ],
@@ -295,7 +293,7 @@ This is the first one.
 
 1. Have you done the first thing in the first one?
     a. Do the first thing. Then ask yourself if you are done:
-        'Yes' | 'No' but I have an excuse
+        'Yes' | 'No'
 2. Do the second thing in the first one.
             "#,
     ));
@@ -335,12 +333,10 @@ This is the first one.
                                     responses: vec![
                                         Response {
                                             value: "Yes",
-                                            condition: None,
                                             span: Span::default()
                                         },
                                         Response {
                                             value: "No",
-                                            condition: Some("but I have an excuse"),
                                             span: Span::default()
                                         }
                                     ],
@@ -390,9 +386,9 @@ fn realistic_procedure() {
                     - Known allergy?
                             'No' | 'Yes'
                     - Difficult airway or aspiration risk?
-                            'No' | 'Yes' and equipment/assistance available
+                            'No' | 'Yes'
                     - Risk of blood loss > 500 mL?
-                            'No' | 'Yes' and two IVs planned and fluids available
+                            'No' | 'Yes'
             "#,
     ));
     let result = input.read_procedure();
@@ -419,7 +415,6 @@ fn realistic_procedure() {
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None,
                                     span: Span::default()
                                 }],
                                 span: Span::default(),
@@ -435,12 +430,10 @@ fn realistic_procedure() {
                                 responses: vec![
                                     Response {
                                         value: "Yes",
-                                        condition: None,
                                         span: Span::default()
                                     },
                                     Response {
                                         value: "Not Applicable",
-                                        condition: None,
                                         span: Span::default()
                                     }
                                 ],
@@ -456,7 +449,6 @@ fn realistic_procedure() {
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None,
                                     span: Span::default()
                                 }],
                                 span: Span::default(),
@@ -471,7 +463,6 @@ fn realistic_procedure() {
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Yes",
-                                    condition: None,
                                     span: Span::default()
                                 }],
                                 span: Span::default(),
@@ -494,12 +485,10 @@ fn realistic_procedure() {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None,
                                                 span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
-                                                condition: None,
                                                 span: Span::default()
                                             }
                                         ],
@@ -516,14 +505,10 @@ fn realistic_procedure() {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None,
                                                 span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
-                                                condition: Some(
-                                                    "and equipment/assistance available"
-                                                ),
                                                 span: Span::default(),
                                             }
                                         ],
@@ -540,14 +525,10 @@ fn realistic_procedure() {
                                         responses: vec![
                                             Response {
                                                 value: "No",
-                                                condition: None,
                                                 span: Span::default()
                                             },
                                             Response {
                                                 value: "Yes",
-                                                condition: Some(
-                                                    "and two IVs planned and fluids available"
-                                                ),
                                                 span: Span::default(),
                                             }
                                         ],
@@ -1175,12 +1156,10 @@ fn substeps_with_responses() {
                     responses: vec![
                         Response {
                             value: "Yes",
-                            condition: None,
                             span: Span::default()
                         },
                         Response {
                             value: "No",
-                            condition: None,
                             span: Span::default()
                         },
                     ],
@@ -1584,7 +1563,7 @@ fn spans_are_populated() {
     let procedure = input
         .read_procedure()
         .unwrap();
-    assert_eq!(procedure.span, Span::new(43, 231));
+    assert_eq!(procedure.span, Span::new(43, 219));
     assert_eq!(
         procedure
             .name
@@ -1622,7 +1601,7 @@ fn spans_are_populated() {
         assert_eq!(*span, Span::new(92, 23));
     }
     if let Element::Steps(scopes, span) = &procedure.elements[2] {
-        assert_eq!(*span, Span::new(119, 155));
+        assert_eq!(*span, Span::new(119, 143));
 
         if let Scope::DependentBlock {
             span, subscopes, ..
@@ -1644,12 +1623,12 @@ fn spans_are_populated() {
             span, subscopes, ..
         } = &scopes[1]
         {
-            assert_eq!(*span, Span::new(164, 110));
+            assert_eq!(*span, Span::new(164, 98));
 
             if let Scope::ResponseBlock { responses, .. } = &subscopes[0] {
                 assert_eq!(responses[0].span, Span::new(211, 6));
-                assert_eq!(responses[1].span, Span::new(220, 21));
-                assert_eq!(responses[2].span, Span::new(244, 29));
+                assert_eq!(responses[1].span, Span::new(220, 9));
+                assert_eq!(responses[2].span, Span::new(232, 29));
             }
         }
     }

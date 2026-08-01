@@ -583,12 +583,10 @@ III.
                                     responses: vec![
                                         Response {
                                             value: "Yes",
-                                            condition: None,
                                             span: Span::default(),
                                         },
                                         Response {
                                             value: "No",
-                                            condition: None,
                                             span: Span::default(),
                                         },
                                     ],
@@ -606,7 +604,6 @@ III.
                             subscopes: vec![Scope::ResponseBlock {
                                 responses: vec![Response {
                                     value: "Confirmed",
-                                    condition: None,
                                     span: Span::default(),
                                 }],
                                 span: Span::default(),
