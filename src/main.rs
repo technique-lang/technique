@@ -158,7 +158,7 @@ fn select_libraries(matches: &clap::ArgMatches) -> Vec<Builtin> {
 }
 
 fn main() {
-    const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+    const VERSION: &str = env!("TECHNIQUE_VERSION");
 
     // Initialize the tracing subscriber. This respects the RUST_LOG
     // environment variable if present, or sets Level::ERROR as a fallback.

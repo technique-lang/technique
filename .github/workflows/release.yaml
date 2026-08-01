@@ -19,6 +19,8 @@ jobs:
         steps:
             - name: Clone project
               uses: actions/checkout@v6
+              with:
+                  fetch-tags: true
 
             - name: Validate toolchain
               shell: bash
