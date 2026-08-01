@@ -1,7 +1,13 @@
 one_of_many :
 
+# Choosing: Overview
+
 Pick one!
 
     1.  From these
 
 		'One' | 'Two' | 'Three'
+
+    2.  Or from these
+
+		'Yes: proceed' | 'No (stop): halt'

@@ -2,7 +2,8 @@ local_network :
 
 # Local Network Connectivity
 
-Establish that the local network environment is functioning.
+Establish that the local network environment is functioning (all of it: hosts,
+routes, and names).
 
     1.  Check physical network interface { exec(
         ```bash
@@ -13,3 +14,14 @@ Establish that the local network environment is functioning.
     3.  Check local DHCP is working
     4.  Check local DNS responding
     5.  Verify reachability of local network gateway
+    6.  Confirm the local package mirror is serving
+        {
+            exec("curl --silent http://127.0.0.1:48080/simple/")
+        }
+    7.  Report anything still down { exec(
+        ```bash
+            for i in $(ip -br link | awk '$2 != "UP" {print $1}')
+                do echo "still down: $i"
+            done
+        ```
+        ) }

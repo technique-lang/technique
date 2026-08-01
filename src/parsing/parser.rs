@@ -438,7 +438,6 @@ impl<'i> Parser<'i> {
         subject: &'static str,
         start_char: char,
         end_char: char,
-        skip_string_content: bool,
         function: F,
     ) -> Result<A, ParsingError>
     where
@@ -462,28 +461,28 @@ impl<'i> Parser<'i> {
             }
         } else {
             // Nesting case: different characters for start and end (like (...))
+            let mut literals = Literals::new();
             let mut depth = 0;
-            let mut in_string = false;
 
             for (i, c) in self
                 .source
                 .char_indices()
             {
+                if literals.opaque(&self.source[i..]) {
+                    continue;
+                }
+
                 if !begun && c == start_char {
                     begun = true;
                     depth = 1;
                 } else if begun {
-                    if skip_string_content && c == '"' {
-                        in_string = !in_string;
-                    } else if !skip_string_content || !in_string {
-                        if c == start_char {
-                            depth += 1;
-                        } else if c == end_char {
-                            depth -= 1;
-                            if depth == 0 {
-                                l = i + 1; // add end character
-                                break;
-                            }
+                    if c == start_char {
+                        depth += 1;
+                    } else if c == end_char {
+                        depth -= 1;
+                        if depth == 0 {
+                            l = i + 1; // add end character
+                            break;
                         }
                     }
                 }
@@ -577,8 +576,13 @@ impl<'i> Parser<'i> {
         F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
     {
         let content = self.source;
+
+        // a delimiter inside a literal is that literal's text, not ours
+        let mut literals = Literals::new();
         let end_pos = content
-            .find(pattern)
+            .char_indices()
+            .find(|&(i, c)| !literals.opaque(&content[i..]) && pattern.contains(&c))
+            .map(|(i, _)| i)
             .unwrap_or(content.len());
 
         let block = &content[..end_pos];
@@ -1449,7 +1453,7 @@ impl<'i> Parser<'i> {
     }
 
     fn read_code_block(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
-        self.take_block_chars("a code block", '{', '}', true, |inner| {
+        self.take_block_chars("a code block", '{', '}', |inner| {
             let mut expressions = Vec::new();
 
             loop {
@@ -1553,16 +1557,14 @@ impl<'i> Parser<'i> {
             let span = self.span_since(start);
             Ok(Expression::Number(numeric, span))
         } else if is_string_literal(content) {
-            let parts = self.take_block_chars("a string literal", '"', '"', false, |inner| {
+            let parts = self.take_block_chars("a string literal", '"', '"', |inner| {
                 inner.parse_string_pieces(inner.source)
             })?;
             let span = self.span_since(start);
             Ok(Expression::String(parts, span))
         } else if is_enum_response(content) {
             let value =
-                self.take_block_chars("a response literal", '\'', '\'', false, |inner| {
-                    Ok(inner.source)
-                })?;
+                self.take_block_chars("a response literal", '\'', '\'', |inner| Ok(inner.source))?;
             let span = self.span_since(start);
             Ok(Expression::Response(value, span))
         } else if is_invocation(content) {
@@ -1658,7 +1660,7 @@ impl<'i> Parser<'i> {
             .starts_with('(')
         {
             // Parse parenthesized list: (id1, id2, ...)
-            self.take_block_chars("a list of identifiers", '(', ')', true, |outer| {
+            self.take_block_chars("a list of identifiers", '(', ')', |outer| {
                 let mut identifiers = Vec::new();
 
                 loop {
@@ -1755,7 +1757,7 @@ impl<'i> Parser<'i> {
         let start = self.offset;
         self.trim_whitespace();
         self.advance(1); // consume '$'
-        let inner = self.take_block_chars("a cost", '(', ')', true, |outer| {
+        let inner = self.take_block_chars("a cost", '(', ')', |outer| {
             outer.trim_whitespace();
             if outer
                 .source
@@ -1816,12 +1818,12 @@ impl<'i> Parser<'i> {
             return Ok(Expression::Tablet(vec![], self.span_since(start)));
         }
 
-        let elements = self.take_block_chars("a list", '[', ']', true, |outer| {
+        let elements = self.take_block_chars("a list", '[', ']', |outer| {
             outer.take_elements(true, |inner| {
                 if is_pair(inner.source) {
                     let pair_start = inner.offset;
-                    let label = inner
-                        .take_block_chars("a label", '"', '"', false, |label| Ok(label.source))?;
+                    let label =
+                        inner.take_block_chars("a label", '"', '"', |label| Ok(label.source))?;
                     inner.trim_whitespace();
                     inner.advance(1); // consume '=' (is_pair guarantees it)
                     inner.trim_whitespace();
@@ -1875,7 +1877,7 @@ impl<'i> Parser<'i> {
     /// `()` for an empty value.
     fn read_tuple_literal(&mut self) -> Result<Expression<'i>, ParsingError> {
         let start = self.offset;
-        let elements = self.take_block_chars("a tuple", '(', ')', true, |outer| {
+        let elements = self.take_block_chars("a tuple", '(', ')', |outer| {
             outer.take_elements(false, |inner| inner.read_expression())
         })?;
         if elements.len() < 2 {
@@ -2226,7 +2228,7 @@ impl<'i> Parser<'i> {
     /// so its presence marks the content as an external URI.
     fn read_target(&mut self) -> Result<Target<'i>, ParsingError> {
         let start_offset = self.offset;
-        self.take_block_chars("an invocation", '<', '>', true, |inner| {
+        self.take_block_chars("an invocation", '<', '>', |inner| {
             let content = inner
                 .source
                 .trim();
@@ -2678,7 +2680,7 @@ impl<'i> Parser<'i> {
     /// comma-separated list of full expressions, e.g. `(a, b, other(c))`.
     /// Unlike a list, there's no newline form.
     fn read_parameters(&mut self) -> Result<Vec<Expression<'i>>, ParsingError> {
-        self.take_block_chars("parameters for a function", '(', ')', true, |outer| {
+        self.take_block_chars("parameters for a function", '(', ')', |outer| {
             outer.take_elements(false, |inner| inner.read_expression())
         })
     }
@@ -3052,26 +3054,31 @@ where
 {
     let mut i = 0;
     let mut begun = false;
-    let mut in_fence = false;
+    let mut literals = Literals::new();
+    let mut buffer = String::new();
 
     for line in source.lines() {
-        let opaque = in_fence;
-        if line
-            .matches("```")
-            .count()
-            % 2
-            == 1
-        {
-            in_fence = !in_fence;
-        }
-        if opaque {
-            i += line.len() + 1;
-            continue;
-        }
+        // A predicate reads the shape of a line, so the content of any literal
+        // on it is blanked first. Most lines have none and are handed straight
+        // through; the rest are rewritten into a buffer we keep reusing.
+        let text = if !literals.in_literal() && !line.contains(['"', '`']) {
+            line
+        } else {
+            buffer.clear();
+            for (j, c) in line.char_indices() {
+                if literals.opaque(&line[j..]) {
+                    buffer.push(' ');
+                } else {
+                    buffer.push(c);
+                }
+            }
+            &buffer
+        };
+        literals.opaque("\n");
 
-        if !begun && start(line) {
+        if !begun && start(text) {
             begun = true;
-        } else if begun && end(line) {
+        } else if begun && end(text) {
             // don't include this line
             break;
         }
@@ -3114,13 +3121,20 @@ where
 /// example it must not match " a. And now: do something" or "b. Proceed
 /// with:".
 ///
-/// This function, however, is permissive. It identifies lines that could be
-/// intended as procedure declarations (including malformed ones) so that
-/// proper validation and error messages can be provided during the actual
-/// parsing phase.
+/// The name must be an identifier and the colon must stand apart from it. The
+/// signature is not validated here; `f : B` is a declaration whose signature is
+/// wrong, which read_signature() will address once we commit to reading it.
 fn is_procedure_declaration(content: &str) -> bool {
     match content.split_once(':') {
         Some((before, _after)) => {
+            // a declaration is written `name : signature`, with the colon
+            // standing apart from the name. Prose punctuates the other way, as
+            // in `Warning: Important`, and so is never a declaration. A missing
+            // name has nothing to stand apart from
+            if !before.is_empty() && !before.ends_with([' ', '\t']) {
+                return false;
+            }
+
             let before = before.trim_ascii();
 
             // Check if the name part is valid
@@ -3176,8 +3190,19 @@ fn begins_procedure_declaration(content: &str) -> bool {
 /// preventing us from attempting to parse it as a separate procedure and
 /// reporting what turns out to be a better error.
 fn potential_procedure_declaration(content: &str) -> bool {
-    match content.split_once(':') {
+    let line = content
+        .lines()
+        .next()
+        .unwrap_or("");
+
+    match line.split_once(':') {
         Some((before, after)) => {
+            // as in is_procedure_declaration(), a declaration sets its colon
+            // apart from the name; prose does not
+            if !before.is_empty() && !before.ends_with([' ', '\t']) {
+                return false;
+            }
+
             let before = before.trim_ascii();
 
             // Empty before colon -> only a declaration if there's something after
@@ -3188,10 +3213,10 @@ fn potential_procedure_declaration(content: &str) -> bool {
             }
 
             // If it's a step patterns then it's not a procedure declaration!
-            if is_step_dependent(content)
-                || is_step_parallel(content)
-                || is_substep_dependent(content)
-                || is_substep_parallel(content)
+            if is_step_dependent(line)
+                || is_step_parallel(line)
+                || is_substep_dependent(line)
+                || is_substep_parallel(line)
             {
                 return false;
             }
@@ -3225,9 +3250,10 @@ fn potential_procedure_declaration(content: &str) -> bool {
 fn is_procedure_body(content: &str) -> bool {
     let line = content.trim_ascii();
 
-    // Empty lines are not body content (continue reading declaration)
+    // A declaration ends at the blank line separating it from what follows, so
+    // by definition nothing after one is still part of it
     if line.is_empty() {
-        return false;
+        return true;
     }
 
     // Check for procedure body indicators. At the end, if it doesn't look like signature, it's body.
@@ -3344,35 +3370,93 @@ fn is_function(content: &str) -> bool {
     re.is_match(content)
 }
 
+// Tracks whether a scan has passed into a literal, where the text belongs to
+// the string and not to the structure of the document. A `"` string ends at the
+// line ending; a ``` fence spans lines. Callers drive it one character at a
+// time, which keeps every scan working on borrowed slices.
+enum Within {
+    Text,
+    String,
+    Fence,
+}
+
+struct Literals {
+    within: Within,
+    delimiter: u8,
+}
+
+impl Literals {
+    fn new() -> Literals {
+        Literals {
+            within: Within::Text,
+            delimiter: 0,
+        }
+    }
+
+    fn in_literal(&self) -> bool {
+        match self.within {
+            Within::Text => false,
+            _ => true,
+        }
+    }
+
+    // `rest` is the text from the current position onwards, so that the ```
+    // delimiter is recognized whole rather than a backtick at a time
+    fn opaque(&mut self, rest: &str) -> bool {
+        if self.delimiter > 0 {
+            self.delimiter -= 1;
+            return true;
+        }
+
+        match self.within {
+            Within::Text => {
+                if rest.starts_with("```") {
+                    self.within = Within::Fence;
+                    self.delimiter = 2;
+                    true
+                } else if rest.starts_with('"') {
+                    self.within = Within::String;
+                    false
+                } else {
+                    false
+                }
+            }
+            // a string is closed by the next quote, or by the line ending; a
+            // fence is how text is carried across lines
+            Within::String => {
+                if rest.starts_with('"') || rest.starts_with('\n') {
+                    self.within = Within::Text;
+                    false
+                } else {
+                    true
+                }
+            }
+            Within::Fence => {
+                if rest.starts_with("```") {
+                    self.within = Within::Text;
+                    self.delimiter = 2;
+                }
+                true
+            }
+        }
+    }
+}
+
 // Iterate the `(offset, char)` pairs of `content` that sit at the top level —
-// not nested inside `()`/`[]`, a `"..."` string, or a ``` multiline fence.
+// not nested inside `()`/`[]` and not within a literal.
 // Shared by take_elements() and locate_statement_end() so the two don't drift.
 fn top_level_chars(content: &str) -> impl Iterator<Item = (usize, char)> + '_ {
+    let mut literals = Literals::new();
     let mut depth = 0i32;
-    let mut in_string = false;
-    let mut in_multiline = false;
-    let mut backticks = 0u8;
 
     content
         .char_indices()
         .filter_map(move |(i, c)| {
-            if c == '`' {
-                backticks += 1;
-                if backticks == 3 {
-                    in_multiline = !in_multiline;
-                    backticks = 0;
-                }
+            if literals.opaque(&content[i..]) {
                 return None;
             }
-            backticks = 0;
 
             match c {
-                _ if in_multiline => None,
-                '"' => {
-                    in_string = !in_string;
-                    None
-                }
-                _ if in_string => None,
                 '(' | '[' => {
                     depth += 1;
                     None

@@ -485,7 +485,7 @@ fn character_delimited_blocks() {
     let mut input = Parser::new();
     input.initialize("{ todo() }");
 
-    let result = input.take_block_chars("inline code", '{', '}', true, |parser| {
+    let result = input.take_block_chars("inline code", '{', '}', |parser| {
         let text = parser.source;
         assert_eq!(text, " todo() ");
         Ok(true)
@@ -497,7 +497,7 @@ fn character_delimited_blocks() {
     // we find ourselves parsing them, so subparser() won't work.
     input.initialize("XhelloX world");
 
-    let result = input.take_block_chars("", 'X', 'X', false, |parser| {
+    let result = input.take_block_chars("", 'X', 'X', |parser| {
         let text = parser.source;
         assert_eq!(text, "hello");
         Ok(true)
@@ -511,7 +511,7 @@ fn skip_string_content_flag() {
 
     // Test skip_string_content: true - should ignore braces inside strings
     input.initialize(r#"{ "string with { brace" }"#);
-    let result = input.take_block_chars("code block", '{', '}', true, |parser| {
+    let result = input.take_block_chars("code block", '{', '}', |parser| {
         let text = parser.source;
         assert_eq!(text, r#" "string with { brace" "#);
         Ok(true)
@@ -520,7 +520,7 @@ fn skip_string_content_flag() {
 
     // Test skip_string_content: false - should treat braces normally
     input.initialize(r#""string with } brace""#);
-    let result = input.take_block_chars("string content", '"', '"', false, |parser| {
+    let result = input.take_block_chars("string content", '"', '"', |parser| {
         let text = parser.source;
         assert_eq!(text, "string with } brace");
         Ok(true)
@@ -1211,6 +1211,46 @@ fn test_potential_procedure_declaration_is_superset() {
     // Neither should match sentences with spaces
     assert!(!is_procedure_declaration("Ask these questions :"));
     assert!(!potential_procedure_declaration("Ask these questions :"));
+
+    // Nor prose, code, titles, or responses that merely contain a colon. A
+    // procedure name is a lowercase identifier, so none of these can be one.
+    // Lines taken from the example corpus
+    assert!(!is_procedure_declaration(
+        "Ask yourself: \"What can I do to influence the situation?\" Interpret"
+    ));
+    assert!(!is_procedure_declaration("Assuming you do, then:"));
+    assert!(!is_procedure_declaration("Warning: Important"));
+    assert!(!is_procedure_declaration("Ingredients: Leaves, Water"));
+    assert!(!is_procedure_declaration(
+        "bringing web1:80 and web2:80 into service"
+    ));
+    assert!(!is_procedure_declaration("# Choosing: Overview"));
+    assert!(!is_procedure_declaration("'Yes: proceed' | 'No'"));
+    assert!(!is_procedure_declaration("note: be careful here"));
+    assert!(!is_procedure_declaration(
+        "exec(\"curl http://127.0.0.1:48080/simple/\")"
+    ));
+
+    // ... but a declaration whose signature is malformed is still one, the
+    // author's intent being plain. An empty or arrow-bearing remainder is
+    // enough to make the line an attempt at a declaration
+    assert!(is_procedure_declaration("broken_proc : A ->"));
+    assert!(is_procedure_declaration("f : B"));
+    assert!(potential_procedure_declaration("MyProcedure :"));
+    assert!(potential_procedure_declaration("my_proc(a, b :"));
+    assert!(potential_procedure_declaration("f( :"));
+
+    // A declaration sets its colon apart from the name; prose punctuates the
+    // other way and so is never one, wherever it appears
+    assert!(is_procedure_declaration("foo : A -> B"));
+    assert!(is_procedure_declaration("foo   : A -> B"));
+    assert!(is_procedure_declaration("foo\t: A -> B"));
+    assert!(is_procedure_declaration("    foo : A -> B"));
+    assert!(!is_procedure_declaration("foo: A -> B"));
+    assert!(!potential_procedure_declaration("foo: A -> B"));
+
+    // ... except that a missing name has nothing to stand apart from
+    assert!(potential_procedure_declaration(": Ingredients -> Coffee"));
 
     // Edge cases with whitespace
     assert!(!is_procedure_declaration("  :")); // No name
@@ -2954,6 +2994,61 @@ https_proxy=http://10.0.0.1:8888/ curl -f https://www.example.com/
         "fenced shell content must not be read as structure: {:?}",
         result.err()
     );
+}
+
+#[test]
+fn colon_in_prose_or_code_is_not_a_declaration() {
+    let mut input = Parser::new();
+
+    // Same `http://` hazard as the fenced case above, but in a plain string.
+    // The colon is only a declaration when what follows it could be a
+    // signature.
+    let source = r#"
+% technique v1
+
+check_proxy :
+
+1.  Make a request.
+    {
+        exec("curl -f http://1.2.3.4:8888/")
+    }
+"#
+    .trim_ascii();
+
+    input.initialize(source);
+    let result = input.parse_collecting_errors();
+    assert!(
+        result.is_ok(),
+        "string content must not be read as structure: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn literals_are_opaque_to_a_scan() {
+    // what a line scanner sees once the content of any literal is blanked out
+    fn mask(text: &str) -> String {
+        let mut literals = Literals::new();
+        text.char_indices()
+            .map(|(i, c)| if literals.opaque(&text[i..]) { ' ' } else { c })
+            .collect()
+    }
+
+    assert_eq!(mask("plain : text"), "plain : text");
+    assert_eq!(mask("exec(\"a : b\")"), "exec(\"     \")");
+
+    // the delimiters survive, so a malformed response is still recognisable
+    assert_eq!(mask("\"Yes\" | \"No\""), "\"   \" | \"  \"");
+
+    // a `"` string ends at the line ending, so an unbalanced quote cannot
+    // swallow everything that follows it
+    assert_eq!(mask("say \"oops\nfoo :"), "say \"    \nfoo :");
+
+    // ... whereas a fence deliberately does span lines
+    assert_eq!(mask("```\nfoo :\n```"), "             ");
+
+    // a run of backticks longer than the delimiter is content past the third
+    assert_eq!(mask("````x```"), "        ");
 }
 
 #[test]

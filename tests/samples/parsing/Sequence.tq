@@ -14,3 +14,4 @@ instance we have to disable termination protection.
             select("Apply Immediately")
             click("Modify DB instance")
         }
+    2.  And now we list home { exec("ls ~/.local/bin") ~ listing }
