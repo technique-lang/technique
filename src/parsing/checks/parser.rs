@@ -288,6 +288,13 @@ fn response_as_expression() {
             Span::default()
         ))
     );
+
+    // and the value is held to the same rule as one in an enum
+    input.initialize("' Monarchy '");
+    assert_eq!(
+        input.read_expression(),
+        Err(ParsingError::InvalidResponse(Span::new(0, 0)))
+    );
 }
 
 #[test]
@@ -2502,8 +2509,12 @@ fn splitting_by() {
     // different split character
     input.initialize("'Yes'|'No'|'Maybe'");
     let result = input.take_split_by('|', |inner| {
-        validate_response(inner.source)
-            .ok_or(ParsingError::IllegalParserState(Span::new(inner.offset, 0)))
+        inner
+            .read_enum_response()
+            .map(|value| Response {
+                value,
+                span: Span::default(),
+            })
     });
     assert_eq!(
         result,
@@ -2598,6 +2609,51 @@ fn reading_responses() {
             }
         ])
     );
+
+    // A padded or empty value is not a response
+    input.initialize("' Yes '");
+    let result = input.read_responses();
+    assert_eq!(result, Err(ParsingError::InvalidResponse(Span::new(0, 0))));
+
+    input.initialize("''");
+    let result = input.read_responses();
+    assert_eq!(result, Err(ParsingError::InvalidResponse(Span::new(0, 0))));
+
+    // The enum ends with its lines, leaving what follows to the enclosing
+    // scope, and a wrapped enum continues onto the next line
+    input.initialize("'Yes' | 'No'\n    { x ~ y }");
+    let result = input.read_responses();
+    assert_eq!(
+        result,
+        Ok(vec![
+            Response {
+                value: "Yes",
+                span: Span::default()
+            },
+            Response {
+                value: "No",
+                span: Span::default()
+            }
+        ])
+    );
+    assert_eq!(input.source, "    { x ~ y }");
+
+    input.initialize("'Yes' |\n    'No'\n    { x ~ y }");
+    let result = input.read_responses();
+    assert_eq!(
+        result,
+        Ok(vec![
+            Response {
+                value: "Yes",
+                span: Span::default()
+            },
+            Response {
+                value: "No",
+                span: Span::default()
+            }
+        ])
+    );
+    assert_eq!(input.source, "    { x ~ y }");
 }
 
 #[test]

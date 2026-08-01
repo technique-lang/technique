@@ -770,6 +770,10 @@ impl TechniqueLanguageServer {
                     "Must either be a list (values) or a tablet (labelled pairs), not a mix of the two".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
+                ParsingError::MixedStepContent(_) => (
+                    "A step is described first and answered second, so text can't follow responses".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidInvocation(_) => (
                     "Invalid procedure Invocation".to_string(),
                     DiagnosticSeverity::ERROR,

@@ -45,6 +45,7 @@ pub enum ParsingError {
     InvalidSection(Span),
     MixedSectionContent(Span),
     MixedBracketContent(Span),
+    MixedStepContent(Span),
     InvalidInvocation(Span),
     InvalidFunction(Span),
     InvalidTuple(Span),
@@ -83,6 +84,7 @@ impl ParsingError {
             | ParsingError::InvalidSection(span)
             | ParsingError::MixedSectionContent(span)
             | ParsingError::MixedBracketContent(span)
+            | ParsingError::MixedStepContent(span)
             | ParsingError::InvalidInvocation(span)
             | ParsingError::InvalidFunction(span)
             | ParsingError::InvalidTuple(span)
@@ -1568,8 +1570,7 @@ impl<'i> Parser<'i> {
             let span = self.span_since(start);
             Ok(Expression::String(parts, span))
         } else if is_enum_response(content) {
-            let value =
-                self.take_block_chars("a response literal", '\'', '\'', |inner| Ok(inner.source))?;
+            let value = self.read_enum_response()?;
             let span = self.span_since(start);
             Ok(Expression::Response(value, span))
         } else if is_invocation(content) {
@@ -2613,19 +2614,48 @@ impl<'i> Parser<'i> {
         )
     }
 
+    /// Parse a single response literal like 'Yes'
+    fn read_enum_response(&mut self) -> Result<&'i str, ParsingError> {
+        let start = self.offset;
+        let value =
+            self.take_block_chars("a response literal", '\'', '\'', |inner| Ok(inner.source))?;
+
+        // There has to be a value, and it must not be padded as `'Yes'` and
+        // `' Yes '` would differ but render identically.
+        if value.is_empty() || value != value.trim_ascii() {
+            return Err(ParsingError::InvalidResponse(Span::new(start, 0)));
+        }
+
+        Ok(value)
+    }
+
     /// Parse enum responses like 'Yes' | 'No' | 'Not Applicable'
     fn read_responses(&mut self) -> Result<Vec<Response<'i>>, ParsingError> {
-        self.take_split_by('|', |inner| {
-            let mut resp = validate_response(inner.source)
-                .ok_or(ParsingError::InvalidResponse(Span::new(inner.offset, 0)))?;
-            resp.span = Span::new(
-                inner.offset,
-                inner
-                    .source
-                    .len(),
-            );
-            Ok(resp)
-        })
+        // The block is the run of lines beginning with a response literal, so
+        // that whatever follows the enum is left for the enclosing scope.
+        self.take_block_lines(
+            is_enum_response,
+            |line| !is_enum_response(line),
+            |outer| {
+                outer.take_split_by('|', |inner| {
+                    let span = Span::new(
+                        inner.offset,
+                        inner
+                            .source
+                            .len(),
+                    );
+                    let value = inner.read_enum_response()?;
+
+                    // a response is the literal and nothing else
+                    inner.trim_whitespace();
+                    if !inner.is_finished() {
+                        return Err(ParsingError::InvalidResponse(Span::new(span.offset, 0)));
+                    }
+
+                    Ok(Response { value, span })
+                })
+            },
+        )
     }
 
     fn parse_multiline_content(&mut self) -> Result<(Option<&'i str>, Vec<&'i str>), ParsingError> {
@@ -2844,6 +2874,10 @@ impl<'i> Parser<'i> {
                     span: self.span_since(responses_start),
                 });
             } else {
+                // an enum answers the step it is in, so text cannot follow it
+                if let Some(Scope::ResponseBlock { .. }) = scopes.last() {
+                    return Err(ParsingError::MixedStepContent(Span::new(self.offset, 0)));
+                }
                 break;
             }
         }

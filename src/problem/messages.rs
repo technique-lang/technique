@@ -515,6 +515,23 @@ An empty List is written `[]`. An empty Tablet is written `[=]`.
             .trim_ascii()
             .to_string(),
         ),
+        ParsingError::MixedStepContent(_) => (
+            "Step mixes description and responses".to_string(),
+            r#"
+A step is described first and answered second, so the responses enumerating
+the choices valid for its result come last; free-form text cannot follow
+them:
+
+    1.  Do you want coffee?
+            'Yes' | 'No'
+        Tell the barista.
+
+The trailing sentence needs to be above the responses, or in a substep of its
+own.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidInvocation(_) => {
             let examples = vec![
                 Invocation {

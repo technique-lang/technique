@@ -649,28 +649,6 @@ pub(crate) fn validate_genus(input: &str, span: Span) -> Option<Genus<'_>> {
     }
 }
 
-pub fn validate_response(input: &str) -> Option<Response<'_>> {
-    if input.len() == 0 {
-        return None;
-    }
-
-    // A response is the quoted value and nothing else. There has to be one,
-    // and it must not be padded as `'Yes'` and `' Yes '` would differ but
-    // render identically.
-    let re = regex!(r"^'([^'\s](?:[^']*[^'\s])?)'$");
-    let cap = re.captures(input)?;
-
-    let value = cap
-        .get(1)
-        .unwrap()
-        .as_str();
-
-    Some(Response {
-        value,
-        span: Span::default(),
-    })
-}
-
 #[cfg(test)]
 mod check {
     use super::*;
