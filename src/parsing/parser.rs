@@ -3250,9 +3250,10 @@ fn potential_procedure_declaration(content: &str) -> bool {
 fn is_procedure_body(content: &str) -> bool {
     let line = content.trim_ascii();
 
-    // Empty lines are not body content (continue reading declaration)
+    // A declaration ends at the blank line separating it from what follows, so
+    // by definition nothing after one is still part of it
     if line.is_empty() {
-        return false;
+        return true;
     }
 
     // Check for procedure body indicators. At the end, if it doesn't look like signature, it's body.
