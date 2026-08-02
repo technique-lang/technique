@@ -218,7 +218,6 @@ impl Render for Response {
     fn render(&self, out: &mut Markup) {
         out.call("render-response");
         out.param("value", &self.value);
-        out.param_opt("condition", &self.condition);
         out.close();
     }
 }

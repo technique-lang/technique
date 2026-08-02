@@ -117,12 +117,9 @@
   })
 }
 
-#let render-response(value: none, condition: none) = {
+#let render-response(value: none) = {
     text(fill: rgb("#999999"), raw("["))
-    text(font: "Liberation Sans", size: 0.85em, {
-        if condition != none [ #value #condition ]
-        else [ #value ]
-    })
+    text(font: "Liberation Sans", size: 0.85em, [#value])
     text(fill: rgb("#999999"), raw("]"))
 }
 

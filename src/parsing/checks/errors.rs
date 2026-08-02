@@ -172,6 +172,21 @@ making_coffee :
 }
 
 #[test]
+fn invalid_text_after_responses() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1. Do you want coffee?
+        'Yes' | 'No'
+        Tell the barista.
+            "#
+        .trim_ascii(),
+        ParsingError::MixedStepContent(Span::new(73, 0)),
+    );
+}
+
+#[test]
 fn invalid_multiline_missing_closing() {
     expect_error(
         r#"

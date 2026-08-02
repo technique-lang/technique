@@ -118,13 +118,10 @@
     })
 }
 
-#let render-response(value: none, condition: none) = {
+#let render-response(value: none) = {
     h(4pt)
     text(size: 8pt, [\u{221a}])
-    text(size: 8pt, {
-        if condition != none [ #value -- #condition ]
-        else [ #value ]
-    })
+    text(size: 8pt, [#value])
 }
 
 #let render-attribute(name: none, children: none) = {

@@ -1673,39 +1673,6 @@ run :
 }
 
 #[test]
-fn response_with_condition_carries_condition() {
-    // 'No' but tired -> Response { value: "No", condition: Some("but tired") }
-    let source = r#"
-% technique v1
-
-run :
-
-1.  Decision time?
-        'Yes' | 'No' but tired
-        "#
-    .trim_ascii();
-    let path = Path::new("Test.tq");
-    let document = parsing::parse(path, source).expect("parse");
-    let program = translate(&document).expect("translate");
-
-    let Operation::Sequence(ops, _) = &program.subroutines[0].body else {
-        panic!("expected Sequence");
-    };
-    let Operation::Step { responses, .. } = &ops[0] else {
-        panic!("expected Step");
-    };
-    assert_eq!(responses.len(), 2);
-    assert_eq!(responses[0].value, "Yes");
-    assert!(
-        responses[0]
-            .condition
-            .is_none()
-    );
-    assert_eq!(responses[1].value, "No");
-    assert_eq!(responses[1].condition, Some("but tired"));
-}
-
-#[test]
 fn multiple_peer_response_blocks_union_on_step() {
     // Two distinct ResponseBlocks under different attribute scopes peer to
     // the same Step. The Step's responses field accumulates all of them.

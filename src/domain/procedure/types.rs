@@ -68,8 +68,7 @@ pub enum Node {
     },
 }
 
-/// A response option with an optional condition.
+/// A response option.
 pub struct Response {
     pub value: String,
-    pub condition: Option<String>,
 }

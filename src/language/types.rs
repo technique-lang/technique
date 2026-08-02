@@ -389,13 +389,12 @@ impl PartialEq for Scope<'_> {
 #[derive(Eq, Debug)]
 pub struct Response<'i> {
     pub value: &'i str,
-    pub condition: Option<&'i str>,
     pub span: Span,
 }
 
 impl PartialEq for Response<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.value == other.value && self.condition == other.condition
+        self.value == other.value
     }
 }
 
@@ -648,32 +647,6 @@ pub(crate) fn validate_genus(input: &str, span: Span) -> Option<Genus<'_>> {
             }
         }
     }
-}
-
-pub fn validate_response(input: &str) -> Option<Response<'_>> {
-    if input.len() == 0 {
-        return None;
-    }
-
-    // Handle conditions like 'Yes and equipment available'
-    let re = regex!(r"^'(.*?)'(?:\s+(.+))?$");
-    let cap = re.captures(input)?;
-
-    let value = cap
-        .get(1)
-        .unwrap()
-        .as_str();
-
-    let condition = match cap.get(2) {
-        Some(two) => Some(two.as_str()),
-        None => None,
-    };
-
-    Some(Response {
-        value,
-        condition,
-        span: Span::default(),
-    })
 }
 
 #[cfg(test)]
