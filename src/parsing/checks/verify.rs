@@ -17,7 +17,7 @@ fn technique_header() {
     assert_eq!(
         metadata,
         Ok(Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: None,
             copyright: None,
             domain: None,
@@ -37,7 +37,7 @@ fn technique_header() {
     assert_eq!(
         metadata,
         Ok(Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
             domain: Some("checklist"),

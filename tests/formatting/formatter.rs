@@ -22,7 +22,7 @@ mod verify {
         let document = Document {
             source: None,
             header: Some(Metadata {
-                version: 1,
+                version: Version::new(1, None, None),
                 license: Some("MIT"),
                 copyright: None,
                 domain: Some("checklist"),
@@ -71,7 +71,7 @@ first : A -> B
         let document = Document {
             source: None,
             header: Some(Metadata {
-                version: 1,
+                version: Version::new(1, None, None),
                 license: Some("PD"),
                 copyright: Some("2025 The First Procedure Society, Inc"),
                 domain: None,

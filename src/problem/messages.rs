@@ -118,6 +118,37 @@ to be used when rendering the Technique. Common domains include
                 ),
             )
         }
+        ParsingError::InvalidVersion(_) => (
+            "Invalid version".to_string(),
+            format!(
+                r#"
+The first line must list the minimum version of the Technique
+language your document is written to, prefixed with 'v'.
+For example {}, {}, or {}.
+                "#,
+                renderer.style(crate::formatting::Syntax::Header, "v1"),
+                renderer.style(crate::formatting::Syntax::Header, "v1.3"),
+                renderer.style(crate::formatting::Syntax::Header, "v2.17.1"),
+            )
+            .trim_ascii()
+            .to_string(),
+        ),
+        ParsingError::InsufficientVersion(_, version) => (
+            "Compiler out of date".to_string(),
+            format!(
+                r#"
+The document declares that it needs at least version {} of the language,
+but this is technique {}.
+                "#,
+                renderer.style(crate::formatting::Syntax::Header, &version.to_string()),
+                renderer.style(
+                    crate::formatting::Syntax::Header,
+                    &Version::compiler().to_string()
+                ),
+            )
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::InvalidCharacter(_, c) => (
             format!("Invalid character '{}'", c),
             "This character is not allowed here.".to_string(),

@@ -36,6 +36,8 @@ pub enum ParsingError {
     // more specific errors
     InvalidCharacter(Span, char),
     InvalidHeader(Span),
+    InvalidVersion(Span),
+    InsufficientVersion(Span, Version),
     InvalidIdentifier(Span, String),
     InvalidForma(Span),
     InvalidGenus(Span),
@@ -76,6 +78,7 @@ impl ParsingError {
             | ParsingError::UnexpectedEndOfInput(span)
             | ParsingError::MissingParenthesis(span)
             | ParsingError::InvalidHeader(span)
+            | ParsingError::InvalidVersion(span)
             | ParsingError::InvalidForma(span)
             | ParsingError::InvalidGenus(span)
             | ParsingError::InvalidSignature(span)
@@ -106,6 +109,7 @@ impl ParsingError {
             ParsingError::Expected(span, _)
             | ParsingError::ExpectedMatchingChar(span, _, _, _)
             | ParsingError::InvalidCharacter(span, _)
+            | ParsingError::InsufficientVersion(span, _)
             | ParsingError::InvalidIdentifier(span, _) => *span,
         }
     }
@@ -216,6 +220,13 @@ impl<'i> Parser<'i> {
                 Err(error) => {
                     self.problems
                         .push(error);
+                    // otherwise these lines are offered to the body parser
+                    while is_magic_line(self.source)
+                        || is_spdx_line(self.source)
+                        || is_domain_line(self.source)
+                    {
+                        self.skip_to_next_line();
+                    }
                     None
                 }
             }
@@ -780,21 +791,64 @@ impl<'i> Parser<'i> {
         Ok(())
     }
 
-    // hard wire the version for now. If we ever grow to supporting multiple major
-    // versions then this will be a lot more complicated than just dealing with a
-    // different natural number here.
-    fn read_magic_line(&mut self) -> Result<u8, ParsingError> {
+    fn read_magic_line(&mut self) -> Result<Version, ParsingError> {
         self.take_until(&['\n'], |inner| {
-            let re = regex!(r"%\s*technique\s+v1\s*$");
+            let re = regex!(r"^\s*%\s*technique(?:\s+(\S+))?\s*$");
 
-            if re.is_match(inner.source) {
-                Ok(1)
-            } else {
-                let error_offset = analyze_magic_line(inner.source);
-                Err(ParsingError::InvalidHeader(Span::new(
-                    inner.offset + error_offset,
+            let cap = re
+                .captures(inner.source)
+                .ok_or(ParsingError::InvalidHeader(Span::new(
+                    inner.offset + analyze_magic_line(inner.source),
                     0,
-                )))
+                )))?;
+
+            let one = cap
+                .get(1)
+                .ok_or(ParsingError::InvalidVersion(Span::new(
+                    inner.offset + analyze_magic_line(inner.source),
+                    0,
+                )))?;
+
+            let span = Span::new(
+                inner.offset + one.start(),
+                one.as_str()
+                    .len(),
+            );
+
+            let re = regex!(r"^v(\d{1,9})(?:\.(\d{1,9}))?(?:\.(\d{1,9}))?$");
+
+            let cap = re
+                .captures(one.as_str())
+                .ok_or(ParsingError::InvalidVersion(span))?;
+
+            let number = |i: usize| {
+                cap.get(i)
+                    .and_then(|one| {
+                        one.as_str()
+                            .parse()
+                            .ok()
+                    })
+            };
+
+            let version = Version {
+                major: number(1).ok_or(ParsingError::InvalidVersion(span))?,
+                minor: number(2),
+                patch: number(3),
+            };
+
+            // v0 was the original language version, long since retired.
+            if version.major == 0
+                && version
+                    .minor
+                    .is_none()
+            {
+                Err(ParsingError::InvalidVersion(span))?
+            }
+
+            if version.supported_by(&Version::compiler()) {
+                Ok(version)
+            } else {
+                Err(ParsingError::InsufficientVersion(span, version))
             }
         })
     }
@@ -3003,33 +3057,21 @@ fn analyze_magic_line(content: &str) -> usize {
         return 0;
     }
 
-    // If both "technique" and "v1" are present but still invalid (like "v1.0"),
-    // point to the character immediately after "v1"
-    if trimmed.contains("technique") && trimmed.contains("v1") {
-        if let Some(v1_pos) = content.find("v1") {
-            return v1_pos + 2; // Position after "v1"
-        }
-    }
-
-    // Point to where version should be if missing v1
-    if !trimmed.contains("v1") {
-        // Find position after "technique"
-        if let Some(pos) = content.find("technique") {
-            let after_technique = pos + "technique".len();
-            // Skip whitespace to find the actual version string
-            let remaining = &content[after_technique..];
-            for (i, ch) in remaining.char_indices() {
-                if !ch.is_whitespace() {
-                    // If we found a 'v', point to the character after it (the version number)
-                    if ch == 'v' && i + 1 < remaining.len() {
-                        return after_technique + i + 1;
-                    }
-                    // Otherwise point to where we found the non-whitespace character
-                    return after_technique + i;
+    if let Some(pos) = content.find("technique") {
+        let after_technique = pos + "technique".len();
+        // Skip whitespace to find the actual version string
+        let remaining = &content[after_technique..];
+        for (i, ch) in remaining.char_indices() {
+            if !ch.is_whitespace() {
+                // If we found a 'v', point to the character after it (the version number)
+                if ch == 'v' && i + 1 < remaining.len() {
+                    return after_technique + i + 1;
                 }
+                // Otherwise point to where we found the non-whitespace character
+                return after_technique + i;
             }
-            return after_technique;
         }
+        return after_technique;
     }
 
     // If structure is roughly correct but still invalid, point to start
