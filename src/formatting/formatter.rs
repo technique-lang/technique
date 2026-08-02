@@ -606,7 +606,13 @@ impl<'i> Formatter<'i> {
 
     fn format_header(&mut self, metadata: &'i Metadata) {
         self.switch_syntax(Syntax::Header);
-        self.append_str("% technique v1\n");
+        self.append_str("% technique ");
+        self.append_str(
+            &metadata
+                .version
+                .to_string(),
+        );
+        self.append_char('\n');
 
         if let Some(license) = metadata.license {
             self.append_str("! ");

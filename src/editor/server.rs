@@ -734,6 +734,13 @@ impl TechniqueLanguageServer {
                 ParsingError::InvalidHeader(_) => {
                     ("Invalid header line".to_string(), DiagnosticSeverity::ERROR)
                 }
+                ParsingError::InvalidVersion(_) => {
+                    ("Invalid version string".to_string(), DiagnosticSeverity::ERROR)
+                }
+                ParsingError::InsufficientVersion(_, version) => (
+                    format!("Requires technique {}", version),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::InvalidIdentifier(_, id) => (
                     format!("Invalid identifier '{}'", id),
                     DiagnosticSeverity::ERROR,

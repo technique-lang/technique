@@ -7,13 +7,13 @@ fn magic_line() {
     assert!(is_magic_line(input.source));
 
     let result = input.read_magic_line();
-    assert_eq!(result, Ok(1));
+    assert_eq!(result, Ok(Version::new(1, None, None)));
 
     input.initialize("%technique v1");
     assert!(is_magic_line(input.source));
 
     let result = input.read_magic_line();
-    assert_eq!(result, Ok(1));
+    assert_eq!(result, Ok(Version::new(1, None, None)));
 
     input.initialize("%techniquev1");
     assert!(is_magic_line(input.source));
@@ -21,6 +21,69 @@ fn magic_line() {
     // this is rejected because the technique keyword isn't present.
     let result = input.read_magic_line();
     assert!(result.is_err());
+}
+
+#[test]
+fn magic_line_semantic_version() {
+    let mut input = Parser::new();
+
+    // v1 stands until the compiler reaches 2.0
+    input.initialize("% technique v1");
+    let result = input.read_magic_line();
+    assert_eq!(result, Ok(Version::new(1, None, None)));
+
+    // v0 was the original language version and is not accepted
+    input.initialize("% technique v0");
+    let result = input.read_magic_line();
+    assert_eq!(result, Err(ParsingError::InvalidVersion(Span::new(12, 2))));
+
+    // a malformed version is distinguished from one that is merely too new
+    input.initialize("% technique v1.0.0.0");
+    let result = input.read_magic_line();
+    assert_eq!(result, Err(ParsingError::InvalidVersion(Span::new(12, 8))));
+
+    input.initialize("% technique vX");
+    let result = input.read_magic_line();
+    assert_eq!(result, Err(ParsingError::InvalidVersion(Span::new(12, 2))));
+
+    // the version is required
+    input.initialize("% technique");
+    let result = input.read_magic_line();
+    assert_eq!(result, Err(ParsingError::InvalidVersion(Span::new(11, 0))));
+
+    input.initialize("% technique v9999.9");
+    let result = input.read_magic_line();
+    assert_eq!(
+        result,
+        Err(ParsingError::InsufficientVersion(
+            Span::new(12, 7),
+            Version::new(9999, Some(9), None)
+        ))
+    );
+}
+
+#[test]
+fn version_supported_by_compiler() {
+    // a document asking for v1 is met by any 1.x compiler
+    assert!(Version::new(1, None, None).supported_by(&Version::new(1, Some(90), Some(6))));
+    assert!(Version::new(1, Some(3), None).supported_by(&Version::new(1, Some(90), Some(6))));
+    assert!(Version::new(1, Some(3), Some(1)).supported_by(&Version::new(1, Some(3), Some(1))));
+
+    // but not by an older 1.x, nor by the next major
+    assert!(!Version::new(1, Some(9), None).supported_by(&Version::new(1, Some(3), Some(0))));
+    assert!(!Version::new(1, Some(3), Some(2)).supported_by(&Version::new(1, Some(3), Some(1))));
+    assert!(!Version::new(1, None, None).supported_by(&Version::new(2, Some(0), Some(0))));
+    assert!(!Version::new(2, None, None).supported_by(&Version::new(1, Some(90), Some(6))));
+
+    // 0.x behaves the same way, so an earlier release is met by a later one
+    assert!(Version::new(0, Some(6), Some(6)).supported_by(&Version::new(0, Some(7), Some(0))));
+    assert!(Version::new(0, Some(7), None).supported_by(&Version::new(0, Some(7), Some(0))));
+    assert!(!Version::new(0, Some(7), Some(1)).supported_by(&Version::new(0, Some(7), Some(0))));
+
+    // while the compiler is at 0.x a bare v1 is admitted, but only bare
+    assert!(Version::new(1, None, None).supported_by(&Version::new(0, Some(7), Some(0))));
+    assert!(!Version::new(1, Some(0), None).supported_by(&Version::new(0, Some(7), Some(0))));
+    assert!(!Version::new(2, None, None).supported_by(&Version::new(0, Some(7), Some(0))));
 }
 
 #[test]
@@ -41,18 +104,17 @@ fn magic_line_wrong_keyword_error_position() {
 #[test]
 fn magic_line_wrong_version_error_position() {
     // Test that error position points to the version number after "v" in wrong version strings
-    assert_eq!(analyze_magic_line("% technique v0"), 13); // Points to "0" in "v0"
-    assert_eq!(analyze_magic_line("% technique  v2"), 14); // Points to "2" in "v2" with extra space
-    assert_eq!(analyze_magic_line("% technique\tv0"), 13); // Points to "0" in "v0" with tab
     assert_eq!(analyze_magic_line("% technique   vX"), 15); // Points to "X" in "vX" with multiple spaces
-    assert_eq!(analyze_magic_line("% technique v99"), 13); // Points to "9" in "v99"
-    assert_eq!(analyze_magic_line("% technique   v0.5"), 15); // Points to "0" in "v0.5" with multiple spaces
+    assert_eq!(analyze_magic_line("% technique\tvX"), 13); // Points to "X" in "vX" with tab
+    assert_eq!(analyze_magic_line("% technique v1.0.0.0"), 13); // Points to "1" when there are too many components
 
     // Test edge case where there's no "v" at all - should point to where version should start
     assert_eq!(analyze_magic_line("% technique 1.0"), 12); // Points to "1" when there's no "v"
-    assert_eq!(analyze_magic_line("% technique v1.0"), 14); // Points to "." when there is a "v1" but it has minor version
     assert_eq!(analyze_magic_line("% technique  2"), 13); // Points to "2" when there's no "v" with extra space
     assert_eq!(analyze_magic_line("% technique beta"), 12); // Points to "b" in "beta" when there's no "v"
+
+    // Test where the version is missing entirely
+    assert_eq!(analyze_magic_line("% technique"), 11); // Points past the keyword
 }
 
 #[test]

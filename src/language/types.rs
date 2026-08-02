@@ -22,9 +22,88 @@ pub struct Document<'i> {
     pub body: Option<Technique<'i>>,
 }
 
+#[derive(Copy, Clone, Eq, Debug, PartialEq, PartialOrd, Ord)]
+pub struct Version {
+    pub major: u32,
+    pub minor: Option<u32>,
+    pub patch: Option<u32>,
+}
+
+impl Version {
+    pub const fn new(major: u32, minor: Option<u32>, patch: Option<u32>) -> Self {
+        Version {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    pub fn compiler() -> Self {
+        Version {
+            major: env!("CARGO_PKG_VERSION_MAJOR")
+                .parse()
+                .unwrap(),
+            minor: Some(
+                env!("CARGO_PKG_VERSION_MINOR")
+                    .parse()
+                    .unwrap(),
+            ),
+            patch: Some(
+                env!("CARGO_PKG_VERSION_PATCH")
+                    .parse()
+                    .unwrap(),
+            ),
+        }
+    }
+
+    pub fn supported_by(&self, compiler: &Version) -> bool {
+        // Transitional: the entire existing corpus declares v1 while the
+        // compiler is still at 0.x. Remove when the tooling reaches 1.0.
+        if compiler.major == 0
+            && self.major == 1
+            && self
+                .minor
+                .is_none()
+        {
+            return true;
+        }
+
+        if self.major != compiler.major {
+            return false;
+        }
+
+        (
+            self.minor
+                .unwrap_or(0),
+            self.patch
+                .unwrap_or(0),
+        ) <= (
+            compiler
+                .minor
+                .unwrap_or(0),
+            compiler
+                .patch
+                .unwrap_or(0),
+        )
+    }
+}
+
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.major)?;
+        if let Some(minor) = self.minor {
+            write!(f, ".{}", minor)?;
+        }
+        if let Some(patch) = self.patch {
+            write!(f, ".{}", patch)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Eq, Debug)]
 pub struct Metadata<'i> {
-    pub version: u8,
+    pub version: Version,
     pub license: Option<&'i str>,
     pub copyright: Option<&'i str>,
     pub domain: Option<&'i str>,
@@ -43,7 +122,7 @@ impl PartialEq for Metadata<'_> {
 impl Default for Metadata<'_> {
     fn default() -> Self {
         Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: None,
             copyright: None,
             domain: None,
@@ -840,7 +919,7 @@ mod check {
 
     fn maker<'i>() -> Metadata<'i> {
         let t1 = Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: None,
             copyright: None,
             domain: None,
@@ -853,7 +932,7 @@ mod check {
     #[test]
     fn ast_construction() {
         let t1 = Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: None,
             copyright: None,
             domain: None,
@@ -863,7 +942,7 @@ mod check {
         assert_eq!(Metadata::default(), t1);
 
         let t2 = Metadata {
-            version: 1,
+            version: Version::new(1, None, None),
             license: Some("MIT"),
             copyright: Some("ACME, Inc"),
             domain: Some("checklist"),
