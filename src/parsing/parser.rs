@@ -2586,6 +2586,12 @@ impl<'i> Parser<'i> {
                             para_span,
                         ));
                     } else {
+                        if let Some(text) = potential_unspaced_declaration(outer.source) {
+                            outer
+                                .problems
+                                .push(ParsingError::InvalidDeclaration(outer.span_of(text)));
+                        }
+
                         // Paragraph container
                         let para_start = outer.offset;
                         let descriptives = outer.take_paragraph(|parser| {
@@ -3352,6 +3358,25 @@ fn potential_procedure_declaration(content: &str) -> bool {
         }
         None => false,
     }
+}
+
+/// A paragraph consisting solely of a token and a colon, as in
+///
+/// ```text
+/// beta:
+/// ```
+///
+/// Prose ending in a colon is a phrase introducing what follows, never a lone
+/// word, so this is a declaration whose colon was not set apart from the name.
+/// Being a whole paragraph, it cannot be the last line of a wrapped sentence.
+fn potential_unspaced_declaration(content: &str) -> Option<&str> {
+    let paragraph = &content[..content
+        .find("\n\n")
+        .unwrap_or(content.len())];
+    let line = paragraph.trim_ascii();
+
+    let re = regex!(r"^[^\s:]+:$");
+    if re.is_match(line) { Some(line) } else { None }
 }
 
 fn is_procedure_body(content: &str) -> bool {

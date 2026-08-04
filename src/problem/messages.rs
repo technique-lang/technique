@@ -389,8 +389,8 @@ this form.
                 "Invalid procedure declaration".to_string(),
                 format!(
                     r#"
-Procedures are declared by specifying an identifier as a name, followed by a
-colon:
+Procedures are declared by specifying an identifier as a name, followed by at
+least one space, then a colon:
 
     {}
     {}

@@ -122,6 +122,47 @@ making_coffee Ingredients -> Coffee
     );
 }
 
+// A paragraph of nothing but a name and a colon is a declaration whose colon
+// was not set apart from the name, not prose
+#[test]
+fn declaration_without_space_before_colon() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+beta:
+
+    2.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidDeclaration(Span::new(41, 5)),
+    );
+}
+
+// ... whereas the last line of a wrapped sentence is prose, and the blank
+// line that would have set it apart as its own paragraph is absent
+#[test]
+fn colon_ending_wrapped_prose_is_not_a_declaration() {
+    let source = r#"
+making_coffee :
+
+The one you want is
+this one:
+
+    1.  Boil the water
+            "#
+    .trim_ascii();
+
+    let result = parse_with_recovery(Path::new("Test.tq"), source);
+    assert!(
+        result.is_ok(),
+        "Prose ending in a colon should parse, got: {:?}",
+        result.err()
+    );
+}
+
 // Content a section cannot hold is reported, not quietly dropped on the
 // floor as it makes its way past
 #[test]
