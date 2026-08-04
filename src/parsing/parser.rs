@@ -3244,11 +3244,17 @@ where
 /// example it must not match " a. And now: do something" or "b. Proceed
 /// with:".
 ///
-/// The name must be an identifier and the colon must stand apart from it. The
+/// The name must be an identifier and the colon must stand apart from it, on
+/// the same line; a signature may then wrap onto the lines below. The
 /// signature is not validated here; `f : B` is a declaration whose signature is
 /// wrong, which read_signature() will address once we commit to reading it.
 fn is_procedure_declaration(content: &str) -> bool {
-    match content.split_once(':') {
+    let line = content
+        .lines()
+        .next()
+        .unwrap_or("");
+
+    match line.split_once(':') {
         Some((before, _after)) => {
             // a declaration is written `name : signature`, with the colon
             // standing apart from the name. Prose punctuates the other way, as

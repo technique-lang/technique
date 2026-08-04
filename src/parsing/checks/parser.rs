@@ -476,7 +476,8 @@ fn declaration_full() {
 
     let content = r#"
     connectivity_check(e,s) : LocalEnvironment, TargetService -> NetworkHealth
-                "#;
+                "#
+    .trim_ascii();
 
     assert!(is_procedure_declaration(content));
 }
@@ -495,7 +496,8 @@ fn multiline_declaration() {
 
         1. Add the beans to the machine
         2. Pour in the milk
-                "#;
+                "#
+    .trim_ascii();
 
     assert!(is_procedure_declaration(content));
 }
