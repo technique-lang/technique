@@ -122,6 +122,27 @@ making_coffee Ingredients -> Coffee
     );
 }
 
+// Content a section cannot hold is reported, not quietly dropped on the
+// floor as it makes its way past
+#[test]
+fn unrecognized_content_in_section() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+I. Second Section
+
+    # Overview notes
+
+    1.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::Unrecognized(Span::new(64, 0)),
+    );
+}
+
 // A malformed declaration must end the procedure before it, rather than
 // being taken as description and swallowing the procedure that follows
 #[test]

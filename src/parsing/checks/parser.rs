@@ -3328,6 +3328,40 @@ fn test_redundant_error_removal_unclosed_interpolation() {
     }
 }
 
+// A quote in descriptive text is punctuation the author wrote, here an inch
+// mark. It opens no literal, so it must not hide the code inline after it
+#[test]
+fn quote_in_descriptive_text() {
+    let mut input = Parser::new();
+
+    let source = r#"Measure the 6" pipe { record_it() } carefully."#;
+
+    input.initialize(source);
+    let result = input.read_descriptive();
+
+    let paragraphs = result.unwrap();
+    let descriptives = &paragraphs[0].0;
+
+    match &descriptives[0] {
+        Descriptive::Text(text) => assert_eq!(*text, "Measure the 6\" pipe"),
+        _ => panic!("First element should be text"),
+    }
+
+    match &descriptives[1] {
+        Descriptive::CodeInline(exprs) => {
+            let [Expression::Execution(func, _)] = exprs.as_slice() else {
+                panic!("Second element should be code inline with function execution");
+            };
+            assert_eq!(
+                func.target
+                    .value,
+                "record_it"
+            );
+        }
+        _ => panic!("Second element should be code inline"),
+    }
+}
+
 #[test]
 fn multiline_code_inline() {
     let mut input = Parser::new();

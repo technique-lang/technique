@@ -598,7 +598,33 @@ impl<'i> Parser<'i> {
             .map(|(i, _)| i)
             .unwrap_or(content.len());
 
-        let block = &content[..end_pos];
+        self.take_upto(end_pos, function)
+    }
+
+    /// As take_until(), but for descriptive text, which holds no literals. A
+    /// quote there is punctuation the author wrote, an old-fashioned mark for
+    /// the inch unit of measurement, or a quotation; none of which indicate a
+    /// run of text that needs to be masked.
+    fn take_text_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let end_pos = self
+            .source
+            .find(pattern)
+            .unwrap_or(
+                self.source
+                    .len(),
+            );
+
+        self.take_upto(end_pos, function)
+    }
+
+    fn take_upto<A, F>(&mut self, end_pos: usize, function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let block = &self.source[..end_pos];
         let mut parser = self.subparser(0, block);
 
         // Pass to closure for processing
@@ -1405,7 +1431,9 @@ impl<'i> Parser<'i> {
                                 .push(error),
                         }
                     } else {
-                        // Skip non-procedure content line by line
+                        outer
+                            .problems
+                            .push(ParsingError::Unrecognized(Span::new(outer.offset, 0)));
                         outer.skip_to_next_line();
                     }
                 }
@@ -1444,7 +1472,9 @@ impl<'i> Parser<'i> {
                             line.len(),
                         )));
                     } else {
-                        // Skip unrecognized content line by line
+                        outer
+                            .problems
+                            .push(ParsingError::Unrecognized(Span::new(outer.offset, 0)));
                         outer.skip_to_next_line();
                     }
                 }
@@ -2628,7 +2658,7 @@ impl<'i> Parser<'i> {
                                     parser.advance(1);
                                     content.push(Descriptive::Text("$"));
                                 } else {
-                                    let text = parser.take_until(
+                                    let text = parser.take_text_until(
                                         &['{', '<', '$', '~', '\n'],
                                         |inner| {
                                             let content = inner
