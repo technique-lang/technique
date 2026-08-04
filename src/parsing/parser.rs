@@ -1022,13 +1022,24 @@ impl<'i> Parser<'i> {
 
         let text = one.as_str();
         let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
+            // As below, the name is the first word, so that a name which is
+            // not an identifier is reported on its own rather than together
+            // with whatever was mistakenly written after it
             let before = before.trim();
-            let name = validate_identifier(before, self.span_of(before)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    Span::new(self.offset, before.len()),
-                    before.to_string(),
-                ),
+            let first = before
+                .split_whitespace()
+                .next()
+                .unwrap_or(before);
+
+            let name = validate_identifier(first, self.span_of(first)).ok_or(
+                ParsingError::InvalidIdentifier(self.span_of(first), first.to_string()),
             )?;
+
+            if first.len() < before.len() {
+                return Err(ParsingError::InvalidParameters(
+                    self.span_of(before[first.len()..].trim_ascii_start()),
+                ));
+            }
 
             // Extract parameters from parentheses
             if !list.ends_with(')') {
@@ -1043,10 +1054,7 @@ impl<'i> Parser<'i> {
                 for item in list.split(',') {
                     let trimmed = item.trim_ascii();
                     let param = validate_identifier(trimmed, self.span_of(trimmed)).ok_or(
-                        ParsingError::InvalidIdentifier(
-                            Span::new(self.offset, trimmed.len()),
-                            trimmed.to_string(),
-                        ),
+                        ParsingError::InvalidIdentifier(self.span_of(trimmed), trimmed.to_string()),
                     )?;
                     params.push(param);
                 }
@@ -1055,18 +1063,21 @@ impl<'i> Parser<'i> {
 
             (name, parameters)
         } else {
-            // Check if there are multiple words (procedure name + anything
-            // else) which would indicates parameters without parentheses
-            let words: Vec<&str> = text
-                .trim()
+            // The name is the first word. Validate it before considering
+            // what follows, so that a name which is not an identifier is
+            // reported as such rather than blamed on the words after it
+            let first = text
                 .split_whitespace()
-                .collect();
-            if words.len() > 1 {
-                // Calculate position of first mistaken parameter-ish thing
-                let first_space_pos = text
-                    .find(' ')
-                    .unwrap_or(0);
-                let first_param_pos = text[first_space_pos..]
+                .next()
+                .unwrap_or(text);
+
+            let name = validate_identifier(first, self.span_of(first)).ok_or(
+                ParsingError::InvalidIdentifier(self.span_of(first), first.to_string()),
+            )?;
+
+            // Anything further is an attempt at parameters without parentheses
+            if first.len() < text.len() {
+                let first_param_pos = text[first.len()..]
                     .trim_start()
                     .as_ptr() as isize
                     - text.as_ptr() as isize;
@@ -1078,12 +1089,6 @@ impl<'i> Parser<'i> {
                 )));
             }
 
-            let name = validate_identifier(text, self.span_of(text)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    Span::new(self.offset, text.len()),
-                    text.to_string(),
-                ),
-            )?;
             (name, None)
         };
 
@@ -3294,35 +3299,25 @@ fn potential_procedure_declaration(content: &str) -> bool {
                     .is_empty();
             }
 
-            // If it's a step patterns then it's not a procedure declaration!
+            // A name is an identifier, so it never begins with one of the
+            // marker characters that open a step, section, title, attribute,
+            // response, or code block. Those lines carry colons of their own
             if is_step_dependent(line)
                 || is_step_parallel(line)
                 || is_substep_dependent(line)
                 || is_substep_parallel(line)
+                || is_subsubstep_dependent(line)
+                || is_section(line)
+                || is_procedure_title(line)
+                || is_attribute_pattern(line)
+                || is_enum_response(line)
+                || is_code_block(line)
             {
                 return false;
             }
 
-            // Has parentheses -> likely trying to be a procedure with parameters
-            if before.contains('(') {
-                return true;
-            }
-
-            // Check if it looks like prose vs an identifier attempt
-            // Prose typically: starts with capital, has multiple space-separated words
-            // Identifiers: lowercase, possibly with underscores
-            let first_char = before
-                .chars()
-                .next()
-                .unwrap();
-            let has_spaces = before.contains(' ');
-
-            // If it starts with uppercase AND has spaces, it's probably prose
-            if first_char.is_uppercase() && has_spaces {
-                return false;
-            }
-
-            // Otherwise, could be a procedure declaration attempt
+            // Anything else setting a colon apart from what precedes it is an
+            // attempt at a declaration, however malformed the name
             true
         }
         None => false,

@@ -1274,9 +1274,25 @@ fn test_potential_procedure_declaration_is_superset() {
     assert!(!is_procedure_declaration("123foo :")); // Starts with digit
     assert!(potential_procedure_declaration("123foo :"));
 
-    // Neither should match sentences with spaces
-    assert!(!is_procedure_declaration("Ask these questions :"));
-    assert!(!potential_procedure_declaration("Ask these questions :"));
+    assert!(!is_procedure_declaration("Prepare Gin :")); // Capital letter, and spaces
+    assert!(potential_procedure_declaration("Prepare Gin :"));
+
+    // Prose sets its colon against the preceding word, so neither matches
+    assert!(!is_procedure_declaration(
+        "Ask these questions: are you sure?"
+    ));
+    assert!(!potential_procedure_declaration(
+        "Ask these questions: are you sure?"
+    ));
+
+    // A line opening a title, section, attribute, or code block is none
+    // either, whatever colons it goes on to carry
+    assert!(!potential_procedure_declaration(
+        "# Making Tea : An Overview"
+    ));
+    assert!(!potential_procedure_declaration("I. Prepare it : now"));
+    assert!(!potential_procedure_declaration("@chef : the good one"));
+    assert!(!potential_procedure_declaration("{ exec(\"date : now\") }"));
 
     // Nor prose, code, titles, or responses that merely contain a colon. A
     // procedure name is a lowercase identifier, so none of these can be one.

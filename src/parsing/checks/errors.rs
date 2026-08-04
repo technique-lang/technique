@@ -122,6 +122,25 @@ making_coffee Ingredients -> Coffee
     );
 }
 
+// A malformed declaration must end the procedure before it, rather than
+// being taken as description and swallowing the procedure that follows
+#[test]
+fn invalid_identifier_in_following_declaration() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+Prepare Gin :
+
+    1.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidIdentifier(Span::new(41, 7), "Prepare".to_string()),
+    );
+}
+
 #[test]
 fn invalid_identifier_in_parameters() {
     expect_error(
@@ -129,7 +148,7 @@ fn invalid_identifier_in_parameters() {
 making_coffee(BadParam) : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(Span::new(0, 8), "BadParam".to_string()),
+        ParsingError::InvalidIdentifier(Span::new(14, 8), "BadParam".to_string()),
     );
 }
 
