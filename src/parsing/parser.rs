@@ -1114,11 +1114,13 @@ impl<'i> Parser<'i> {
 
     /// Parse a procedure with error recovery - collects multiple errors instead of stopping at the first one
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        // Find the procedure block boundaries
+        // Find the procedure block boundaries. The end is the next attempted
+        // declaration, malformed or not, so a mistake in one procedure's name
+        // does not silently absorb it into the procedure preceding it.
         let i = locate_block_lines(
             self.source,
-            is_procedure_declaration,
-            is_procedure_declaration,
+            potential_procedure_declaration,
+            potential_procedure_declaration,
         );
 
         // Extract the procedure block
@@ -1382,7 +1384,7 @@ impl<'i> Parser<'i> {
                     body: Technique::Empty,
                     span: Span::default(),
                 })
-            } else if is_procedure_declaration(outer.source) {
+            } else if potential_procedure_declaration(outer.source) {
                 // Section contains procedures
                 let mut procedures = Vec::new();
                 while !outer.is_finished() {
@@ -1390,13 +1392,12 @@ impl<'i> Parser<'i> {
                     if outer.is_finished() {
                         break;
                     }
-                    if is_procedure_declaration(outer.source) {
+                    if potential_procedure_declaration(outer.source) {
                         match outer.read_procedure() {
                             Ok(procedure) => procedures.push(procedure),
-                            Err(_err) => {
-                                // Error is already collected in outer.problems
-                                // Just skip adding this procedure and continue
-                            }
+                            Err(error) => outer
+                                .problems
+                                .push(error),
                         }
                     } else {
                         // Skip non-procedure content line by line
