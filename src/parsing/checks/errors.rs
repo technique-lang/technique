@@ -141,6 +141,24 @@ beta:
     );
 }
 
+// A signature after the colon settles it; no sentence is written that way
+#[test]
+fn declaration_without_space_but_with_signature() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+beta: Ingredients -> Coffee
+
+    2.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidDeclaration(Span::new(41, 27)),
+    );
+}
+
 // ... whereas the last line of a wrapped sentence is prose, and the blank
 // line that would have set it apart as its own paragraph is absent
 #[test]

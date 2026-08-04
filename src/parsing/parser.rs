@@ -3360,23 +3360,37 @@ fn potential_procedure_declaration(content: &str) -> bool {
     }
 }
 
-/// A paragraph consisting solely of a token and a colon, as in
+/// A paragraph that is a declaration but for the space setting the colon
+/// apart from the name, as in
 ///
 /// ```text
 /// beta:
+/// beta(a, b):
+/// beta: Ingredients -> Coffee
 /// ```
 ///
 /// Prose ending in a colon is a phrase introducing what follows, never a lone
-/// word, so this is a declaration whose colon was not set apart from the name.
-/// Being a whole paragraph, it cannot be the last line of a wrapped sentence.
+/// name, and never carries a signature.
 fn potential_unspaced_declaration(content: &str) -> Option<&str> {
     let paragraph = &content[..content
         .find("\n\n")
         .unwrap_or(content.len())];
     let line = paragraph.trim_ascii();
 
-    let re = regex!(r"^[^\s:]+:$");
-    if re.is_match(line) { Some(line) } else { None }
+    // prose wraps, whereas a declaration is a single line; and one written
+    // correctly sets its colon apart, having been taken as a boundary long
+    // before reaching descriptive text
+    let (name, rest) = line.split_once(':')?;
+    if line.contains('\n') || name.ends_with([' ', '\t']) {
+        return None;
+    }
+
+    let spaced = format!("{} :{}", name, rest);
+    if begins_procedure_declaration(&spaced) {
+        Some(line)
+    } else {
+        None
+    }
 }
 
 fn is_procedure_body(content: &str) -> bool {
