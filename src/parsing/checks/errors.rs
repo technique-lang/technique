@@ -122,6 +122,123 @@ making_coffee Ingredients -> Coffee
     );
 }
 
+// A multi-line string left open masks the rest of the input, so the closing
+// brace of the code block goes missing. Name the cause, not the symptom
+#[test]
+fn unterminated_multiline_in_code_block() {
+    expect_error(
+        r#"
+alpha :
+
+    1.  Do it { exec(
+        ```bash
+            ./stuff
+        ) }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidMultiline(Span::new(39, 0)),
+    );
+}
+
+// A paragraph of nothing but a name and a colon is a declaration whose colon
+// was not set apart from the name, not prose
+#[test]
+fn declaration_without_space_before_colon() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+beta:
+
+    2.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidDeclaration(Span::new(41, 5)),
+    );
+}
+
+// A signature after the colon settles it; no sentence is written that way
+#[test]
+fn declaration_without_space_but_with_signature() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+beta: Ingredients -> Coffee
+
+    2.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidDeclaration(Span::new(41, 27)),
+    );
+}
+
+// ... whereas the last line of a wrapped sentence is prose, and the blank
+// line that would have set it apart as its own paragraph is absent
+#[test]
+fn colon_ending_wrapped_prose_is_not_a_declaration() {
+    let source = r#"
+making_coffee :
+
+The one you want is
+this one:
+
+    1.  Boil the water
+            "#
+    .trim_ascii();
+
+    let result = parse_with_recovery(Path::new("Test.tq"), source);
+    assert!(
+        result.is_ok(),
+        "Prose ending in a colon should parse, got: {:?}",
+        result.err()
+    );
+}
+
+// Content a section cannot hold is reported, not quietly dropped on the
+// floor as it makes its way past
+#[test]
+fn unrecognized_content_in_section() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+I. Second Section
+
+    # Overview notes
+
+    1.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::Unrecognized(Span::new(64, 0)),
+    );
+}
+
+// A malformed declaration must end the procedure before it, rather than
+// being taken as description and swallowing the procedure that follows
+#[test]
+fn invalid_identifier_in_following_declaration() {
+    expect_error(
+        r#"
+making_coffee :
+
+    1.  Boil the water
+
+Prepare Gin :
+
+    1.  Pour it out
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidIdentifier(Span::new(41, 7), "Prepare".to_string()),
+    );
+}
+
 #[test]
 fn invalid_identifier_in_parameters() {
     expect_error(
@@ -129,7 +246,7 @@ fn invalid_identifier_in_parameters() {
 making_coffee(BadParam) : Ingredients -> Coffee
             "#
         .trim_ascii(),
-        ParsingError::InvalidIdentifier(Span::new(0, 8), "BadParam".to_string()),
+        ParsingError::InvalidIdentifier(Span::new(14, 8), "BadParam".to_string()),
     );
 }
 

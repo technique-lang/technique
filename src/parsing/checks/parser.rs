@@ -476,7 +476,8 @@ fn declaration_full() {
 
     let content = r#"
     connectivity_check(e,s) : LocalEnvironment, TargetService -> NetworkHealth
-                "#;
+                "#
+    .trim_ascii();
 
     assert!(is_procedure_declaration(content));
 }
@@ -495,7 +496,8 @@ fn multiline_declaration() {
 
         1. Add the beans to the machine
         2. Pour in the milk
-                "#;
+                "#
+    .trim_ascii();
 
     assert!(is_procedure_declaration(content));
 }
@@ -1274,9 +1276,25 @@ fn test_potential_procedure_declaration_is_superset() {
     assert!(!is_procedure_declaration("123foo :")); // Starts with digit
     assert!(potential_procedure_declaration("123foo :"));
 
-    // Neither should match sentences with spaces
-    assert!(!is_procedure_declaration("Ask these questions :"));
-    assert!(!potential_procedure_declaration("Ask these questions :"));
+    assert!(!is_procedure_declaration("Prepare Gin :")); // Capital letter, and spaces
+    assert!(potential_procedure_declaration("Prepare Gin :"));
+
+    // Prose sets its colon against the preceding word, so neither matches
+    assert!(!is_procedure_declaration(
+        "Ask these questions: are you sure?"
+    ));
+    assert!(!potential_procedure_declaration(
+        "Ask these questions: are you sure?"
+    ));
+
+    // A line opening a title, section, attribute, or code block is none
+    // either, whatever colons it goes on to carry
+    assert!(!potential_procedure_declaration(
+        "# Making Tea : An Overview"
+    ));
+    assert!(!potential_procedure_declaration("I. Prepare it : now"));
+    assert!(!potential_procedure_declaration("@chef : the good one"));
+    assert!(!potential_procedure_declaration("{ exec(\"date : now\") }"));
 
     // Nor prose, code, titles, or responses that merely contain a colon. A
     // procedure name is a lowercase identifier, so none of these can be one.
@@ -3183,6 +3201,71 @@ broken_proc2 : -> B
     };
 }
 
+// A procedure whose declaration is mistyped must be reported where it was
+// written. Both of these parsed as steps or were absorbed by the procedure
+// above, so the complaint used to arrive further down the file, pointing at
+// whatever construct finally broke.
+
+#[test]
+fn test_section_declaration_first() {
+    use std::path::Path;
+
+    let content = r#"
+mix_drink :
+
+I. Prepare the ingredients <prepare_gin>
+
+II. Serve it up <serve_drink>
+
+prepare gin :
+
+    1.  Remove cubes from the freezer
+
+serve_drink :
+
+    1.  Pour it out
+        "#;
+
+    let errors = parse_with_recovery(Path::new("Test.tq"), content)
+        .expect_err("mistyped declaration should be an error");
+
+    let expected = content
+        .find("prepare gin :")
+        .unwrap()
+        + "prepare ".len();
+
+    assert_eq!(errors[0].offset(), expected);
+}
+
+#[test]
+fn test_section_declaration_following() {
+    use std::path::Path;
+
+    let content = r#"
+mix_drink :
+
+I. Prepare the ingredients <prepare_gin>
+
+prepare_gin :
+
+    1.  Remove cubes from the freezer
+
+serve drink :
+
+    1.  Pour it out
+        "#;
+
+    let errors = parse_with_recovery(Path::new("Test.tq"), content)
+        .expect_err("mistyped declaration should be an error");
+
+    let expected = content
+        .find("serve drink :")
+        .unwrap()
+        + "serve ".len();
+
+    assert_eq!(errors[0].offset(), expected);
+}
+
 #[test]
 fn test_redundant_error_removal_needed() {
     use std::path::Path;
@@ -3244,6 +3327,40 @@ fn test_redundant_error_removal_unclosed_interpolation() {
         Ok(_) => {
             panic!("Expected error for unclosed interpolation, but parsing succeeded");
         }
+    }
+}
+
+// A quote in descriptive text is punctuation the author wrote, here an inch
+// mark. It opens no literal, so it must not hide the code inline after it
+#[test]
+fn quote_in_descriptive_text() {
+    let mut input = Parser::new();
+
+    let source = r#"Measure the 6" pipe { record_it() } carefully."#;
+
+    input.initialize(source);
+    let result = input.read_descriptive();
+
+    let paragraphs = result.unwrap();
+    let descriptives = &paragraphs[0].0;
+
+    match &descriptives[0] {
+        Descriptive::Text(text) => assert_eq!(*text, "Measure the 6\" pipe"),
+        _ => panic!("First element should be text"),
+    }
+
+    match &descriptives[1] {
+        Descriptive::CodeInline(exprs) => {
+            let [Expression::Execution(func, _)] = exprs.as_slice() else {
+                panic!("Second element should be code inline with function execution");
+            };
+            assert_eq!(
+                func.target
+                    .value,
+                "record_it"
+            );
+        }
+        _ => panic!("Second element should be code inline"),
     }
 }
 

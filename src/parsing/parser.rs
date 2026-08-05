@@ -458,6 +458,7 @@ impl<'i> Parser<'i> {
     {
         let mut l = 0;
         let mut begun = false;
+        let mut unterminated = false;
 
         if start_char == end_char {
             // Simple case: same character for start and end (like X...X)
@@ -500,6 +501,8 @@ impl<'i> Parser<'i> {
                     }
                 }
             }
+
+            unterminated = literals.in_fence();
         }
 
         if !begun {
@@ -509,6 +512,18 @@ impl<'i> Parser<'i> {
             ));
         }
         if l == 0 {
+            // a multi-line string left open masks the rest of the input,
+            // taking the end character we were looking for with it
+            if unterminated {
+                let i = self
+                    .source
+                    .rfind("```")
+                    .unwrap_or(0);
+                return Err(ParsingError::InvalidMultiline(Span::new(
+                    self.offset + i,
+                    0,
+                )));
+            }
             return Err(ParsingError::ExpectedMatchingChar(
                 Span::new(self.offset, 0),
                 subject,
@@ -598,7 +613,33 @@ impl<'i> Parser<'i> {
             .map(|(i, _)| i)
             .unwrap_or(content.len());
 
-        let block = &content[..end_pos];
+        self.take_upto(end_pos, function)
+    }
+
+    /// As take_until(), but for descriptive text, which holds no literals. A
+    /// quote there is punctuation the author wrote, an old-fashioned mark for
+    /// the inch unit of measurement, or a quotation; none of which indicate a
+    /// run of text that needs to be masked.
+    fn take_text_until<A, F>(&mut self, pattern: &[char], function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let end_pos = self
+            .source
+            .find(pattern)
+            .unwrap_or(
+                self.source
+                    .len(),
+            );
+
+        self.take_upto(end_pos, function)
+    }
+
+    fn take_upto<A, F>(&mut self, end_pos: usize, function: F) -> Result<A, ParsingError>
+    where
+        F: Fn(&mut Parser<'i>) -> Result<A, ParsingError>,
+    {
+        let block = &self.source[..end_pos];
         let mut parser = self.subparser(0, block);
 
         // Pass to closure for processing
@@ -1022,13 +1063,24 @@ impl<'i> Parser<'i> {
 
         let text = one.as_str();
         let (name, parameters) = if let Some((before, list)) = text.split_once('(') {
+            // As below, the name is the first word, so that a name which is
+            // not an identifier is reported on its own rather than together
+            // with whatever was mistakenly written after it
             let before = before.trim();
-            let name = validate_identifier(before, self.span_of(before)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    Span::new(self.offset, before.len()),
-                    before.to_string(),
-                ),
+            let first = before
+                .split_whitespace()
+                .next()
+                .unwrap_or(before);
+
+            let name = validate_identifier(first, self.span_of(first)).ok_or(
+                ParsingError::InvalidIdentifier(self.span_of(first), first.to_string()),
             )?;
+
+            if first.len() < before.len() {
+                return Err(ParsingError::InvalidParameters(
+                    self.span_of(before[first.len()..].trim_ascii_start()),
+                ));
+            }
 
             // Extract parameters from parentheses
             if !list.ends_with(')') {
@@ -1043,10 +1095,7 @@ impl<'i> Parser<'i> {
                 for item in list.split(',') {
                     let trimmed = item.trim_ascii();
                     let param = validate_identifier(trimmed, self.span_of(trimmed)).ok_or(
-                        ParsingError::InvalidIdentifier(
-                            Span::new(self.offset, trimmed.len()),
-                            trimmed.to_string(),
-                        ),
+                        ParsingError::InvalidIdentifier(self.span_of(trimmed), trimmed.to_string()),
                     )?;
                     params.push(param);
                 }
@@ -1055,18 +1104,21 @@ impl<'i> Parser<'i> {
 
             (name, parameters)
         } else {
-            // Check if there are multiple words (procedure name + anything
-            // else) which would indicates parameters without parentheses
-            let words: Vec<&str> = text
-                .trim()
+            // The name is the first word. Validate it before considering
+            // what follows, so that a name which is not an identifier is
+            // reported as such rather than blamed on the words after it
+            let first = text
                 .split_whitespace()
-                .collect();
-            if words.len() > 1 {
-                // Calculate position of first mistaken parameter-ish thing
-                let first_space_pos = text
-                    .find(' ')
-                    .unwrap_or(0);
-                let first_param_pos = text[first_space_pos..]
+                .next()
+                .unwrap_or(text);
+
+            let name = validate_identifier(first, self.span_of(first)).ok_or(
+                ParsingError::InvalidIdentifier(self.span_of(first), first.to_string()),
+            )?;
+
+            // Anything further is an attempt at parameters without parentheses
+            if first.len() < text.len() {
+                let first_param_pos = text[first.len()..]
                     .trim_start()
                     .as_ptr() as isize
                     - text.as_ptr() as isize;
@@ -1078,12 +1130,6 @@ impl<'i> Parser<'i> {
                 )));
             }
 
-            let name = validate_identifier(text, self.span_of(text)).ok_or(
-                ParsingError::InvalidIdentifier(
-                    Span::new(self.offset, text.len()),
-                    text.to_string(),
-                ),
-            )?;
             (name, None)
         };
 
@@ -1114,11 +1160,13 @@ impl<'i> Parser<'i> {
 
     /// Parse a procedure with error recovery - collects multiple errors instead of stopping at the first one
     fn read_procedure(&mut self) -> Result<Procedure<'i>, ParsingError> {
-        // Find the procedure block boundaries
+        // Find the procedure block boundaries. The end is the next attempted
+        // declaration, malformed or not, so a mistake in one procedure's name
+        // does not silently absorb it into the procedure preceding it.
         let i = locate_block_lines(
             self.source,
-            is_procedure_declaration,
-            is_procedure_declaration,
+            potential_procedure_declaration,
+            potential_procedure_declaration,
         );
 
         // Extract the procedure block
@@ -1382,7 +1430,7 @@ impl<'i> Parser<'i> {
                     body: Technique::Empty,
                     span: Span::default(),
                 })
-            } else if is_procedure_declaration(outer.source) {
+            } else if potential_procedure_declaration(outer.source) {
                 // Section contains procedures
                 let mut procedures = Vec::new();
                 while !outer.is_finished() {
@@ -1390,16 +1438,17 @@ impl<'i> Parser<'i> {
                     if outer.is_finished() {
                         break;
                     }
-                    if is_procedure_declaration(outer.source) {
+                    if potential_procedure_declaration(outer.source) {
                         match outer.read_procedure() {
                             Ok(procedure) => procedures.push(procedure),
-                            Err(_err) => {
-                                // Error is already collected in outer.problems
-                                // Just skip adding this procedure and continue
-                            }
+                            Err(error) => outer
+                                .problems
+                                .push(error),
                         }
                     } else {
-                        // Skip non-procedure content line by line
+                        outer
+                            .problems
+                            .push(ParsingError::Unrecognized(Span::new(outer.offset, 0)));
                         outer.skip_to_next_line();
                     }
                 }
@@ -1438,7 +1487,9 @@ impl<'i> Parser<'i> {
                             line.len(),
                         )));
                     } else {
-                        // Skip unrecognized content line by line
+                        outer
+                            .problems
+                            .push(ParsingError::Unrecognized(Span::new(outer.offset, 0)));
                         outer.skip_to_next_line();
                     }
                 }
@@ -2550,6 +2601,12 @@ impl<'i> Parser<'i> {
                             para_span,
                         ));
                     } else {
+                        if let Some(text) = potential_unspaced_declaration(outer.source) {
+                            outer
+                                .problems
+                                .push(ParsingError::InvalidDeclaration(outer.span_of(text)));
+                        }
+
                         // Paragraph container
                         let para_start = outer.offset;
                         let descriptives = outer.take_paragraph(|parser| {
@@ -2622,7 +2679,7 @@ impl<'i> Parser<'i> {
                                     parser.advance(1);
                                     content.push(Descriptive::Text("$"));
                                 } else {
-                                    let text = parser.take_until(
+                                    let text = parser.take_text_until(
                                         &['{', '<', '$', '~', '\n'],
                                         |inner| {
                                             let content = inner
@@ -3202,11 +3259,17 @@ where
 /// example it must not match " a. And now: do something" or "b. Proceed
 /// with:".
 ///
-/// The name must be an identifier and the colon must stand apart from it. The
+/// The name must be an identifier and the colon must stand apart from it, on
+/// the same line; a signature may then wrap onto the lines below. The
 /// signature is not validated here; `f : B` is a declaration whose signature is
 /// wrong, which read_signature() will address once we commit to reading it.
 fn is_procedure_declaration(content: &str) -> bool {
-    match content.split_once(':') {
+    let line = content
+        .lines()
+        .next()
+        .unwrap_or("");
+
+    match line.split_once(':') {
         Some((before, _after)) => {
             // a declaration is written `name : signature`, with the colon
             // standing apart from the name. Prose punctuates the other way, as
@@ -3293,38 +3356,61 @@ fn potential_procedure_declaration(content: &str) -> bool {
                     .is_empty();
             }
 
-            // If it's a step patterns then it's not a procedure declaration!
+            // A name is an identifier, so it never begins with one of the
+            // marker characters that open a step, section, title, attribute,
+            // response, or code block. Those lines carry colons of their own
             if is_step_dependent(line)
                 || is_step_parallel(line)
                 || is_substep_dependent(line)
                 || is_substep_parallel(line)
+                || is_subsubstep_dependent(line)
+                || is_section(line)
+                || is_procedure_title(line)
+                || is_attribute_pattern(line)
+                || is_enum_response(line)
+                || is_code_block(line)
             {
                 return false;
             }
 
-            // Has parentheses -> likely trying to be a procedure with parameters
-            if before.contains('(') {
-                return true;
-            }
-
-            // Check if it looks like prose vs an identifier attempt
-            // Prose typically: starts with capital, has multiple space-separated words
-            // Identifiers: lowercase, possibly with underscores
-            let first_char = before
-                .chars()
-                .next()
-                .unwrap();
-            let has_spaces = before.contains(' ');
-
-            // If it starts with uppercase AND has spaces, it's probably prose
-            if first_char.is_uppercase() && has_spaces {
-                return false;
-            }
-
-            // Otherwise, could be a procedure declaration attempt
+            // Anything else setting a colon apart from what precedes it is an
+            // attempt at a declaration, however malformed the name
             true
         }
         None => false,
+    }
+}
+
+/// A paragraph that is a declaration but for the space setting the colon
+/// apart from the name, as in
+///
+/// ```text
+/// beta:
+/// beta(a, b):
+/// beta: Ingredients -> Coffee
+/// ```
+///
+/// Prose ending in a colon is a phrase introducing what follows, never a lone
+/// name, and never carries a signature.
+fn potential_unspaced_declaration(content: &str) -> Option<&str> {
+    let paragraph = &content[..content
+        .find("\n\n")
+        .unwrap_or(content.len())];
+    let line = paragraph.trim_ascii();
+
+    // prose wraps, whereas a declaration is a single line; and one written
+    // correctly sets its colon apart, having been taken as a boundary long
+    // before reaching descriptive text
+    let (name, rest) = line.split_once(':')?;
+    if line.contains('\n') || name.ends_with([' ', '\t']) {
+        return None;
+    }
+
+    let spaced = format!("{} :{}", name, rest);
+    if begins_procedure_declaration(&spaced) {
+        Some(line)
+    } else {
+        None
     }
 }
 
@@ -3476,8 +3562,18 @@ impl Literals {
 
     fn in_literal(&self) -> bool {
         match self.within {
-            Within::Text => false,
+            // still inside a literal if partway through a ``` delimiter
+            Within::Text => self.delimiter > 0,
             _ => true,
+        }
+    }
+
+    // a fence is the only literal that carries across lines, so it is the only
+    // one that can still be open at the end of the input
+    fn in_fence(&self) -> bool {
+        match self.within {
+            Within::Fence => true,
+            _ => false,
         }
     }
 

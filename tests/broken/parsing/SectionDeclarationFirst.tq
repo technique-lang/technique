@@ -1,0 +1,16 @@
+mix_drink :
+
+# Mix Drink
+
+I. Prepare the ingredients <prepare_gin>
+
+II. Serve it up <serve_drink>
+
+prepare gin :
+
+    1.  Remove cubes from the freezer
+    2.  Drop them in the glass
+
+serve_drink :
+
+    1.  Pour it out
