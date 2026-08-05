@@ -3547,7 +3547,8 @@ impl Literals {
 
     fn in_literal(&self) -> bool {
         match self.within {
-            Within::Text => false,
+            // still inside a literal if partway through a ``` delimiter
+            Within::Text => self.delimiter > 0,
             _ => true,
         }
     }
