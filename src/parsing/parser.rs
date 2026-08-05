@@ -458,6 +458,7 @@ impl<'i> Parser<'i> {
     {
         let mut l = 0;
         let mut begun = false;
+        let mut unterminated = false;
 
         if start_char == end_char {
             // Simple case: same character for start and end (like X...X)
@@ -500,6 +501,8 @@ impl<'i> Parser<'i> {
                     }
                 }
             }
+
+            unterminated = literals.in_fence();
         }
 
         if !begun {
@@ -509,6 +512,18 @@ impl<'i> Parser<'i> {
             ));
         }
         if l == 0 {
+            // a multi-line string left open masks the rest of the input,
+            // taking the end character we were looking for with it
+            if unterminated {
+                let i = self
+                    .source
+                    .rfind("```")
+                    .unwrap_or(0);
+                return Err(ParsingError::InvalidMultiline(Span::new(
+                    self.offset + i,
+                    0,
+                )));
+            }
             return Err(ParsingError::ExpectedMatchingChar(
                 Span::new(self.offset, 0),
                 subject,
@@ -3550,6 +3565,15 @@ impl Literals {
             // still inside a literal if partway through a ``` delimiter
             Within::Text => self.delimiter > 0,
             _ => true,
+        }
+    }
+
+    // a fence is the only literal that carries across lines, so it is the only
+    // one that can still be open at the end of the input
+    fn in_fence(&self) -> bool {
+        match self.within {
+            Within::Fence => true,
+            _ => false,
         }
     }
 

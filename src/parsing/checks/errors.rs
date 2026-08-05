@@ -122,6 +122,24 @@ making_coffee Ingredients -> Coffee
     );
 }
 
+// A multi-line string left open masks the rest of the input, so the closing
+// brace of the code block goes missing. Name the cause, not the symptom
+#[test]
+fn unterminated_multiline_in_code_block() {
+    expect_error(
+        r#"
+alpha :
+
+    1.  Do it { exec(
+        ```bash
+            ./stuff
+        ) }
+            "#
+        .trim_ascii(),
+        ParsingError::InvalidMultiline(Span::new(39, 0)),
+    );
+}
+
 // A paragraph of nothing but a name and a colon is a declaration whose colon
 // was not set apart from the name, not prose
 #[test]
