@@ -1,6 +1,6 @@
 [package]
 name = "technique"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 description = "A domain specific language for procedures."
 authors = [ "Andrew Cowie" ]
@@ -16,7 +16,7 @@ lsp-types = "0.97"
 owo-colors = "4"
 regex = "1.11.1"
 serde_json = "1.0"
-time = "0.3"
+time = { version = "0.3", features = [ "local-offset" ] }
 
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
