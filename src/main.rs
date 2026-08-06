@@ -11,6 +11,7 @@ use tracing_subscriber::{self, EnvFilter};
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
+use technique::logging::{self, Column};
 use technique::parsing;
 use technique::resolution;
 use technique::runner::{self, Builtin, Conclusion, Library, Mode, Outcome, RunId};
@@ -28,6 +29,7 @@ enum Output {
     Native,
     Silent,
     Store,
+    Json,
 }
 
 #[derive(Eq, Debug, PartialEq)]
@@ -401,6 +403,55 @@ fn main() {
                     Arg::new("id")
                         .required(true)
                         .help("The identifier of the run to continue. Can be written as `000007` or just `7`."),
+                ),
+        )
+        .subcommand(
+            Command::new("log")
+                .about("Print the trace recorded for a procedure run.")
+                .long_about("Print the trace recorded when a Technique procedure was run. \
+                    Each line is one recorded event: entering a step, executing a command, \
+                    and the result the step settled on. Times are relative to the start of \
+                    the run, which is given in the heading.")
+                .arg(
+                    Arg::new("id")
+                        .required(true)
+                        .help("The identifier of the run to print. Can be written as `000007` or just `7`."),
+                )
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .value_parser(["console", "json", "pfftt", "native"])
+                        .default_value("console")
+                        .action(ArgAction::Set)
+                        .help("Change the output format. The default is to print a human-readable version of the trace to the terminal. \
+                            Other formats include a JSON array, with one object per record line; \
+                            the raw Procedure interchange Format For Transferring Techniques record lines as they are stored on disk; \
+                            or, (for debugging) the internal data structures the records were parsed back into)."),
+                )
+                .arg(
+                    Arg::new("columns")
+                        .long("columns")
+                        .value_name("name,...")
+                        .value_parser(["timestamp", "run", "date", "time", "offset", "duration", "path", "short", "state", "value"])
+                        .value_delimiter(',')
+                        .action(ArgAction::Set)
+                        .help("Specify the fields of the PFFTT record to show, overriding the default associated with the chosen --output format. \
+                            `timestamp` is the ISO 8601 start time of the event, in UTC. \
+                            `run` is the identifier of the run the record belongs to. \
+                            `date` and `time` are the start date and time respectively, shown in the local timezone. \
+                            `offset` gives the elapsed time since the beginning of the run, and \
+                            `duration` shows the amount of time taken by a completed step or scope. \
+                            `path` is the fully qualified path to the step, scope, or iteration. \
+                            `short` is the abbreviated version of the path as shown by the runner when executing a procedure. \
+                            `state` lists the kind of record line, and \
+                            `value` gives the result of a step or data associated with that line."),
+                )
+                .arg(
+                    Arg::new("raw-control-chars")
+                        .short('R')
+                        .long("raw-control-chars")
+                        .action(ArgAction::SetTrue)
+                        .help("Emit ANSI escape codes for syntax highlighting even if output is redirected to a pipe or file."),
                 ),
         )
         .subcommand(
@@ -1097,6 +1148,88 @@ fn main() {
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
+                }
+            }
+        }
+        Some(("log", submatches)) => {
+            let id = submatches
+                .get_one::<String>("id")
+                .unwrap();
+
+            debug!(id);
+
+            let run_id = match RunId::parse(id) {
+                Ok(run_id) => run_id,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            };
+
+            let output = submatches
+                .get_one::<String>("output")
+                .unwrap();
+            let output = match output.as_str() {
+                "console" => Output::Terminal,
+                "json" => Output::Json,
+                "pfftt" => Output::Store,
+                "native" => Output::Native,
+                _ => panic!("Unrecognized --output value"),
+            };
+
+            debug!(?output);
+
+            // Each output form selects the columns that suit it; --columns,
+            // when given, overrides that choice. PFFTT is the exception: its
+            // fields are defined by the format.
+            let selected = submatches.get_many::<String>("columns");
+            let columns: Vec<Column> = match (selected, &output) {
+                (Some(_), Output::Store) => {
+                    eprintln!(
+                        "{}: --columns cannot be used with --output=pfftt",
+                        "error".bright_red()
+                    );
+                    std::process::exit(1);
+                }
+                (Some(names), _) => names
+                    .map(|name| Column::parse(name))
+                    .collect(),
+                (None, Output::Json) => logging::JSON_COLUMNS.to_vec(),
+                (None, Output::Store) => logging::PFFTT_COLUMNS.to_vec(),
+                (None, _) => logging::CONSOLE_COLUMNS.to_vec(),
+            };
+
+            debug!(?columns);
+
+            let raw_output = *submatches
+                .get_one::<bool>("raw-control-chars")
+                .unwrap(); // flags are always present since SetTrue implies default_value
+
+            let (_, records) = match runner::review(run_id) {
+                Ok(recorded) => recorded,
+                Err(error) => {
+                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    std::process::exit(1);
+                }
+            };
+
+            match output {
+                Output::Store => {
+                    print!("{}", logging::render_pfftt(&records));
+                }
+                Output::Native => {
+                    println!("{:#?}", records);
+                }
+                Output::Json => {
+                    print!("{}", logging::render_json(&records, &columns));
+                }
+                _ => {
+                    let result = if raw_output || std::io::stdout().is_terminal() {
+                        logging::render_console(&records, &columns, &Terminal)
+                    } else {
+                        logging::render_console(&records, &columns, &Identity)
+                    };
+                    print!("{}", result);
                 }
             }
         }
