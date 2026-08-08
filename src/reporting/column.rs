@@ -136,7 +136,7 @@ enum Cell {
 }
 
 /// Render a run's records as a column-aligned stream, one line per record.
-pub fn render_console(records: &[Record], columns: &[Column], renderer: &dyn Render) -> String {
+pub fn render_console(records: &[Record], columns: &[Column], renderer: &impl Render) -> String {
     let mut text = String::new();
 
     let first = match records.first() {
