@@ -643,28 +643,60 @@ fn list_prompt() -> Prompt {
     }
 }
 
-#[test]
-fn list_prompt_empty_submits_empty_list() {
-    // Enter on an untouched list field yields `[]`, which coerce_to_list reads
-    // as zero iterations.
+// Type `text` into a list field and submit it, returning the gathered value.
+fn gather_list(text: &str) -> Value {
     let mut it = list_prompt();
-    assert_eq!(
-        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Literali("[]".to_string())))
-    );
+    for c in text.chars() {
+        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    match it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+        Some(UserInput::Done(value)) => value,
+        other => panic!("expected Done, got {:?}", other),
+    }
 }
 
 #[test]
-fn list_prompt_wraps_typed_buffer() {
-    // Whatever the user types is wrapped in brackets on submit, so the
-    // result parses through the existing list-literal path.
-    let mut it = list_prompt();
-    for c in "east, west".chars() {
-        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
-    }
+fn list_prompt_empty_submits_empty_list() {
+    // Enter on an untouched list field yields the empty list, which
+    // coerce_to_list reads as zero iterations.
+    assert_eq!(gather_list(""), Value::Arraeum(Vec::new()));
+}
+
+#[test]
+fn list_prompt_gathers_elements() {
+    // What the user types is gathered as a list of its elements, not as one
+    // string: the structure survives into the binding and onto the record.
     assert_eq!(
-        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Literali("[east, west]".to_string())))
+        gather_list("east, west"),
+        Value::Arraeum(vec![
+            Value::Literali("east".to_string()),
+            Value::Literali("west".to_string()),
+        ])
+    );
+
+    // Unspaced, as typed in a hurry.
+    assert_eq!(
+        gather_list("i-1234,i556768"),
+        Value::Arraeum(vec![
+            Value::Literali("i-1234".to_string()),
+            Value::Literali("i556768".to_string()),
+        ])
+    );
+
+    // A single element with no separator is a one-element list.
+    assert_eq!(
+        gather_list("east"),
+        Value::Arraeum(vec![Value::Literali("east".to_string())])
+    );
+
+    // Quoted elements keep their text; numbers take their natural type, the
+    // same as a command-line argument would.
+    assert_eq!(
+        gather_list(r#""east", 5"#),
+        Value::Arraeum(vec![
+            Value::Literali("east".to_string()),
+            Value::Quanticle(Numeric::Integral(5)),
+        ])
     );
 }
 
