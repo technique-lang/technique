@@ -1,11 +1,9 @@
-//! On-disk state store and run identifiers.
+//! The PFFTT record: the events a run writes, and the codec that puts
+//! them on a line and reads them back.
 
-use std::collections::HashMap;
-use std::io;
-use std::path::{Path, PathBuf};
-
-use super::runner::RunnerError;
 use crate::value;
+
+use super::StoreError;
 
 /// Monotonic identifier for a run. Conventionally rendered and stored as a
 /// six-digit zero-padded string.
@@ -15,10 +13,10 @@ pub struct RunId(pub u32);
 impl RunId {
     /// Parse a run identifier. Both unpadded (`7`) and zero-padded
     /// (`000007`) decimal forms are accepted.
-    pub fn parse(text: &str) -> Result<RunId, RunnerError> {
+    pub fn parse(text: &str) -> Result<RunId, StoreError> {
         text.parse::<u32>()
             .map(RunId)
-            .map_err(|_| RunnerError::InvalidRunId(text.to_string()))
+            .map_err(|_| StoreError::InvalidRunId(text.to_string()))
     }
 
     /// Render as a six-digit zero-padded decimal string.
@@ -36,7 +34,6 @@ pub enum RecordError {
 }
 
 /// One record line on disk.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     pub recorded: String,
@@ -58,7 +55,6 @@ pub struct Record {
 /// `Action`) with the value it returned; Pure builtins are not recorded.
 /// `Input` records the values supplied to a procedure so a resume can restore
 /// the state without re-prompting for information already entered.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
@@ -78,7 +74,6 @@ pub enum State {
 /// One value supplied to a procedure's parameter: bound to a named parameter
 /// (recorded as `value ~ name`), or positional when the parameter is unnamed
 /// (recorded as a bare `value`).
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Supplied {
     pub value: value::Value,
@@ -87,365 +82,42 @@ pub struct Supplied {
 
 /// The target of an `Invoke`: either a named procedure (rendered as
 /// `name:`) or a URI to an external technique.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum InvokeTarget {
     Procedure(String),
     Uri(String),
 }
 
-/// On-disk store of runs, rooted at some base directory (conventionally
-/// `.store/` relative to the user's current directory).
-#[allow(dead_code)]
-pub struct Store {
-    base: PathBuf,
+/// Trim a rendered PFFTT path to the live-prompt form: drop the leading `/`,
+/// and the entry procedure's `name:` head when a section immediately follows.
+pub fn display_path(qualified: &str) -> String {
+    let body = qualified
+        .strip_prefix('/')
+        .unwrap_or(qualified);
+    let mut parts: Vec<&str> = body
+        .split('/')
+        .collect();
+    if parts.len() >= 2 && parts[0].ends_with(':') && is_section_component(parts[1]) {
+        parts.remove(0);
+    }
+    parts.join("/")
 }
 
-// Cap the number of times the allocator retries when another process has
-// taken the identifier we just computed. The race window is small; a
-// handful of retries is more than enough in practice.
-#[allow(dead_code)]
-const ALLOCATE_RETRIES: usize = 4;
-
-#[allow(dead_code)]
-impl Store {
-    /// Build a handle to a store rooted at `base`. No I/O happens here; the
-    /// directory is created on the first call to `allocate`.
-    pub fn new(base: PathBuf) -> Self {
-        Store { base }
-    }
-
-    /// Allocate a new run identifier and create its directory. Returns the
-    /// identifier and the path of the new directory.
-    pub fn allocate(&self) -> Result<(RunId, PathBuf), RunnerError> {
-        // Make sure the store root exists before scanning for siblings.
-        if let Err(error) = std::fs::create_dir_all(&self.base) {
-            return Err(RunnerError::StoreError {
-                path: self
-                    .base
-                    .clone(),
-                error,
-            });
-        }
-
-        for _ in 0..ALLOCATE_RETRIES {
-            let next = self.next_identifier()?;
-            let path = self
-                .base
-                .join(next.render());
-            match std::fs::create_dir(&path) {
-                Ok(()) => return Ok((next, path)),
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(RunnerError::StoreError { path, error }),
-            }
-        }
-
-        Err(RunnerError::StoreError {
-            path: self
-                .base
-                .clone(),
-            error: io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "exhausted retries allocating a run identifier",
-            ),
-        })
-    }
-
-    /// Allocate a new run and write its opening `Start` record. The PFFTT
-    /// file is named after the source document's basename (e.g.
-    /// `NetworkProbe.pfftt`).
-    pub fn create(
-        &self,
-        document: &Path,
-        started: String,
-        libraries: &[String],
-    ) -> Result<(RunId, PathBuf), RunnerError> {
-        let absolute = std::path::absolute(document).map_err(|error| RunnerError::StoreError {
-            path: document.to_path_buf(),
-            error,
-        })?;
-        let (run_id, run_dir) = self.allocate()?;
-        let pfftt = construct_state_path(&run_dir, &absolute);
-        let mut uri = format!("file://{}", absolute.display());
-        if !libraries.is_empty() {
-            uri.push_str("?library=");
-            uri.push_str(&libraries.join(","));
-        }
-        let record = Record {
-            recorded: started,
-            run_id,
-            path: "/".to_string(),
-            state: State::Start { uri },
-        };
-        std::fs::write(&pfftt, format_record(&record))
-            .map_err(|error| RunnerError::StoreError { path: pfftt, error })?;
-        Ok((run_id, run_dir))
-    }
-
-    /// Open an existing run. Parses the leading `Start` record to recover the
-    /// source document and the libraries it was run with, then replays
-    /// records into a map of completed step paths to the value each recorded
-    /// (`Done` with its value, `Skip`/`Fail` mapping to `Unitus`), used to
-    /// rehydrate bindings on resume. `Stop` and `Resume` records are passed
-    /// over.
-    pub fn open(
-        &self,
-        run_id: RunId,
-    ) -> Result<
-        (
-            PathBuf,
-            Vec<String>,
-            HashMap<String, value::Value>,
-            HashMap<String, Vec<Supplied>>,
-            PathBuf,
-        ),
-        RunnerError,
-    > {
-        let run_dir = self
-            .base
-            .join(run_id.render());
-        if !run_dir.is_dir() {
-            return Err(RunnerError::NoSuchRun(run_id));
-        }
-        let pfftt = find_pfftt_file(&run_dir, run_id)?;
-        let content = std::fs::read_to_string(&pfftt).map_err(|error| RunnerError::StoreError {
-            path: pfftt.clone(),
-            error,
-        })?;
-
-        let mut lines = content
-            .lines()
-            .filter(|line| {
-                !line
-                    .trim()
-                    .is_empty()
-            });
-
-        let first = lines
-            .next()
-            .ok_or(RunnerError::StartMissing(run_id))?;
-        let head =
-            parse_record(first).map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
-        let (document, libraries) = match head.state {
-            State::Start { uri, .. } => parse_run_uri(&uri),
-            _ => return Err(RunnerError::StartMissing(run_id)),
-        };
-
-        let mut completed = HashMap::new();
-        let mut inputs: HashMap<String, Vec<Supplied>> = HashMap::new();
-        for line in lines {
-            let record = parse_record(line)
-                .map_err(|error| RunnerError::MalformedRecord { run_id, error })?;
-            match record.state {
-                State::Done(value) => {
-                    completed.insert(record.path, value.unwrap_or(value::Value::Unitus));
-                }
-                State::Skip | State::Fail(_) => {
-                    completed.insert(record.path, value::Value::Unitus);
-                }
-                State::Input(supplied) => {
-                    inputs.insert(record.path, supplied);
-                }
-                State::Start { .. }
-                | State::Finish
-                | State::Stop
-                | State::Resume
-                | State::Invoke(_)
-                | State::Execute { .. }
-                | State::Return(_)
-                | State::Begin => {}
-            }
-        }
-        Ok((document, libraries, completed, inputs, run_dir))
-    }
-
-    // Scan the store for the highest existing run identifier and return
-    // one more. Entries whose names are not valid decimal integers are
-    // ignored, which keeps the allocator robust against editor scratch
-    // files left in `.store/`.
-    fn next_identifier(&self) -> Result<RunId, RunnerError> {
-        let mut max: u32 = 0;
-        let entries = std::fs::read_dir(&self.base).map_err(|error| RunnerError::StoreError {
-            path: self
-                .base
-                .clone(),
-            error,
-        })?;
-        for entry in entries {
-            let entry = entry.map_err(|error| RunnerError::StoreError {
-                path: self
-                    .base
-                    .clone(),
-                error,
-            })?;
-            if let Some(name) = entry
-                .file_name()
-                .to_str()
-            {
-                if let Ok(n) = name.parse::<u32>() {
-                    if n > max {
-                        max = n;
-                    }
-                }
-            }
-        }
-        Ok(RunId(max + 1))
-    }
-}
-
-// Recover the source document's file path and the libraries that were
-// selected from a Start URI of the form
-//
-// file://{path}?library=a,b
-
-// written by `create` records. The query string parameters are optional.
-fn parse_run_uri(uri: &str) -> (PathBuf, Vec<String>) {
-    let (location, query) = match uri.split_once('?') {
-        Some((location, query)) => (location, Some(query)),
-        None => (uri, None),
-    };
-    let path = location
-        .strip_prefix("file://")
-        .unwrap_or(location);
-    let libraries = query
-        .and_then(|query| query.strip_prefix("library="))
-        .map(|names| {
-            names
-                .split(',')
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    (PathBuf::from(path), libraries)
-}
-
-// Compute the on-disk PFFTT file path for a run, named using the source
-// document's stem.
-pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
-    let stem = document
-        .file_stem()
-        .map(|s| s.to_os_string())
-        .unwrap_or_default();
-    let mut name = PathBuf::from(stem);
-    name.set_extension("pfftt");
-    run_dir.join(name)
-}
-
-/// Where an `Appender` sends its records, normally an append-only PFFTT file
-/// in the store, or an in-memory sink for test runs that keep no persistent
-/// state.
-enum Target {
-    File { file: std::fs::File, path: PathBuf },
-    Memory(String),
-    Discard,
-}
-
-/// Append-only writer for a PFFTT file. Used by the runner to append a
-/// record for each step boundary and lifecycle event. Carries the
-/// `RunId` so callers can stamp it onto records.
-/// through every layer.
-#[allow(dead_code)]
-pub struct Appender {
-    target: Target,
-    run_id: RunId,
-}
-
-#[allow(dead_code)]
-impl Appender {
-    /// Open the PFFTT file for append. The file must already exist (the
-    /// runner writes the opening `Start` record first via `Store::create`).
-    pub fn open(path: PathBuf, run_id: RunId) -> Result<Self, RunnerError> {
-        let file = std::fs::OpenOptions::new()
-            .append(true)
-            .open(&path)
-            .map_err(|error| RunnerError::StoreError {
-                path: path.clone(),
-                error,
-            })?;
-        Ok(Appender {
-            target: Target::File { file, path },
-            run_id,
-        })
-    }
-
-    /// An Appender that discards every record for use in tests.
-    pub fn sink() -> Self {
-        Appender {
-            target: Target::Discard,
-            run_id: RunId(0),
-        }
-    }
-
-    /// An Appender that captures every record in memory for use in tests,
-    /// readable afterwards with `contents()`. Touches no filesystem.
-    pub fn memory() -> Self {
-        Appender {
-            target: Target::Memory(String::new()),
-            run_id: RunId(0),
-        }
-    }
-
-    /// The records captured by an in-memory Appender (`memory()`), as the raw
-    /// PFFTT text; empty for a file or discarding Appender.
-    pub fn contents(&self) -> &str {
-        match &self.target {
-            Target::Memory(buffer) => buffer,
-            _ => "",
-        }
-    }
-
-    /// The `RunId` this Appender is writing records for.
-    pub fn run_id(&self) -> RunId {
-        self.run_id
-    }
-
-    /// Append one record line. Flushes are left to the OS; on Quit the
-    /// runner drops the Appender, which closes the file.
-    pub fn append(&mut self, record: &Record) -> Result<(), RunnerError> {
-        use std::io::Write;
-        let text = format_record(record);
-        match &mut self.target {
-            Target::File { file, path } => file
-                .write_all(text.as_bytes())
-                .map_err(|error| RunnerError::StoreError {
-                    path: path.clone(),
-                    error,
-                }),
-            Target::Memory(buffer) => {
-                buffer.push_str(&text);
-                Ok(())
-            }
-            Target::Discard => Ok(()),
-        }
-    }
-}
-
-// Locate the single `*.pfftt` file in a run directory.
-fn find_pfftt_file(run_dir: &Path, run_id: RunId) -> Result<PathBuf, RunnerError> {
-    let entries = std::fs::read_dir(run_dir).map_err(|error| RunnerError::StoreError {
-        path: run_dir.to_path_buf(),
-        error,
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|error| RunnerError::StoreError {
-            path: run_dir.to_path_buf(),
-            error,
-        })?;
-        let path = entry.path();
-        if path
-            .extension()
-            .and_then(|s| s.to_str())
-            == Some("pfftt")
-        {
-            return Ok(path);
-        }
-    }
-    Err(RunnerError::StartMissing(run_id))
+/// Leading token, not the whole component: an acquire label can glue an
+/// ` <invocation>` annotation after the numeral.
+fn is_section_component(part: &str) -> bool {
+    let token = part
+        .split_whitespace()
+        .next()
+        .unwrap_or("");
+    !token.is_empty()
+        && token
+            .bytes()
+            .all(|b| b"IVXLCDM".contains(&b))
 }
 
 // Serialize a Record in PFFTT line form. The format is:
 // Timestamp RunId Path (State Value) followed by a newline.
-#[allow(dead_code)]
 pub(crate) fn format_record(record: &Record) -> String {
     let mut text = String::new();
     text.push_str(&record.recorded);
@@ -520,7 +192,7 @@ fn format_state(out: &mut String, state: &State) {
 // Format a procedure's supplied inputs as `( value ~ name, value, … )`: each
 // value serialized by the value codec, a named parameter followed by `~ name`,
 // an unnamed one left bare.
-fn format_supplied(out: &mut String, supplied: &[Supplied]) {
+pub(crate) fn format_supplied(out: &mut String, supplied: &[Supplied]) {
     out.push('(');
     for (i, item) in supplied
         .iter()
@@ -617,6 +289,19 @@ pub(crate) fn fail_reason(reason: &str) -> value::Value {
         "reason".to_string(),
         value::Value::Literali(reason.to_string()),
     )])
+}
+
+/// Parse the lines of a PFFTT file into records, blank lines passed over.
+pub fn parse_records(content: &str) -> Result<Vec<Record>, RecordError> {
+    content
+        .lines()
+        .filter(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .map(parse_record)
+        .collect()
 }
 
 // Parse a single PFFTT record line into a Record.
@@ -1095,7 +780,7 @@ fn split_once_top_level_tilde(text: &str) -> Option<(&str, &str)> {
 }
 
 #[cfg(test)]
-#[path = "checks/state.rs"]
+#[path = "checks/record.rs"]
 mod check;
 
 #[cfg(test)]

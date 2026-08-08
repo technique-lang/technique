@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use technique::engraving::Appender;
 use technique::parsing;
-use technique::runner::{
-    Appender, Conclusion, Context, Environment, Headless, Library, Outcome, Runner,
-};
+use technique::runner::{Conclusion, Context, Environment, Headless, Library, Outcome, Runner};
 use technique::translation;
 
 use crate::common::list_technique_documents;

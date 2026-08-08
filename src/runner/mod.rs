@@ -14,18 +14,16 @@ mod evaluator;
 mod library;
 mod path;
 mod runner;
-mod state;
 
 pub use context::Context;
 pub use driver::{Headless, Mode};
 pub use evaluator::Environment;
 pub use library::{Builtin, Library, Native, library_for};
 pub use runner::{Conclusion, Outcome, Runner, RunnerError};
-pub use state::{Appender, RecordError, RunId};
 
+use crate::engraving::{Appender, Record, RunId, State, Store, construct_state_path};
 use driver::{Automatic, Console, Transcript};
 use runner::{bind_parameters, now_iso8601};
-use state::{Record, State, Store, construct_state_path};
 
 const STORE_ROOT: &str = ".store";
 
@@ -132,6 +130,12 @@ pub fn locate(run_id: RunId) -> Result<(PathBuf, Vec<String>), RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
     let (document, libraries, _, _, _) = store.open(run_id)?;
     Ok((document, libraries))
+}
+
+/// Load an existing run's recorded trail back into memory.
+pub fn load(run_id: RunId) -> Result<Vec<Record>, RunnerError> {
+    let store = Store::new(PathBuf::from(STORE_ROOT));
+    Ok(store.read(run_id)?)
 }
 
 /// Open an existing run and walk the given program, short-circuiting

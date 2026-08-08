@@ -19,7 +19,7 @@ use crossterm::style::{
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size};
 use crossterm::{cursor, queue};
 
-use super::path::display_path;
+use crate::engraving::display_path;
 use crate::formatting::{Identity, Render, Syntax};
 use crate::highlighting::Terminal;
 use crate::value::Value;

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::engraving::{Appender, InvokeTarget, State, Store, Supplied, parse_record};
 use crate::language;
 use crate::language::{Identifier, Numeric as LangNumeric};
 use crate::parsing;
@@ -15,7 +16,6 @@ use crate::runner::library::Library;
 use crate::runner::runner::{
     Conclusion, Outcome, Runner, RunnerError, bind_parameters, render_argument_echo,
 };
-use crate::runner::state::{Appender, InvokeTarget, State, Store, Supplied, parse_record};
 use crate::translation::translate;
 use crate::value::Value;
 
@@ -37,7 +37,7 @@ impl StoreFixture {
         let (run_id, run_dir) = store
             .create(&document, "2026-05-16T00:00:00Z".to_string(), &[])
             .expect("create");
-        let pfftt = crate::runner::state::construct_state_path(&run_dir, &document);
+        let pfftt = crate::engraving::construct_state_path(&run_dir, &document);
         let appender = Appender::open(pfftt, run_id).expect("open appender");
         StoreFixture {
             base,
@@ -826,18 +826,18 @@ cycle(s) : Situation -> Done
         "the callee's body must not run after the quit"
     );
     assert!(
-        !pfftt
+        pfftt
             .lines()
-            .any(|line| line.contains("Invoke")),
-        "declining at the prompt records no Invoke — the call never began"
+            .any(|line| line.contains("Invoke cycle:")),
+        "the dispatch is recorded on arrival, before the prompt the user quit at"
     );
 }
 
 #[test]
 fn skip_while_acquiring_records_the_skipped_invocation() {
-    // Skip at the implicit-argument prompt skips the invocation: a Skip is
-    // recorded at the callee's path (not silently swallowed) with no Invoke,
-    // and the callee's body never runs.
+    // Skip at the implicit-argument prompt skips the invocation: the dispatch
+    // is recorded, a Skip is recorded at the callee's path (not silently
+    // swallowed), and the callee's body never runs.
     let source = r#"
 % technique v1
 
@@ -877,10 +877,10 @@ cycle(s) : Situation -> Done
         "the skipped invocation is recorded at the callee's path"
     );
     assert!(
-        !pfftt
+        pfftt
             .lines()
-            .any(|line| line.contains("Invoke")),
-        "a declined call records no Invoke"
+            .any(|line| line.contains("Invoke cycle:")),
+        "the dispatch is recorded on arrival, the Skip standing as the decline"
     );
     assert!(
         !pfftt
