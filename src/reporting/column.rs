@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use time::{Date, Month, OffsetDateTime, UtcOffset};
+use time::format_description::well_known::Rfc3339;
+use time::{OffsetDateTime, UtcOffset};
 
 use crate::engraving::{
     InvokeTarget, Record, State, display_path, format_record, format_supplied, parse_run_uri,
@@ -535,40 +536,7 @@ fn elapsed(from: Option<i64>, to: Option<i64>) -> Option<i64> {
 // Milliseconds since the Unix epoch for a PFFTT timestamp of the form
 // 2026-08-04T22:50:36.869Z, as written when the record was appended.
 fn parse_timestamp(recorded: &str) -> Option<i64> {
-    let year = recorded
-        .get(0..4)?
-        .parse::<i32>()
-        .ok()?;
-    let month = recorded
-        .get(5..7)?
-        .parse::<u8>()
-        .ok()?;
-    let day = recorded
-        .get(8..10)?
-        .parse::<u8>()
-        .ok()?;
-    let hour = recorded
-        .get(11..13)?
-        .parse::<u8>()
-        .ok()?;
-    let minute = recorded
-        .get(14..16)?
-        .parse::<u8>()
-        .ok()?;
-    let second = recorded
-        .get(17..19)?
-        .parse::<u8>()
-        .ok()?;
-    let milli = recorded
-        .get(20..23)?
-        .parse::<u16>()
-        .ok()?;
-
-    let date = Date::from_calendar_date(year, Month::try_from(month).ok()?, day).ok()?;
-    let moment = date
-        .with_hms_milli(hour, minute, second, milli)
-        .ok()?
-        .assume_utc();
+    let moment = OffsetDateTime::parse(recorded, &Rfc3339).ok()?;
     i64::try_from(moment.unix_timestamp_nanos() / 1_000_000).ok()
 }
 
