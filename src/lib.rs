@@ -1,4 +1,5 @@
 pub mod domain;
+pub mod engraving;
 pub mod formatting;
 pub mod highlighting;
 pub mod language;
@@ -6,6 +7,7 @@ pub mod linking;
 pub mod parsing;
 pub mod program;
 pub(crate) mod regex;
+pub mod reporting;
 pub mod resolution;
 pub mod runner;
 pub mod templating;
