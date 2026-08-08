@@ -1,7 +1,8 @@
 use crate::problem::Present;
 use technique::{
-    formatting::Render, language::*, linking::LinkingError, parsing::ParsingError,
-    resolution::ResolutionError, runner::RunnerError, translation::TranslationError,
+    engraving::StoreError, formatting::Render, language::*, linking::LinkingError,
+    parsing::ParsingError, resolution::ResolutionError, runner::RunnerError,
+    translation::TranslationError,
 };
 
 /// Generate problem and detail messages for parsing errors using AST construction
@@ -1467,24 +1468,24 @@ functions calls:
     }
 }
 
-/// Generate problem and detail messages for errors occurring when a procedure
-/// is being evaluated by the runner.
-pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (String, String) {
+/// Generate problem and detail messages for errors reading from or writing to
+/// the store of recorded runs.
+pub fn generate_store_error(error: &StoreError, _renderer: &dyn Render) -> (String, String) {
     match error {
-        RunnerError::NoSuchRun(run_id) => (
+        StoreError::NoSuchRun(run_id) => (
             format!("No such run '{:06}'", run_id.0),
             "The directory for this run identifier was not found in the local state store."
                 .to_string(),
         ),
-        RunnerError::StoreError { path, error } => (
+        StoreError::Io { path, error } => (
             format!("I/O error with local state store at {}", path.display()),
             format!("{}", error),
         ),
-        RunnerError::MalformedRecord { run_id, .. } => (
+        StoreError::MalformedRecord { run_id, .. } => (
             format!("Malformed record for run '{:06}'", run_id.0),
             "The PFFTT state file for this run could not be parsed.".to_string(),
         ),
-        RunnerError::StartMissing(run_id) => (
+        StoreError::StartMissing(run_id) => (
             format!("Start record missing in run '{:06}'", run_id.0),
             r#"
 The state file is present but its first record (the Start event) is
@@ -1493,7 +1494,7 @@ missing or malformed.
             .trim_ascii()
             .to_string(),
         ),
-        RunnerError::InvalidRunId(text) => (
+        StoreError::InvalidRunId(text) => (
             format!("Invalid run identifier '{}'", text),
             r#"
 Run identifiers are integer values, conventionally rendered as six
@@ -1502,6 +1503,14 @@ zero-padded digits.
             .trim_ascii()
             .to_string(),
         ),
+    }
+}
+
+/// Generate problem and detail messages for errors occurring when a procedure
+/// is being evaluated by the runner.
+pub fn generate_runner_error(error: &RunnerError, _renderer: &dyn Render) -> (String, String) {
+    match error {
+        RunnerError::Store(error) => generate_store_error(error, _renderer),
         RunnerError::MissingEntryProcedure => (
             "No entry procedure".to_string(),
             r#"

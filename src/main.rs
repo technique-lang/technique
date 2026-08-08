@@ -8,13 +8,14 @@ use std::str::FromStr;
 use tracing::debug;
 use tracing_subscriber::{self, EnvFilter};
 
+use technique::engraving::RunId;
 use technique::formatting::{self, Identity};
 use technique::highlighting::{self, Terminal};
 use technique::linking;
-use technique::logging::{self, Column};
 use technique::parsing;
+use technique::reporting::{self, Column};
 use technique::resolution;
-use technique::runner::{self, Builtin, Conclusion, Library, Mode, Outcome, RunId};
+use technique::runner::{self, Builtin, Conclusion, Library, Mode, Outcome};
 use technique::templating::{self, Checklist, NasaEsaIss, Procedure, Recipe, Source};
 use technique::translation;
 
@@ -1038,7 +1039,7 @@ fn main() {
             let run_id = match RunId::parse(id) {
                 Ok(run_id) => run_id,
                 Err(error) => {
-                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    eprintln!("{}", problem::concise_store_error(&error, &Terminal));
                     std::process::exit(1);
                 }
             };
@@ -1161,7 +1162,7 @@ fn main() {
             let run_id = match RunId::parse(id) {
                 Ok(run_id) => run_id,
                 Err(error) => {
-                    eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
+                    eprintln!("{}", problem::concise_store_error(&error, &Terminal));
                     std::process::exit(1);
                 }
             };
@@ -1194,9 +1195,9 @@ fn main() {
                 (Some(names), _) => names
                     .map(|name| Column::parse(name))
                     .collect(),
-                (None, Output::Json) => logging::JSON_COLUMNS.to_vec(),
-                (None, Output::Store) => logging::PFFTT_COLUMNS.to_vec(),
-                (None, _) => logging::CONSOLE_COLUMNS.to_vec(),
+                (None, Output::Json) => reporting::JSON_COLUMNS.to_vec(),
+                (None, Output::Store) => reporting::PFFTT_COLUMNS.to_vec(),
+                (None, _) => reporting::CONSOLE_COLUMNS.to_vec(),
             };
 
             debug!(?columns);
@@ -1205,7 +1206,7 @@ fn main() {
                 .get_one::<bool>("raw-control-chars")
                 .unwrap(); // flags are always present since SetTrue implies default_value
 
-            let (_, records) = match runner::review(run_id) {
+            let records = match runner::load(run_id) {
                 Ok(recorded) => recorded,
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
@@ -1215,19 +1216,19 @@ fn main() {
 
             match output {
                 Output::Store => {
-                    print!("{}", logging::render_pfftt(&records));
+                    print!("{}", reporting::render_pfftt(&records));
                 }
                 Output::Native => {
                     println!("{:#?}", records);
                 }
                 Output::Json => {
-                    print!("{}", logging::render_json(&records, &columns));
+                    print!("{}", reporting::render_json(&records, &columns));
                 }
                 _ => {
                     let result = if raw_output || std::io::stdout().is_terminal() {
-                        logging::render_console(&records, &columns, &Terminal)
+                        reporting::render_console(&records, &columns, &Terminal)
                     } else {
-                        logging::render_console(&records, &columns, &Identity)
+                        reporting::render_console(&records, &columns, &Identity)
                     };
                     print!("{}", result);
                 }

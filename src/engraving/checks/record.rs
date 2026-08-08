@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::runner::runner::RunnerError;
-use crate::runner::state::{
-    InvokeTarget, Record, RecordError, RunId, State, Store, Supplied, fail_reason, format_record,
-    parse_record,
+use crate::engraving::{
+    InvokeTarget, Record, RecordError, RunId, State, Store, StoreError, Supplied, display_path,
+    fail_reason, format_record, parse_record,
 };
 use crate::value::Value;
 
@@ -43,7 +42,7 @@ fn run_id_parse() {
 fn run_id_parse_rejects_non_decimal() {
     for text in ["", "abc", "-1"] {
         match RunId::parse(text) {
-            Err(RunnerError::InvalidRunId(got)) => assert_eq!(got, text),
+            Err(StoreError::InvalidRunId(got)) => assert_eq!(got, text),
             other => panic!("expected InvalidRunId for {:?}, got {:?}", text, other),
         }
     }
@@ -281,7 +280,7 @@ fn open_missing_run_returns_no_such_run() {
             .clone(),
     );
     match store.open(RunId(42)) {
-        Err(RunnerError::NoSuchRun(run_id)) => assert_eq!(run_id, RunId(42)),
+        Err(StoreError::NoSuchRun(run_id)) => assert_eq!(run_id, RunId(42)),
         other => panic!("expected NoSuchRun, got {:?}", other),
     }
 }
@@ -710,7 +709,7 @@ fn open_missing_start_record() {
             .clone(),
     );
     match store.open(RunId(1)) {
-        Err(RunnerError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
+        Err(StoreError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
         other => panic!("expected StartMissing, got {:?}", other),
     }
 
@@ -726,7 +725,36 @@ fn open_missing_start_record() {
             .clone(),
     );
     match store.open(RunId(1)) {
-        Err(RunnerError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
+        Err(StoreError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
         other => panic!("expected StartMissing, got {:?}", other),
     }
+}
+
+#[test]
+fn display_trims_entry_head() {
+    // Within a section the entry head is dropped, the numeral anchors instead.
+    assert_eq!(
+        display_path("/connectivity_check:/VI/check_aws_health:/7"),
+        "VI/check_aws_health:/7"
+    );
+
+    // A flat entry with no section keeps its name; only the leading slash goes.
+    assert_eq!(
+        display_path("/connectivity_check:/1"),
+        "connectivity_check:/1"
+    );
+    assert_eq!(
+        display_path("/activate_crisis_management:/-1"),
+        "activate_crisis_management:/-1"
+    );
+
+    // An ` <invocation>` annotation on the numeral is kept; the head still drops.
+    assert_eq!(
+        display_path("/connectivity_check:/VII <service_endpoint>"),
+        "VII <service_endpoint>"
+    );
+
+    // An anonymous technique has no head to drop; the leading slash still goes.
+    assert_eq!(display_path("/I/1"), "I/1");
+    assert_eq!(display_path("/I"), "I");
 }

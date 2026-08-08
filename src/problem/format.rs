@@ -1,12 +1,13 @@
 use super::messages::{
     generate_error_message, generate_linking_error, generate_resolution_error,
-    generate_runner_error, generate_translation_error,
+    generate_runner_error, generate_store_error, generate_translation_error,
 };
 use owo_colors::OwoColorize;
 use std::path::Path;
 use technique::{
-    formatting::Render, language::LoadingError, linking::LinkingError, parsing::ParsingError,
-    resolution::ResolutionError, runner::RunnerError, translation::TranslationError,
+    engraving::StoreError, formatting::Render, language::LoadingError, linking::LinkingError,
+    parsing::ParsingError, resolution::ResolutionError, runner::RunnerError,
+    translation::TranslationError,
 };
 
 /// Render an error with full source context: a header line, the offending
@@ -233,6 +234,12 @@ pub fn concise_linking_error<'i>(
 /// Format a runner error with concise single-line output.
 pub fn concise_runner_error(error: &RunnerError, renderer: &impl Render) -> String {
     let (problem, _) = generate_runner_error(error, renderer);
+    format!("{}: {}", "error".bright_red(), problem.bold())
+}
+
+/// Format a StoreError with concise single-line output
+pub fn concise_store_error(error: &StoreError, renderer: &impl Render) -> String {
+    let (problem, _) = generate_store_error(error, renderer);
     format!("{}: {}", "error".bright_red(), problem.bold())
 }
 

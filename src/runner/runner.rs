@@ -2,14 +2,13 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::path::PathBuf;
 
 use super::context::Context;
 use super::driver::{Driver, Kind, Standing, UserInput};
 use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
-use super::state::{Appender, InvokeTarget, Record, RecordError, RunId, State, Supplied};
+use crate::engraving::{Appender, InvokeTarget, Record, State, StoreError, Supplied};
 use crate::language;
 use crate::program::{
     Executable, ExecutableRef, Invocable, Locale, Operation, Ordinal, Program, Subroutine,
@@ -51,17 +50,7 @@ pub enum Failure {
 /// in `crate::problem` knows how to render each one.
 #[derive(Debug)]
 pub enum RunnerError {
-    NoSuchRun(RunId),
-    StoreError {
-        path: PathBuf,
-        error: io::Error,
-    },
-    MalformedRecord {
-        run_id: RunId,
-        error: RecordError,
-    },
-    StartMissing(RunId),
-    InvalidRunId(String),
+    Store(StoreError),
     MissingEntryProcedure,
     UnboundVariable(String),
     BindArityMismatch {
@@ -100,6 +89,12 @@ pub enum RunnerError {
     },
     TerminalRequired,
     UserQuit,
+}
+
+impl From<StoreError> for RunnerError {
+    fn from(error: StoreError) -> Self {
+        RunnerError::Store(error)
+    }
 }
 
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
@@ -681,11 +676,28 @@ impl<'i, D: Driver> Runner<'i, D> {
                     }
 
                     // Acquire deferred arguments at the call site, in the
-                    // invocation's `<name>` form, before any Invoke is recorded.
+                    // invocation's `<name>` form.
                     let caller = self
                         .path
                         .render();
                     let invoked = format!("<{}>", name);
+
+                    // Record the dispatch on arrival, before any argument is
+                    // solicited, so that the time the user takes supplying one
+                    // falls between this and the Input that follows. Declining
+                    // at the prompt settles Skip or Fail at the callee's path,
+                    // which stands as the record of a call that was dispatched
+                    // and turned down.
+                    let run_id = self
+                        .appender
+                        .run_id();
+                    self.appender
+                        .append(&Record {
+                            recorded: now_iso8601(),
+                            run_id,
+                            path: caller.clone(),
+                            state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
+                        })?;
 
                     let formae = render_parameter_formae(subroutine.signature);
 
@@ -785,21 +797,6 @@ impl<'i, D: Driver> Runner<'i, D> {
                             }
                         }
                     }
-
-                    // Record the dispatch once the arguments are in hand —
-                    // declining at the prompt above returns before this, so a
-                    // declined call records no Invoke. Recorded at answer-time,
-                    // so the gap from the previous event is the user wait.
-                    let run_id = self
-                        .appender
-                        .run_id();
-                    self.appender
-                        .append(&Record {
-                            recorded: now_iso8601(),
-                            run_id,
-                            path: caller,
-                            state: State::Invoke(InvokeTarget::Procedure(name.to_string())),
-                        })?;
 
                     // Record the prompted inputs (answered just now) before
                     // Begin, unless they were restored from a prior run (already
@@ -1625,7 +1622,8 @@ impl<'i, D: Driver> Runner<'i, D> {
                 run_id,
                 path: qualified.to_string(),
                 state: State::Input(supplied),
-            })
+            })?;
+        Ok(())
     }
 
     /// At a procedure's entry, restore its parameter bindings from a prior
@@ -1764,7 +1762,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             state: State::Finish,
         };
         self.appender
-            .append(&record)
+            .append(&record)?;
+        Ok(())
     }
 
     /// Record a deliberate Stop at the root path and unwind the walk.
@@ -1953,7 +1952,7 @@ fn record_state(conclusion: &Conclusion) -> State {
                 // failure with no reason rather than an empty-string one.
                 State::Fail(None)
             } else {
-                State::Fail(Some(super::state::fail_reason(reason)))
+                State::Fail(Some(crate::engraving::fail_reason(reason)))
             }
         }
         Conclusion::Stopping => unreachable!(), // Stop is recorded as a lifecycle event, not a step result
