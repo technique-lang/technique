@@ -1139,8 +1139,8 @@ enum Field {
         cursor: usize,
         edited: bool,
         original: Value,
-        /// A list field renders its buffer between `[` and `]` and submits the
-        /// buffer wrapped as `[buffer]`, so an empty answer yields `[]`.
+        /// A list field renders its buffer between `[` and `]` and submits it
+        /// as a list, so an empty answer yields the empty list.
         bracketed: bool,
     },
     Frozen {
@@ -1414,10 +1414,13 @@ impl Prompt {
             } => match code {
                 KeyCode::Enter => {
                     if *bracketed {
-                        // A list field always submits its buffer wrapped, so an
-                        // empty answer is `[]` and `coerce_to_list` iterates it
-                        // zero times.
-                        Some(UserInput::Done(Value::Literali(format!("[{}]", buffer))))
+                        // A list field submits its buffer wrapped and parsed
+                        // into elements, the same way a command-line argument
+                        // is; an empty answer is the empty list.
+                        Some(UserInput::Done(super::evaluator::parse_value(&format!(
+                            "[{}]",
+                            buffer
+                        ))))
                     } else if !*edited {
                         // Unchanged: return the original value verbatim, with
                         // its type and exact value intact.
