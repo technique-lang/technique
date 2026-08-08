@@ -12,7 +12,6 @@ use super::record::{Record, RunId, State, Supplied, format_record, parse_record,
 
 /// On-disk store of runs, rooted at some base directory (conventionally
 /// `.store/` relative to the user's current directory).
-#[allow(dead_code)]
 pub struct Store {
     base: PathBuf,
 }
@@ -20,10 +19,8 @@ pub struct Store {
 // Cap the number of times the allocator retries when another process has
 // taken the identifier we just computed. The race window is small; a
 // handful of retries is more than enough in practice.
-#[allow(dead_code)]
 const ALLOCATE_RETRIES: usize = 4;
 
-#[allow(dead_code)]
 impl Store {
     /// Build a handle to a store rooted at `base`. No I/O happens here; the
     /// directory is created on the first call to `allocate`.
@@ -278,13 +275,11 @@ enum Target {
 /// record for each step boundary and lifecycle event. Carries the
 /// `RunId` so callers can stamp it onto records.
 /// through every layer.
-#[allow(dead_code)]
 pub struct Appender {
     target: Target,
     run_id: RunId,
 }
 
-#[allow(dead_code)]
 impl Appender {
     /// Open the PFFTT file for append. The file must already exist (the
     /// runner writes the opening `Start` record first via `Store::create`).

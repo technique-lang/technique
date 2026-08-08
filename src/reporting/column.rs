@@ -64,24 +64,38 @@ pub enum Column {
 }
 
 impl Column {
+    /// Every column, in the order they are offered to the user.
+    pub const ALL: [Column; 10] = [
+        Column::Timestamp,
+        Column::Run,
+        Column::Date,
+        Column::Time,
+        Column::Offset,
+        Column::Duration,
+        Column::Path,
+        Column::Short,
+        Column::State,
+        Column::Value,
+    ];
+
+    /// The names `--columns` accepts, for the command-line parser to offer.
+    pub fn names() -> [&'static str; 10] {
+        Column::ALL.map(|column| column.name())
+    }
+
     pub fn parse(name: &str) -> Column {
-        match name {
-            "timestamp" => Column::Timestamp,
-            "run" => Column::Run,
-            "date" => Column::Date,
-            "time" => Column::Time,
-            "offset" => Column::Offset,
-            "duration" => Column::Duration,
-            "path" => Column::Path,
-            "short" => Column::Short,
-            "state" => Column::State,
-            "value" => Column::Value,
+        match Column::ALL
+            .into_iter()
+            .find(|column| column.name() == name)
+        {
+            Some(column) => column,
             // the command-line parser restricts which names reach us
-            _ => unreachable!(),
+            None => unreachable!(),
         }
     }
 
-    /// Field names for JSON.
+    /// The name of this column, both as the value that `--columns` accepts
+    /// and for the field label in JSON objects.
     pub fn name(&self) -> &'static str {
         match self {
             Column::Timestamp => "timestamp",

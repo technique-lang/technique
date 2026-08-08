@@ -1,4 +1,4 @@
-use clap::builder::{PossibleValue, TypedValueParser};
+use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser};
 use clap::value_parser;
 use clap::{Arg, ArgAction, Command};
 use owo_colors::OwoColorize;
@@ -118,6 +118,34 @@ impl TypedValueParser for PaperSizeParser {
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
         Some(Box::new(
             ["a4", "a5", "letter", "WxH"]
+                .into_iter()
+                .map(PossibleValue::new),
+        ))
+    }
+}
+
+// Custom clap parser so `--columns` yields Columns rather than names, with the
+// column vocabulary itself listed under "possible values" in help output.
+#[derive(Clone)]
+struct ColumnNameParser;
+
+impl TypedValueParser for ColumnNameParser {
+    type Value = Column;
+
+    fn parse_ref(
+        &self,
+        cmd: &Command,
+        arg: Option<&Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        PossibleValuesParser::new(Column::names())
+            .parse_ref(cmd, arg, value)
+            .map(|name: String| Column::parse(&name))
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(
+            Column::names()
                 .into_iter()
                 .map(PossibleValue::new),
         ))
@@ -433,7 +461,7 @@ fn main() {
                     Arg::new("columns")
                         .long("columns")
                         .value_name("name,...")
-                        .value_parser(["timestamp", "run", "date", "time", "offset", "duration", "path", "short", "state", "value"])
+                        .value_parser(ColumnNameParser)
                         .value_delimiter(',')
                         .action(ArgAction::Set)
                         .help("Specify the fields of the PFFTT record to show, overriding the default associated with the chosen --output format. \
@@ -1183,7 +1211,7 @@ fn main() {
             // Each output form selects the columns that suit it; --columns,
             // when given, overrides that choice. PFFTT is the exception: its
             // fields are defined by the format.
-            let selected = submatches.get_many::<String>("columns");
+            let selected = submatches.get_many::<Column>("columns");
             let columns: Vec<Column> = match (selected, &output) {
                 (Some(_), Output::Store) => {
                     eprintln!(
@@ -1193,7 +1221,7 @@ fn main() {
                     std::process::exit(1);
                 }
                 (Some(names), _) => names
-                    .map(|name| Column::parse(name))
+                    .copied()
                     .collect(),
                 (None, Output::Json) => reporting::JSON_COLUMNS.to_vec(),
                 (None, Output::Store) => reporting::PFFTT_COLUMNS.to_vec(),

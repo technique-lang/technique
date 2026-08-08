@@ -34,7 +34,6 @@ pub enum RecordError {
 }
 
 /// One record line on disk.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     pub recorded: String,
@@ -56,7 +55,6 @@ pub struct Record {
 /// `Action`) with the value it returned; Pure builtins are not recorded.
 /// `Input` records the values supplied to a procedure so a resume can restore
 /// the state without re-prompting for information already entered.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
@@ -76,7 +74,6 @@ pub enum State {
 /// One value supplied to a procedure's parameter: bound to a named parameter
 /// (recorded as `value ~ name`), or positional when the parameter is unnamed
 /// (recorded as a bare `value`).
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Supplied {
     pub value: value::Value,
@@ -85,7 +82,6 @@ pub struct Supplied {
 
 /// The target of an `Invoke`: either a named procedure (rendered as
 /// `name:`) or a URI to an external technique.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum InvokeTarget {
     Procedure(String),
@@ -122,7 +118,6 @@ fn is_section_component(part: &str) -> bool {
 
 // Serialize a Record in PFFTT line form. The format is:
 // Timestamp RunId Path (State Value) followed by a newline.
-#[allow(dead_code)]
 pub(crate) fn format_record(record: &Record) -> String {
     let mut text = String::new();
     text.push_str(&record.recorded);
