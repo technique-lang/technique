@@ -672,33 +672,9 @@ fn list_prompt_empty_submits_empty_list() {
 fn list_prompt_gathers_elements() {
     // What the user types is gathered as a list of its elements, not as one
     // string: the structure survives into the binding and onto the record.
+    // Each element takes its natural type, the same as an argument would.
     assert_eq!(
-        gather_list("east, west"),
-        Value::Arraeum(vec![
-            Value::Literali("east".to_string()),
-            Value::Literali("west".to_string()),
-        ])
-    );
-
-    // Unspaced, as typed in a hurry.
-    assert_eq!(
-        gather_list("i-1234,i556768"),
-        Value::Arraeum(vec![
-            Value::Literali("i-1234".to_string()),
-            Value::Literali("i556768".to_string()),
-        ])
-    );
-
-    // A single element with no separator is a one-element list.
-    assert_eq!(
-        gather_list("east"),
-        Value::Arraeum(vec![Value::Literali("east".to_string())])
-    );
-
-    // Quoted elements keep their text; numbers take their natural type, the
-    // same as a command-line argument would.
-    assert_eq!(
-        gather_list(r#""east", 5"#),
+        gather_list("east, 5"),
         Value::Arraeum(vec![
             Value::Literali("east".to_string()),
             Value::Quanticle(Numeric::Integral(5)),

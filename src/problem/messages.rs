@@ -1595,6 +1595,16 @@ backslash is an escape, and only \\, \", \n, and \r are recognized.
             .trim_ascii()
             .to_string(),
         ),
+        RunnerError::MalformedList { text } => (
+            format!("Malformed list: {}", text),
+            r#"
+A value written as a list must have its brackets and quotes balanced. Quote an
+element only when it contains a comma or newlines; inside quotes a backslash is
+an escape, and only \\, \", \n, and \r are recognized.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         RunnerError::NotIterable => (
             "Iteration requires a list".to_string(),
             r#"

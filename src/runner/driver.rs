@@ -1414,11 +1414,9 @@ impl Prompt {
             } => match code {
                 KeyCode::Enter => {
                     if *bracketed {
-                        // A list field submits its buffer wrapped and parsed
-                        // into elements, the same way a command-line argument
-                        // is; an empty answer is the empty list. A buffer
-                        // that does not parse is not accepted; the edit stays
-                        // open for correction.
+                        // A list field submits its buffer as elements, the
+                        // same way a command-line argument is read. A buffer
+                        // that does not parse is not accepted.
                         super::evaluator::parse_list_literal(&format!("[{}]", buffer))
                             .map(|items| UserInput::Done(Value::Arraeum(items)))
                     } else if !*edited {

@@ -91,6 +91,9 @@ pub enum RunnerError {
         parameter: String,
         argument: String,
     },
+    MalformedList {
+        text: String,
+    },
     TerminalRequired,
     UserQuit,
 }

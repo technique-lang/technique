@@ -224,9 +224,9 @@ pub fn evaluate<'i>(
 /// Reduce a value to the elements a `foreach` iterates. A list yields its
 /// members; `Unit` (the absence of a value) is empty; a blank string (an empty
 /// prompt answer) is likewise empty, so a `foreach` over it runs zero times; a
-/// non-blank string may be a `[a, b]` literal, which parses into its elements,
-/// else it is a one-element list; a bare quantity widens likewise. A tablet,
-/// tuple, or future is not iterable.
+/// non-blank string may be a `[a, b]` literal, which parses into its elements
+/// and is an error if it doesn't, else it is a one-element list; a bare
+/// quantity widens likewise. A tablet, tuple, or future is not iterable.
 pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     match value {
         Value::Arraeum(items) => Ok(items),
@@ -238,10 +238,10 @@ pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
         {
             Ok(Vec::new())
         }
-        Value::Literali(text) => match parse_list_literal(&text) {
-            Some(items) => Ok(items),
-            None => Ok(vec![Value::Literali(text)]),
-        },
+        Value::Literali(text) if is_list_literal(&text) => {
+            parse_list_literal(&text).ok_or(RunnerError::MalformedList { text })
+        }
+        Value::Literali(text) => Ok(vec![Value::Literali(text)]),
         value @ Value::Quanticle(_) => Ok(vec![value]),
         _ => Err(RunnerError::NotIterable),
     }
@@ -286,8 +286,17 @@ pub(super) fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     {
         return Some(Vec::new());
     }
-    crate::engraving::split_top_level(inner, ',')
-        .ok()?
+    let mut elements = crate::engraving::split_top_level(inner, ',').ok()?;
+    // A trailing separator is admitted, but does not add an element.
+    if let Some(last) = elements.last() {
+        if last
+            .trim()
+            .is_empty()
+        {
+            elements.pop();
+        }
+    }
+    elements
         .into_iter()
         .map(|element| {
             let element = element.trim();
