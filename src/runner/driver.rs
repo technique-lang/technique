@@ -1139,8 +1139,8 @@ enum Field {
         cursor: usize,
         edited: bool,
         original: Value,
-        /// A list field renders its buffer between `[` and `]` and submits the
-        /// buffer wrapped as `[buffer]`, so an empty answer yields `[]`.
+        /// A list field renders its buffer between `[` and `]` and submits it
+        /// as a list, so an empty answer yields the empty list.
         bracketed: bool,
     },
     Frozen {
@@ -1414,19 +1414,19 @@ impl Prompt {
             } => match code {
                 KeyCode::Enter => {
                     if *bracketed {
-                        // A list field always submits its buffer wrapped, so an
-                        // empty answer is `[]` and `coerce_to_list` iterates it
-                        // zero times.
-                        Some(UserInput::Done(Value::Literali(format!("[{}]", buffer))))
+                        // A list field submits its buffer as elements, the
+                        // same way a command-line argument is read. A buffer
+                        // that does not parse is not accepted.
+                        super::evaluator::parse_list_literal(&format!("[{}]", buffer))
+                            .map(|items| UserInput::Done(Value::Arraeum(items)))
                     } else if !*edited {
                         // Unchanged: return the original value verbatim, with
                         // its type and exact value intact.
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
                     } else if let Value::Quanticle(_) = original {
                         // An edited numeric value stays numeric: re-parse the
-                        // buffer with the language's own number grammar. A
-                        // buffer that is not a valid number is not accepted —
-                        // the edit stays open for correction.
+                        // buffer. A buffer that is not a valid number is not
+                        // accepted; the edit stays open for correction.
                         match crate::parsing::parse_numeric(buffer) {
                             Some(numeric) => Some(UserInput::Done(Value::Quanticle(
                                 crate::value::Numeric::from(&numeric),

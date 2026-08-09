@@ -263,7 +263,7 @@ fn escape_literal(out: &mut String, text: &str) {
 
 // Reverse `escape_literal`. An unknown escape (or a trailing backslash) is a
 // malformed record.
-fn unescape_literal(text: &str) -> Result<String, RecordError> {
+pub(crate) fn unescape_literal(text: &str) -> Result<String, RecordError> {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars();
     while let Some(c) = chars.next() {
@@ -644,7 +644,7 @@ pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError>
 // Split `text` on `delim`, but only at top level: not inside double quotes
 // (honouring `\"` escapes), not inside single-quoted Enumerati values (which
 // carry no escapes or interior quote), nor inside nested `[]`, `()`, or `{}`.
-fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
+pub(crate) fn split_top_level(text: &str, delim: char) -> Result<Vec<&str>, RecordError> {
     let mut parts = Vec::new();
     let bytes = text.as_bytes();
     let mut depth = 0i32;

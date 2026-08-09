@@ -1209,13 +1209,20 @@ fn main() {
             debug!(?output);
 
             // Each output form selects the columns that suit it; --columns,
-            // when given, overrides that choice. PFFTT is the exception: its
-            // fields are defined by the format.
+            // when given, overrides that choice. `pfftt` and `native` are the
+            // exceptions: their fields are fixed by the format.
             let selected = submatches.get_many::<Column>("columns");
             let columns: Vec<Column> = match (selected, &output) {
                 (Some(_), Output::Store) => {
                     eprintln!(
                         "{}: --columns cannot be used with --output=pfftt",
+                        "error".bright_red()
+                    );
+                    std::process::exit(1);
+                }
+                (Some(_), Output::Native) => {
+                    eprintln!(
+                        "{}: --columns cannot be used with --output=native",
                         "error".bright_red()
                     );
                     std::process::exit(1);

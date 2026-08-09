@@ -1,7 +1,9 @@
 use crate::language::{Identifier, Numeric as LangNumeric, Span};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
-use crate::runner::evaluator::{Environment, coerce_to_list, combine, evaluate};
+use crate::runner::evaluator::{
+    Environment, coerce_to_list, combine, evaluate, is_list_literal, parse_list_literal,
+};
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value;
@@ -538,6 +540,84 @@ fn coerce_parses_bracketed_literal() {
 
     let empty = coerce_to_list(value::Value::Literali("[]".to_string())).expect("coerced");
     assert_eq!(empty, Vec::<value::Value>::new());
+
+    // Bracketed but malformed is an error, not one iteration over the raw
+    // text; text that was never bracketed is the one-element list.
+    let error = coerce_to_list(value::Value::Literali(r#"["Sydney, NSW]"#.to_string()))
+        .expect_err("expected malformed error");
+    let RunnerError::MalformedList { text } = error else {
+        panic!("expected MalformedList, got {:?}", error);
+    };
+    assert_eq!(text, r#"["Sydney, NSW]"#);
+
+    let plain = coerce_to_list(value::Value::Literali("east".to_string())).expect("coerced");
+    assert_eq!(plain, vec![value::Value::Literali("east".to_string())]);
+}
+
+#[test]
+fn parse_list_separates_elements_at_top_level() {
+    // A ',' inside a quoted element is part of that element, not a separator.
+    assert_eq!(
+        parse_list_literal(r#"["Sydney, NSW", "Hobart, TAS"]"#).expect("parsed"),
+        vec![
+            value::Value::Literali("Sydney, NSW".to_string()),
+            value::Value::Literali("Hobart, TAS".to_string()),
+        ]
+    );
+
+    // Nor does a ',' inside a nested bracket; the element parses as a list in
+    // its own right.
+    assert_eq!(
+        parse_list_literal("[[a, b], c]").expect("parsed"),
+        vec![
+            value::Value::Arraeum(vec![
+                value::Value::Literali("a".to_string()),
+                value::Value::Literali("b".to_string()),
+            ]),
+            value::Value::Literali("c".to_string()),
+        ]
+    );
+
+    // A trailing separator adds no element.
+    assert_eq!(
+        parse_list_literal("[east, west,]").expect("parsed"),
+        vec![
+            value::Value::Literali("east".to_string()),
+            value::Value::Literali("west".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn parse_list_applies_record_escapes() {
+    // Inside quotes a backslash escapes, using the same escapes the record
+    // format writes, so an element can hold a quote or a newline.
+    assert_eq!(
+        parse_list_literal(r#"["say \"hi\"", "one\ntwo"]"#).expect("parsed"),
+        vec![
+            value::Value::Literali("say \"hi\"".to_string()),
+            value::Value::Literali("one\ntwo".to_string()),
+        ]
+    );
+
+    // Outside quotes it is an ordinary character.
+    assert_eq!(
+        parse_list_literal(r"[C:\path]").expect("parsed"),
+        vec![value::Value::Literali(r"C:\path".to_string())]
+    );
+}
+
+#[test]
+fn parse_list_rejects_malformed() {
+    // An unbalanced quote, an unbalanced bracket, or an unknown escape is not
+    // a list, so callers can tell it apart from text that never was one.
+    assert_eq!(parse_list_literal(r#"["Sydney, NSW]"#), None);
+    assert_eq!(parse_list_literal("[[a, b]"), None);
+    assert_eq!(parse_list_literal(r#"["C:\path"]"#), None);
+
+    assert!(is_list_literal("[a, b]"));
+    assert!(!is_list_literal("[a, b"));
+    assert!(!is_list_literal("sydney"));
 }
 
 #[test]

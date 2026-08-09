@@ -87,6 +87,13 @@ pub enum RunnerError {
         procedure: String,
         actual: usize,
     },
+    MalformedArgument {
+        parameter: String,
+        argument: String,
+    },
+    MalformedList {
+        text: String,
+    },
     TerminalRequired,
     UserQuit,
 }
@@ -2159,12 +2166,16 @@ pub(super) fn bind_parameters(
         .iter()
         .zip(arguments)
     {
-        env.extend(
-            param
-                .value
-                .to_string(),
-            super::evaluator::parse_value(argument),
-        );
+        let parameter = param
+            .value
+            .to_string();
+        let value = super::evaluator::parse_value(argument).ok_or_else(|| {
+            RunnerError::MalformedArgument {
+                parameter: parameter.clone(),
+                argument: argument.to_string(),
+            }
+        })?;
+        env.extend(parameter, value);
     }
     Ok(env)
 }

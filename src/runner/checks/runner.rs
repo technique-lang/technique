@@ -2271,6 +2271,54 @@ test :
 }
 
 #[test]
+fn list_argument_binds_as_a_list() {
+    let source = r#"
+% technique v1
+
+sweep(regions) :
+
+1.  step
+        "#
+    .trim_ascii();
+    let document = parsing::parse(Path::new("Test.tq"), source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    // A bracketed argument binds as a list.
+    let args = ["[sydney, hobart]".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    assert_eq!(
+        env.lookup("regions"),
+        Some(&Value::Arraeum(vec![
+            Value::Literali("sydney".to_string()),
+            Value::Literali("hobart".to_string()),
+        ]))
+    );
+
+    // Text that was never a list stays text, brackets being the cue.
+    let args = ["sydney".to_string()];
+    let env = bind_parameters(&program, &args).expect("bind");
+    assert_eq!(
+        env.lookup("regions"),
+        Some(&Value::Literali("sydney".to_string()))
+    );
+
+    // An argument that reads as a list but doesn't parse is rejected rather
+    // than silently taken as text: here the quote is unbalanced.
+    let args = [r#"["Sydney, NSW]"#.to_string()];
+    let error = bind_parameters(&program, &args).expect_err("expected malformed error");
+    let RunnerError::MalformedArgument {
+        parameter,
+        argument,
+    } = error
+    else {
+        panic!("expected MalformedArgument, got {:?}", error);
+    };
+    assert_eq!(parameter, "regions");
+    assert_eq!(argument, r#"["Sydney, NSW]"#);
+}
+
+#[test]
 fn argument_echo_binds_each_parameter() {
     let source = r#"
 % technique v1

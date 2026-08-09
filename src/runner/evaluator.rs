@@ -224,9 +224,9 @@ pub fn evaluate<'i>(
 /// Reduce a value to the elements a `foreach` iterates. A list yields its
 /// members; `Unit` (the absence of a value) is empty; a blank string (an empty
 /// prompt answer) is likewise empty, so a `foreach` over it runs zero times; a
-/// non-blank string may be a `[a, b]` literal, which parses into its elements,
-/// else it is a one-element list; a bare quantity widens likewise. A tablet,
-/// tuple, or future is not iterable.
+/// non-blank string may be a `[a, b]` literal, which parses into its elements
+/// and is an error if it doesn't, else it is a one-element list; a bare
+/// quantity widens likewise. A tablet, tuple, or future is not iterable.
 pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     match value {
         Value::Arraeum(items) => Ok(items),
@@ -238,34 +238,44 @@ pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
         {
             Ok(Vec::new())
         }
-        Value::Literali(text) => match parse_list_literal(&text) {
-            Some(items) => Ok(items),
-            None => Ok(vec![Value::Literali(text)]),
-        },
+        Value::Literali(text) if is_list_literal(&text) => {
+            parse_list_literal(&text).ok_or(RunnerError::MalformedList { text })
+        }
+        Value::Literali(text) => Ok(vec![Value::Literali(text)]),
         value @ Value::Quanticle(_) => Ok(vec![value]),
         _ => Err(RunnerError::NotIterable),
     }
 }
 
-/// Coerce a raw user-supplied string — a command-line argument or an unquoted
-/// list element — into its natural Value type: a `[ … ]` literal becomes a
-/// list, a number becomes a quantity, anything else stays a string.
-pub(super) fn parse_value(text: &str) -> Value {
+/// Coerce a raw user-supplied string (a command-line argument or an unquoted
+/// list element) into its natural Value type. A `[ ... ]` literal becomes a
+/// list, a number becomes a quantity, anything else stays a string. `None` if
+/// the text appears to be a list but does not parse.
+pub(super) fn parse_value(text: &str) -> Option<Value> {
     let trimmed = text.trim();
-    if let Some(items) = parse_list_literal(trimmed) {
-        return Value::Arraeum(items);
+    if is_list_literal(trimmed) {
+        return parse_list_literal(trimmed).map(Value::Arraeum);
     }
     if let Some(numeric) = crate::parsing::parse_numeric(trimmed) {
-        return Value::Quanticle(Numeric::from(&numeric));
+        return Some(Value::Quanticle(Numeric::from(&numeric)));
     }
-    Value::Literali(text.to_string())
+    Some(Value::Literali(text.to_string()))
 }
 
-/// Parse a `[ "a", b, ... ]` literal into its elements. A quoted element is a
-/// string verbatim; an unquoted one takes its natural type via `parse_value`.
-/// Returns `None` for text that is not bracketed. TODO This splits naively on
-/// ',' so commas inside element text are not supported.
-fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
+/// Whether text reads as a list literal, the guard distinguishing a malformed
+/// list from ordinary text that was never one.
+pub(super) fn is_list_literal(text: &str) -> bool {
+    let text = text.trim();
+    text.starts_with('[') && text.ends_with(']')
+}
+
+/// Parse a user-input `[ "a", b, ... ]` string into its elements. Elements
+/// are separated at top level only, so a ',' inside a quoted element or a
+/// nested bracket does not split. A quoted element is a string carrying the
+/// record format's escapes; an unquoted one takes its natural type via
+/// `parse_value`. Returns `None` for text that is not bracketed, and for text
+/// that is malformed (an unbalanced quote or bracket, or an unknown escape).
+pub(super) fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     let inner = text
         .trim()
         .strip_prefix('[')?
@@ -276,20 +286,31 @@ fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     {
         return Some(Vec::new());
     }
-    let items = inner
-        .split(',')
+    let mut elements = crate::engraving::split_top_level(inner, ',').ok()?;
+    // A trailing separator is admitted, but does not add an element.
+    if let Some(last) = elements.last() {
+        if last
+            .trim()
+            .is_empty()
+        {
+            elements.pop();
+        }
+    }
+    elements
+        .into_iter()
         .map(|element| {
             let element = element.trim();
             match element
                 .strip_prefix('"')
                 .and_then(|e| e.strip_suffix('"'))
             {
-                Some(unquoted) => Value::Literali(unquoted.to_string()),
+                Some(quoted) => crate::engraving::unescape_literal(quoted)
+                    .ok()
+                    .map(Value::Literali),
                 None => parse_value(element),
             }
         })
-        .collect();
-    Some(items)
+        .collect()
 }
 
 /// Bind names to a value, shared by `Bind` evaluation and `foreach`

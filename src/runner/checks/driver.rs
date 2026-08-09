@@ -643,29 +643,50 @@ fn list_prompt() -> Prompt {
     }
 }
 
+// Type `text` into a list field and submit it, returning what the prompt
+// settles on — None if it refused the buffer, leaving the edit open.
+fn submit_list(text: &str) -> Option<UserInput> {
+    let mut it = list_prompt();
+    for c in text.chars() {
+        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+}
+
+// As above, for the cases that are expected to settle.
+fn gather_list(text: &str) -> Value {
+    match submit_list(text) {
+        Some(UserInput::Done(value)) => value,
+        other => panic!("expected Done, got {:?}", other),
+    }
+}
+
 #[test]
 fn list_prompt_empty_submits_empty_list() {
-    // Enter on an untouched list field yields `[]`, which coerce_to_list reads
-    // as zero iterations.
-    let mut it = list_prompt();
+    // Enter on an untouched list field yields the empty list, which
+    // coerce_to_list reads as zero iterations.
+    assert_eq!(gather_list(""), Value::Arraeum(Vec::new()));
+}
+
+#[test]
+fn list_prompt_gathers_elements() {
+    // What the user types is gathered as a list of its elements, not as one
+    // string: the structure survives into the binding and onto the record.
+    // Each element takes its natural type, the same as an argument would.
     assert_eq!(
-        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Literali("[]".to_string())))
+        gather_list("east, 5"),
+        Value::Arraeum(vec![
+            Value::Literali("east".to_string()),
+            Value::Quanticle(Numeric::Integral(5)),
+        ])
     );
 }
 
 #[test]
-fn list_prompt_wraps_typed_buffer() {
-    // Whatever the user types is wrapped in brackets on submit, so the
-    // result parses through the existing list-literal path.
-    let mut it = list_prompt();
-    for c in "east, west".chars() {
-        it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
-    }
-    assert_eq!(
-        it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(UserInput::Done(Value::Literali("[east, west]".to_string())))
-    );
+fn list_prompt_refuses_malformed_buffer() {
+    // A buffer that doesn't parse leaves the edit open rather than settling
+    // on a mangled list.
+    assert_eq!(submit_list(r#""east, west"#), None);
 }
 
 #[test]
