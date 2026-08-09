@@ -643,13 +643,19 @@ fn list_prompt() -> Prompt {
     }
 }
 
-// Type `text` into a list field and submit it, returning the gathered value.
-fn gather_list(text: &str) -> Value {
+// Type `text` into a list field and submit it, returning what the prompt
+// settles on — None if it refused the buffer, leaving the edit open.
+fn submit_list(text: &str) -> Option<UserInput> {
     let mut it = list_prompt();
     for c in text.chars() {
         it.handle(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
     }
-    match it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+    it.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+}
+
+// As above, for the cases that are expected to settle.
+fn gather_list(text: &str) -> Value {
+    match submit_list(text) {
         Some(UserInput::Done(value)) => value,
         other => panic!("expected Done, got {:?}", other),
     }
@@ -698,6 +704,13 @@ fn list_prompt_gathers_elements() {
             Value::Quanticle(Numeric::Integral(5)),
         ])
     );
+}
+
+#[test]
+fn list_prompt_refuses_malformed_buffer() {
+    // A buffer that doesn't parse leaves the edit open rather than settling
+    // on a mangled list.
+    assert_eq!(submit_list(r#""east, west"#), None);
 }
 
 #[test]

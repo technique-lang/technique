@@ -1416,20 +1416,19 @@ impl Prompt {
                     if *bracketed {
                         // A list field submits its buffer wrapped and parsed
                         // into elements, the same way a command-line argument
-                        // is; an empty answer is the empty list.
-                        Some(UserInput::Done(super::evaluator::parse_value(&format!(
-                            "[{}]",
-                            buffer
-                        ))))
+                        // is; an empty answer is the empty list. A buffer
+                        // that does not parse is not accepted; the edit stays
+                        // open for correction.
+                        super::evaluator::parse_list_literal(&format!("[{}]", buffer))
+                            .map(|items| UserInput::Done(Value::Arraeum(items)))
                     } else if !*edited {
                         // Unchanged: return the original value verbatim, with
                         // its type and exact value intact.
                         Some(UserInput::Done(std::mem::replace(original, Value::Unitus)))
                     } else if let Value::Quanticle(_) = original {
                         // An edited numeric value stays numeric: re-parse the
-                        // buffer with the language's own number grammar. A
-                        // buffer that is not a valid number is not accepted —
-                        // the edit stays open for correction.
+                        // buffer. A buffer that is not a valid number is not
+                        // accepted; the edit stays open for correction.
                         match crate::parsing::parse_numeric(buffer) {
                             Some(numeric) => Some(UserInput::Done(Value::Quanticle(
                                 crate::value::Numeric::from(&numeric),

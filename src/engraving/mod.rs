@@ -22,7 +22,9 @@ pub use record::{
 };
 pub use store::{Appender, Store};
 
-pub(crate) use record::{fail_reason, format_record, format_supplied, serialize_value};
+pub(crate) use record::{
+    fail_reason, format_record, format_supplied, serialize_value, split_top_level, unescape_literal,
+};
 pub(crate) use store::{construct_state_path, parse_run_uri};
 
 #[cfg(test)]
