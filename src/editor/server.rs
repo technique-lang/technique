@@ -843,6 +843,10 @@ impl TechniqueLanguageServer {
                     "Invalid quantity symbol".to_string(),
                     DiagnosticSeverity::ERROR,
                 ),
+                ParsingError::InvalidEscape(_) => (
+                    "Invalid escape sequence".to_string(),
+                    DiagnosticSeverity::ERROR,
+                ),
                 ParsingError::UnclosedInterpolation(_) => (
                     "Unclosed interpolation".to_string(),
                     DiagnosticSeverity::ERROR,

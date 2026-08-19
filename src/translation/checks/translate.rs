@@ -908,8 +908,8 @@ run :
         panic!("expected Tablet, got {:?}", ops[0]);
     };
     assert_eq!(entries.len(), 2);
-    assert_eq!(entries[0].label, "speed");
-    assert_eq!(entries[1].label, "weight");
+    assert_eq!(entries[0].label, vec![Fragment::Text("speed")]);
+    assert_eq!(entries[1].label, vec![Fragment::Text("weight")]);
 }
 
 #[test]

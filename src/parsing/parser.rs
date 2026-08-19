@@ -65,6 +65,7 @@ pub enum ParsingError {
     InvalidQuantityUncertainty(Span),
     InvalidQuantityMagnitude(Span),
     InvalidQuantitySymbol(Span),
+    InvalidEscape(Span),
     // highest priority
     UnclosedInterpolation(Span),
 }
@@ -105,6 +106,7 @@ impl ParsingError {
             | ParsingError::InvalidQuantityUncertainty(span)
             | ParsingError::InvalidQuantityMagnitude(span)
             | ParsingError::InvalidQuantitySymbol(span)
+            | ParsingError::InvalidEscape(span)
             | ParsingError::UnclosedInterpolation(span) => *span,
             ParsingError::Expected(span, _)
             | ParsingError::ExpectedMatchingChar(span, _, _, _)
@@ -460,7 +462,34 @@ impl<'i> Parser<'i> {
         let mut begun = false;
         let mut unterminated = false;
 
-        if start_char == end_char {
+        if start_char == '"' {
+            // A double quoted literal is what Literals already knows how to
+            // scan: an escaped quote does not close it, and it cannot carry
+            // across a line ending.
+            let mut literals = Literals::new();
+
+            for (i, c) in self
+                .source
+                .char_indices()
+            {
+                if literals.opaque(&self.source[i..]) {
+                    continue;
+                }
+
+                if !begun {
+                    if c == start_char {
+                        begun = true;
+                    }
+                } else {
+                    // the literal is over, either at the closing quote or
+                    // because the line ended without one
+                    if c == end_char {
+                        l = i + 1; // add end character
+                    }
+                    break;
+                }
+            }
+        } else if start_char == end_char {
             // Simple case: same character for start and end (like X...X)
             for (i, c) in self
                 .source
@@ -715,7 +744,23 @@ impl<'i> Parser<'i> {
             }
             let indent = trimmed.as_ptr() as usize - base;
             let mut parser = outer.subparser(indent, trimmed);
-            results.push(function(&mut parser)?);
+            let result = function(&mut parser)?;
+
+            // whatever the element did not consume is not part of it, and
+            // silently dropping it would hide the malformed input that left
+            // it behind
+            let leftover = parser
+                .source
+                .trim_ascii();
+            if !leftover.is_empty() {
+                let offset = leftover.as_ptr() as usize - base;
+                return Err(ParsingError::Unrecognized(Span::new(
+                    outer.offset + offset,
+                    leftover.len(),
+                )));
+            }
+
+            results.push(result);
             outer
                 .problems
                 .extend(parser.problems);
@@ -1933,8 +1978,9 @@ impl<'i> Parser<'i> {
             outer.take_elements(true, |inner| {
                 if is_pair(inner.source) {
                     let pair_start = inner.offset;
-                    let label =
-                        inner.take_block_chars("a label", '"', '"', |label| Ok(label.source))?;
+                    let label = inner.take_block_chars("a label", '"', '"', |label| {
+                        label.parse_string_pieces(label.source)
+                    })?;
                     inner.trim_whitespace();
                     inner.advance(1); // consume '=' (is_pair guarantees it)
                     inner.trim_whitespace();
@@ -1998,71 +2044,111 @@ impl<'i> Parser<'i> {
         Ok(Expression::Tuple(elements, span))
     }
 
+    /// The text a backslash escape at `i` stands for. Escaping is strict so
+    /// that a sequence we don't recognize is a mistake rather than content;
+    /// anything needing backslashes of its own goes in a multiline instead.
+    fn escaped(&self, bytes: &[u8], i: usize) -> Result<char, ParsingError> {
+        match bytes.get(i + 1) {
+            Some(b'\\') => Ok('\\'),
+            Some(b'"') => Ok('"'),
+            Some(b'n') => Ok('\n'),
+            Some(b'r') => Ok('\r'),
+            Some(b't') => Ok('\t'),
+            Some(b'{') => Ok('{'),
+            Some(b'}') => Ok('}'),
+            _ => {
+                let width = if i + 1 < bytes.len() { 2 } else { 1 };
+                Err(ParsingError::InvalidEscape(Span::new(
+                    self.offset + i,
+                    width,
+                )))
+            }
+        }
+    }
+
+    /// Split a string literal's raw content into runs of text and the
+    /// interpolations between them, decoding escapes as we go. Decoding and
+    /// splitting are one pass because an escaped brace must not be mistaken
+    /// for the start of an interpolation. Each escape yields a one character
+    /// piece, so the surrounding text stays borrowed from the source.
     fn parse_string_pieces(&mut self, raw: &'i str) -> Result<Vec<Piece<'i>>, ParsingError> {
-        // Quick check: if no braces, just return a single text piece
-        if !raw.contains('{') {
+        // Quick check: nothing to decode and nothing to interpolate
+        if !raw.contains(['{', '\\']) {
             return Ok(vec![Piece::Text(raw)]);
         }
 
+        let bytes = raw.as_bytes();
         let mut pieces = Vec::new();
-        let mut current_pos = 0;
+        let mut run = 0; // start of the text being borrowed
+        let mut i = 0;
 
-        while current_pos < raw.len() {
-            // Look for the start of an interpolation
-            if let Some(brace_start) = raw[current_pos..].find('{') {
-                let absolute_brace_start = current_pos + brace_start;
-
-                // Add text before the brace if any
-                if brace_start > 0 {
-                    pieces.push(Piece::Text(&raw[current_pos..absolute_brace_start]));
-                }
-
-                // Find the matching closing brace
-                let mut brace_depth = 0;
-                let mut brace_end = None;
-
-                for (i, c) in raw[absolute_brace_start..].char_indices() {
-                    if c == '{' {
-                        brace_depth += 1;
-                    } else if c == '}' {
-                        brace_depth -= 1;
-                        if brace_depth == 0 {
-                            brace_end = Some(absolute_brace_start + i);
-                            break;
-                        }
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => {
+                    if i > run {
+                        pieces.push(Piece::Text(&raw[run..i]));
                     }
+
+                    pieces.push(Piece::Escaped(self.escaped(bytes, i)?));
+                    i += 2;
+                    run = i;
                 }
-
-                match brace_end {
-                    Some(end_pos) => {
-                        // Extract the content between braces
-                        let expr_content = &raw[absolute_brace_start + 1..end_pos];
-
-                        // Parse the expression using existing machinery
-                        let mut parser = self.subparser(absolute_brace_start + 1, expr_content);
-                        let expression = parser.read_expression()?;
-                        pieces.push(Piece::Interpolation(expression));
-
-                        current_pos = end_pos + 1;
+                b'{' => {
+                    if i > run {
+                        pieces.push(Piece::Text(&raw[run..i]));
                     }
-                    None => {
-                        // Unmatched brace - point to the opening brace position
-                        return Err(ParsingError::UnclosedInterpolation(Span::new(
-                            self.offset + absolute_brace_start,
-                            0,
-                        )));
-                    }
+
+                    let end = self.find_interpolation_end(raw, i)?;
+                    let content = &raw[i + 1..end];
+
+                    let mut parser = self.subparser(i + 1, content);
+                    let expression = parser.read_expression()?;
+                    pieces.push(Piece::Interpolation(expression));
+
+                    i = end + 1;
+                    run = i;
                 }
-            } else {
-                // No more braces - add the rest as text
-                if current_pos < raw.len() {
-                    pieces.push(Piece::Text(&raw[current_pos..]));
-                }
-                break;
+                _ => i += 1,
             }
         }
 
+        if run < raw.len() {
+            pieces.push(Piece::Text(&raw[run..]));
+        }
+
         Ok(pieces)
+    }
+
+    /// Locate the '}' matching the '{' at `start`, counting nesting and
+    /// stepping over escapes so that an escaped brace neither opens nor
+    /// closes an interpolation.
+    fn find_interpolation_end(&self, raw: &str, start: usize) -> Result<usize, ParsingError> {
+        let bytes = raw.as_bytes();
+        let mut depth = 0;
+        let mut i = start;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => {
+                    i += 2;
+                    continue;
+                }
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(i);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+
+        Err(ParsingError::UnclosedInterpolation(Span::new(
+            self.offset + start,
+            0,
+        )))
     }
 
     /// Consume an identifier. As with the other smaller read methods, we do a
@@ -3550,6 +3636,7 @@ enum Within {
 struct Literals {
     within: Within,
     delimiter: u8,
+    escaped: bool,
 }
 
 impl Literals {
@@ -3557,6 +3644,7 @@ impl Literals {
         Literals {
             within: Within::Text,
             delimiter: 0,
+            escaped: false,
         }
     }
 
@@ -3593,15 +3681,28 @@ impl Literals {
                     true
                 } else if rest.starts_with('"') {
                     self.within = Within::String;
+                    self.escaped = false;
                     false
                 } else {
                     false
                 }
             }
             // a string is closed by the next quote, or by the line ending; a
-            // fence is how text is carried across lines
+            // fence is how text is carried across lines. The line ending is
+            // tested first so that a trailing backslash cannot carry the
+            // string into the next line.
             Within::String => {
-                if rest.starts_with('"') || rest.starts_with('\n') {
+                if rest.starts_with('\n') {
+                    self.within = Within::Text;
+                    self.escaped = false;
+                    false
+                } else if self.escaped {
+                    self.escaped = false;
+                    true
+                } else if rest.starts_with('\\') {
+                    self.escaped = true;
+                    true
+                } else if rest.starts_with('"') {
                     self.within = Within::Text;
                     false
                 } else {
@@ -3773,15 +3874,31 @@ fn is_string_literal(content: &str) -> bool {
 /// then be followed by an expression).
 fn is_pair(content: &str) -> bool {
     let content = content.trim_ascii_start();
-    let Some(rest) = content.strip_prefix('"') else {
+    if !content.starts_with('"') {
         return false;
-    };
-    match rest.split_once('"') {
-        Some((_label, after)) => after
-            .trim_ascii_start()
-            .starts_with('='),
-        None => false,
     }
+
+    // the label is a quoted literal, so an escaped quote is content rather
+    // than the end of it
+    let mut literals = Literals::new();
+    let mut begun = false;
+
+    for (i, c) in content.char_indices() {
+        if literals.opaque(&content[i..]) {
+            continue;
+        }
+
+        if !begun {
+            begun = true;
+        } else {
+            return c == '"'
+                && content[i + 1..]
+                    .trim_ascii_start()
+                    .starts_with('=');
+        }
+    }
+
+    false
 }
 
 /// Detect the empty tablet literal `[=]`. A bare `[]` is the empty list; the

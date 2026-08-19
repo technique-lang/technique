@@ -63,6 +63,20 @@ enclose those names in parenthesis. For example:
                 .to_string(),
             )
         }
+        ParsingError::InvalidEscape(_) => (
+            "Invalid escape sequence".to_string(),
+            r#"
+Within a string literal a backslash begins an escape sequence. The known
+escape sequences are '\"', '\n', '\r', '\t', '\{', and '\}'. Write '\\' to get
+a single actual backslash character.
+
+If you need to write something with extensive use of backslashes such as a
+regular expression you might prefer a multiline string delimited by ```, where
+no special interpretation escape or interpolation characters takes place.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         ParsingError::UnclosedInterpolation(_) => (
             "Unclosed string interpolation".to_string(),
             r#"

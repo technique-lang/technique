@@ -96,11 +96,11 @@ fn tablet_entries_evaluate() {
     let op = Operation::Tablet(
         vec![
             Entry {
-                label: "name",
+                label: vec![Fragment::Text("name")],
                 value: Operation::String(vec![Fragment::Text("Kowalski")], Span::default()),
             },
             Entry {
-                label: "count",
+                label: vec![Fragment::Text("count")],
                 value: Operation::Number(LangNumeric::Integral(7), Span::default()),
             },
         ],

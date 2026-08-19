@@ -153,6 +153,12 @@ fn resolve_operation<'i>(
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &mut entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        resolve_operation(op, known, arities, problems);
+                    }
+                }
                 resolve_operation(&mut entry.value, known, arities, problems);
             }
         }
@@ -229,6 +235,12 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        gather_iterated(op, iterated);
+                    }
+                }
                 gather_iterated(&entry.value, iterated);
             }
         }
@@ -300,6 +312,12 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &mut entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        mark_iterated(op, iterated);
+                    }
+                }
                 mark_iterated(&mut entry.value, iterated);
             }
         }
@@ -402,6 +420,12 @@ fn check_scope<'i>(
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        check_scope(op, scope, problems);
+                    }
+                }
                 check_scope(&entry.value, scope, problems);
             }
         }
@@ -471,6 +495,12 @@ fn check_costs<'i>(op: &Operation<'i>, problems: &mut Vec<ResolutionError<'i>>) 
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        check_costs(op, problems);
+                    }
+                }
                 check_costs(&entry.value, problems);
             }
         }

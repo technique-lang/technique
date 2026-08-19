@@ -277,12 +277,13 @@ pub enum ExecutableRef<'i> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Fragment<'i> {
     Text(&'i str),
+    Escaped(char),
     Interpolation(Operation<'i>),
 }
 
 /// An entry in a tablet: a label paired with a value-producing operation.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Entry<'i> {
-    pub label: &'i str,
+    pub label: Vec<Fragment<'i>>,
     pub value: Operation<'i>,
 }

@@ -7,6 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::domain::Adapter;
+use crate::domain::engine::render_pieces;
 use crate::language;
 
 use super::types::{Document, Ingredient, Ingredients, Prose, Step};
@@ -128,9 +129,7 @@ fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, pla
     if let Some(pairs) = scope.tablet() {
         for pair in pairs {
             items.push(Ingredient {
-                label: pair
-                    .label
-                    .to_string(),
+                label: render_pieces(&pair.label),
                 quantity: format_value(&pair.value),
                 source: place.map(String::from),
             });
@@ -143,9 +142,7 @@ fn collect_ingredients(items: &mut Vec<Ingredient>, scope: &language::Scope, pla
         if let Some(pairs) = scope.inline_tablet() {
             for pair in pairs {
                 items.push(Ingredient {
-                    label: pair
-                        .label
-                        .to_string(),
+                    label: render_pieces(&pair.label),
                     quantity: format_value(&pair.value),
                     source: place.map(String::from),
                 });

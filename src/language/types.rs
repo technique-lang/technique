@@ -505,13 +505,15 @@ pub struct Function<'i> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pair<'i> {
-    pub label: &'i str,
+    pub label: Vec<Piece<'i>>,
     pub value: Expression<'i>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Piece<'i> {
     Text(&'i str),
+    /// The character a backslash escape stood for
+    Escaped(char),
     Interpolation(Expression<'i>),
 }
 

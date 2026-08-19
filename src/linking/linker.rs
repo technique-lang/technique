@@ -108,6 +108,12 @@ fn link_operation<'i>(
         }
         Operation::Tablet(entries, _) => {
             for entry in entries {
+                // a label is a quoted literal, so it can interpolate too
+                for fragment in &mut entry.label {
+                    if let Fragment::Interpolation(op) = fragment {
+                        link_operation(op, library, problems);
+                    }
+                }
                 link_operation(&mut entry.value, library, problems);
             }
         }

@@ -638,6 +638,174 @@ fn string_delimited_blocks() {
 }
 
 #[test]
+fn string_escapes() {
+    let mut input = Parser::new();
+
+    // an escaped quote is content, and does not end the literal
+    input.initialize(r#"{ "say \"hello\" now" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("say "),
+                Piece::Escaped('"'),
+                Piece::Text("hello"),
+                Piece::Escaped('"'),
+                Piece::Text(" now"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // an escaped brace is content, and does not open an interpolation
+    input.initialize(r#"{ "awk '\{print $1\}'" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("awk '"),
+                Piece::Escaped('{'),
+                Piece::Text("print $1"),
+                Piece::Escaped('}'),
+                Piece::Text("'"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // an unescaped brace still interpolates, alongside escapes
+    input.initialize(r#"{ "deploy { customer } \"now\"" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("deploy "),
+                Piece::Interpolation(Expression::Variable(
+                    Identifier::new("customer"),
+                    Span::default()
+                )),
+                Piece::Text(" "),
+                Piece::Escaped('"'),
+                Piece::Text("now"),
+                Piece::Escaped('"'),
+            ],
+            Span::default()
+        )])
+    );
+
+    // the remaining escapes
+    input.initialize(r#"{ "a\nb\rc\td\\e" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("a"),
+                Piece::Escaped('\n'),
+                Piece::Text("b"),
+                Piece::Escaped('\r'),
+                Piece::Text("c"),
+                Piece::Escaped('\t'),
+                Piece::Text("d"),
+                Piece::Escaped('\\'),
+                Piece::Text("e"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // a lone closing brace is literal, needing no escape
+    input.initialize(r#"{ "a } b" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![Piece::Text("a } b")],
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn tablet_label_escapes() {
+    let mut input = Parser::new();
+
+    // a label is a quoted literal like any other, so it escapes the same way
+    input.initialize(r#"{ ["say \"hi\"" = 1] }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: vec![
+                    Piece::Text("say "),
+                    Piece::Escaped('"'),
+                    Piece::Text("hi"),
+                    Piece::Escaped('"'),
+                ],
+                value: Expression::Number(Numeric::Integral(1), Span::default())
+            }],
+            Span::default()
+        )])
+    );
+
+    // and interpolates the same way
+    input.initialize(r#"{ ["order { n }" = 2] }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: vec![
+                    Piece::Text("order "),
+                    Piece::Interpolation(Expression::Variable(
+                        Identifier::new("n"),
+                        Span::default()
+                    )),
+                ],
+                value: Expression::Number(Numeric::Integral(2), Span::default())
+            }],
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn string_escapes_rejected() {
+    let mut input = Parser::new();
+
+    // escaping is strict, so content needing backslashes of its own has to
+    // be written as a multiline instead
+    input.initialize(r#"{ "grep '^\s*\d+'" }"#);
+    match input.read_code_block() {
+        Err(ParsingError::InvalidEscape(_)) => {}
+        other => panic!("Expected InvalidEscape, got: {:?}", other),
+    }
+
+    // a backslash with nothing following it inside the literal
+    input.initialize(r#"{ "oops \" }"#);
+    assert!(
+        input
+            .read_code_block()
+            .is_err()
+    );
+}
+
+#[test]
+fn string_escapes_do_not_expose_structure() {
+    let mut input = Parser::new();
+
+    // the escaped quotes must not end the literal as far as the line
+    // scanner is concerned, otherwise the ordinal inside it reads as the
+    // start of a step
+    input.initialize("probe :\n    1. { exec(\"say \\\"2. not a step\\\" now\") }\n");
+    let result = input.read_procedure();
+    assert!(result.is_ok(), "expected a procedure, got {:?}", result);
+
+    let procedure = result.unwrap();
+    let steps = procedure
+        .elements
+        .len();
+    assert_eq!(steps, 1, "the ordinal inside the string became a step");
+}
+
+#[test]
 fn taking_until() {
     let mut input = Parser::new();
 
@@ -1920,7 +2088,7 @@ fn tablets() {
         result,
         Ok(vec![Expression::Tablet(
             vec![Pair {
-                label: "name",
+                label: vec![Piece::Text("name")],
                 value: Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
             }],
             Span::default()
@@ -1940,14 +2108,14 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "name",
+                    label: vec![Piece::Text("name")],
                     value: Expression::String(
                         vec![Piece::Text("Alice of Chains")],
                         Span::default()
                     )
                 },
                 Pair {
-                    label: "age",
+                    label: vec![Piece::Text("age")],
                     value: Expression::String(vec![Piece::Text("29")], Span::default())
                 }
             ],
@@ -1969,15 +2137,15 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "answer",
+                    label: vec![Piece::Text("answer")],
                     value: Expression::Number(Numeric::Integral(42), Span::default())
                 },
                 Pair {
-                    label: "message",
+                    label: vec![Piece::Text("message")],
                     value: Expression::Variable(Identifier::new("msg"), Span::default())
                 },
                 Pair {
-                    label: "timestamp",
+                    label: vec![Piece::Text("timestamp")],
                     value: Expression::Execution(
                         Function {
                             target: Identifier::new("now"),
@@ -2022,14 +2190,14 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "context",
+                    label: vec![Piece::Text("context")],
                     value: Expression::String(
                         vec![Piece::Text("Details about the thing")],
                         Span::default()
                     )
                 },
                 Pair {
-                    label: "status",
+                    label: vec![Piece::Text("status")],
                     value: Expression::Variable(Identifier::new("active"), Span::default())
                 }
             ],
@@ -2217,11 +2385,11 @@ fn tablet_inline_commas() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "answer",
+                    label: vec![Piece::Text("answer")],
                     value: Expression::Number(Numeric::Integral(42), Span::default())
                 },
                 Pair {
-                    label: "truth",
+                    label: vec![Piece::Text("truth")],
                     value: Expression::String(vec![Piece::Text("yes")], Span::default())
                 }
             ],

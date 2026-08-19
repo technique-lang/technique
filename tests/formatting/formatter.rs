@@ -339,7 +339,7 @@ We must take action!
                                     expressions: vec![Expression::Tablet(
                                         vec![
                                             Pair {
-                                                label: "timestamp",
+                                                label: vec![Piece::Text("timestamp")],
                                                 value: Expression::Execution(
                                                     Function {
                                                         target: Identifier::new("now"),
@@ -349,7 +349,7 @@ We must take action!
                                                 ),
                                             },
                                             Pair {
-                                                label: "message",
+                                                label: vec![Piece::Text("message")],
                                                 value: Expression::Variable(
                                                     Identifier::new("msg"),
                                                     Span::default(),
