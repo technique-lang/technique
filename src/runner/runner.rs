@@ -517,7 +517,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Number(_, _)
             | Operation::Response(_, _)
             | Operation::String(_, _)
-            | Operation::Multiline(_, _, _)
+            | Operation::Verbatim(_, _)
             | Operation::Tablet(_, _)
             | Operation::List(_, _)
             | Operation::Tuple(_, _)

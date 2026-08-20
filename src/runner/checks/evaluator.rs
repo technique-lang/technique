@@ -1,4 +1,4 @@
-use crate::language::{Identifier, Numeric as LangNumeric, Span};
+use crate::language::{Identifier, Multiline, Numeric as LangNumeric, Span};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
 use crate::runner::evaluator::{
@@ -83,7 +83,11 @@ fn string_interpolation() {
 fn multiline_joins_with_newlines() {
     let library = Library::core();
     let context = Context::native(false);
-    let op = Operation::Multiline(None, vec!["foo", "bar", "baz"], Span::default());
+    let multiline = Multiline {
+        language: None,
+        lines: vec!["foo", "bar", "baz"],
+    };
+    let op = Operation::Verbatim(&multiline, Span::default());
     let mut env = Environment::new();
     let v = evaluate(&library, &context, &mut env, &op).expect("evaluated");
     assert_eq!(v, value::Value::Literali("foo\nbar\nbaz".to_string()));
@@ -96,11 +100,11 @@ fn tablet_entries_evaluate() {
     let op = Operation::Tablet(
         vec![
             Entry {
-                label: "name",
+                label: vec![Fragment::Text("name")],
                 value: Operation::String(vec![Fragment::Text("Kowalski")], Span::default()),
             },
             Entry {
-                label: "count",
+                label: vec![Fragment::Text("count")],
                 value: Operation::Number(LangNumeric::Integral(7), Span::default()),
             },
         ],

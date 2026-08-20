@@ -908,8 +908,8 @@ run :
         panic!("expected Tablet, got {:?}", ops[0]);
     };
     assert_eq!(entries.len(), 2);
-    assert_eq!(entries[0].label, "speed");
-    assert_eq!(entries[1].label, "weight");
+    assert_eq!(entries[0].label, vec![Fragment::Text("speed")]);
+    assert_eq!(entries[1].label, vec![Fragment::Text("weight")]);
 }
 
 #[test]
@@ -1475,12 +1475,11 @@ run :
     let Operation::Execute(executable, _) = &ops[0] else {
         panic!("expected Execute");
     };
-    let Operation::Multiline(lang, lines, _) = &executable.arguments[0] else {
+    let Operation::Verbatim(multiline, _) = &executable.arguments[0] else {
         panic!("expected Multiline, got {:?}", executable.arguments[0]);
     };
-    assert_eq!(*lang, Some("bash"));
-    assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "ip addr");
+    assert_eq!(multiline.language, Some("bash"));
+    assert_eq!(multiline.lines, vec!["        ip addr"]);
 }
 
 #[test]

@@ -744,25 +744,31 @@ impl<'i> Translator<'i> {
         }
     }
 
+    /// The pieces of a quoted literal, shared by string values and the
+    /// labels of tablet entries since the two parse identically.
+    fn translate_pieces(&mut self, pieces: &'i [language::Piece<'i>]) -> Vec<Fragment<'i>> {
+        pieces
+            .iter()
+            .map(|piece| match piece {
+                language::Piece::Text(text) => Fragment::Text(text),
+                language::Piece::Escaped(c) => Fragment::Escaped(*c),
+                language::Piece::Interpolation(expr) => {
+                    Fragment::Interpolation(self.translate_expression(expr))
+                }
+            })
+            .collect()
+    }
+
     fn translate_expression(&mut self, expression: &'i language::Expression<'i>) -> Operation<'i> {
         match expression {
             language::Expression::Variable(id, span) => Operation::Variable(*id, *span),
             language::Expression::Number(numeric, span) => Operation::Number(*numeric, *span),
             language::Expression::String(pieces, span) => {
-                let fragments = pieces
-                    .iter()
-                    .map(|piece| match piece {
-                        language::Piece::Text(text) => Fragment::Text(text),
-                        language::Piece::Interpolation(expr) => {
-                            Fragment::Interpolation(self.translate_expression(expr))
-                        }
-                    })
-                    .collect();
-                Operation::String(fragments, *span)
+                Operation::String(self.translate_pieces(pieces), *span)
             }
             language::Expression::Response(value, span) => Operation::Response(value, *span),
-            language::Expression::Multiline(lang, lines, span) => {
-                Operation::Multiline(*lang, lines.clone(), *span)
+            language::Expression::Multiline(multiline, span) => {
+                Operation::Verbatim(multiline, *span)
             }
             language::Expression::Pair(pair, span) => {
                 // A standalone labelled value widens to a single-entry
@@ -770,7 +776,7 @@ impl<'i> Translator<'i> {
                 // single-element list.
                 Operation::Tablet(
                     vec![Entry {
-                        label: pair.label,
+                        label: self.translate_pieces(&pair.label),
                         value: self.translate_expression(&pair.value),
                     }],
                     *span,
@@ -780,7 +786,7 @@ impl<'i> Translator<'i> {
                 let entries = pairs
                     .iter()
                     .map(|pair| Entry {
-                        label: pair.label,
+                        label: self.translate_pieces(&pair.label),
                         value: self.translate_expression(&pair.value),
                     })
                     .collect();

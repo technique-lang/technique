@@ -253,16 +253,28 @@ impl<'i> Response<'i> {
 /// Render an Expression as human-readable text.
 /// Returns (expression_text, body_lines) where body_lines captures multiline
 /// content separately for distinct styling.
+/// The text of a quoted literal, with any interpolation rendered as the
+/// expression it came from. Shared by string values and tablet labels.
+pub(crate) fn render_pieces(pieces: &[Piece]) -> String {
+    let mut result = String::new();
+
+    for piece in pieces {
+        match piece {
+            Piece::Text(t) => result.push_str(t),
+            Piece::Escaped(c) => result.push(*c),
+            Piece::Interpolation(e) => result.push_str(&render_expression(e)),
+        }
+    }
+
+    result
+}
+
 fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
     if let Expression::Execution(func, _) = expr {
         let mut body = Vec::new();
         for param in &func.parameters {
-            if let Expression::Multiline(_, lines, _) = param {
-                body.extend(
-                    lines
-                        .iter()
-                        .map(|s| s.to_string()),
-                );
+            if let Expression::Multiline(multiline, _) = param {
+                body.push(multiline.content());
             }
         }
         if !body.is_empty() {
@@ -334,26 +346,21 @@ fn render_expression(expr: &Expression) -> String {
                 args.join(", ")
             )
         }
-        Expression::Multiline(_, lines, _) => lines.join("\n"),
+        Expression::Multiline(multiline, _) => multiline.content(),
         Expression::Variable(id, _) => id
             .value
             .to_string(),
         Expression::Binding(inner, _, _) => render_expression(inner),
-        Expression::String(pieces, _) => {
-            let mut result = String::new();
-            for piece in pieces {
-                match piece {
-                    Piece::Text(t) => result.push_str(t),
-                    Piece::Interpolation(e) => result.push_str(&render_expression(e)),
-                }
-            }
-            result
-        }
+        Expression::String(pieces, _) => render_pieces(pieces),
         Expression::Response(value, _) => format!("'{}'", value),
         Expression::Number(Numeric::Scientific(q), _) => q.to_string(),
         Expression::Number(Numeric::Integral(n), _) => n.to_string(),
         Expression::Pair(pair, _) => {
-            format!("\"{}\" = {}", pair.label, render_expression(&pair.value))
+            format!(
+                "\"{}\" = {}",
+                render_pieces(&pair.label),
+                render_expression(&pair.value)
+            )
         }
         Expression::List(elements, _) => {
             let items: Vec<_> = elements
@@ -375,7 +382,13 @@ fn render_expression(expr: &Expression) -> String {
             }
             let entries: Vec<_> = pairs
                 .iter()
-                .map(|pair| format!("\"{}\" = {}", pair.label, render_expression(&pair.value)))
+                .map(|pair| {
+                    format!(
+                        "\"{}\" = {}",
+                        render_pieces(&pair.label),
+                        render_expression(&pair.value)
+                    )
+                })
                 .collect();
             format!("[{}]", entries.join(", "))
         }

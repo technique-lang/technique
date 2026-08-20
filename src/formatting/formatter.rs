@@ -34,6 +34,15 @@ impl Substitutions {
     }
 }
 
+fn escaped_as(c: char) -> char {
+    match c {
+        '\n' => 'n',
+        '\r' => 'r',
+        '\t' => 't',
+        other => other,
+    }
+}
+
 // Helper function to convert numbers to superscript
 fn to_superscript(num: i8) -> String {
     num.to_string()
@@ -471,7 +480,7 @@ impl<'i> Formatter<'i> {
             return Vec::new();
         }
         match expr {
-            Expression::Multiline(_, _, _) => {
+            Expression::Multiline(_, _) => {
                 // These are not inline, caller should handle specially
                 Vec::new()
             }
@@ -904,7 +913,7 @@ impl<'i> Formatter<'i> {
                             line = self.builder();
                             line.add_word(Syntax::Structure, "}");
                         }
-                        Expression::Multiline(_, _, _) => {
+                        Expression::Multiline(_, _) => {
                             line.flush();
                             self.add_fragment_reference(Syntax::Structure, "{");
                             self.increase(4);
@@ -921,7 +930,7 @@ impl<'i> Formatter<'i> {
                                     .parameters
                                     .iter()
                                     .any(|p| {
-                                        if let Expression::Multiline(_, _, _) = p {
+                                        if let Expression::Multiline(_, _) = p {
                                             true
                                         } else {
                                             false
@@ -1267,22 +1276,7 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Variable, identifier.value);
             }
             Expression::String(pieces, _) => {
-                self.add_fragment_reference(Syntax::Quote, "\"");
-                for piece in pieces {
-                    match piece {
-                        Piece::Text(text) => {
-                            // Preserve user string content exactly as written
-                            self.add_fragment_reference(Syntax::String, text);
-                        }
-                        Piece::Interpolation(expr) => {
-                            let fragments = self.render_string_interpolation(expr);
-                            for (syntax, content) in fragments {
-                                self.add_fragment(syntax, content);
-                            }
-                        }
-                    }
-                }
-                self.add_fragment_reference(Syntax::Quote, "\"");
+                self.append_quoted(Syntax::String, pieces);
             }
             Expression::Response(value, _) => {
                 self.add_fragment_reference(Syntax::Quote, "'");
@@ -1290,28 +1284,21 @@ impl<'i> Formatter<'i> {
                 self.add_fragment_reference(Syntax::Quote, "'");
             }
             Expression::Number(numeric, _) => self.append_numeric(numeric),
-            Expression::Multiline(lang, lines, _) => {
+            Expression::Multiline(multiline, _) => {
                 self.append_char('\n');
 
                 self.indent();
                 self.add_fragment_reference(Syntax::Quote, "```");
-                if let Some(which) = lang {
+                if let Some(which) = multiline.language {
                     self.add_fragment_reference(Syntax::Language, which);
                 }
                 self.append_char('\n');
 
                 self.increase(4);
-                for line in lines {
-                    self.indent();
-                    // Break multiline content into words for wrapping
-                    for (i, word) in line
-                        .split_ascii_whitespace()
-                        .enumerate()
-                    {
-                        if i > 0 {
-                            self.add_fragment_reference(Syntax::Multiline, " ");
-                        }
-                        self.add_fragment_reference(Syntax::Multiline, word);
+                for line in multiline.lines() {
+                    if !line.is_empty() {
+                        self.indent();
+                        self.add_fragment(Syntax::Multiline, line);
                     }
                     self.append_char('\n');
                 }
@@ -1488,7 +1475,7 @@ impl<'i> Formatter<'i> {
 
         let mut has_multiline = false;
         for parameter in &function.parameters {
-            if let Expression::Multiline(_, _, _) = parameter {
+            if let Expression::Multiline(_, _) = parameter {
                 has_multiline = true;
                 break;
             }
@@ -1512,10 +1499,29 @@ impl<'i> Formatter<'i> {
         self.add_fragment_reference(Syntax::Structure, ")");
     }
 
+    /// Write a quoted literal back out: text verbatim as it was borrowed,
+    /// escapes in the form they were written, interpolations rendered.
+    fn append_quoted(&mut self, syntax: Syntax, pieces: &'i [Piece]) {
+        self.add_fragment_reference(Syntax::Quote, "\"");
+        for piece in pieces {
+            match piece {
+                Piece::Text(text) => self.add_fragment_reference(syntax, text),
+                Piece::Escaped(c) => {
+                    self.add_fragment(syntax, Cow::Owned(format!("\\{}", escaped_as(*c))))
+                }
+                Piece::Interpolation(expr) => {
+                    let fragments = self.render_string_interpolation(expr);
+                    for (syntax, content) in fragments {
+                        self.add_fragment(syntax, content);
+                    }
+                }
+            }
+        }
+        self.add_fragment_reference(Syntax::Quote, "\"");
+    }
+
     fn append_pair(&mut self, pair: &'i Pair) {
-        self.add_fragment_reference(Syntax::Quote, "\"");
-        self.add_fragment_reference(Syntax::Label, pair.label);
-        self.add_fragment_reference(Syntax::Quote, "\"");
+        self.append_quoted(Syntax::Label, &pair.label);
         self.add_fragment_reference(Syntax::Neutral, " ");
         self.add_fragment_reference(Syntax::Structure, "=");
         self.add_fragment_reference(Syntax::Neutral, " ");

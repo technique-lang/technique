@@ -127,6 +127,31 @@ fn kind(value: &Value) -> &'static str {
 ///
 /// Fails with `UnboundVariable` etc if the operation cannot be resolved;
 /// specifically at this point values of variables need to be known from the
+/// Concatenate the fragments of a quoted literal, evaluating any
+/// interpolation as it is reached. Shared by string values and the labels of
+/// tablet entries, which parse the same way.
+fn evaluate_fragments<'i>(
+    library: &Library,
+    context: &Context,
+    env: &mut Environment,
+    fragments: &[Fragment<'i>],
+) -> Result<String, RunnerError> {
+    let mut text = String::new();
+
+    for fragment in fragments {
+        match fragment {
+            Fragment::Text(t) => text.push_str(t),
+            Fragment::Escaped(c) => text.push(*c),
+            Fragment::Interpolation(inner) => match evaluate(library, context, env, inner)? {
+                Value::Literali(s) => text.push_str(&s),
+                other => text.push_str(&other.to_string()),
+            },
+        }
+    }
+
+    Ok(text)
+}
+
 /// `Environment` otherwise the `Operation` can't be evaluated.
 ///
 /// A resolved `Execute` dispatches through the passed in `Library` to its
@@ -150,32 +175,15 @@ pub fn evaluate<'i>(
             }),
         Operation::Number(n, _) => Ok(Value::Quanticle(Numeric::from(n))),
         Operation::Response(value, _) => Ok(Value::Enumerati(value.to_string())),
-        Operation::String(fragments, _) => {
-            let mut text = String::new();
-            for fragment in fragments {
-                match fragment {
-                    Fragment::Text(t) => text.push_str(t),
-                    Fragment::Interpolation(inner) => {
-                        match evaluate(library, context, env, inner)? {
-                            Value::Literali(s) => text.push_str(&s),
-                            other => text.push_str(&other.to_string()),
-                        }
-                    }
-                }
-            }
-            Ok(Value::Literali(text))
-        }
-        Operation::Multiline(_, lines, _) => Ok(Value::Literali(lines.join("\n"))),
+        Operation::String(fragments, _) => Ok(Value::Literali(evaluate_fragments(
+            library, context, env, fragments,
+        )?)),
+        Operation::Verbatim(multiline, _) => Ok(Value::Literali(multiline.content())),
         Operation::Tablet(entries, _) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {
                 let v = evaluate(library, context, env, &entry.value)?;
-                pairs.push((
-                    entry
-                        .label
-                        .to_string(),
-                    v,
-                ));
+                pairs.push((evaluate_fragments(library, context, env, &entry.label)?, v));
             }
             Ok(Value::Tabularum(pairs))
         }

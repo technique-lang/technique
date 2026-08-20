@@ -638,6 +638,174 @@ fn string_delimited_blocks() {
 }
 
 #[test]
+fn string_escapes() {
+    let mut input = Parser::new();
+
+    // an escaped quote is content, and does not end the literal
+    input.initialize(r#"{ "say \"hello\" now" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("say "),
+                Piece::Escaped('"'),
+                Piece::Text("hello"),
+                Piece::Escaped('"'),
+                Piece::Text(" now"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // an escaped brace is content, and does not open an interpolation
+    input.initialize(r#"{ "awk '\{print $1\}'" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("awk '"),
+                Piece::Escaped('{'),
+                Piece::Text("print $1"),
+                Piece::Escaped('}'),
+                Piece::Text("'"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // an unescaped brace still interpolates, alongside escapes
+    input.initialize(r#"{ "deploy { customer } \"now\"" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("deploy "),
+                Piece::Interpolation(Expression::Variable(
+                    Identifier::new("customer"),
+                    Span::default()
+                )),
+                Piece::Text(" "),
+                Piece::Escaped('"'),
+                Piece::Text("now"),
+                Piece::Escaped('"'),
+            ],
+            Span::default()
+        )])
+    );
+
+    // the remaining escapes
+    input.initialize(r#"{ "a\nb\rc\td\\e" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![
+                Piece::Text("a"),
+                Piece::Escaped('\n'),
+                Piece::Text("b"),
+                Piece::Escaped('\r'),
+                Piece::Text("c"),
+                Piece::Escaped('\t'),
+                Piece::Text("d"),
+                Piece::Escaped('\\'),
+                Piece::Text("e"),
+            ],
+            Span::default()
+        )])
+    );
+
+    // a lone closing brace is literal, needing no escape
+    input.initialize(r#"{ "a } b" }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::String(
+            vec![Piece::Text("a } b")],
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn tablet_label_escapes() {
+    let mut input = Parser::new();
+
+    // a label is a quoted literal like any other, so it escapes the same way
+    input.initialize(r#"{ ["say \"hi\"" = 1] }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: vec![
+                    Piece::Text("say "),
+                    Piece::Escaped('"'),
+                    Piece::Text("hi"),
+                    Piece::Escaped('"'),
+                ],
+                value: Expression::Number(Numeric::Integral(1), Span::default())
+            }],
+            Span::default()
+        )])
+    );
+
+    // and interpolates the same way
+    input.initialize(r#"{ ["order { n }" = 2] }"#);
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Tablet(
+            vec![Pair {
+                label: vec![
+                    Piece::Text("order "),
+                    Piece::Interpolation(Expression::Variable(
+                        Identifier::new("n"),
+                        Span::default()
+                    )),
+                ],
+                value: Expression::Number(Numeric::Integral(2), Span::default())
+            }],
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn string_escapes_rejected() {
+    let mut input = Parser::new();
+
+    // escaping is strict, so content needing backslashes of its own has to
+    // be written as a multiline instead
+    input.initialize(r#"{ "grep '^\s*\d+'" }"#);
+    match input.read_code_block() {
+        Err(ParsingError::InvalidEscape(_)) => {}
+        other => panic!("Expected InvalidEscape, got: {:?}", other),
+    }
+
+    // a backslash with nothing following it inside the literal
+    input.initialize(r#"{ "oops \" }"#);
+    assert!(
+        input
+            .read_code_block()
+            .is_err()
+    );
+}
+
+#[test]
+fn string_escapes_do_not_expose_structure() {
+    let mut input = Parser::new();
+
+    // the escaped quotes must not end the literal as far as the line
+    // scanner is concerned, otherwise the ordinal inside it reads as the
+    // start of a step
+    input.initialize("probe :\n    1. { exec(\"say \\\"2. not a step\\\" now\") }\n");
+    let result = input.read_procedure();
+    assert!(result.is_ok(), "expected a procedure, got {:?}", result);
+
+    let procedure = result.unwrap();
+    let steps = procedure
+        .elements
+        .len();
+    assert_eq!(steps, 1, "the ordinal inside the string became a step");
+}
+
+#[test]
 fn taking_until() {
     let mut input = Parser::new();
 
@@ -1494,8 +1662,10 @@ echo "Done"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec!["ls -l", "echo \"Done\""],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec!["ls -l", "echo \"Done\""],
+                    },
                     Span::default()
                 )]
             },
@@ -1690,8 +1860,10 @@ ls -la, please
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec!["ls -la, please"],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec!["ls -la, please"],
+                    },
                     Span::default()
                 )]
             },
@@ -1714,12 +1886,91 @@ echo "hello, world"
                 target: Identifier::new("combine"),
                 parameters: vec![
                     Expression::Multiline(
-                        Some("bash"),
-                        vec!["echo \"hello, world\""],
+                        Multiline {
+                            language: Some("bash"),
+                            lines: vec!["echo \"hello, world\""],
+                        },
                         Span::default()
                     ),
                     Expression::String(vec![Piece::Text("second, arg")], Span::default())
                 ]
+            },
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn multiline_indent_tabs_expand_to_spaces() {
+    let mut input = Parser::new();
+
+    // The parser keeps each line exactly as written, tabs and all, so the
+    // lines stay borrowed from the source.
+    input.initialize(
+        "{ exec(```json\n            {\n    \t\t\t\"a\": 1,\n    \t\t},\n        ```) }",
+    );
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Multiline {
+                        language: Some("json"),
+                        lines: vec!["            {", "    \t\t\t\"a\": 1,", "    \t\t},"],
+                    },
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+
+    // Reading them back is what interprets the indentation: a tab advances
+    // to the next four column stop, so the brace lines sit a level outside
+    // the key rather than, as counting bytes would have it, a level inside.
+    let multiline = Multiline {
+        language: Some("json"),
+        lines: vec!["            {", "    \t\t\t\"a\": 1,", "    \t\t},"],
+    };
+    assert_eq!(
+        multiline
+            .lines()
+            .collect::<Vec<_>>(),
+        vec!["{", "    \"a\": 1,", "},"]
+    );
+}
+
+#[test]
+fn multiline_dedent_governed_by_least_indented_line() {
+    let mut input = Parser::new();
+
+    // A line further left than the one above it is ordinary in real content
+    // — the closing brace of a JSON object sits outside its keys. The block
+    // is dedented by the least indented line so that nothing is cut off.
+    input.initialize(
+        r#"{ exec(```json
+            {
+        "src": ["a"],
+            }
+        ```) }"#,
+    );
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Multiline {
+                        language: Some("json"),
+                        lines: vec![
+                            "            {",
+                            "        \"src\": [\"a\"],",
+                            "            }"
+                        ],
+                    },
+                    Span::default()
+                )]
             },
             Span::default()
         )])
@@ -1747,15 +1998,17 @@ fn multiline() {
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec![
-                        "./stuff",
-                        "",
-                        "if [ true ]",
-                        "then",
-                        "    ./other args",
-                        "fi"
-                    ],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec![
+                            "        ./stuff",
+                            "",
+                            "        if [ true ]",
+                            "        then",
+                            "            ./other args",
+                            "        fi"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -1776,8 +2029,10 @@ echo "Done"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    None,
-                    vec!["ls -l", "echo \"Done\""],
+                    Multiline {
+                        language: None,
+                        lines: vec!["ls -l", "echo \"Done\""],
+                    },
                     Span::default()
                 )]
             },
@@ -1802,15 +2057,17 @@ echo "Ending"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("shell"),
-                    vec![
-                        "echo \"Starting\"",
-                        "",
-                        "echo \"Middle section\"",
-                        "",
-                        "",
-                        "echo \"Ending\""
-                    ],
+                    Multiline {
+                        language: Some("shell"),
+                        lines: vec![
+                            "echo \"Starting\"",
+                            "",
+                            "echo \"Middle section\"",
+                            "",
+                            "",
+                            "echo \"Ending\""
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -1837,15 +2094,17 @@ echo "Ending"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("python"),
-                    vec![
-                        "def hello():",
-                        "    print(\"Hello\")",
-                        "    if True:",
-                        "        print(\"World\")",
-                        "",
-                        "hello()"
-                    ],
+                    Multiline {
+                        language: Some("python"),
+                        lines: vec![
+                            "    def hello():",
+                            "        print(\"Hello\")",
+                            "        if True:",
+                            "            print(\"World\")",
+                            "",
+                            "    hello()"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -1866,8 +2125,10 @@ echo test
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    None,
-                    vec!["echo test"],
+                    Multiline {
+                        language: None,
+                        lines: vec!["echo test"],
+                    },
                     Span::default()
                 )]
             },
@@ -1892,15 +2153,17 @@ echo test
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("yaml"),
-                    vec![
-                        "name: test",
-                        "items:",
-                        "  - item1",
-                        "  - item2",
-                        "config:",
-                        "  enabled: true"
-                    ],
+                    Multiline {
+                        language: Some("yaml"),
+                        lines: vec![
+                            "  name: test",
+                            "  items:",
+                            "    - item1",
+                            "    - item2",
+                            "  config:",
+                            "    enabled: true"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -1920,7 +2183,7 @@ fn tablets() {
         result,
         Ok(vec![Expression::Tablet(
             vec![Pair {
-                label: "name",
+                label: vec![Piece::Text("name")],
                 value: Expression::String(vec![Piece::Text("Johannes Grammerly")], Span::default())
             }],
             Span::default()
@@ -1940,14 +2203,14 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "name",
+                    label: vec![Piece::Text("name")],
                     value: Expression::String(
                         vec![Piece::Text("Alice of Chains")],
                         Span::default()
                     )
                 },
                 Pair {
-                    label: "age",
+                    label: vec![Piece::Text("age")],
                     value: Expression::String(vec![Piece::Text("29")], Span::default())
                 }
             ],
@@ -1969,15 +2232,15 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "answer",
+                    label: vec![Piece::Text("answer")],
                     value: Expression::Number(Numeric::Integral(42), Span::default())
                 },
                 Pair {
-                    label: "message",
+                    label: vec![Piece::Text("message")],
                     value: Expression::Variable(Identifier::new("msg"), Span::default())
                 },
                 Pair {
-                    label: "timestamp",
+                    label: vec![Piece::Text("timestamp")],
                     value: Expression::Execution(
                         Function {
                             target: Identifier::new("now"),
@@ -2022,14 +2285,14 @@ fn tablets() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "context",
+                    label: vec![Piece::Text("context")],
                     value: Expression::String(
                         vec![Piece::Text("Details about the thing")],
                         Span::default()
                     )
                 },
                 Pair {
-                    label: "status",
+                    label: vec![Piece::Text("status")],
                     value: Expression::Variable(Identifier::new("active"), Span::default())
                 }
             ],
@@ -2129,8 +2392,10 @@ ls -la, please
         result,
         Ok(vec![Expression::List(
             vec![Expression::Multiline(
-                Some("bash"),
-                vec!["ls -la, please"],
+                Multiline {
+                    language: Some("bash"),
+                    lines: vec!["ls -la, please"],
+                },
                 Span::default()
             )],
             Span::default()
@@ -2217,11 +2482,11 @@ fn tablet_inline_commas() {
         Ok(vec![Expression::Tablet(
             vec![
                 Pair {
-                    label: "answer",
+                    label: vec![Piece::Text("answer")],
                     value: Expression::Number(Numeric::Integral(42), Span::default())
                 },
                 Pair {
-                    label: "truth",
+                    label: vec![Piece::Text("truth")],
                     value: Expression::String(vec![Piece::Text("yes")], Span::default())
                 }
             ],
