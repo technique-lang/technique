@@ -178,7 +178,7 @@ pub fn evaluate<'i>(
         Operation::String(fragments, _) => Ok(Value::Literali(evaluate_fragments(
             library, context, env, fragments,
         )?)),
-        Operation::Multiline(_, lines, _) => Ok(Value::Literali(lines.join("\n"))),
+        Operation::Verbatim(multiline, _) => Ok(Value::Literali(multiline.content())),
         Operation::Tablet(entries, _) => {
             let mut pairs = Vec::with_capacity(entries.len());
             for entry in entries {

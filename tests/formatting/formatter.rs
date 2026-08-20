@@ -214,8 +214,10 @@ win_le_tour : Bicycle -> YellowJersey
                         Function {
                             target: Identifier::new("exec"),
                             parameters: vec![Expression::Multiline(
-                                Some("bash"),
-                                vec!["rm -rf /"],
+                                Multiline {
+                                    language: Some("bash"),
+                                    lines: vec!["rm -rf /"],
+                                },
                                 Span::default(),
                             )],
                         },
@@ -271,8 +273,10 @@ vibe_coding :
                                     Function {
                                         target: Identifier::new("exec"),
                                         parameters: vec![Expression::Multiline(
-                                            Some("bash"),
-                                            vec!["rm -rf /"],
+                                            Multiline {
+                                                language: Some("bash"),
+                                                lines: vec!["rm -rf /"],
+                                            },
                                             Span::default(),
                                         )],
                                     },
@@ -389,6 +393,60 @@ Record everything, with timestamps.
                 "message" = msg
             ]
         }
+                "#
+            )
+        );
+    }
+
+    #[test]
+    fn multiline_content_written_verbatim() {
+        // A multiline is raw content. Its internal indentation and any run
+        // of whitespace inside a line have to survive being written back,
+        // otherwise formatting a document quietly rewrites the JSON or the
+        // shell script the author put there.
+        let document = Document {
+            source: None,
+            header: None,
+            body: Some(Technique::Procedures(vec![Procedure {
+                name: Identifier::new("deploy"),
+                parameters: None,
+                signature: None,
+                elements: vec![Element::CodeBlock(
+                    vec![Expression::Execution(
+                        Function {
+                            target: Identifier::new("exec"),
+                            parameters: vec![Expression::Multiline(
+                                Multiline {
+                                    language: Some("json"),
+                                    lines: vec!["    {", "\"ip\":  [\"tcp:22\"],", "    }"],
+                                },
+                                Span::default(),
+                            )],
+                        },
+                        Span::default(),
+                    )],
+                    vec![],
+                    Span::default(),
+                )],
+                span: Span::default(),
+            }])),
+        };
+
+        let result = format_with_renderer(&document, 78);
+        assert_eq!(
+            combine(result),
+            trim(
+                r#"
+deploy :
+{
+    exec(
+    ```json
+            {
+        "ip":  ["tcp:22"],
+            }
+    ```
+    )
+}
                 "#
             )
         );

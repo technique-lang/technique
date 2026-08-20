@@ -165,7 +165,7 @@ fn resolve_operation<'i>(
         Operation::Variable(_, _)
         | Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
@@ -247,7 +247,7 @@ fn gather_iterated<'i>(op: &Operation<'i>, iterated: &mut HashSet<&'i str>) {
         Operation::Variable(_, _)
         | Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
@@ -324,7 +324,7 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
         Operation::Variable(_, _)
         | Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
@@ -431,7 +431,7 @@ fn check_scope<'i>(
         }
         Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
@@ -507,7 +507,7 @@ fn check_costs<'i>(op: &Operation<'i>, problems: &mut Vec<ResolutionError<'i>>) 
         Operation::Variable(_, _)
         | Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}
@@ -520,7 +520,7 @@ fn literal_not_a_quantity(op: &Operation) -> bool {
     match op {
         Operation::String(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Tablet(_, _)
         | Operation::List(_, _)
         | Operation::Tuple(_, _)

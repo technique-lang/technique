@@ -125,7 +125,7 @@ fn link_operation<'i>(
         Operation::Variable(_, _)
         | Operation::Number(_, _)
         | Operation::Response(_, _)
-        | Operation::Multiline(_, _, _)
+        | Operation::Verbatim(_, _)
         | Operation::Prose(_, _)
         | Operation::Hole(_)
         | Operation::Unit(_) => {}

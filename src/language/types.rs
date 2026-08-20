@@ -1,5 +1,7 @@
 //! Types representing an Abstract Syntax Tree for the Technique language
 
+use crate::language::multiline::Multiline;
+use crate::language::quantity::Quantity;
 use crate::regex::*;
 
 /// Byte range within the original source. `length` excludes trailing whitespace.
@@ -523,7 +525,7 @@ pub enum Expression<'i> {
     String(Vec<Piece<'i>>, Span),
     Response(&'i str, Span),
     Number(Numeric<'i>, Span),
-    Multiline(Option<&'i str>, Vec<&'i str>, Span),
+    Multiline(Multiline<'i>, Span),
     Repeat(Box<Expression<'i>>, Span),
     Foreach(Vec<Identifier<'i>>, Box<Expression<'i>>, Span),
     Within(Box<Expression<'i>>, Span),
@@ -547,9 +549,7 @@ impl PartialEq for Expression<'_> {
             (Expression::String(a, _), Expression::String(b, _)) => a == b,
             (Expression::Response(a, _), Expression::Response(b, _)) => a == b,
             (Expression::Number(a, _), Expression::Number(b, _)) => a == b,
-            (Expression::Multiline(a1, a2, _), Expression::Multiline(b1, b2, _)) => {
-                a1 == b1 && a2 == b2
-            }
+            (Expression::Multiline(a, _), Expression::Multiline(b, _)) => a == b,
             (Expression::Repeat(a, _), Expression::Repeat(b, _)) => a == b,
             (Expression::Foreach(a1, a2, _), Expression::Foreach(b1, b2, _)) => {
                 a1 == b1 && a2 == b2
@@ -578,8 +578,6 @@ pub enum Numeric<'i> {
     Integral(i64),
     Scientific(Quantity<'i>),
 }
-
-pub use crate::language::quantity::Quantity;
 
 // the validate functions all need to have start and end anchors, which seems
 // like it should be abstracted away.

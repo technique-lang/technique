@@ -1662,8 +1662,10 @@ echo "Done"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec!["ls -l", "echo \"Done\""],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec!["ls -l", "echo \"Done\""],
+                    },
                     Span::default()
                 )]
             },
@@ -1858,8 +1860,10 @@ ls -la, please
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec!["ls -la, please"],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec!["ls -la, please"],
+                    },
                     Span::default()
                 )]
             },
@@ -1882,12 +1886,91 @@ echo "hello, world"
                 target: Identifier::new("combine"),
                 parameters: vec![
                     Expression::Multiline(
-                        Some("bash"),
-                        vec!["echo \"hello, world\""],
+                        Multiline {
+                            language: Some("bash"),
+                            lines: vec!["echo \"hello, world\""],
+                        },
                         Span::default()
                     ),
                     Expression::String(vec![Piece::Text("second, arg")], Span::default())
                 ]
+            },
+            Span::default()
+        )])
+    );
+}
+
+#[test]
+fn multiline_indent_tabs_expand_to_spaces() {
+    let mut input = Parser::new();
+
+    // The parser keeps each line exactly as written, tabs and all, so the
+    // lines stay borrowed from the source.
+    input.initialize(
+        "{ exec(```json\n            {\n    \t\t\t\"a\": 1,\n    \t\t},\n        ```) }",
+    );
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Multiline {
+                        language: Some("json"),
+                        lines: vec!["            {", "    \t\t\t\"a\": 1,", "    \t\t},"],
+                    },
+                    Span::default()
+                )]
+            },
+            Span::default()
+        )])
+    );
+
+    // Reading them back is what interprets the indentation: a tab advances
+    // to the next four column stop, so the brace lines sit a level outside
+    // the key rather than, as counting bytes would have it, a level inside.
+    let multiline = Multiline {
+        language: Some("json"),
+        lines: vec!["            {", "    \t\t\t\"a\": 1,", "    \t\t},"],
+    };
+    assert_eq!(
+        multiline
+            .lines()
+            .collect::<Vec<_>>(),
+        vec!["{", "    \"a\": 1,", "},"]
+    );
+}
+
+#[test]
+fn multiline_dedent_governed_by_least_indented_line() {
+    let mut input = Parser::new();
+
+    // A line further left than the one above it is ordinary in real content
+    // — the closing brace of a JSON object sits outside its keys. The block
+    // is dedented by the least indented line so that nothing is cut off.
+    input.initialize(
+        r#"{ exec(```json
+            {
+        "src": ["a"],
+            }
+        ```) }"#,
+    );
+    assert_eq!(
+        input.read_code_block(),
+        Ok(vec![Expression::Execution(
+            Function {
+                target: Identifier::new("exec"),
+                parameters: vec![Expression::Multiline(
+                    Multiline {
+                        language: Some("json"),
+                        lines: vec![
+                            "            {",
+                            "        \"src\": [\"a\"],",
+                            "            }"
+                        ],
+                    },
+                    Span::default()
+                )]
             },
             Span::default()
         )])
@@ -1915,15 +1998,17 @@ fn multiline() {
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("bash"),
-                    vec![
-                        "./stuff",
-                        "",
-                        "if [ true ]",
-                        "then",
-                        "    ./other args",
-                        "fi"
-                    ],
+                    Multiline {
+                        language: Some("bash"),
+                        lines: vec![
+                            "        ./stuff",
+                            "",
+                            "        if [ true ]",
+                            "        then",
+                            "            ./other args",
+                            "        fi"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -1944,8 +2029,10 @@ echo "Done"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    None,
-                    vec!["ls -l", "echo \"Done\""],
+                    Multiline {
+                        language: None,
+                        lines: vec!["ls -l", "echo \"Done\""],
+                    },
                     Span::default()
                 )]
             },
@@ -1970,15 +2057,17 @@ echo "Ending"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("shell"),
-                    vec![
-                        "echo \"Starting\"",
-                        "",
-                        "echo \"Middle section\"",
-                        "",
-                        "",
-                        "echo \"Ending\""
-                    ],
+                    Multiline {
+                        language: Some("shell"),
+                        lines: vec![
+                            "echo \"Starting\"",
+                            "",
+                            "echo \"Middle section\"",
+                            "",
+                            "",
+                            "echo \"Ending\""
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -2005,15 +2094,17 @@ echo "Ending"```) }"#,
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("python"),
-                    vec![
-                        "def hello():",
-                        "    print(\"Hello\")",
-                        "    if True:",
-                        "        print(\"World\")",
-                        "",
-                        "hello()"
-                    ],
+                    Multiline {
+                        language: Some("python"),
+                        lines: vec![
+                            "    def hello():",
+                            "        print(\"Hello\")",
+                            "        if True:",
+                            "            print(\"World\")",
+                            "",
+                            "    hello()"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -2034,8 +2125,10 @@ echo test
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    None,
-                    vec!["echo test"],
+                    Multiline {
+                        language: None,
+                        lines: vec!["echo test"],
+                    },
                     Span::default()
                 )]
             },
@@ -2060,15 +2153,17 @@ echo test
             Function {
                 target: Identifier::new("exec"),
                 parameters: vec![Expression::Multiline(
-                    Some("yaml"),
-                    vec![
-                        "name: test",
-                        "items:",
-                        "  - item1",
-                        "  - item2",
-                        "config:",
-                        "  enabled: true"
-                    ],
+                    Multiline {
+                        language: Some("yaml"),
+                        lines: vec![
+                            "  name: test",
+                            "  items:",
+                            "    - item1",
+                            "    - item2",
+                            "  config:",
+                            "    enabled: true"
+                        ],
+                    },
                     Span::default()
                 )]
             },
@@ -2297,8 +2392,10 @@ ls -la, please
         result,
         Ok(vec![Expression::List(
             vec![Expression::Multiline(
-                Some("bash"),
-                vec!["ls -la, please"],
+                Multiline {
+                    language: Some("bash"),
+                    lines: vec!["ls -la, please"],
+                },
                 Span::default()
             )],
             Span::default()

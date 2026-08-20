@@ -1699,7 +1699,7 @@ impl<'i> Parser<'i> {
         } else if content.starts_with('(') {
             self.read_tuple_literal()
         } else if content.starts_with("```") {
-            let (lang, lines) = self
+            let (language, lines) = self
                 .take_block_delimited("```", |inner| inner.parse_multiline_content())
                 .map_err(|err| match err {
                     ParsingError::Expected(span, "the corresponding end delimiter") => {
@@ -1708,7 +1708,13 @@ impl<'i> Parser<'i> {
                     _ => err,
                 })?;
             let span = self.span_since(start);
-            Ok(Expression::Multiline(lang, lines, span))
+            Ok(Expression::Multiline(
+                Multiline {
+                    language,
+                    lines,
+                },
+                span,
+            ))
         } else if is_numeric(content) {
             let numeric = self.read_numeric()?;
             let span = self.span_since(start);
@@ -2856,7 +2862,7 @@ impl<'i> Parser<'i> {
     }
 
     fn parse_multiline_content(&mut self) -> Result<(Option<&'i str>, Vec<&'i str>), ParsingError> {
-        let mut lines: Vec<&str> = self
+        let mut lines: Vec<&'i str> = self
             .source
             .lines()
             .collect();
@@ -2870,42 +2876,19 @@ impl<'i> Parser<'i> {
         let lang = if !first.is_empty() { Some(first) } else { None };
         lines.remove(0);
 
-        let second = lines[0];
-
-        // We let the indentation of the first line govern the rest of the block
-        let indent = second.len()
-            - second
-                .trim_ascii_start()
-                .len();
-
-        // Trim consistent leading whitespace while preserving internal indentation
-        let mut result = Vec::with_capacity(lines.len());
-
-        for line in lines {
-            // the final line with ``` will be likely shorter, irrespective of
-            // anything else going on.
-            let i = indent.min(line.len());
-
-            // now grab the text after the designated indent point. We check
-            // to make sure there's nothing before that point, otherwise we
-            // would have truncated the user's text. That's not allowed!
-            let (before, after) = line.split_at(i);
-            if !before
-                .trim_ascii()
-                .is_empty()
-            {
-                return Err(ParsingError::InvalidMultiline(Span::new(self.offset, 0)));
-            }
-
-            result.push(after)
+        // Drop the trailing line if it was just the indentation the closing
+        // ``` delimiter was sitting on
+        if lines
+            .last()
+            .is_some_and(|line| {
+                line.trim_ascii()
+                    .is_empty()
+            })
+        {
+            lines.pop();
         }
 
-        // Remove trailing empty line if it's just from the closing ``` delimiter
-        if !result.is_empty() && result[result.len() - 1].is_empty() {
-            result.pop();
-        }
-
-        Ok((lang, result))
+        Ok((lang, lines))
     }
 
     /// Consume parameters to an invocation or function: a parenthesised,

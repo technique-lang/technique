@@ -767,8 +767,8 @@ impl<'i> Translator<'i> {
                 Operation::String(self.translate_pieces(pieces), *span)
             }
             language::Expression::Response(value, span) => Operation::Response(value, *span),
-            language::Expression::Multiline(lang, lines, span) => {
-                Operation::Multiline(*lang, lines.clone(), *span)
+            language::Expression::Multiline(multiline, span) => {
+                Operation::Verbatim(multiline, *span)
             }
             language::Expression::Pair(pair, span) => {
                 // A standalone labelled value widens to a single-entry

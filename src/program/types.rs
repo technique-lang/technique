@@ -124,7 +124,7 @@ pub enum Operation<'i> {
     Number(language::Numeric<'i>, Span),
     String(Vec<Fragment<'i>>, Span),
     Response(&'i str, Span),
-    Multiline(Option<&'i str>, Vec<&'i str>, Span),
+    Verbatim(&'i language::Multiline<'i>, Span),
     Tablet(Vec<Entry<'i>>, Span),
     List(Vec<Operation<'i>>, Span),
     Tuple(Vec<Operation<'i>>, Span),
@@ -189,7 +189,7 @@ impl<'i> Operation<'i> {
             | Operation::Number(_, span)
             | Operation::String(_, span)
             | Operation::Response(_, span)
-            | Operation::Multiline(_, _, span)
+            | Operation::Verbatim(_, span)
             | Operation::Tablet(_, span)
             | Operation::List(_, span)
             | Operation::Tuple(_, span)

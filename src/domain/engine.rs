@@ -273,12 +273,8 @@ fn render_expression_parts(expr: &Expression) -> (String, Vec<String>) {
     if let Expression::Execution(func, _) = expr {
         let mut body = Vec::new();
         for param in &func.parameters {
-            if let Expression::Multiline(_, lines, _) = param {
-                body.extend(
-                    lines
-                        .iter()
-                        .map(|s| s.to_string()),
-                );
+            if let Expression::Multiline(multiline, _) = param {
+                body.push(multiline.content());
             }
         }
         if !body.is_empty() {
@@ -350,7 +346,7 @@ fn render_expression(expr: &Expression) -> String {
                 args.join(", ")
             )
         }
-        Expression::Multiline(_, lines, _) => lines.join("\n"),
+        Expression::Multiline(multiline, _) => multiline.content(),
         Expression::Variable(id, _) => id
             .value
             .to_string(),
