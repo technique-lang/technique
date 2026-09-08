@@ -1,4 +1,4 @@
-//! Rendering of the trail recorded for a completed or interrupted run.
+//! Rendering of the journal recorded for a completed or interrupted run.
 
 use std::collections::HashMap;
 
@@ -381,12 +381,18 @@ fn measure_times(records: &[Record]) -> (Vec<Option<i64>>, Vec<Option<i64>>) {
             State::Start { .. } => {
                 started = Some(i);
             }
-            State::Begin => {
+            State::Begin(supplied) => {
                 begun.insert(path, i);
+                if !supplied.is_empty() && i > 0 {
+                    spans[i] = elapsed(stamps[i - 1], stamps[i]);
+                }
             }
             State::Execute { .. } => {
                 executing.insert(path, i);
             }
+            // A revocation withdraws an outcome without bracketing anything,
+            // so it closes no span of its own.
+            State::Revoke => {}
             State::Done(_) | State::Skip | State::Fail(_) => {
                 if let Some(opened) = begun.remove(path) {
                     spans[i] = elapsed(stamps[opened], stamps[i]);
@@ -402,23 +408,16 @@ fn measure_times(records: &[Record]) -> (Vec<Option<i64>>, Vec<Option<i64>>) {
                     spans[i] = elapsed(stamps[opened], stamps[i]);
                 }
             }
-            // The inputs a procedure was given close the asking for them: the
-            // dispatch recorded on arrival, or the run's Start for the entry
-            // procedure's own parameters. Either way the span is the wait for
-            // the user to supply them.
-            State::Input(_) => {
-                if i > 0 {
-                    spans[i] = elapsed(stamps[i - 1], stamps[i]);
-                }
-            }
-            State::Resume | State::Invoke(_) => {}
+            // A Bind sits immediately before its scope's outcome, so it
+            // brackets no interval of its own.
+            State::Resume | State::Invoke(_) | State::Bind(_) => {}
         }
     }
 
     (stamps, spans)
 }
 
-// The abbreviated path the live trace shows, except at the root, which trims
+// The abbreviated path the live trail shows, except at the root, which trims
 // away to nothing and is shown as the `/` it is recorded as.
 fn shortened(path: &str) -> String {
     let text = display_path(path);
@@ -455,11 +454,12 @@ fn keyword(state: &State) -> &'static str {
         State::Invoke(_) => "Invoke",
         State::Execute { .. } => "Execute",
         State::Return(_) => "Return",
-        State::Input(_) => "Input",
-        State::Begin => "Begin",
+        State::Begin(_) => "Begin",
+        State::Bind(_) => "Bind",
         State::Done(_) => "Done",
         State::Skip => "Skip",
         State::Fail(_) => "Fail",
+        State::Revoke => "Revoke",
     }
 }
 
@@ -474,12 +474,12 @@ fn payload(state: &State) -> Option<String> {
         State::Return(value) | State::Done(value) | State::Fail(value) => value
             .as_ref()
             .map(serialize_value),
-        State::Input(supplied) => {
+        State::Begin(supplied) | State::Bind(supplied) => {
             let mut text = String::new();
             format_supplied(&mut text, supplied);
             Some(text)
         }
-        State::Finish | State::Stop | State::Resume | State::Begin | State::Skip => None,
+        State::Finish | State::Stop | State::Resume | State::Skip | State::Revoke => None,
     }
 }
 

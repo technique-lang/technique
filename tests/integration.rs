@@ -2,6 +2,7 @@ mod common;
 mod engraving;
 mod formatting;
 mod linking;
+mod navigation;
 mod parsing;
 mod resolution;
 mod runner;

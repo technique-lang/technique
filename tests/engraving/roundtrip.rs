@@ -6,7 +6,7 @@ use technique::reporting::render_pfftt;
 
 use crate::common::list_files;
 
-/// Every recorded trail must survive being parsed back into records and
+/// Every recorded journal must survive being parsed back into records and
 /// rendered again, byte for byte. This is what lets `technique log
 /// --output=pfftt` claim to be the stored format when the records no longer
 /// come from a file: a codec that drops a field, reorders one, or loses an
@@ -39,7 +39,7 @@ fn ensure_records_render_as_stored() {
 
     assert!(
         failures.is_empty(),
-        "trails failed to round-trip: {:?}",
+        "journals failed to round-trip: {:?}",
         failures
     );
 }

@@ -25,6 +25,25 @@ impl RunId {
     }
 }
 
+/// Identifier for one scope within a run. Ths is effectively an interned
+/// route from /, shared by its `Begin`, its outcome, and by every record
+/// written inside it. Written by convention as a three-digit wide zero-padded
+/// string; `000` is reserved for the metadata records that bracket the
+/// Technique as a whole.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub struct Serial(pub u32);
+
+impl Serial {
+    /// The serial for the root-level metadata records `Start`, `Finish`,
+    /// `Stop` and `Resume`.
+    pub const LIFECYCLE: Serial = Serial(0);
+
+    /// Render as a three-digit zero-padded number.
+    pub fn render(self) -> String {
+        format!("{:03}", self.0)
+    }
+}
+
 /// Errors raised if a PFFTT file is malformed or invalid.
 #[derive(Debug, Eq, PartialEq)]
 pub enum RecordError {
@@ -38,6 +57,7 @@ pub enum RecordError {
 pub struct Record {
     pub recorded: String,
     pub run_id: RunId,
+    pub serial: Serial,
     pub path: String,
     pub state: State,
 }
@@ -53,8 +73,12 @@ pub struct Record {
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` and `Return` bracket an effectful host call (a `Command` or
 /// `Action`) with the value it returned; Pure builtins are not recorded.
-/// `Input` records the values supplied to a procedure so a resume can restore
-/// the state without re-prompting for information already entered.
+/// `Bind` states the bindings a scope made, written once immediately before
+/// that scope's outcome; a binding's own value is unit, so the value it
+/// captured is reachable only here.
+/// `Revoke` withdraws a scope's outcome so the walk redoes it, and carries no
+/// payload: correcting a value is a `Revoke` plus ordinary re-execution, with
+/// nothing pre-answered.
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
@@ -64,16 +88,15 @@ pub enum State {
     Invoke(InvokeTarget),
     Execute { function: String },
     Return(Option<value::Value>),
-    Input(Vec<Supplied>),
-    Begin,
+    Begin(Vec<Supplied>),
+    Bind(Vec<Supplied>),
+    Revoke,
     Done(Option<value::Value>),
     Skip,
     Fail(Option<value::Value>),
 }
 
-/// One value supplied to a procedure's parameter: bound to a named parameter
-/// (recorded as `value ~ name`), or positional when the parameter is unnamed
-/// (recorded as a bare `value`).
+/// A value, rendered `value ~ name` when it carries a name.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Supplied {
     pub value: value::Value,
@@ -100,7 +123,12 @@ pub fn display_path(qualified: &str) -> String {
     if parts.len() >= 2 && parts[0].ends_with(':') && is_section_component(parts[1]) {
         parts.remove(0);
     }
-    parts.join("/")
+    let rendered = parts.join("/");
+    if rendered.is_empty() {
+        "/".to_string()
+    } else {
+        rendered
+    }
 }
 
 /// Leading token, not the whole component: an acquire label can glue an
@@ -117,7 +145,7 @@ fn is_section_component(part: &str) -> bool {
 }
 
 // Serialize a Record in PFFTT line form. The format is:
-// Timestamp RunId Path (State Value) followed by a newline.
+// Timestamp RunId Serial Path (State Value) followed by a newline.
 pub(crate) fn format_record(record: &Record) -> String {
     let mut text = String::new();
     text.push_str(&record.recorded);
@@ -128,6 +156,12 @@ pub(crate) fn format_record(record: &Record) -> String {
             .render(),
     );
     text.push(' ');
+    text.push_str(
+        &record
+            .serial
+            .render(),
+    );
+    text.push(' ');
     text.push_str(&record.path);
     text.push(' ');
     format_state(&mut text, &record.state);
@@ -135,7 +169,7 @@ pub(crate) fn format_record(record: &Record) -> String {
     text
 }
 
-fn format_state(out: &mut String, state: &State) {
+pub(super) fn format_state(out: &mut String, state: &State) {
     match state {
         State::Start { uri } => {
             out.push_str("Start ");
@@ -144,6 +178,7 @@ fn format_state(out: &mut String, state: &State) {
         State::Finish => out.push_str("Finish"),
         State::Stop => out.push_str("Stop"),
         State::Resume => out.push_str("Resume"),
+        State::Revoke => out.push_str("Revoke"),
         State::Invoke(target) => {
             out.push_str("Invoke ");
             match target {
@@ -166,11 +201,14 @@ fn format_state(out: &mut String, state: &State) {
                 out.push_str(&serialize_value(v));
             }
         }
-        State::Input(supplied) => {
-            out.push_str("Input ");
+        State::Begin(supplied) => {
+            out.push_str("Begin ");
             format_supplied(out, supplied);
         }
-        State::Begin => out.push_str("Begin"),
+        State::Bind(bound) => {
+            out.push_str("Bind ");
+            format_supplied(out, bound);
+        }
         State::Done(value) => {
             out.push_str("Done");
             if let Some(v) = value {
@@ -193,6 +231,10 @@ fn format_state(out: &mut String, state: &State) {
 // value serialized by the value codec, a named parameter followed by `~ name`,
 // an unnamed one left bare.
 pub(crate) fn format_supplied(out: &mut String, supplied: &[Supplied]) {
+    if supplied.is_empty() {
+        out.push_str("()");
+        return;
+    }
     out.push('(');
     for (i, item) in supplied
         .iter()
@@ -307,11 +349,14 @@ pub fn parse_records(content: &str) -> Result<Vec<Record>, RecordError> {
 // Parse a single PFFTT record line into a Record.
 pub(crate) fn parse_record(line: &str) -> Result<Record, RecordError> {
     let line = line.trim_end_matches(['\r', '\n']);
-    let mut parts = line.splitn(4, ' ');
+    let mut parts = line.splitn(5, ' ');
     let recorded = parts
         .next()
         .ok_or(RecordError::MalformedRecord)?;
     let run_text = parts
+        .next()
+        .ok_or(RecordError::MalformedRecord)?;
+    let serial_text = parts
         .next()
         .ok_or(RecordError::MalformedRecord)?;
     let path = parts
@@ -320,17 +365,27 @@ pub(crate) fn parse_record(line: &str) -> Result<Record, RecordError> {
     let rest = parts
         .next()
         .ok_or(RecordError::MalformedRecord)?;
-    if recorded.is_empty() || run_text.is_empty() || path.is_empty() || rest.is_empty() {
+    if recorded.is_empty()
+        || run_text.is_empty()
+        || serial_text.is_empty()
+        || path.is_empty()
+        || rest.is_empty()
+    {
         return Err(RecordError::MalformedRecord);
     }
     let run_id = run_text
         .parse::<u32>()
         .map(RunId)
         .map_err(|_| RecordError::MalformedRecord)?;
+    let serial = serial_text
+        .parse::<u32>()
+        .map(Serial)
+        .map_err(|_| RecordError::MalformedRecord)?;
     let state = parse_state(rest)?;
     Ok(Record {
         recorded: recorded.to_string(),
         run_id,
+        serial,
         path: path.to_string(),
         state,
     })
@@ -398,15 +453,19 @@ fn parse_state(text: &str) -> Result<State, RecordError> {
             })
         }
         "Return" => Ok(State::Return(parse_optional_value(rest)?)),
-        "Input" => {
-            let payload = rest.ok_or(RecordError::MalformedState)?;
-            Ok(State::Input(parse_supplied(payload)?))
-        }
         "Begin" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            Ok(State::Begin(parse_supplied(payload)?))
+        }
+        "Bind" => {
+            let payload = rest.ok_or(RecordError::MalformedState)?;
+            Ok(State::Bind(parse_supplied(payload)?))
+        }
+        "Revoke" => {
             if rest.is_some() {
                 return Err(RecordError::MalformedState);
             }
-            Ok(State::Begin)
+            Ok(State::Revoke)
         }
         "Done" => Ok(State::Done(parse_optional_value(rest)?)),
         "Skip" => {
@@ -428,7 +487,7 @@ fn parse_optional_value(rest: Option<&str>) -> Result<Option<value::Value>, Reco
 }
 
 // Single-line PFFTT text form for a runtime `value::Value`, so a completed
-// step's result survives in the trail and rehydrates on resume.
+// step's result survives in the journal and rehydrates on resume.
 //
 //   Unitus            -> ()
 //   Literali(s)       -> "<escaped>"
@@ -544,7 +603,7 @@ fn render_value_numeric(numeric: &value::Numeric) -> String {
     }
 }
 
-pub(crate) fn deserialize_value(text: &str) -> Result<value::Value, RecordError> {
+fn deserialize_value(text: &str) -> Result<value::Value, RecordError> {
     let text = text.trim();
     if text.is_empty() {
         return Err(RecordError::MalformedState);

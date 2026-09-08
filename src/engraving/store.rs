@@ -1,14 +1,12 @@
 //! The store of recorded runs: allocation of run identifiers, and the
 //! append-only PFFTT file each run is written to.
 
-use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::value;
-
 use super::StoreError;
-use super::record::{Record, RunId, State, Supplied, format_record, parse_record, parse_records};
+use super::ledger::Ledger;
+use super::record::{Record, RunId, Serial, State, format_record, parse_record, parse_records};
 
 /// On-disk store of runs, rooted at some base directory (conventionally
 /// `.store/` relative to the user's current directory).
@@ -87,6 +85,7 @@ impl Store {
         let record = Record {
             recorded: started,
             run_id,
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Start { uri },
         };
@@ -95,7 +94,7 @@ impl Store {
         Ok((run_id, run_dir))
     }
 
-    /// Read an existing run's trail back into memory, every record in the
+    /// Read an existing run's journal back into memory, every record in the
     /// order it was written.
     pub fn read(&self, run_id: RunId) -> Result<Vec<Record>, StoreError> {
         let run_dir = self
@@ -114,24 +113,12 @@ impl Store {
     }
 
     /// Open an existing run. Parses the leading `Start` record to recover the
-    /// source document and the libraries it was run with, then replays
-    /// records into a map of completed step paths to the value each recorded
-    /// (`Done` with its value, `Skip`/`Fail` mapping to `Unitus`), used to
-    /// rehydrate bindings on resume. `Stop` and `Resume` records are passed
-    /// over.
+    /// source document and the libraries it was run with, then folds every
+    /// record that follows into the `Ledger` a resume walks against.
     pub fn open(
         &self,
         run_id: RunId,
-    ) -> Result<
-        (
-            PathBuf,
-            Vec<String>,
-            HashMap<String, value::Value>,
-            HashMap<String, Vec<Supplied>>,
-            PathBuf,
-        ),
-        StoreError,
-    > {
+    ) -> Result<(PathBuf, Vec<String>, Ledger, PathBuf), StoreError> {
         let run_dir = self
             .base
             .join(run_id.render());
@@ -162,32 +149,13 @@ impl Store {
             _ => return Err(StoreError::StartMissing(run_id)),
         };
 
-        let mut completed = HashMap::new();
-        let mut inputs: HashMap<String, Vec<Supplied>> = HashMap::new();
+        let mut ledger = Ledger::new();
         for line in lines {
             let record = parse_record(line)
                 .map_err(|error| StoreError::MalformedRecord { run_id, error })?;
-            match record.state {
-                State::Done(value) => {
-                    completed.insert(record.path, value.unwrap_or(value::Value::Unitus));
-                }
-                State::Skip | State::Fail(_) => {
-                    completed.insert(record.path, value::Value::Unitus);
-                }
-                State::Input(supplied) => {
-                    inputs.insert(record.path, supplied);
-                }
-                State::Start { .. }
-                | State::Finish
-                | State::Stop
-                | State::Resume
-                | State::Invoke(_)
-                | State::Execute { .. }
-                | State::Return(_)
-                | State::Begin => {}
-            }
+            ledger.apply(&record);
         }
-        Ok((document, libraries, completed, inputs, run_dir))
+        Ok((document, libraries, ledger, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return

@@ -4,6 +4,8 @@
 use std::io;
 use std::path::PathBuf;
 
+mod ledger;
+mod navigation;
 mod record;
 mod store;
 
@@ -17,8 +19,10 @@ pub enum StoreError {
     Io { path: PathBuf, error: io::Error },
 }
 
+pub use ledger::{Entry, Ledger};
+pub use navigation::{Journal, Motion, Position};
 pub use record::{
-    InvokeTarget, Record, RecordError, RunId, State, Supplied, display_path, parse_records,
+    InvokeTarget, Record, RecordError, RunId, Serial, State, Supplied, display_path, parse_records,
 };
 pub use store::{Appender, Store};
 

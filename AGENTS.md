@@ -290,7 +290,7 @@ where the fields are
 - `()` the value of the step or state, if any, in this case Unitus.
 
 Results are written to the @./.store/ directory, and serve both as the
-permanent record of a step having been completed and also as a trace allowing
+permanent record of a step having been completed and also as a journal allowing
 the procedure to be resumed if interrupted. The line format is serialized by
 @src/runner/state.rs, which is authoritative.
 

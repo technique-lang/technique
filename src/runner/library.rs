@@ -25,7 +25,7 @@ pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
 /// How a builtin is presented to the user. `Pure` just runs. `Command` (e.g.
 /// `exec()`) is host-run and vetted on an editable prompt. `Instant`
 /// (`now()`) is host-run too but has nothing to vet and can't fail, so it
-/// runs unvetted while still being traced like `Command`. `Action`s (such as
+/// runs unvetted while still being recorded like `Command`. `Action`s (such as
 /// `click()`, `select()`) are a physical step the user confirms read-only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nature {

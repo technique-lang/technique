@@ -1,0 +1,15 @@
+% technique v1
+
+launder_towels :
+
+A towel is about the most massively useful thing an interstellar hitchhiker
+can have, so each one gets dried individually.
+
+    1.  Gather the towels { ["blue", "green"] ~ towels }
+    2.  { foreach towel in towels }
+        -   <dry_towel>(towel)
+
+dry_towel(towel) : Towel -> ()
+
+    1.  Hang { towel } on the line
+    2.  Wait for the sun

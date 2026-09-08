@@ -5,11 +5,13 @@
 
 //! The walker tells the driver what to show and then asks for the step's
 //! outcome. A driver is assembled from two orthogonal axes: an `Output`
-//! presentation policy (`Visual` renders a trace, `Silent` shows nothing) and
+//! presentation policy (`Visual` renders a trail, `Silent` shows nothing) and
 //! a `Verdict` input policy (`Interactive` reads the user's keystrokes,
 //! `Batch` takes the body's value unattended). `Interface` composes the two.
 //! `Mock` is for testing.
 
+#[cfg(test)]
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -19,7 +21,7 @@ use crossterm::style::{
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size};
 use crossterm::{cursor, queue};
 
-use crate::engraving::display_path;
+use crate::engraving::{Motion, display_path};
 use crate::formatting::{Identity, Render, Syntax};
 use crate::highlighting::Terminal;
 use crate::value::Value;
@@ -48,7 +50,189 @@ pub enum UserInput {
     /// severing the rollup so the failure does not propagate above. Reachable
     /// only from the `<Esc>` menu at a failed node, never the Enter default.
     Override,
+    /// Step back through what this walk has recorded. The node being prompted
+    /// is left unsettled; the walker resumes its prompt when review ends.
+    /// Raised by `<Up>`, not by any menu item.
+    Review,
     Quit,
+}
+
+/// What the user did at the position the review cursor rests on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Review {
+    Move(Motion),
+    /// What the user picked from the menu at the reviewed position. The same
+    /// vocabulary the position was answered with the first time: a reviewed
+    /// answer is changed by giving a different one, not by a verb of its own.
+    Chose(Offer),
+    /// Return to the live prompt, which the walker re-issues.
+    Leave,
+    /// Stop the run, as `<Ctrl>+<c>` does at any other prompt.
+    Quit,
+}
+
+/// What a keystroke means. A key whose meaning depends on its holder stays
+/// physical, to be reinterpreted by it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Intent {
+    Accept,
+    Decline,
+    Move(Motion),
+    Typed(char),
+    Erase,
+    End,
+}
+
+/// The program's key bindings, whole. `None` is a key that carries no meaning,
+/// which the source reads past.
+pub fn intent(key: KeyEvent) -> Option<Intent> {
+    match key.code {
+        KeyCode::Enter => Some(Intent::Accept),
+        KeyCode::Esc => Some(Intent::Decline),
+        KeyCode::Up => Some(Intent::Move(Motion::Up)),
+        KeyCode::Down => Some(Intent::Move(Motion::Down)),
+        KeyCode::Left => Some(Intent::Move(Motion::Left)),
+        KeyCode::Right => Some(Intent::Move(Motion::Right)),
+        KeyCode::PageUp => Some(Intent::Move(Motion::PageUp)),
+        KeyCode::PageDown => Some(Intent::Move(Motion::PageDown)),
+        KeyCode::Backspace => Some(Intent::Erase),
+        KeyCode::End => Some(Intent::End),
+        // Shift is not read: it is how a capital arrives, rather than a
+        // modifier on one.
+        KeyCode::Char(c) => {
+            if key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            {
+                None
+            } else {
+                Some(Intent::Typed(c))
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Where an interactive prompt takes its keystrokes from. The source owns raw
+/// mode, the release filter and `<Ctrl>+<c>`.
+pub trait Keys {
+    type Held;
+
+    /// None where the terminal will not go raw.
+    fn hold(&mut self) -> Option<Self::Held>;
+
+    fn read(&mut self) -> Option<KeyEvent>;
+
+    /// None means interrupted: `<Ctrl>+<c>`, a read error, or no more keys.
+    fn next(&mut self) -> Option<Intent> {
+        loop {
+            let key = self.read()?;
+            if key.kind == KeyEventKind::Release {
+                continue;
+            }
+            if key
+                .modifiers
+                .contains(KeyModifiers::CONTROL)
+            {
+                if let KeyCode::Char('c') = key.code {
+                    // Believe it or not we actually have to handle <Ctrl>+<c>
+                    // explicitly when in raw mode. It is refusable nowhere, so
+                    // it never reaches a holder as an intent.
+                    return None;
+                }
+            }
+            if let Some(intent) = intent(key) {
+                return Some(intent);
+            }
+        }
+    }
+}
+
+/// Raw mode, restored when this drops — including on an unwind, which nothing
+/// did before.
+pub struct Raw;
+
+impl Drop for Raw {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
+}
+
+/// The user's terminal, which is what a run reads.
+pub struct RealKeyboard;
+
+impl Keys for RealKeyboard {
+    type Held = Raw;
+
+    fn hold(&mut self) -> Option<Raw> {
+        match enable_raw_mode() {
+            Ok(()) => Some(Raw),
+            Err(_) => None,
+        }
+    }
+
+    fn read(&mut self) -> Option<KeyEvent> {
+        loop {
+            match event::read() {
+                Ok(event::Event::Key(key)) => return Some(key),
+                Ok(_) => continue,
+                Err(_) => return None,
+            }
+        }
+    }
+}
+
+/// A queue of keystrokes standing in for the terminal; run dry, it reads as
+/// interrupted.
+#[cfg(test)]
+pub struct MockKeyboard {
+    keys: std::collections::VecDeque<KeyEvent>,
+}
+
+#[cfg(test)]
+impl MockKeyboard {
+    pub fn new<I: IntoIterator<Item = KeyEvent>>(keys: I) -> Self {
+        MockKeyboard {
+            keys: keys
+                .into_iter()
+                .collect(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Keys for MockKeyboard {
+    type Held = ();
+
+    fn hold(&mut self) -> Option<()> {
+        Some(())
+    }
+
+    fn read(&mut self) -> Option<KeyEvent> {
+        self.keys
+            .pop_front()
+    }
+}
+
+/// One prompt the walker puts to the user: where it stands, how it settles on
+/// a bare `<Enter>`, and what its body produced. `ask` takes this rather than
+/// a handful of loose arguments because a step's verdict, a scope's close and
+/// the sign-off of a node that rolled up to a failure differ only in these
+/// fields.
+pub struct Question<'a> {
+    /// The node's Qualified Name, repeated on the live prompt line.
+    pub qualified: &'a str,
+    /// `→` at a step, `↙` at a scope's close, `⇒`/`⇐` at a document boundary.
+    pub marker: &'a str,
+    /// What a bare `<Enter>` settles on, and where the `<Esc>` menu opens.
+    pub standing: Standing,
+    /// Drives the unattended answer where the standing is `Done`.
+    pub kind: Kind,
+    /// The value the body produced, offered for acceptance.
+    pub produced: Value,
+    /// Whether anything has settled behind this prompt, making `<Up>` a motion
+    /// rather than a no-op.
+    pub reviewable: bool,
 }
 
 /// The default verdict a node's rolled-up body leaves standing at its close.
@@ -103,15 +287,15 @@ pub trait Driver {
     /// Execute / Unresolved Invoke announce-only, resume diagnostics.
     fn announce(&mut self, message: &str);
 
-    /// Answer the most recent `step` prompt. `produced` is the value the step
-    /// body computed, offered as the step's value: `Console` presents it for
-    /// the user to accept, `Automatic` answers it directly. When `choices` is
-    /// non-empty the user instead selects one of those response values,
-    /// yielding `Done(Literali(choice))`. Skip, Fail, and Quit are available
-    /// to user either way. `produced` is consumed: the driver either moves it
-    /// into the returned `Done` or discards it. `qualified` is the step's
-    /// Qualified Name, repeated on the live prompt line.
-    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput;
+    /// Answer the most recent `step` prompt, or sign off a scope at its close.
+    /// `Console` presents the question's produced value for the user to accept,
+    /// `Automatic` answers it directly. When `choices` is non-empty the user
+    /// instead selects one of those response values, yielding
+    /// `Done(Literali(choice))`. `offers` is what the walker says is legal
+    /// here; the unattended drivers never read it, so extending the vocabulary
+    /// costs them nothing. `choices` is kept separate from `offers` because the
+    /// two are different things: choices are domain values, offers are actions.
+    fn ask(&mut self, question: Question<'_>, choices: &[&str], offers: &[Offer]) -> UserInput;
 
     /// Cross out into an external `<uri>` procedure: prompt at the `⇒` departure
     /// — the place arguments would be solicited — then leave the glyph-less `⇒`
@@ -139,7 +323,7 @@ pub trait Driver {
     /// `click("Actions")`) the user performs themselves: show the imperative
     /// `verb` and its `label` read-only on the prompt line and act on the
     /// user's verdict. `Done` means they did it, leaving a compact `{name}()`
-    /// trace; Skip / Fail decline and record the step; Quit stops. Unlike
+    /// trail; Skip / Fail decline and record the step; Quit stops. Unlike
     /// `command` there is no edit buffer. `Automatic` returns `Done` without
     /// prompting.
     fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput;
@@ -149,22 +333,19 @@ pub trait Driver {
     /// numeral and title, e.g. `II. Check internet connectivity`.
     fn section(&mut self, qualified: &str, numeral: &str, title: &str);
 
-    /// Prompt the user to sign off a completed structural scope — a
-    /// Section at its close, or the whole run at the entry procedure's close.
-    /// Like `ask` but with no response choices, settling to the `↙` close
-    /// marker; `produced` is the scope's value, offered for acceptance;
-    /// `kind` drives unattended `Done` or `Skip` as in `ask`.
-    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput;
-
-    /// Sign off a node that rolled up to a failure or skip. When running
-    /// interactively a failure may be Overridden to Done.
-    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
-        let _ = (qualified, marker);
-        match standing {
-            Standing::Done => UserInput::Done(Value::Unitus),
-            Standing::Skip => UserInput::Skip,
-            Standing::Fail => UserInput::Fail(String::new()),
-        }
+    /// Show one position the walk has already passed and read where the user
+    /// wants to go next. The walker holds the cursor and moves it; this shows
+    /// where it now rests. The unattended drivers leave at once, never having
+    /// asked to review in the first place.
+    fn review(
+        &mut self,
+        marker: &str,
+        qualified: &str,
+        settled: Option<&UserInput>,
+        offers: &[Offer],
+    ) -> Review {
+        let _ = (marker, qualified, settled, offers);
+        Review::Leave
     }
 
     /// Render the settled verdict line for a step or scope close: `marker`
@@ -173,13 +354,18 @@ pub trait Driver {
     fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput);
 
     /// Obtain a value for a deferred input: `Done` supplies it, Skip / Fail
-    /// abandon the call, Quit stops the run.
+    /// abandon the call, Quit stops the run. `seed` pre-fills the edit buffer
+    /// where a revoked entry recorded a value here, so correcting one character
+    /// of forty instance identifiers does not mean retyping all forty. It is a
+    /// default the user still commits, against the same type check — not a
+    /// pre-answer, since nothing is written from the review prompt.
     fn acquire(
         &mut self,
         qualified: &str,
         text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput;
 
     /// The syntax renderer for highlighting source fragments shown to the
@@ -187,7 +373,7 @@ pub trait Driver {
     fn renderer(&self) -> &'static dyn Render;
 }
 
-/// The presentation axis: what a driver shows. `Visual` renders the trace to a
+/// The presentation axis: what a driver shows. `Visual` renders the trail to a
 /// terminal; `Silent` shows nothing. The `show_*` methods draw the line a
 /// `Batch` verdict still displays for a point it decides without prompting;
 /// `surface` hands an interactive verdict the raw sink to prompt on.
@@ -226,18 +412,9 @@ pub trait Verdict {
     fn ask<O: Output>(
         &mut self,
         out: &mut O,
-        qualified: &str,
+        question: Question<'_>,
         choices: &[&str],
-        produced: Value,
-        kind: Kind,
-    ) -> UserInput;
-
-    fn seal<O: Output>(
-        &mut self,
-        out: &mut O,
-        qualified: &str,
-        produced: Value,
-        kind: Kind,
+        offers: &[Offer],
     ) -> UserInput;
 
     fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput;
@@ -258,22 +435,29 @@ pub trait Verdict {
         text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput;
 
     fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput;
 
     fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput;
 
-    fn overrule<O: Output>(
+    /// Where the review cursor goes next. Only an interactive policy has
+    /// anyone to ask, so the rest leave at once.
+    fn review<O: Output>(
         &mut self,
         out: &mut O,
-        qualified: &str,
         marker: &str,
-        standing: Standing,
-    ) -> UserInput;
+        qualified: &str,
+        settled: Option<&UserInput>,
+        offers: &[Offer],
+    ) -> Review {
+        let _ = (out, marker, qualified, settled, offers);
+        Review::Leave
+    }
 }
 
-/// A visual presentation to a terminal, rendering the trace shared by the
+/// A visual presentation to a terminal, rendering the trail shared by the
 /// interactive and batch drivers.
 pub struct Visual<W: Write> {
     output: W,
@@ -403,32 +587,23 @@ impl Output for Silent {
 /// default is confirmation: `<Enter>` completes the step, accepting the
 /// default action or the body's current value intact; the `<Esc>` menu offers
 /// Skip, Fail, Quit, sometimes Override, and (for an editable scalar) Edit.
-pub struct Interactive;
+pub struct Interactive<K: Keys = RealKeyboard> {
+    keys: K,
+}
 
-impl Verdict for Interactive {
+impl<K: Keys> Verdict for Interactive<K> {
     fn ask<O: Output>(
         &mut self,
         out: &mut O,
-        qualified: &str,
+        question: Question<'_>,
         choices: &[&str],
-        produced: Value,
-        _kind: Kind,
+        offers: &[Offer],
     ) -> UserInput {
-        prompt(out.surface(), qualified, "→", choices, produced)
-    }
-
-    fn seal<O: Output>(
-        &mut self,
-        out: &mut O,
-        qualified: &str,
-        produced: Value,
-        _kind: Kind,
-    ) -> UserInput {
-        prompt(out.surface(), qualified, "↙", &[], produced)
+        prompt(out.surface(), &mut self.keys, question, choices, offers)
     }
 
     fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
-        prompt_command(out.surface(), qualified, script)
+        prompt_command(out.surface(), &mut self.keys, qualified, script)
     }
 
     fn action<O: Output>(
@@ -439,7 +614,7 @@ impl Verdict for Interactive {
         verb: &str,
         value: &Value,
     ) -> UserInput {
-        prompt_action(out.surface(), qualified, name, verb, value)
+        prompt_action(out.surface(), &mut self.keys, qualified, name, verb, value)
     }
 
     fn acquire<O: Output>(
@@ -449,6 +624,7 @@ impl Verdict for Interactive {
         text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput {
         // The trailing space before `(name : forma)` is unconditional, same
         // as when `text` is empty: {qualified} {name : forma}.
@@ -459,12 +635,24 @@ impl Verdict for Interactive {
             name.unwrap_or("?"),
             forma.unwrap_or("?")
         );
-        prompt_acquire(out.surface(), &label, is_list_forma(forma))
+        prompt_acquire(
+            out.surface(),
+            &mut self.keys,
+            &label,
+            is_list_forma(forma),
+            seed,
+        )
     }
 
     fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput {
         let announced = announce(qualified, text);
-        let input = prompt(out.surface(), &announced, "⇒", &[], Value::Unitus);
+        let input = prompt(
+            out.surface(),
+            &mut self.keys,
+            boundary(&announced, "⇒"),
+            &[],
+            &BOUNDARY,
+        );
         if let UserInput::Quit = input {
         } else {
             out.show_depart(&announced);
@@ -473,17 +661,31 @@ impl Verdict for Interactive {
     }
 
     fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
-        prompt(out.surface(), qualified, "⇐", &[], Value::Unitus)
+        prompt(
+            out.surface(),
+            &mut self.keys,
+            boundary(qualified, "⇐"),
+            &[],
+            &BOUNDARY,
+        )
     }
 
-    fn overrule<O: Output>(
+    fn review<O: Output>(
         &mut self,
         out: &mut O,
-        qualified: &str,
         marker: &str,
-        standing: Standing,
-    ) -> UserInput {
-        prompt_overrule(out.surface(), qualified, marker, standing)
+        qualified: &str,
+        settled: Option<&UserInput>,
+        offers: &[Offer],
+    ) -> Review {
+        prompt_review(
+            out.surface(),
+            &mut self.keys,
+            marker,
+            qualified,
+            settled,
+            offers,
+        )
     }
 }
 
@@ -491,10 +693,18 @@ impl Verdict for Interactive {
 /// and scope's body value as the result, if available, otherwise Skip.
 pub struct Batch;
 
-fn unattended(produced: Value, kind: Kind) -> UserInput {
-    match kind {
-        Kind::Computable | Kind::System => UserInput::Done(produced),
-        Kind::Prose | Kind::Action | Kind::Choice => UserInput::Skip,
+/// A node whose body already settled Fail or Skip keeps that; otherwise the
+/// step's `Kind` decides. `Kind` cannot collapse into the standing: `Prose`,
+/// `Action` and `Choice` skip unattended, but interactively those same nodes
+/// stand at `Done` and `<Enter>` means "done, I read it".
+fn unattended(question: Question<'_>) -> UserInput {
+    match question.standing {
+        Standing::Fail => UserInput::Fail(String::new()),
+        Standing::Skip => UserInput::Skip,
+        Standing::Done => match question.kind {
+            Kind::Computable | Kind::System => UserInput::Done(question.produced),
+            Kind::Prose | Kind::Action | Kind::Choice => UserInput::Skip,
+        },
     }
 }
 
@@ -502,22 +712,11 @@ impl Verdict for Batch {
     fn ask<O: Output>(
         &mut self,
         _out: &mut O,
-        _qualified: &str,
+        question: Question<'_>,
         _choices: &[&str],
-        produced: Value,
-        kind: Kind,
+        _offers: &[Offer],
     ) -> UserInput {
-        unattended(produced, kind)
-    }
-
-    fn seal<O: Output>(
-        &mut self,
-        _out: &mut O,
-        _qualified: &str,
-        produced: Value,
-        kind: Kind,
-    ) -> UserInput {
-        unattended(produced, kind)
+        unattended(question)
     }
 
     fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
@@ -545,6 +744,7 @@ impl Verdict for Batch {
         _text: &str,
         _name: Option<&str>,
         _forma: Option<&str>,
+        _seed: Option<&Value>,
     ) -> UserInput {
         UserInput::Done(Value::Unitus)
     }
@@ -557,19 +757,95 @@ impl Verdict for Batch {
     fn external<O: Output>(&mut self, _out: &mut O, _qualified: &str) -> UserInput {
         UserInput::Skip
     }
+}
 
-    fn overrule<O: Output>(
+/// Gives a prepared verdict at named steps; every other step is answered as
+/// `Batch` answers it. A step is given its verdict the first time it is
+/// reached, so a step reached again is answered unattended. For tests.
+#[cfg(test)]
+pub struct Script {
+    answers: HashMap<String, UserInput>,
+    /// Keys the review cursor takes, in order, once a prompt has asked to
+    /// review. Exhausted, it leaves.
+    reviews: std::collections::VecDeque<Review>,
+}
+
+#[cfg(test)]
+impl Script {
+    pub fn new<I: IntoIterator<Item = (String, UserInput)>>(answers: I) -> Self {
+        Script {
+            answers: answers
+                .into_iter()
+                .collect(),
+            reviews: std::collections::VecDeque::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Verdict for Script {
+    fn ask<O: Output>(
+        &mut self,
+        out: &mut O,
+        question: Question<'_>,
+        choices: &[&str],
+        offers: &[Offer],
+    ) -> UserInput {
+        match self
+            .answers
+            .remove(question.qualified)
+        {
+            Some(input) => input,
+            None => Batch.ask(out, question, choices, offers),
+        }
+    }
+
+    fn command<O: Output>(&mut self, out: &mut O, qualified: &str, script: &str) -> UserInput {
+        Batch.command(out, qualified, script)
+    }
+
+    fn action<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        name: &str,
+        verb: &str,
+        value: &Value,
+    ) -> UserInput {
+        Batch.action(out, qualified, name, verb, value)
+    }
+
+    fn acquire<O: Output>(
+        &mut self,
+        out: &mut O,
+        qualified: &str,
+        text: &str,
+        name: Option<&str>,
+        forma: Option<&str>,
+        seed: Option<&Value>,
+    ) -> UserInput {
+        Batch.acquire(out, qualified, text, name, forma, seed)
+    }
+
+    fn depart<O: Output>(&mut self, out: &mut O, qualified: &str, text: &str) -> UserInput {
+        Batch.depart(out, qualified, text)
+    }
+
+    fn review<O: Output>(
         &mut self,
         _out: &mut O,
-        _qualified: &str,
         _marker: &str,
-        standing: Standing,
-    ) -> UserInput {
-        match standing {
-            Standing::Done => UserInput::Done(Value::Unitus),
-            Standing::Skip => UserInput::Skip,
-            Standing::Fail => UserInput::Fail(String::new()),
-        }
+        _qualified: &str,
+        _settled: Option<&UserInput>,
+        _offers: &[Offer],
+    ) -> Review {
+        self.reviews
+            .pop_front()
+            .unwrap_or(Review::Leave)
+    }
+
+    fn external<O: Output>(&mut self, out: &mut O, qualified: &str) -> UserInput {
+        Batch.external(out, qualified)
     }
 }
 
@@ -617,9 +893,9 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .section(qualified, numeral, title);
     }
 
-    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput {
+    fn ask(&mut self, question: Question<'_>, choices: &[&str], offers: &[Offer]) -> UserInput {
         self.verdict
-            .ask(&mut self.out, qualified, choices, produced, kind)
+            .ask(&mut self.out, question, choices, offers)
     }
 
     fn depart(&mut self, qualified: &str, text: &str) -> UserInput {
@@ -642,14 +918,15 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
             .action(&mut self.out, qualified, name, verb, value)
     }
 
-    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput {
+    fn review(
+        &mut self,
+        marker: &str,
+        qualified: &str,
+        settled: Option<&UserInput>,
+        offers: &[Offer],
+    ) -> Review {
         self.verdict
-            .seal(&mut self.out, qualified, produced, kind)
-    }
-
-    fn overrule(&mut self, qualified: &str, marker: &str, standing: Standing) -> UserInput {
-        self.verdict
-            .overrule(&mut self.out, qualified, marker, standing)
+            .review(&mut self.out, marker, qualified, settled, offers)
     }
 
     fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
@@ -663,9 +940,10 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
         text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput {
         self.verdict
-            .acquire(&mut self.out, qualified, text, name, forma)
+            .acquire(&mut self.out, qualified, text, name, forma, seed)
     }
 
     fn renderer(&self) -> &'static dyn Render {
@@ -675,16 +953,21 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
 }
 
 /// Represents the interactive console prompt in a terminal: renders the
-/// output trace and reads the user's keystrokes.
-pub type Console<W = io::Stdout> = Interface<Visual<W>, Interactive>;
+/// output trail and reads the user's keystrokes.
+pub type Console<W = io::Stdout, K = RealKeyboard> = Interface<Visual<W>, Interactive<K>>;
 
-/// Non-interactive driver that still renders the trace, then takes each
+/// Non-interactive driver that still renders the trail, then takes each
 /// body's value (if any) as the result.
 pub type Automatic<W = io::Stdout> = Interface<Visual<W>, Batch>;
 
 /// Non-interactive driver with no UI output, leaving only executed child
 /// process's output the only thing written to the terminal.
 pub type Headless = Interface<Silent, Batch>;
+
+/// As `Headless`, but taking prepared verdicts from a `Script`. Lets a test
+/// stop a run partway, or answer one step differently, without a terminal.
+#[cfg(test)]
+pub type Scripted = Interface<Silent, Script>;
 
 impl Console<io::Stdout> {
     pub fn new() -> Self {
@@ -693,7 +976,7 @@ impl Console<io::Stdout> {
                 output: io::stdout(),
                 renderer: &Terminal,
             },
-            verdict: Interactive,
+            verdict: Interactive { keys: RealKeyboard },
         }
     }
 }
@@ -706,8 +989,29 @@ impl<W: Write> Console<W> {
                 output,
                 renderer: &Terminal,
             },
-            verdict: Interactive,
+            verdict: Interactive { keys: RealKeyboard },
         }
+    }
+}
+
+#[cfg(test)]
+impl<W: Write, K: Keys> Console<W, K> {
+    /// Drive the prompts from a queue of keystrokes rather than a terminal,
+    /// which is the whole of what a test does differently.
+    pub fn with_keys(output: W, keys: K) -> Self {
+        Interface {
+            out: Visual {
+                output,
+                renderer: &Terminal,
+            },
+            verdict: Interactive { keys },
+        }
+    }
+
+    /// Read back what the run drew, alongside what it recorded.
+    pub fn into_output(self) -> W {
+        self.out
+            .output
     }
 }
 
@@ -752,19 +1056,53 @@ impl Headless {
     }
 }
 
+#[cfg(test)]
+impl Scripted {
+    pub fn new<I: IntoIterator<Item = (String, UserInput)>>(answers: I) -> Self {
+        Interface {
+            out: Silent {
+                discard: io::sink(),
+            },
+            verdict: Script::new(answers),
+        }
+    }
+
+    /// Drive the review cursor as well, with the keys it takes in order once a
+    /// prompt has answered `Review`.
+    pub fn reviewing<I, R>(answers: I, reviews: R) -> Self
+    where
+        I: IntoIterator<Item = (String, UserInput)>,
+        R: IntoIterator<Item = Review>,
+    {
+        let mut verdict = Script::new(answers);
+        verdict.reviews = reviews
+            .into_iter()
+            .collect();
+        Interface {
+            out: Silent {
+                discard: io::sink(),
+            },
+            verdict,
+        }
+    }
+}
+
 /// Run one interactive prompt and return the user's verdict, clearing the
 /// live `▶` row on settle.
-fn prompt(
+fn prompt<K: Keys>(
     mut out: &mut dyn Write,
-    qualified: &str,
-    settle: &str,
+    keys: &mut K,
+    question: Question<'_>,
     choices: &[&str],
-    produced: Value,
+    offers: &[Offer],
 ) -> UserInput {
-    let qualified = display_path(qualified);
-    let result = interact(out, Prompt::begin(choices, produced), |o, i| {
-        draw(o, &qualified, settle, i)
-    });
+    let qualified = display_path(question.qualified);
+    let marker = question
+        .marker
+        .to_string();
+    let mut seeded = Prompt::begin(choices, question.produced, question.standing, offers);
+    seeded.reviewable = question.reviewable;
+    let result = interact(out, keys, seeded, |o, i| draw(o, &qualified, &marker, i));
     let _ = queue!(
         &mut out,
         cursor::MoveToColumn(0),
@@ -774,38 +1112,206 @@ fn prompt(
     result
 }
 
-fn prompt_overrule(
+/// Show one reviewed position on the live prompt line and read the next key.
+/// Up and Down step through what the walk has settled, Left goes up and out to
+/// the enclosing scope and Right retraces that descent, and `<Esc>` opens the
+/// menu — the same gesture the live prompt uses for everything that is not the
+/// Enter default.
+///
+/// A frame the walk entered but never asked about — a procedure's entry, a
+/// scope it is still standing inside — is a position like any other, and
+/// `settled` is `None` there. Edit, Skip and Fail are withheld at those: there
+/// is no recorded value to withdraw, leaving only Quit.
+///
+/// `<Enter>` does nothing here. It means "settle this" at every other prompt,
+/// and a reviewed position has nothing to settle; binding it to Quit, the one
+/// destructive action on offer, would be a trap. `<End>` is the way out from
+/// six levels deep in one press.
+fn prompt_review<K: Keys>(
     mut out: &mut dyn Write,
-    qualified: &str,
+    keys: &mut K,
     marker: &str,
-    standing: Standing,
-) -> UserInput {
+    qualified: &str,
+    settled: Option<&UserInput>,
+    offered: &[Offer],
+) -> Review {
     let qualified = display_path(qualified);
-    let result = interact(out, Prompt::overrule(standing), |o, i| {
-        draw(o, &qualified, marker, i)
-    });
-    let _ = queue!(
+    let mut reviewing = Reviewing::begin(offered);
+    let result = {
+        let _raw = match keys.hold() {
+            Some(raw) => raw,
+            None => {
+                let _ = writeln!(out, "(could not enter raw mode)");
+                return Review::Quit;
+            }
+        };
+        loop {
+            if draw_review(out, marker, &qualified, settled, &reviewing).is_err() {
+                break Review::Quit;
+            }
+            match keys.next() {
+                None => break Review::Quit,
+                Some(intent) => {
+                    if let Some(answer) = reviewing.handle(intent) {
+                        break answer;
+                    }
+                }
+            }
+        }
+    };
+    // A motion returns so the cursor can be moved and the line drawn again, so
+    // the line is left standing: clearing it here and redrawing there blanks it
+    // between every keypress, which is seen as flicker. Only an answer, a
+    // departure or a quit ends review, and only those take the line down.
+    let moving = if let Review::Move(_) = result {
+        true
+    } else {
+        false
+    };
+    if !moving {
+        let _ = queue!(
+            &mut out,
+            cursor::MoveToColumn(0),
+            Clear(ClearType::CurrentLine),
+            cursor::Show
+        );
+        let _ = out.flush();
+    }
+    result
+}
+
+/// The reviewed position, drawn as the trail line it was — the `↑` marker, the
+/// path, and the verdict it settled on — followed, once `<Esc>` has opened it,
+/// by the menu.
+fn draw_review(
+    mut out: &mut dyn Write,
+    marker: &str,
+    qualified: &str,
+    settled: Option<&UserInput>,
+    reviewing: &Reviewing,
+) -> io::Result<()> {
+    queue!(
         &mut out,
         cursor::MoveToColumn(0),
-        Clear(ClearType::CurrentLine)
-    );
-    let _ = out.flush();
-    result
+        Clear(ClearType::CurrentLine),
+        cursor::Hide
+    )?;
+    write!(
+        out,
+        "{}",
+        format!("{} {} ", marker, qualified).with(MARKER_GREY)
+    )?;
+    if let Some((glyph, syntax)) = settled.and_then(verdict_glyph) {
+        write!(out, "{}", Terminal.style(syntax, glyph))?;
+    }
+    write!(out, "   ")?;
+    if let Some(menu) = &reviewing.menu {
+        render_menu(out, menu, |_| true)?;
+    }
+    out.flush()
+}
+
+/// The keyboard's state at a reviewed position. `Prompt`'s sibling.
+struct Reviewing {
+    offers: Vec<Offer>,
+    menu: Option<Menu>,
+}
+
+impl Reviewing {
+    fn begin(offers: &[Offer]) -> Self {
+        Reviewing {
+            offers: offers.to_vec(),
+            menu: None,
+        }
+    }
+
+    fn handle(&mut self, intent: Intent) -> Option<Review> {
+        // An escape hatch a menu can stand in front of is not one.
+        if let Intent::End = intent {
+            return Some(Review::Leave);
+        }
+        if self
+            .menu
+            .is_some()
+        {
+            self.menu_key(intent)
+        } else {
+            self.position_key(intent)
+        }
+    }
+
+    // `reviewing` withholds an offer rather than greying it, so nothing here
+    // is ever disabled.
+    fn menu_key(&mut self, intent: Intent) -> Option<Review> {
+        match intent {
+            Intent::Move(motion) => {
+                self.menu
+                    .as_mut()?
+                    .step(motion, |_| true);
+                None
+            }
+            Intent::Accept => Some(Review::Chose(
+                self.menu
+                    .as_ref()?
+                    .chosen(),
+            )),
+            Intent::Typed(c) => self
+                .menu
+                .as_mut()?
+                .select(c, |_| true)
+                .map(Review::Chose),
+            Intent::Decline => {
+                self.menu = None;
+                None
+            }
+            Intent::Erase | Intent::End => None,
+        }
+    }
+
+    fn position_key(&mut self, intent: Intent) -> Option<Review> {
+        match intent {
+            Intent::Move(motion) => Some(Review::Move(motion)),
+            Intent::Decline => {
+                self.menu = Some(Menu::open(&self.offers, 0));
+                None
+            }
+            Intent::Accept | Intent::Typed(_) | Intent::Erase | Intent::End => None,
+        }
+    }
+}
+
+/// The offer set at a document boundary — a `⇒` departure or a `⇐` return.
+/// There is no value to edit, nothing above to review, and no rollup to
+/// override.
+const BOUNDARY: [Offer; 3] = [Offer::Skip, Offer::Fail, Offer::Quit];
+
+/// A boundary crossing put as a question: nothing produced, standing at Done.
+fn boundary<'a>(qualified: &'a str, marker: &'a str) -> Question<'a> {
+    Question {
+        qualified,
+        marker,
+        standing: Standing::Done,
+        kind: Kind::Prose,
+        produced: Value::Unitus,
+        reviewable: true,
+    }
 }
 
 /// Present a read-only action on the live prompt line — `» {path} {verb} {label} ▶`
 /// — and settle on the user's verdict. On Done it leaves a compact dark-grey
-/// trace `» {path} {name}()`; Skip / Fail / Quit clear the line for the step's
+/// trail `» {path} {name}()`; Skip / Fail / Quit clear the line for the step's
 /// own settle to follow.
-fn prompt_action(
+fn prompt_action<K: Keys>(
     mut out: &mut dyn Write,
+    keys: &mut K,
     qualified: &str,
     name: &str,
     verb: &str,
     value: &Value,
 ) -> UserInput {
     let qualified = display_path(qualified);
-    let result = interact(out, Prompt::begin(&[], Value::Unitus), |o, i| {
+    let seeded = Prompt::begin(&[], Value::Unitus, Standing::Done, &BOUNDARY);
+    let result = interact(out, keys, seeded, |o, i| {
         draw_action(o, &qualified, verb, value, i)
     });
     let _ = queue!(
@@ -829,7 +1335,12 @@ fn prompt_action(
 /// typing edits it in place, Esc opens the menu (Skip / Fail / Quit). On
 /// `Done` the live line is redrawn in grey with the interactive prompt marker
 /// becoming the '$', reminiscent of a shell.
-fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> UserInput {
+fn prompt_command<K: Keys>(
+    mut out: &mut dyn Write,
+    keys: &mut K,
+    qualified: &str,
+    script: &str,
+) -> UserInput {
     let qualified = display_path(qualified);
     // Seed the editable line
     let script = script.trim_end();
@@ -840,11 +1351,14 @@ fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> Use
     );
     let result = interact(
         out,
+        keys,
         Prompt {
             field,
             menu: None,
             reason: None,
             standing: Standing::Done,
+            offers: BOUNDARY.to_vec(),
+            reviewable: true,
         },
         |o, i| draw(o, &qualified, "→", i),
     );
@@ -873,15 +1387,29 @@ fn prompt_command(mut out: &mut dyn Write, qualified: &str, script: &str) -> Use
 /// Solicit a deferred input on the `▶` prompt line: `<Enter>` accepts the
 /// empty default, typing overrides it; the `<Esc>` menu and `<Ctrl-C>` abandon
 /// the call.
-fn prompt_acquire(mut out: &mut dyn Write, label: &str, list: bool) -> UserInput {
-    let field = edit(String::new(), Value::Literali(String::new()), list);
+fn prompt_acquire<K: Keys>(
+    mut out: &mut dyn Write,
+    keys: &mut K,
+    label: &str,
+    list: bool,
+    seed: Option<&Value>,
+) -> UserInput {
+    let buffer = match seed.and_then(editable_seed) {
+        Some(text) => text,
+        None => String::new(),
+    };
+    let original = Value::Literali(buffer.clone());
+    let field = edit(buffer, original, list);
     let result = interact(
         out,
+        keys,
         Prompt {
             field,
             menu: None,
             reason: None,
             standing: Standing::Done,
+            offers: BOUNDARY.to_vec(),
+            reviewable: true,
         },
         |o, i| draw(o, label, "↘", i),
     );
@@ -897,33 +1425,35 @@ fn prompt_acquire(mut out: &mut dyn Write, label: &str, list: bool) -> UserInput
 /// Drive one raw-mode interaction to a settled `UserInput`, leaving the prompt
 /// row cleared. Shared by the step/scope prompt and the exec command prompt; the
 /// caller writes whatever record line it wants afterward.
-fn interact(
+fn interact<K: Keys>(
     mut out: &mut dyn Write,
+    keys: &mut K,
     mut interaction: Prompt,
     mut render: impl FnMut(&mut dyn Write, &Prompt) -> io::Result<()>,
 ) -> UserInput {
     // The interactive path is guarded on stdout being a terminal before the
     // walk begins, so a raw-mode failure here is an unexpected terminal fault
     // rather than a redirect; bail by quitting.
-    if enable_raw_mode().is_err() {
-        let _ = writeln!(out, "(could not enter raw mode)");
-        return UserInput::Quit;
-    }
+    let _raw = match keys.hold() {
+        Some(raw) => raw,
+        None => {
+            let _ = writeln!(out, "(could not enter raw mode)");
+            return UserInput::Quit;
+        }
+    };
     let result = loop {
         if render(out, &interaction).is_err() {
             break UserInput::Quit;
         }
-        match event::read() {
-            Ok(event::Event::Key(key)) if key.kind != KeyEventKind::Release => {
-                if let Some(input) = interaction.handle(key) {
+        match keys.next() {
+            None => break UserInput::Quit,
+            Some(intent) => {
+                if let Some(input) = interaction.handle(intent) {
                     break input;
                 }
             }
-            Ok(_) => {}
-            Err(_) => break UserInput::Quit,
         }
     };
-    let _ = disable_raw_mode();
     let _ = queue!(&mut out, cursor::Show);
     let _ = out.flush();
     result
@@ -987,7 +1517,8 @@ fn verdict_glyph(verdict: &UserInput) -> Option<(&'static str, Syntax)> {
         UserInput::Done(_) | UserInput::Override => Some(("✓", Syntax::Done)),
         UserInput::Skip => Some(("⊘", Syntax::Skip)),
         UserInput::Fail(_) => Some(("✗", Syntax::Fail)),
-        UserInput::Quit => None,
+        // Nothing settled: the walk is unwinding to review or stop
+        UserInput::Review | UserInput::Quit => None,
     }
 }
 
@@ -1019,7 +1550,7 @@ fn render_conclude<W: Write>(out: &mut W, label: &str, verdict: &UserInput, rend
 }
 
 /// Render an automatically-run shell command on one line: `→ {path} $ {script}`,
-/// the whole line dark grey like the trace chrome so it reads as announce
+/// the whole line dark grey like the trail chrome so it reads as announce
 /// rather than as the command's own output that follows. The `$` stands in for
 /// a shell prompt (distinct from the user's `▶` edit prompt). Trailing
 /// whitespace is trimmed so a code block's blank tail line is not echoed.
@@ -1041,10 +1572,13 @@ fn render_section<W: Write>(out: &mut W, numeral: &str, title: &str, renderer: &
     }
 }
 
-/// One Esc-menu option. `Edit` reshapes the produced value in place; the rest
-/// are the step exits. Navigation order is the slice order in `MENU`.
+/// One action a walk position may offer. The walker decides which are legal
+/// where it stands and passes that set to the prompt; the UI presents those and
+/// returns which was chosen. `Edit` reshapes the produced value in place, the
+/// rest settle or leave the step. Navigation order is the order the walker
+/// gives them in.
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum MenuItem {
+pub enum Offer {
     Edit,
     Skip,
     Fail,
@@ -1052,29 +1586,28 @@ enum MenuItem {
     Quit,
 }
 
-impl MenuItem {
+impl Offer {
     fn label(self) -> &'static str {
         match self {
-            MenuItem::Edit => "Edit",
-            MenuItem::Skip => "Skip",
-            MenuItem::Fail => "Fail",
-            MenuItem::Override => "Override",
-            MenuItem::Quit => "Quit",
+            Offer::Edit => "Edit",
+            Offer::Skip => "Skip",
+            Offer::Fail => "Fail",
+            Offer::Override => "Override",
+            Offer::Quit => "Quit",
+        }
+    }
+
+    /// The letter that activates this offer, in either menu.
+    fn shortcut(self) -> char {
+        match self {
+            Offer::Edit => 'e',
+            Offer::Skip => 's',
+            Offer::Fail => 'f',
+            Offer::Override => 'o',
+            Offer::Quit => 'q',
         }
     }
 }
-
-/// The Esc-menu, always shown in full. `Edit` leads but is greyed unless the
-/// produced value is an editable scalar; `Override` is greyed unless a child
-/// failed, so the menu teaches both which steps can be edited and that a
-/// failure can be deliberately accepted.
-const MENU: [MenuItem; 5] = [
-    MenuItem::Edit,
-    MenuItem::Skip,
-    MenuItem::Fail,
-    MenuItem::Override,
-    MenuItem::Quit,
-];
 
 /// Shell-prompt glyph placed after the path, before the cursor — the
 /// equivalent of `$` or `>` in a shell.
@@ -1152,6 +1685,55 @@ enum Field {
     },
 }
 
+/// A row of offers with one highlighted: what `<Esc>` opens, at the live
+/// prompt and in review alike.
+struct Menu {
+    offers: Vec<Offer>,
+    active: usize,
+}
+
+impl Menu {
+    fn open(offers: &[Offer], active: usize) -> Self {
+        Menu {
+            offers: offers.to_vec(),
+            active,
+        }
+    }
+
+    /// Stops at the edge rather than wrapping. Only Left and Right move a row.
+    fn step(&mut self, motion: Motion, enabled: impl Fn(Offer) -> bool) {
+        let found = match motion {
+            Motion::Left => (0..self.active)
+                .rev()
+                .find(|&i| enabled(self.offers[i])),
+            Motion::Right => ((self.active + 1)
+                ..self
+                    .offers
+                    .len())
+                .find(|&i| enabled(self.offers[i])),
+            _ => None,
+        };
+        if let Some(at) = found {
+            self.active = at;
+        }
+    }
+
+    /// A letter naming nothing on the row, or something greyed, does nothing.
+    fn select(&mut self, typed: char, enabled: impl Fn(Offer) -> bool) -> Option<Offer> {
+        let typed = typed.to_ascii_lowercase();
+        let at = self
+            .offers
+            .iter()
+            .position(|offer| offer.shortcut() == typed && enabled(*offer))?;
+        self.active = at;
+        Some(self.offers[at])
+    }
+
+    fn chosen(&self) -> Offer {
+        self.offers[self.active]
+    }
+}
+
 /// The inline buffer soliciting a fail reason, shown on the menu line while
 /// Fail is highlighted. A submenu of the menu, not a Field: the underlying
 /// `Frozen` value is left untouched so backing out restores it.
@@ -1166,29 +1748,29 @@ struct Reason {
 /// while `menu` rests on Fail.
 struct Prompt {
     field: Field,
-    menu: Option<usize>,
+    menu: Option<Menu>,
     reason: Option<Reason>,
     /// The node's rolled-up default — `Done` for an ordinary prompt, `Fail` or
-    /// `Skip` at an `overrule`. Colours the `▶`, enables `Override` (only on
-    /// `Fail`), and is where the `<Esc>` menu opens.
+    /// `Skip` where a child settled that way. Colours the `▶` and is where the
+    /// `<Esc>` menu opens.
     standing: Standing,
+    /// What the walker said is legal here. The menu shows exactly these.
+    offers: Vec<Offer>,
+    /// Whether `<Up>` steps back into what has settled.
+    reviewable: bool,
 }
 
 impl Prompt {
-    /// Seed an interaction with the supplied choices and a Value. The
-    /// behaviour on pressing <Enter> is confirmation that the step is done,
-    /// not data entry: `<Enter>` completes the step and the step's value is
-    /// whatever its body produced.
+    /// Seed an interaction with the supplied choices, a Value, how it settles
+    /// on a bare `<Enter>`, and the actions the walker says are legal here.
+    /// Pressing `<Enter>` confirms the node settles at its standing; it is not
+    /// data entry, the value being whatever the body produced.
     ///
-    /// - a non-empty `choices` array selects between Responses; otherwise
-    ///
-    /// - the Value originally produced by the step is shown `Frozen`, and
-    /// `<Enter>` accepts it intact.
-    ///
-    /// Editing is opt-in via the `<Esc>` menu (see `menu_items`), offered only
-    /// when the value is an editable scalar; `ask()` will later present that
-    /// same Edit field up-front.
-    fn begin(choices: &[&str], produced: Value) -> Self {
+    /// A non-empty `choices` array selects between Responses; otherwise the
+    /// produced value is shown `Frozen` and `<Enter>` accepts it intact.
+    /// Editing is opt-in via the `<Esc>` menu, offered only when the value is
+    /// an editable scalar.
+    fn begin(choices: &[&str], produced: Value, standing: Standing, offers: &[Offer]) -> Self {
         let field = if choices.is_empty() {
             Field::Frozen { produced }
         } else {
@@ -1204,44 +1786,19 @@ impl Prompt {
             field,
             menu: None,
             reason: None,
-            standing: Standing::Done,
-        }
-    }
-
-    /// Seed an interaction to sign off a node whose body rolled up to `standing`
-    /// (`Fail` or `Skip`). No value to accept, so the field is a frozen Unit;
-    /// the standing colours the `▶` and, on `Fail`, lights up `Override`.
-    fn overrule(standing: Standing) -> Self {
-        Prompt {
-            field: Field::Frozen {
-                produced: Value::Unitus,
-            },
-            menu: None,
-            reason: None,
             standing,
-        }
-    }
-
-    /// Whether a menu item is currently selectable. `Edit` is offered only when
-    /// the produced value is an editable scalar; `Override` only when a child
-    /// failed (`standing` is `Fail`); the exits are always available. Navigation
-    /// skips a disabled item and the menu never opens onto one.
-    fn enabled(&self, item: MenuItem) -> bool {
-        match item {
-            MenuItem::Edit => match &self.field {
-                Field::Frozen { produced } => editable_seed(produced).is_some(),
-                _ => false,
-            },
-            MenuItem::Override => self.standing == Standing::Fail,
-            _ => true,
+            offers: offers.to_vec(),
+            reviewable: true,
         }
     }
 
     /// First selectable item. The exits are always enabled, so the fallback
     /// never fires.
     fn first_enabled(&self) -> usize {
-        (0..MENU.len())
-            .find(|&i| self.enabled(MENU[i]))
+        (0..self
+            .offers
+            .len())
+            .find(|&i| offerable(&self.field, self.offers[i]))
             .unwrap_or(0)
     }
 
@@ -1250,28 +1807,17 @@ impl Prompt {
     /// selectable item.
     fn landing(&self) -> usize {
         let target = match self.standing {
-            Standing::Fail => Some(MenuItem::Fail),
-            Standing::Skip => Some(MenuItem::Skip),
+            Standing::Fail => Some(Offer::Fail),
+            Standing::Skip => Some(Offer::Skip),
             Standing::Done => None,
         };
         target
             .and_then(|item| {
-                MENU.iter()
+                self.offers
+                    .iter()
                     .position(|m| *m == item)
             })
             .unwrap_or_else(|| self.first_enabled())
-    }
-
-    /// Nearest selectable item after / before `from`, or `None` at the edge —
-    /// so navigation stops rather than wrapping, and steps over a greyed item.
-    fn next_enabled(&self, from: usize) -> Option<usize> {
-        ((from + 1)..MENU.len()).find(|&i| self.enabled(MENU[i]))
-    }
-
-    fn prev_enabled(&self, from: usize) -> Option<usize> {
-        (0..from)
-            .rev()
-            .find(|&i| self.enabled(MENU[i]))
     }
 
     /// Transition a `Frozen` scalar into an editable buffer seeded from it.
@@ -1288,92 +1834,73 @@ impl Prompt {
         self.menu = None;
     }
 
-    fn handle(&mut self, key: KeyEvent) -> Option<UserInput> {
-        if key
-            .modifiers
-            .contains(KeyModifiers::CONTROL)
-        {
-            if let KeyCode::Char('c') = key.code {
-                // Believe it or not we actually have to handle <Ctrl>+<c>
-                // explicitly when in raw mode! It reads as a blunt Quit.
-                return Some(UserInput::Quit);
-            }
-        }
+    fn handle(&mut self, intent: Intent) -> Option<UserInput> {
         if self
             .reason
             .is_some()
         {
-            self.reason_key(key.code)
+            self.reason_key(intent)
         } else if self
             .menu
             .is_some()
         {
-            self.menu_key(key.code)
+            self.menu_key(intent)
         } else {
-            self.field_key(key.code)
+            self.field_key(intent)
         }
     }
 
     /// Carry out a menu item, as `<Enter>` does on the highlighted one. Fail
     /// opens the reason submenu, leaving the underlying value untouched so Esc
     /// can back out cleanly.
-    fn activate(&mut self, item: MenuItem) -> Option<UserInput> {
+    fn activate(&mut self, item: Offer) -> Option<UserInput> {
         match item {
-            MenuItem::Edit => {
+            Offer::Edit => {
                 self.enter_edit();
                 None
             }
-            MenuItem::Skip => Some(UserInput::Skip),
-            MenuItem::Fail => {
+            Offer::Skip => Some(UserInput::Skip),
+            Offer::Fail => {
                 self.reason = Some(Reason {
                     buffer: String::new(),
                     cursor: 0,
                 });
                 None
             }
-            MenuItem::Override => Some(UserInput::Override),
-            MenuItem::Quit => Some(UserInput::Quit),
+            Offer::Override => Some(UserInput::Override),
+            Offer::Quit => Some(UserInput::Quit),
         }
     }
 
-    /// A letter shortcut: rest the highlight on `item`, then activate it.
-    fn choose(&mut self, item: MenuItem) -> Option<UserInput> {
-        self.menu = MENU
-            .iter()
-            .position(|m| *m == item);
-        self.activate(item)
-    }
-
-    fn menu_key(&mut self, code: KeyCode) -> Option<UserInput> {
-        let active = (*self
-            .menu
-            .as_ref()?)
-        .min(MENU.len() - 1);
-        match code {
-            KeyCode::Left => {
-                if let Some(prev) = self.prev_enabled(active) {
-                    self.menu = Some(prev);
-                }
+    fn menu_key(&mut self, intent: Intent) -> Option<UserInput> {
+        match intent {
+            Intent::Move(motion) => {
+                let field = &self.field;
+                self.menu
+                    .as_mut()?
+                    .step(motion, |item| offerable(field, item));
                 None
             }
-            KeyCode::Right => {
-                if let Some(next) = self.next_enabled(active) {
-                    self.menu = Some(next);
-                }
-                None
+            Intent::Accept => {
+                let item = self
+                    .menu
+                    .as_ref()?
+                    .chosen();
+                self.activate(item)
             }
-            KeyCode::Enter => self.activate(MENU[active]),
-            KeyCode::Char('s') | KeyCode::Char('S') => self.choose(MenuItem::Skip),
-            KeyCode::Char('f') | KeyCode::Char('F') => self.choose(MenuItem::Fail),
-            KeyCode::Char('o') | KeyCode::Char('O') if self.enabled(MenuItem::Override) => {
-                self.choose(MenuItem::Override)
+            Intent::Typed(c) => {
+                let field = &self.field;
+                let item = self
+                    .menu
+                    .as_mut()?
+                    .select(c, |item| offerable(field, item))?;
+                self.activate(item)
             }
-            KeyCode::Char('q') | KeyCode::Char('Q') => self.choose(MenuItem::Quit),
-            KeyCode::Esc => {
+            Intent::Decline => {
                 self.menu = None;
                 None
             }
-            _ => None,
+            Intent::Erase | Intent::End => None,
         }
     }
 
@@ -1381,13 +1908,13 @@ impl Prompt {
     /// `Fail(reason)` (an empty reason is taken as given); `<Esc>` closes the
     /// submenu back to the menu with Fail still highlighted; the rest edit the
     /// inline buffer.
-    fn reason_key(&mut self, code: KeyCode) -> Option<UserInput> {
+    fn reason_key(&mut self, intent: Intent) -> Option<UserInput> {
         let reason = self
             .reason
             .as_mut()?;
-        match code {
-            KeyCode::Enter => Some(UserInput::Fail(std::mem::take(&mut reason.buffer))),
-            KeyCode::Esc => {
+        match intent {
+            Intent::Accept => Some(UserInput::Fail(std::mem::take(&mut reason.buffer))),
+            Intent::Decline => {
                 self.reason = None;
                 None
             }
@@ -1398,10 +1925,18 @@ impl Prompt {
         }
     }
 
-    fn field_key(&mut self, code: KeyCode) -> Option<UserInput> {
-        if let KeyCode::Esc = code {
-            self.menu = Some(self.landing());
+    fn field_key(&mut self, intent: Intent) -> Option<UserInput> {
+        if let Intent::Decline = intent {
+            self.menu = Some(Menu::open(&self.offers, self.landing()));
             return None;
+        }
+        // Up steps back through what has been recorded, wherever the prompt is
+        // and whatever field it holds. Down is its counterpart inside review;
+        // at the live prompt there is nothing ahead to move to.
+        if let Intent::Move(Motion::Up) = intent {
+            if self.reviewable {
+                return Some(UserInput::Review);
+            }
         }
         let standing = self.standing;
         match &mut self.field {
@@ -1411,8 +1946,8 @@ impl Prompt {
                 edited,
                 original,
                 bracketed,
-            } => match code {
-                KeyCode::Enter => {
+            } => match intent {
+                Intent::Accept => {
                     if *bracketed {
                         // A list field submits its buffer as elements, the
                         // same way a command-line argument is read. A buffer
@@ -1444,32 +1979,35 @@ impl Prompt {
                     None
                 }
             },
-            Field::Frozen { produced } => match code {
+            Field::Frozen { produced } => match intent {
                 // Enter accepts the standing verdict: an ordinary prompt's Done,
                 // but at an overrule the failure (or skip) the body left — so
                 // Enter never silently lifts a failure; only the Override menu
                 // item does.
-                KeyCode::Enter => Some(match standing {
+                Intent::Accept => Some(match standing {
                     Standing::Done => UserInput::Done(std::mem::replace(produced, Value::Unitus)),
                     Standing::Skip => UserInput::Skip,
                     Standing::Fail => UserInput::Fail(String::new()),
                 }),
                 _ => None,
             },
-            Field::Choose { choices, active } => match code {
-                KeyCode::Left | KeyCode::Up => {
+            // Left/Right only: the choices render horizontally and the `<Esc>`
+            // menu beside them navigates the same way, so Up and Down are free
+            // to be review throughout.
+            Field::Choose { choices, active } => match intent {
+                Intent::Move(Motion::Left) => {
                     if *active > 0 {
                         *active -= 1;
                     }
                     None
                 }
-                KeyCode::Right | KeyCode::Down => {
+                Intent::Move(Motion::Right) => {
                     if *active + 1 < choices.len() {
                         *active += 1;
                     }
                     None
                 }
-                KeyCode::Enter => Some(UserInput::Done(Value::Literali(std::mem::take(
+                Intent::Accept => Some(UserInput::Done(Value::Literali(std::mem::take(
                     &mut choices[*active],
                 )))),
                 _ => None,
@@ -1480,7 +2018,7 @@ impl Prompt {
 
 /// Draw the current interaction state onto the repeatedly-cleared prompt line.
 /// Layout: `{settle} {path} ▶ {content}` — the settle arrow and path are dark
-/// grey (matching the trace lines above), and ▶ is the shell-prompt character
+/// grey (matching the trail lines above), and ▶ is the shell-prompt character
 /// before the cursor/content area.
 fn draw(
     mut out: &mut dyn Write,
@@ -1522,7 +2060,7 @@ fn draw(
 }
 
 /// Draw the read-only action prompt line: `» {path} {verb} {label} ▶`, the verb
-/// in light brown, the marker and path dark grey like the trace lines above.
+/// in light brown, the marker and path dark grey like the trail lines above.
 fn draw_action(
     mut out: &mut dyn Write,
     qualified: &str,
@@ -1569,8 +2107,8 @@ fn draw_tail(
 ) -> io::Result<(Option<u16>, u16)> {
     let mut cursor_col: Option<u16> = None;
     let mut end_col: u16 = prefix;
-    match interaction.menu {
-        Some(active) => match &interaction.reason {
+    match &interaction.menu {
+        Some(menu) => match &interaction.reason {
             Some(reason) => {
                 write!(out, "{}{}", REASON_PREFIX, reason.buffer)?;
                 let lead = prefix
@@ -1588,7 +2126,10 @@ fn draw_tail(
                         .chars()
                         .count() as u16;
             }
-            None => render_menu(out, interaction, active)?,
+            None => {
+                let field = &interaction.field;
+                render_menu(out, menu, |item| offerable(field, item))?
+            }
         },
         None => match &interaction.field {
             Field::Edit {
@@ -1729,11 +2270,31 @@ fn render_choices(mut out: &mut dyn Write, choices: &[&str], active: usize) -> i
     Ok(())
 }
 
+/// Whether an offered item is currently selectable. Everything the walker
+/// offered is legal by construction; the one exception is `Edit`, which needs
+/// the produced value to be an editable scalar — a property of the value's
+/// shape that the walker cannot know. Navigation skips a disabled item, the
+/// menu never opens onto one, and its letter does not reach it.
+fn offerable(field: &Field, item: Offer) -> bool {
+    match item {
+        Offer::Edit => match field {
+            Field::Frozen { produced } => editable_seed(produced).is_some(),
+            _ => false,
+        },
+        _ => true,
+    }
+}
+
 /// Render the Esc-menu: the active item in reverse video, a disabled item (a
 /// greyed `Edit`) dimmed, the rest plain. The active item is always enabled, so
 /// reverse and dim never apply to the same item.
-fn render_menu(mut out: &mut dyn Write, interaction: &Prompt, active: usize) -> io::Result<()> {
-    for (i, item) in MENU
+fn render_menu(
+    mut out: &mut dyn Write,
+    menu: &Menu,
+    enabled: impl Fn(Offer) -> bool,
+) -> io::Result<()> {
+    for (i, item) in menu
+        .offers
         .iter()
         .enumerate()
     {
@@ -1741,11 +2302,11 @@ fn render_menu(mut out: &mut dyn Write, interaction: &Prompt, active: usize) -> 
             write!(out, "  ")?;
         }
         let label = item.label();
-        if i == active {
+        if i == menu.active {
             queue!(&mut out, SetAttribute(Attribute::Reverse))?;
             write!(out, " {} ", label)?;
             queue!(&mut out, SetAttribute(Attribute::Reset))?;
-        } else if !interaction.enabled(*item) {
+        } else if !enabled(*item) {
             queue!(&mut out, SetAttribute(Attribute::Dim))?;
             write!(out, " {} ", label)?;
             queue!(&mut out, SetAttribute(Attribute::Reset))?;
@@ -1821,14 +2382,14 @@ fn next_boundary(s: &str, i: usize) -> usize {
 /// buffer's content changed (an insertion or deletion) as opposed to a cursor
 /// move or an unhandled key. Callers tracking an `edited` flag set it on a
 /// `true` return; `<Enter>` / `<Esc>` are the caller's, not handled here.
-fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
-    match code {
-        KeyCode::Char(c) => {
+fn text_key(buffer: &mut String, cursor: &mut usize, intent: Intent) -> bool {
+    match intent {
+        Intent::Typed(c) => {
             buffer.insert(*cursor, c);
             *cursor += c.len_utf8();
             true
         }
-        KeyCode::Backspace => {
+        Intent::Erase => {
             if *cursor > 0 {
                 let start = prev_boundary(buffer, *cursor);
                 buffer.replace_range(start..*cursor, "");
@@ -1838,11 +2399,11 @@ fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
                 false
             }
         }
-        KeyCode::Left => {
+        Intent::Move(Motion::Left) => {
             *cursor = prev_boundary(buffer, *cursor);
             false
         }
-        KeyCode::Right => {
+        Intent::Move(Motion::Right) => {
             *cursor = next_boundary(buffer, *cursor);
             false
         }
@@ -1852,7 +2413,7 @@ fn text_key(buffer: &mut String, cursor: &mut usize, code: KeyCode) -> bool {
 
 #[derive(Debug)]
 #[allow(dead_code)] // fields are read only via Debug
-enum Trace {
+enum Trail {
     Enter {
         path: String,
     },
@@ -1883,12 +2444,13 @@ fn disposition(input: &UserInput) -> Option<Standing> {
         UserInput::Done(_) | UserInput::Override => Some(Standing::Done),
         UserInput::Skip => Some(Standing::Skip),
         UserInput::Fail(_) => Some(Standing::Fail),
-        UserInput::Quit => None,
+        // Nothing settled: the walk is unwinding to review or stop
+        UserInput::Review | UserInput::Quit => None,
     }
 }
 
 /// A driver for debugging that prints each value-bearing callback as a
-/// `Trace`, delegating decisions about outcomes to the inner wrapped driver.
+/// `Trail`, delegating decisions about outcomes to the inner wrapped driver.
 pub struct Transcript<D, W> {
     inner: D,
     output: W,
@@ -1904,12 +2466,12 @@ impl<D> Transcript<D, io::Stdout> {
 }
 
 impl<D, W: Write> Transcript<D, W> {
-    fn emit(&mut self, trace: Trace) {
-        let _ = writeln!(self.output, "{:#?}", trace);
+    fn emit(&mut self, trail: Trail) {
+        let _ = writeln!(self.output, "{:#?}", trail);
     }
 
-    fn trace_outcome(&mut self, path: &str, produced: Value, outcome: &UserInput) {
-        self.emit(Trace::Leave {
+    fn trail_outcome(&mut self, path: &str, produced: Value, outcome: &UserInput) {
+        self.emit(Trail::Leave {
             path: path.to_string(),
             outcome: disposition(outcome),
             result: produced,
@@ -1919,7 +2481,7 @@ impl<D, W: Write> Transcript<D, W> {
 
 impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     fn step(&mut self, qualified: &str, text: &str, description: &str, depth: usize) {
-        self.emit(Trace::Enter {
+        self.emit(Trail::Enter {
             path: announce(qualified, text),
         });
         self.inner
@@ -1927,7 +2489,7 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     }
 
     fn enter(&mut self, qualified: &str, text: &str) {
-        self.emit(Trace::Enter {
+        self.emit(Trail::Enter {
             path: announce(qualified, text),
         });
         self.inner
@@ -1954,11 +2516,17 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
             .announce(message);
     }
 
-    fn ask(&mut self, qualified: &str, choices: &[&str], produced: Value, kind: Kind) -> UserInput {
+    fn ask(&mut self, question: Question<'_>, choices: &[&str], offers: &[Offer]) -> UserInput {
+        let qualified = question
+            .qualified
+            .to_string();
+        let produced = question
+            .produced
+            .clone();
         let outcome = self
             .inner
-            .ask(qualified, choices, produced.clone(), kind);
-        self.trace_outcome(qualified, produced, &outcome);
+            .ask(question, choices, offers);
+        self.trail_outcome(&qualified, produced, &outcome);
         outcome
     }
 
@@ -1968,7 +2536,7 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     }
 
     fn external(&mut self, qualified: &str) -> UserInput {
-        self.emit(Trace::External {
+        self.emit(Trail::External {
             path: qualified.to_string(),
         });
         self.inner
@@ -1976,7 +2544,7 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     }
 
     fn command(&mut self, qualified: &str, script: &str) -> UserInput {
-        self.emit(Trace::Execute {
+        self.emit(Trail::Execute {
             path: qualified.to_string(),
             script: script.to_string(),
         });
@@ -1985,7 +2553,7 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     }
 
     fn action(&mut self, qualified: &str, name: &str, verb: &str, value: &Value) -> UserInput {
-        self.emit(Trace::Execute {
+        self.emit(Trail::Execute {
             path: qualified.to_string(),
             script: format!("{} {}", verb, value.label())
                 .trim_end()
@@ -1996,19 +2564,11 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
     }
 
     fn section(&mut self, qualified: &str, numeral: &str, title: &str) {
-        self.emit(Trace::Enter {
+        self.emit(Trail::Enter {
             path: qualified.to_string(),
         });
         self.inner
             .section(qualified, numeral, title);
-    }
-
-    fn seal(&mut self, qualified: &str, produced: Value, kind: Kind) -> UserInput {
-        let outcome = self
-            .inner
-            .seal(qualified, produced.clone(), kind);
-        self.trace_outcome(qualified, produced, &outcome);
-        outcome
     }
 
     fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
@@ -2022,16 +2582,17 @@ impl<D: Driver, W: Write> Driver for Transcript<D, W> {
         text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput {
         let outcome = self
             .inner
-            .acquire(qualified, text, name, forma);
+            .acquire(qualified, text, name, forma, seed);
         let supplied = if let UserInput::Done(value) = &outcome {
             value.clone()
         } else {
             Value::Unitus
         };
-        self.emit(Trace::Acquire {
+        self.emit(Trail::Acquire {
             path: announce(qualified, text),
             name: name.map(|n| n.to_string()),
             forma: forma.map(|f| f.to_string()),
@@ -2087,17 +2648,18 @@ pub enum Event {
     },
     Ask {
         qualified: String,
+        /// `→` at a step's verdict, `↙` at a scope's close.
+        marker: String,
         choices: Vec<String>,
     },
     External {
         qualified: String,
     },
-    Seal {
-        qualified: String,
-    },
     Acquire {
         name: Option<String>,
         forma: Option<String>,
+        /// What a revoked entry recorded here, pre-filling the edit buffer.
+        seed: Option<Value>,
     },
 }
 
@@ -2167,24 +2729,40 @@ impl Driver for Mock {
             .push(Event::Announce(message.to_string()));
     }
 
-    fn ask(
-        &mut self,
-        qualified: &str,
-        choices: &[&str],
-        _produced: Value,
-        _kind: Kind,
-    ) -> UserInput {
+    /// A step verdict drains the canned answer queue; a scope close standing at
+    /// Done auto-accepts instead, being orthogonal to the step verdicts a test
+    /// drives. Signing off a rolled-up Fail or Skip takes an answer if one is
+    /// queued and otherwise lets the standing propagate. All three record an
+    /// `Ask` event, told apart by the marker.
+    fn ask(&mut self, question: Question<'_>, choices: &[&str], _offers: &[Offer]) -> UserInput {
         self.events
             .push(Event::Ask {
-                qualified: qualified.to_string(),
+                qualified: question
+                    .qualified
+                    .to_string(),
+                marker: question
+                    .marker
+                    .to_string(),
                 choices: choices
                     .iter()
                     .map(|c| c.to_string())
                     .collect(),
             });
-        self.answers
-            .pop_front()
-            .expect("Mock::ask called with no canned answers remaining")
+        match (question.marker, question.standing) {
+            ("↙", Standing::Done) => UserInput::Done(Value::Unitus),
+            (_, Standing::Done) => self
+                .answers
+                .pop_front()
+                .expect("Mock::ask called with no canned answers remaining"),
+            (_, Standing::Skip) => self
+                .answers
+                .pop_front()
+                .unwrap_or(UserInput::Skip),
+            (_, Standing::Fail) => self
+                .answers
+                .pop_front()
+                .unwrap_or(UserInput::Fail(String::new())),
+        }
     }
 
     fn depart(&mut self, _qualified: &str, _text: &str) -> UserInput {
@@ -2230,32 +2808,6 @@ impl Driver for Mock {
         UserInput::Done(Value::Unitus)
     }
 
-    /// A scope close auto-accepts (records `Done`) and records the event,
-    /// rather than draining the `ask` answer queue — the structural-scope
-    /// close is orthogonal to the step verdicts a test drives. A test
-    /// asserting close behaviour inspects the recorded `Seal` event.
-    fn seal(&mut self, qualified: &str, _produced: Value, _kind: Kind) -> UserInput {
-        self.events
-            .push(Event::Seal {
-                qualified: qualified.to_string(),
-            });
-        UserInput::Done(Value::Unitus)
-    }
-
-    fn overrule(&mut self, qualified: &str, _marker: &str, standing: Standing) -> UserInput {
-        self.events
-            .push(Event::Seal {
-                qualified: qualified.to_string(),
-            });
-        self.answers
-            .pop_front()
-            .unwrap_or(match standing {
-                Standing::Done => UserInput::Done(Value::Unitus),
-                Standing::Skip => UserInput::Skip,
-                Standing::Fail => UserInput::Fail(String::new()),
-            })
-    }
-
     fn show_verdict(&mut self, _marker: &str, _qualified: &str, _verdict: &UserInput) {}
 
     fn acquire(
@@ -2264,11 +2816,13 @@ impl Driver for Mock {
         _text: &str,
         name: Option<&str>,
         forma: Option<&str>,
+        seed: Option<&Value>,
     ) -> UserInput {
         self.events
             .push(Event::Acquire {
                 name: name.map(|n| n.to_string()),
                 forma: forma.map(|f| f.to_string()),
+                seed: seed.cloned(),
             });
         self.answers
             .pop_front()

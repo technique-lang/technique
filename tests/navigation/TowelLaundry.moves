@@ -1,0 +1,232 @@
+# Every record of run 000132 of TowelLaundry.tq, which ran to completion,
+# against all six keys. This journal is here for what NetworkProbe has none of:
+# `foreach` iterations at /[1] and /[2], and one callee invoked twice, so that
+# stepping out of an iteration and back in is pinned. Conventions are as in
+# NetworkProbe.moves; the run reached Finish, so (live) is only what review
+# opens onto, not a prompt to go back down to.
+#
+# origin                                            key         destination
+
+/ Start                                             Up          (refused)
+/ Start                                             Down        /launder_towels: Begin
+/ Start                                             Left        (refused)
+/ Start                                             Right       /launder_towels: Begin
+/ Start                                             PageUp      (refused)
+/ Start                                             PageDown    (refused)
+
+/launder_towels: Begin                              Up          / Start
+/launder_towels: Begin                              Down        /launder_towels:/1 Begin
+/launder_towels: Begin                              Left        / Start
+/launder_towels: Begin                              Right       /launder_towels:/1 Begin
+/launder_towels: Begin                              PageUp      (refused)
+/launder_towels: Begin                              PageDown    (refused)
+
+/launder_towels:/1 Begin                            Up          /launder_towels: Begin
+/launder_towels:/1 Begin                            Down        /launder_towels:/1 Bind
+/launder_towels:/1 Begin                            Left        /launder_towels: Begin
+/launder_towels:/1 Begin                            Right       (refused)
+/launder_towels:/1 Begin                            PageUp      (refused)
+/launder_towels:/1 Begin                            PageDown    /launder_towels:/2 Begin
+
+/launder_towels:/1 Bind                             Up          /launder_towels:/1 Begin
+/launder_towels:/1 Bind                             Down        /launder_towels:/1 Done
+/launder_towels:/1 Bind                             Left        /launder_towels: Begin
+/launder_towels:/1 Bind                             Right       (refused)
+/launder_towels:/1 Bind                             PageUp      (refused)
+/launder_towels:/1 Bind                             PageDown    /launder_towels:/2 Begin
+
+/launder_towels:/1 Done                             Up          /launder_towels:/1 Bind
+/launder_towels:/1 Done                             Down        /launder_towels:/2 Begin
+/launder_towels:/1 Done                             Left        /launder_towels: Done
+/launder_towels:/1 Done                             Right       (refused)
+/launder_towels:/1 Done                             PageUp      (refused)
+/launder_towels:/1 Done                             PageDown    /launder_towels:/2 Skip
+
+/launder_towels:/2 Begin                            Up          /launder_towels:/1 Done
+/launder_towels:/2 Begin                            Down        /launder_towels:/2/[1] Begin
+/launder_towels:/2 Begin                            Left        /launder_towels: Begin
+/launder_towels:/2 Begin                            Right       /launder_towels:/2/[1] Begin
+/launder_towels:/2 Begin                            PageUp      /launder_towels:/1 Begin
+/launder_towels:/2 Begin                            PageDown    (refused)
+
+/launder_towels:/2/[1] Begin                        Up          /launder_towels:/2 Begin
+/launder_towels:/2/[1] Begin                        Down        /launder_towels:/2/[1]/-1 Begin
+/launder_towels:/2/[1] Begin                        Left        /launder_towels:/2 Begin
+/launder_towels:/2/[1] Begin                        Right       /launder_towels:/2/[1]/-1 Begin
+/launder_towels:/2/[1] Begin                        PageUp      (refused)
+/launder_towels:/2/[1] Begin                        PageDown    /launder_towels:/2/[2] Begin
+
+/launder_towels:/2/[1]/-1 Begin                     Up          /launder_towels:/2/[1] Begin
+/launder_towels:/2/[1]/-1 Begin                     Down        /launder_towels:/2/[1]/-1 Invoke
+/launder_towels:/2/[1]/-1 Begin                     Left        /launder_towels:/2/[1] Begin
+/launder_towels:/2/[1]/-1 Begin                     Right       /dry_towel: Begin
+/launder_towels:/2/[1]/-1 Begin                     PageUp      (refused)
+/launder_towels:/2/[1]/-1 Begin                     PageDown    (refused)
+
+/launder_towels:/2/[1]/-1 Invoke                    Up          /launder_towels:/2/[1]/-1 Begin
+/launder_towels:/2/[1]/-1 Invoke                    Down        /dry_towel: Begin
+/launder_towels:/2/[1]/-1 Invoke                    Left        /launder_towels:/2/[1] Begin
+/launder_towels:/2/[1]/-1 Invoke                    Right       /dry_towel: Begin
+/launder_towels:/2/[1]/-1 Invoke                    PageUp      (refused)
+/launder_towels:/2/[1]/-1 Invoke                    PageDown    (refused)
+
+/dry_towel: Begin                                   Up          /launder_towels:/2/[1]/-1 Invoke
+/dry_towel: Begin                                   Down        /dry_towel:/1 Begin
+/dry_towel: Begin                                   Left        /launder_towels:/2/[1]/-1 Begin
+/dry_towel: Begin                                   Right       /dry_towel:/1 Begin
+/dry_towel: Begin                                   PageUp      (refused)
+/dry_towel: Begin                                   PageDown    (refused)
+
+/dry_towel:/1 Begin                                 Up          /dry_towel: Begin
+/dry_towel:/1 Begin                                 Down        /dry_towel:/1 Skip
+/dry_towel:/1 Begin                                 Left        /dry_towel: Begin
+/dry_towel:/1 Begin                                 Right       (refused)
+/dry_towel:/1 Begin                                 PageUp      (refused)
+/dry_towel:/1 Begin                                 PageDown    /dry_towel:/2 Begin
+
+/dry_towel:/1 Skip                                  Up          /dry_towel:/1 Begin
+/dry_towel:/1 Skip                                  Down        /dry_towel:/2 Begin
+/dry_towel:/1 Skip                                  Left        /dry_towel: Skip
+/dry_towel:/1 Skip                                  Right       (refused)
+/dry_towel:/1 Skip                                  PageUp      (refused)
+/dry_towel:/1 Skip                                  PageDown    /dry_towel:/2 Skip
+
+/dry_towel:/2 Begin                                 Up          /dry_towel:/1 Skip
+/dry_towel:/2 Begin                                 Down        /dry_towel:/2 Skip
+/dry_towel:/2 Begin                                 Left        /dry_towel: Begin
+/dry_towel:/2 Begin                                 Right       (refused)
+/dry_towel:/2 Begin                                 PageUp      /dry_towel:/1 Begin
+/dry_towel:/2 Begin                                 PageDown    (refused)
+
+/dry_towel:/2 Skip                                  Up          /dry_towel:/2 Begin
+/dry_towel:/2 Skip                                  Down        /dry_towel: Skip
+/dry_towel:/2 Skip                                  Left        /dry_towel: Skip
+/dry_towel:/2 Skip                                  Right       (refused)
+/dry_towel:/2 Skip                                  PageUp      /dry_towel:/1 Skip
+/dry_towel:/2 Skip                                  PageDown    (refused)
+
+/dry_towel: Skip                                    Up          /dry_towel:/2 Skip
+/dry_towel: Skip                                    Down        /launder_towels:/2/[1]/-1 Skip
+/dry_towel: Skip                                    Left        /launder_towels:/2/[1]/-1 Skip
+/dry_towel: Skip                                    Right       /dry_towel:/2 Skip
+/dry_towel: Skip                                    PageUp      (refused)
+/dry_towel: Skip                                    PageDown    (refused)
+
+/launder_towels:/2/[1]/-1 Skip                      Up          /dry_towel: Skip
+/launder_towels:/2/[1]/-1 Skip                      Down        /launder_towels:/2/[1] Skip
+/launder_towels:/2/[1]/-1 Skip                      Left        /launder_towels:/2/[1] Skip
+/launder_towels:/2/[1]/-1 Skip                      Right       /dry_towel: Skip
+/launder_towels:/2/[1]/-1 Skip                      PageUp      (refused)
+/launder_towels:/2/[1]/-1 Skip                      PageDown    (refused)
+
+/launder_towels:/2/[1] Skip                         Up          /launder_towels:/2/[1]/-1 Skip
+/launder_towels:/2/[1] Skip                         Down        /launder_towels:/2/[2] Begin
+/launder_towels:/2/[1] Skip                         Left        /launder_towels:/2 Skip
+/launder_towels:/2/[1] Skip                         Right       /launder_towels:/2/[1]/-1 Skip
+/launder_towels:/2/[1] Skip                         PageUp      (refused)
+/launder_towels:/2/[1] Skip                         PageDown    /launder_towels:/2/[2] Skip
+
+/launder_towels:/2/[2] Begin                        Up          /launder_towels:/2/[1] Skip
+/launder_towels:/2/[2] Begin                        Down        /launder_towels:/2/[2]/-1 Begin
+/launder_towels:/2/[2] Begin                        Left        /launder_towels:/2 Begin
+/launder_towels:/2/[2] Begin                        Right       /launder_towels:/2/[2]/-1 Begin
+/launder_towels:/2/[2] Begin                        PageUp      /launder_towels:/2/[1] Begin
+/launder_towels:/2/[2] Begin                        PageDown    (refused)
+
+/launder_towels:/2/[2]/-1 Begin                     Up          /launder_towels:/2/[2] Begin
+/launder_towels:/2/[2]/-1 Begin                     Down        /launder_towels:/2/[2]/-1 Invoke
+/launder_towels:/2/[2]/-1 Begin                     Left        /launder_towels:/2/[2] Begin
+/launder_towels:/2/[2]/-1 Begin                     Right       /dry_towel: Begin
+/launder_towels:/2/[2]/-1 Begin                     PageUp      (refused)
+/launder_towels:/2/[2]/-1 Begin                     PageDown    (refused)
+
+/launder_towels:/2/[2]/-1 Invoke                    Up          /launder_towels:/2/[2]/-1 Begin
+/launder_towels:/2/[2]/-1 Invoke                    Down        /dry_towel: Begin
+/launder_towels:/2/[2]/-1 Invoke                    Left        /launder_towels:/2/[2] Begin
+/launder_towels:/2/[2]/-1 Invoke                    Right       /dry_towel: Begin
+/launder_towels:/2/[2]/-1 Invoke                    PageUp      (refused)
+/launder_towels:/2/[2]/-1 Invoke                    PageDown    (refused)
+
+/dry_towel: Begin                                   Up          /launder_towels:/2/[2]/-1 Invoke
+/dry_towel: Begin                                   Down        /dry_towel:/1 Begin
+/dry_towel: Begin                                   Left        /launder_towels:/2/[2]/-1 Begin
+/dry_towel: Begin                                   Right       /dry_towel:/1 Begin
+/dry_towel: Begin                                   PageUp      (refused)
+/dry_towel: Begin                                   PageDown    (refused)
+
+/dry_towel:/1 Begin                                 Up          /dry_towel: Begin
+/dry_towel:/1 Begin                                 Down        /dry_towel:/1 Skip
+/dry_towel:/1 Begin                                 Left        /dry_towel: Begin
+/dry_towel:/1 Begin                                 Right       (refused)
+/dry_towel:/1 Begin                                 PageUp      (refused)
+/dry_towel:/1 Begin                                 PageDown    /dry_towel:/2 Begin
+
+/dry_towel:/1 Skip                                  Up          /dry_towel:/1 Begin
+/dry_towel:/1 Skip                                  Down        /dry_towel:/2 Begin
+/dry_towel:/1 Skip                                  Left        /dry_towel: Skip
+/dry_towel:/1 Skip                                  Right       (refused)
+/dry_towel:/1 Skip                                  PageUp      (refused)
+/dry_towel:/1 Skip                                  PageDown    /dry_towel:/2 Skip
+
+/dry_towel:/2 Begin                                 Up          /dry_towel:/1 Skip
+/dry_towel:/2 Begin                                 Down        /dry_towel:/2 Skip
+/dry_towel:/2 Begin                                 Left        /dry_towel: Begin
+/dry_towel:/2 Begin                                 Right       (refused)
+/dry_towel:/2 Begin                                 PageUp      /dry_towel:/1 Begin
+/dry_towel:/2 Begin                                 PageDown    (refused)
+
+/dry_towel:/2 Skip                                  Up          /dry_towel:/2 Begin
+/dry_towel:/2 Skip                                  Down        /dry_towel: Skip
+/dry_towel:/2 Skip                                  Left        /dry_towel: Skip
+/dry_towel:/2 Skip                                  Right       (refused)
+/dry_towel:/2 Skip                                  PageUp      /dry_towel:/1 Skip
+/dry_towel:/2 Skip                                  PageDown    (refused)
+
+/dry_towel: Skip                                    Up          /dry_towel:/2 Skip
+/dry_towel: Skip                                    Down        /launder_towels:/2/[2]/-1 Skip
+/dry_towel: Skip                                    Left        /launder_towels:/2/[2]/-1 Skip
+/dry_towel: Skip                                    Right       /dry_towel:/2 Skip
+/dry_towel: Skip                                    PageUp      (refused)
+/dry_towel: Skip                                    PageDown    (refused)
+
+/launder_towels:/2/[2]/-1 Skip                      Up          /dry_towel: Skip
+/launder_towels:/2/[2]/-1 Skip                      Down        /launder_towels:/2/[2] Skip
+/launder_towels:/2/[2]/-1 Skip                      Left        /launder_towels:/2/[2] Skip
+/launder_towels:/2/[2]/-1 Skip                      Right       /dry_towel: Skip
+/launder_towels:/2/[2]/-1 Skip                      PageUp      (refused)
+/launder_towels:/2/[2]/-1 Skip                      PageDown    (refused)
+
+/launder_towels:/2/[2] Skip                         Up          /launder_towels:/2/[2]/-1 Skip
+/launder_towels:/2/[2] Skip                         Down        /launder_towels:/2 Skip
+/launder_towels:/2/[2] Skip                         Left        /launder_towels:/2 Skip
+/launder_towels:/2/[2] Skip                         Right       /launder_towels:/2/[2]/-1 Skip
+/launder_towels:/2/[2] Skip                         PageUp      /launder_towels:/2/[1] Skip
+/launder_towels:/2/[2] Skip                         PageDown    (refused)
+
+/launder_towels:/2 Skip                             Up          /launder_towels:/2/[2] Skip
+/launder_towels:/2 Skip                             Down        /launder_towels: Done
+/launder_towels:/2 Skip                             Left        /launder_towels: Done
+/launder_towels:/2 Skip                             Right       /launder_towels:/2/[2] Skip
+/launder_towels:/2 Skip                             PageUp      /launder_towels:/1 Done
+/launder_towels:/2 Skip                             PageDown    (refused)
+
+/launder_towels: Done                               Up          /launder_towels:/2 Skip
+/launder_towels: Done                               Down        (refused)
+/launder_towels: Done                               Left        / Start
+/launder_towels: Done                               Right       /launder_towels:/2 Skip
+/launder_towels: Done                               PageUp      (refused)
+/launder_towels: Done                               PageDown    (refused)
+
+/ Finish                                            Up          (refused)
+/ Finish                                            Down        (refused)
+/ Finish                                            Left        (refused)
+/ Finish                                            Right       (refused)
+/ Finish                                            PageUp      (refused)
+/ Finish                                            PageDown    (refused)
+
+(live)                                              Up          /launder_towels: Done
+(live)                                              Down        (refused)
+(live)                                              Left        (refused)
+(live)                                              Right       (refused)
+(live)                                              PageUp      (refused)
+(live)                                              PageDown    (refused)

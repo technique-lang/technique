@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::engraving::{
-    InvokeTarget, Record, RecordError, RunId, State, Store, StoreError, Supplied, display_path,
-    fail_reason, format_record, parse_record,
+    InvokeTarget, Ledger, Record, RecordError, RunId, Serial, State, Store, StoreError, Supplied,
+    display_path, fail_reason, format_record, parse_record,
 };
 use crate::value::Value;
 
@@ -55,6 +55,15 @@ fn run_id_render_six_digit_padding() {
     assert_eq!(RunId(15003).render(), "015003");
     // Six digits is the convention, but larger values render unpadded.
     assert_eq!(RunId(1_234_567).render(), "1234567");
+}
+
+#[test]
+fn serial_render_three_digit_padding() {
+    assert_eq!(Serial::LIFECYCLE.render(), "000");
+    assert_eq!(Serial(8).render(), "008");
+    assert_eq!(Serial(131).render(), "131");
+    // Three digits is the convention, but larger values render unpadded.
+    assert_eq!(Serial(4096).render(), "4096");
 }
 
 #[test]
@@ -114,7 +123,7 @@ fn create_writes_start_record_at_head() {
     assert_eq!(
         on_disk,
         format!(
-            "2026-05-14T12:34:56Z {} / Start file:///somewhere/NetworkProbe.tq\n",
+            "2026-05-14T12:34:56Z {} 000 / Start file:///somewhere/NetworkProbe.tq\n",
             run_id.render()
         )
     );
@@ -134,13 +143,17 @@ fn create_and_open_round_trips_document_path() {
     let (run_id, _) = store
         .create(&document, started, &[])
         .expect("create");
-    let (read_document, libraries, completed, _, _) = store
+    let (read_document, libraries, ledger, _) = store
         .open(run_id)
         .expect("open");
 
     assert_eq!(read_document, document);
     assert!(libraries.is_empty());
-    assert!(completed.is_empty());
+    assert!(
+        ledger
+            .look(Serial::LIFECYCLE, "/")
+            .is_none()
+    );
 }
 
 #[test]
@@ -158,7 +171,7 @@ fn create_and_open_round_trips_libraries() {
     let (run_id, _) = store
         .create(&document, started, &selected)
         .expect("create");
-    let (read_document, libraries, _, _, _) = store
+    let (read_document, libraries, _, _) = store
         .open(run_id)
         .expect("open");
 
@@ -166,108 +179,104 @@ fn create_and_open_round_trips_libraries() {
     assert_eq!(libraries, selected);
 }
 
-#[test]
-fn open_replays_done_skip_fail_into_completed() {
-    let dir = TempDir::new("replay-three");
-
-    let run_dir = dir
-        .path
-        .join("000001");
-    std::fs::create_dir_all(&run_dir).unwrap();
-    let mut file = String::new();
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:00Z".to_string(),
+// One record line, for building a journal a test then writes to disk.
+fn line(serial: u32, path: &str, state: State) -> String {
+    format_record(&Record {
+        recorded: format!("2026-05-14T12:00:{:02}Z", serial),
         run_id: RunId(1),
-        path: "/".to_string(),
-        state: State::Start {
-            uri: "file:///foo/Test.tq".to_string(),
-        },
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:01Z".to_string(),
-        run_id: RunId(1),
-        path: "/test:1".to_string(),
-        state: State::Done(None),
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:02Z".to_string(),
-        run_id: RunId(1),
-        path: "/test:2".to_string(),
-        state: State::Skip,
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:03Z".to_string(),
-        run_id: RunId(1),
-        path: "/test:3".to_string(),
-        state: State::Fail(None),
-    }));
-    std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
-
-    let store = Store::new(
-        dir.path
-            .clone(),
-    );
-    let (document, _, completed, _, _) = store
-        .open(RunId(1))
-        .expect("open");
-
-    assert_eq!(document, Path::new("/foo/Test.tq"));
-    assert_eq!(completed.len(), 3);
-    assert!(completed.contains_key("/test:1"));
-    assert!(completed.contains_key("/test:2"));
-    assert!(completed.contains_key("/test:3"));
+        serial: Serial(serial),
+        path: path.to_string(),
+        state,
+    })
 }
 
-// Resume and Begin records in the middle of the file are lifecycle
-// events, not step completions — they must not show up in the replayed
-// `completed` set.
-#[test]
-fn open_skips_resume_and_begin_during_replay() {
-    let dir = TempDir::new("replay-skip-lifecycle");
-
+fn trail_of(dir: &TempDir, lines: &[String]) -> Ledger {
     let run_dir = dir
         .path
         .join("000001");
     std::fs::create_dir_all(&run_dir).unwrap();
-    let mut file = String::new();
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:00Z".to_string(),
-        run_id: RunId(1),
-        path: "/".to_string(),
-        state: State::Start {
+    let mut file = line(
+        0,
+        "/",
+        State::Start {
             uri: "file:///foo/Test.tq".to_string(),
         },
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:01Z".to_string(),
-        run_id: RunId(1),
-        path: "/test:1".to_string(),
-        state: State::Begin,
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:02Z".to_string(),
-        run_id: RunId(1),
-        path: "/test:1".to_string(),
-        state: State::Done(Some(Value::Unitus)),
-    }));
-    file.push_str(&format_record(&Record {
-        recorded: "2026-05-14T12:00:03Z".to_string(),
-        run_id: RunId(1),
-        path: "/".to_string(),
-        state: State::Resume,
-    }));
+    );
+    for text in lines {
+        file.push_str(text);
+    }
     std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
-
     let store = Store::new(
         dir.path
             .clone(),
     );
-    let (_, _, completed, _, _) = store
+    let (_, _, ledger, _) = store
         .open(RunId(1))
         .expect("open");
+    ledger
+}
 
-    assert_eq!(completed.len(), 1);
-    assert!(completed.contains_key("/test:1"));
+#[test]
+fn open_folds_done_skip_and_fail_into_outcomes() {
+    let dir = TempDir::new("replay-three");
+    let ledger = trail_of(
+        &dir,
+        &[
+            line(1, "/test:1", State::Begin(Vec::new())),
+            line(1, "/test:1", State::Done(None)),
+            line(2, "/test:2", State::Begin(Vec::new())),
+            line(2, "/test:2", State::Skip),
+            line(3, "/test:3", State::Begin(Vec::new())),
+            line(3, "/test:3", State::Fail(None)),
+        ],
+    );
+
+    for path in ["/test:1", "/test:2", "/test:3"] {
+        let entry = ledger
+            .look(Serial::LIFECYCLE, path)
+            .expect("entry");
+        assert!(
+            entry
+                .outcome
+                .is_some(),
+            "{} has an outcome",
+            path
+        );
+    }
+}
+
+// A scope the walk entered but never closed is not a completion: the entry
+// stands, holding what it began with, and a resume redoes it.
+#[test]
+fn open_leaves_an_unfinished_scope_without_an_outcome() {
+    let dir = TempDir::new("replay-unfinished");
+    let ledger = trail_of(
+        &dir,
+        &[
+            line(1, "/test:1", State::Begin(Vec::new())),
+            line(1, "/test:1", State::Done(Some(Value::Unitus))),
+            line(2, "/test:2", State::Begin(Vec::new())),
+            line(0, "/", State::Resume),
+        ],
+    );
+
+    let finished = ledger
+        .look(Serial::LIFECYCLE, "/test:1")
+        .expect("entry");
+    assert!(
+        finished
+            .outcome
+            .is_some()
+    );
+
+    let unfinished = ledger
+        .look(Serial::LIFECYCLE, "/test:2")
+        .expect("entry");
+    assert!(
+        unfinished
+            .outcome
+            .is_none()
+    );
 }
 
 #[test]
@@ -292,6 +301,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-16T12:50:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial::LIFECYCLE,
         path: "/".to_string(),
         state: State::Start {
             uri: "file:///home/user/NetworkProbe.tq".to_string(),
@@ -299,56 +309,61 @@ fn format_record_pins_on_disk_text() {
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-16T12:50:30Z 015003 / Start file:///home/user/NetworkProbe.tq\n"
+        "2026-05-16T12:50:30Z 015003 000 / Start file:///home/user/NetworkProbe.tq\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:28:25Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial::LIFECYCLE,
         path: "/".to_string(),
         state: State::Resume,
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:28:25Z 015003 / Resume\n"
+        "2026-05-17T00:28:25Z 015003 000 / Resume\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial::LIFECYCLE,
         path: "/".to_string(),
         state: State::Finish,
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:28:30Z 015003 / Finish\n"
+        "2026-05-17T00:28:30Z 015003 000 / Finish\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial::LIFECYCLE,
         path: "/".to_string(),
         state: State::Stop,
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:28:30Z 015003 / Stop\n"
+        "2026-05-17T00:28:30Z 015003 000 / Stop\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial(1),
         path: "/local_network:2".to_string(),
-        state: State::Begin,
+        state: State::Begin(Vec::new()),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:28:30Z 015003 /local_network:2 Begin\n"
+        "2026-05-17T00:28:30Z 015003 001 /local_network:2 Begin ()\n"
     );
 
     let record = Record {
         recorded: "2026-05-16T12:50:42Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial(1),
         path: "/local_network:1".to_string(),
         state: State::Execute {
             function: "exec".to_string(),
@@ -356,56 +371,61 @@ fn format_record_pins_on_disk_text() {
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-16T12:50:42Z 015003 /local_network:1 Execute exec()\n"
+        "2026-05-16T12:50:42Z 015003 001 /local_network:1 Execute exec()\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:31:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial(1),
         path: "/local_network:5".to_string(),
         state: State::Invoke(InvokeTarget::Procedure("probe_border_router".to_string())),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:31:30Z 015003 /local_network:5 Invoke probe_border_router:\n"
+        "2026-05-17T00:31:30Z 015003 001 /local_network:5 Invoke probe_border_router:\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:31:30Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial(1),
         path: "/local_network:5".to_string(),
         state: State::Invoke(InvokeTarget::Uri("file:///tmp/Other.tq".to_string())),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:31:30Z 015003 /local_network:5 Invoke file:///tmp/Other.tq\n"
+        "2026-05-17T00:31:30Z 015003 001 /local_network:5 Invoke file:///tmp/Other.tq\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Done(None),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Done\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Done\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Done(Some(Value::Unitus)),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Done ()\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Done ()\n"
     );
 
     let record = Record {
         recorded: "2026-05-17T00:29:15Z".to_string(),
         run_id: RunId(15003),
+        serial: Serial(1),
         path: "/local_network:3".to_string(),
         state: State::Done(Some(Value::Tabularum(vec![(
             "address".to_string(),
@@ -414,45 +434,63 @@ fn format_record_pins_on_disk_text() {
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-17T00:29:15Z 015003 /local_network:3 Done [ \"address\" = \"192.168.1.1\" ]\n"
+        "2026-05-17T00:29:15Z 015003 001 /local_network:3 Done [ \"address\" = \"192.168.1.1\" ]\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/before_anesthesia:2".to_string(),
         state: State::Done(Some(Value::Literali("Not Applicable".to_string()))),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /before_anesthesia:2 Done \"Not Applicable\"\n"
+        "2026-05-14T12:00:00Z 000001 001 /before_anesthesia:2 Done \"Not Applicable\"\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Skip,
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Skip\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Skip\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
+        path: "/make_coffee:2".to_string(),
+        state: State::Revoke,
+    };
+    let line = "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Revoke\n";
+    assert_eq!(format_record(&record), line);
+    assert_eq!(
+        parse_record(line.trim_end()).expect("parse a Revoke"),
+        record
+    );
+
+    let record = Record {
+        recorded: "2026-05-14T12:00:00Z".to_string(),
+        run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Fail(None),
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Fail\n"
     );
 
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Fail(Some(Value::Tabularum(vec![(
             "reason".to_string(),
@@ -461,7 +499,7 @@ fn format_record_pins_on_disk_text() {
     };
     assert_eq!(
         format_record(&record),
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ \"reason\" = \"network unplugged\" ]\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Fail [ \"reason\" = \"network unplugged\" ]\n"
     );
 }
 
@@ -470,13 +508,14 @@ fn fail_reason_escapes_and_stays_on_one_line() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/make_coffee:2".to_string(),
         state: State::Fail(Some(fail_reason("said \"unplug\"\nthen left"))),
     };
     let line = format_record(&record);
     assert_eq!(
         line,
-        "2026-05-14T12:00:00Z 000001 /make_coffee:2 Fail [ \"reason\" = \"said \\\"unplug\\\"\\nthen left\" ]\n"
+        "2026-05-14T12:00:00Z 000001 001 /make_coffee:2 Fail [ \"reason\" = \"said \\\"unplug\\\"\\nthen left\" ]\n"
     );
     assert_eq!(
         line.matches('\n')
@@ -492,6 +531,7 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-16T12:50:30Z".to_string(),
             run_id: RunId(1),
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Start {
                 uri: "file:///foo/Bar.tq".to_string(),
@@ -500,30 +540,35 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Finish,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Stop,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(15003),
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Resume,
         },
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
-            state: State::Begin,
+            state: State::Begin(Vec::new()),
         },
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
             state: State::Execute {
                 function: "exec".to_string(),
@@ -532,36 +577,42 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
             state: State::Return(Some(Value::Literali("2".to_string()))),
         },
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
             state: State::Invoke(InvokeTarget::Procedure("helper".to_string())),
         },
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
             state: State::Invoke(InvokeTarget::Uri("https://proc.ac/foo/Bar.tq".to_string())),
         },
         Record {
             recorded: "2026-05-14T12:00:00Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:1".to_string(),
             state: State::Done(None),
         },
         Record {
             recorded: "2026-05-14T12:00:01Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:2".to_string(),
             state: State::Done(Some(Value::Unitus)),
         },
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:3".to_string(),
             state: State::Done(Some(Value::Tabularum(vec![(
                 "address".to_string(),
@@ -571,12 +622,14 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:7".to_string(),
             state: State::Done(Some(Value::Literali("Not Applicable".to_string()))),
         },
         Record {
             recorded: "2026-05-14T12:00:02Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:8".to_string(),
             state: State::Done(Some(Value::Literali(
                 "1: lo\n    inet 127.0.0.1/8\na quote \" and a slash \\".to_string(),
@@ -585,24 +638,28 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),
             run_id: RunId(1),
+            serial: Serial::LIFECYCLE,
             path: "/".to_string(),
             state: State::Stop,
         },
         Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:4".to_string(),
             state: State::Skip,
         },
         Record {
             recorded: "2026-05-14T12:00:04Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:5".to_string(),
             state: State::Fail(None),
         },
         Record {
             recorded: "2026-05-14T12:00:05Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/a:6".to_string(),
             state: State::Fail(Some(Value::Tabularum(vec![(
                 "reason".to_string(),
@@ -612,8 +669,9 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:06Z".to_string(),
             run_id: RunId(1),
+            serial: Serial(1),
             path: "/decommission:".to_string(),
-            state: State::Input(vec![
+            state: State::Begin(vec![
                 Supplied {
                     value: Value::Literali("acme-corp".to_string()),
                     name: Some("authority".to_string()),
@@ -645,6 +703,7 @@ fn multiline_literal_stays_on_one_record_line() {
     let record = Record {
         recorded: "2026-05-14T12:00:00Z".to_string(),
         run_id: RunId(1),
+        serial: Serial(1),
         path: "/a:1".to_string(),
         state: State::Done(Some(Value::Literali("first\nsecond\nthird".to_string()))),
     };
@@ -659,7 +718,7 @@ fn multiline_literal_stays_on_one_record_line() {
 
 #[test]
 fn parse_record_rejects_unknown_state() {
-    let line = "2026-05-14T12:00:00Z 000001 /x:1 Maybe";
+    let line = "2026-05-14T12:00:00Z 000001 001 /x:1 Maybe";
     match parse_record(line) {
         Err(RecordError::UnknownState(text)) => assert_eq!(text, "Maybe"),
         other => panic!("expected UnknownState, got {:?}", other),
@@ -669,7 +728,7 @@ fn parse_record_rejects_unknown_state() {
 #[test]
 fn parse_record_rejects_too_few_fields() {
     // Missing state keyword.
-    let line = "2026-05-14T12:00:00Z 000001 /x:1";
+    let line = "2026-05-14T12:00:00Z 000001 001 /x:1";
     match parse_record(line) {
         Err(RecordError::MalformedRecord) => {}
         other => panic!("expected MalformedRecord, got {:?}", other),

@@ -380,7 +380,7 @@ fn main() {
                         .default_value("interactive")
                         .action(ArgAction::Set)
                         .conflicts_with_all(["interactive", "automatic", "quiet"])
-                        .help("How to walk the procedure: interactively, prompting the user at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trace output, so that only the output of external commands is printed to the terminal."),
+                        .help("How to walk the procedure: interactively, prompting the user at each step; automatically, taking each step's computed value and running to completion or first failure; or quietly, also running automatically but suppressing all progress trail output, so that only the output of external commands is printed to the terminal."),
                 )
                 .arg(
                     Arg::new("interactive")
@@ -409,7 +409,7 @@ fn main() {
                         .value_parser(["pfftt", "native"])
                         .default_value("pfftt")
                         .action(ArgAction::Set)
-                        .help("Whether to write the recorded trace to disk in PFFTT format, as is the default, or to instead print a diagnostic trace of the steps as the are completed (for debugging)."),
+                        .help("Whether to write the recorded journal to disk in PFFTT format, as is the default, or to instead print a diagnostic trail of the steps as they are completed (for debugging)."),
                 )
                 .arg(
                     Arg::new("raw-control-chars")
@@ -436,8 +436,8 @@ fn main() {
         )
         .subcommand(
             Command::new("log")
-                .about("Print the trace recorded for a procedure run.")
-                .long_about("Print the trace recorded when a Technique procedure was run. \
+                .about("Print the journal recorded for a procedure run.")
+                .long_about("Print the journal recorded when a Technique procedure was run. \
                     Each line is one recorded event: entering a step, executing a command, \
                     and the result the step settled on. Times are relative to the start of \
                     the run, which is given in the heading.")
@@ -452,7 +452,7 @@ fn main() {
                         .value_parser(["console", "json", "pfftt", "native"])
                         .default_value("console")
                         .action(ArgAction::Set)
-                        .help("Change the output format. The default is to print a human-readable version of the trace to the terminal. \
+                        .help("Change the output format. The default is to print a human-readable version of the journal to the terminal. \
                             Other formats include a JSON array, with one object per record line; \
                             the raw Procedure interchange Format For Transferring Techniques record lines as they are stored on disk; \
                             or, (for debugging) the internal data structures the records were parsed back into)."),
@@ -1050,7 +1050,11 @@ fn main() {
                 Ok((_, Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_))) => {
                     std::process::exit(1)
                 }
-                Ok((_, _)) => std::process::exit(0),
+                Ok((_, Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_)))) => {
+                    std::process::exit(0)
+                }
+                // drive() walks again rather than returning a restart
+                Ok((_, Conclusion::Restarting)) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
@@ -1173,7 +1177,14 @@ fn main() {
                     );
                     std::process::exit(0);
                 }
-                Ok(_) => std::process::exit(0),
+                Ok(Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_)) => {
+                    std::process::exit(1)
+                }
+                Ok(Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_))) => {
+                    std::process::exit(0)
+                }
+                // drive() walks again rather than returning a restart
+                Ok(Conclusion::Restarting) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);

@@ -1,10 +1,11 @@
-2026-06-14T05:58:08.700Z 000001 / Start file://tests/samples/runner/DemolitionBeams.tq
-2026-06-14T05:58:08.700Z 000001 /remove_planet: Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/1 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/1 Skip
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/2 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/2 Skip
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/3 Begin
-2026-06-14T05:58:08.700Z 000001 /remove_planet:/3 Skip
-2026-06-14T05:58:08.700Z 000001 /remove_planet: Skip
-2026-06-14T05:58:08.700Z 000001 / Finish
+2026-08-11T00:59:41.540Z 000001 000 / Start file://tests/samples/runner/DemolitionBeams.tq
+2026-08-11T00:59:41.540Z 000001 001 /remove_planet: Begin ()
+2026-08-11T00:59:41.540Z 000001 002 /remove_planet:/1 Begin ()
+2026-08-11T00:59:41.540Z 000001 002 /remove_planet:/1 Bind ( () ~ hatches )
+2026-08-11T00:59:41.540Z 000001 002 /remove_planet:/1 Skip
+2026-08-11T00:59:41.540Z 000001 003 /remove_planet:/2 Begin ( () ~ hatches )
+2026-08-11T00:59:41.540Z 000001 003 /remove_planet:/2 Skip
+2026-08-11T00:59:41.540Z 000001 004 /remove_planet:/3 Begin ()
+2026-08-11T00:59:41.540Z 000001 004 /remove_planet:/3 Skip
+2026-08-11T00:59:41.540Z 000001 001 /remove_planet: Skip
+2026-08-11T00:59:41.540Z 000001 000 / Finish

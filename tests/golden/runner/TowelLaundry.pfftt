@@ -1,0 +1,31 @@
+2026-08-11T00:59:41.679Z 000132 000 / Start file:///home/andrew/src/technique-lang/technique/tests/golden/runner/TowelLaundry.tq?library=system
+2026-08-11T00:59:41.679Z 000132 001 /launder_towels: Begin ()
+2026-08-11T00:59:41.679Z 000132 002 /launder_towels:/1 Begin ()
+2026-08-11T00:59:41.679Z 000132 002 /launder_towels:/1 Bind ( [ "blue", "green" ] ~ towels )
+2026-08-11T00:59:41.679Z 000132 002 /launder_towels:/1 Done ()
+2026-08-11T00:59:41.679Z 000132 003 /launder_towels:/2 Begin ( [ "blue", "green" ] ~ towels )
+2026-08-11T00:59:41.679Z 000132 004 /launder_towels:/2/[1] Begin ( "blue" ~ towel )
+2026-08-11T00:59:41.679Z 000132 005 /launder_towels:/2/[1]/-1 Begin ( "blue" ~ towel )
+2026-08-11T00:59:41.679Z 000132 005 /launder_towels:/2/[1]/-1 Invoke dry_towel:
+2026-08-11T00:59:41.679Z 000132 006 /dry_towel: Begin ( "blue" ~ towel )
+2026-08-11T00:59:41.679Z 000132 007 /dry_towel:/1 Begin ( "blue" ~ towel )
+2026-08-11T00:59:41.679Z 000132 007 /dry_towel:/1 Skip
+2026-08-11T00:59:41.679Z 000132 008 /dry_towel:/2 Begin ()
+2026-08-11T00:59:41.679Z 000132 008 /dry_towel:/2 Skip
+2026-08-11T00:59:41.679Z 000132 006 /dry_towel: Skip
+2026-08-11T00:59:41.679Z 000132 005 /launder_towels:/2/[1]/-1 Skip
+2026-08-11T00:59:41.679Z 000132 004 /launder_towels:/2/[1] Skip
+2026-08-11T00:59:41.679Z 000132 009 /launder_towels:/2/[2] Begin ( "green" ~ towel )
+2026-08-11T00:59:41.679Z 000132 010 /launder_towels:/2/[2]/-1 Begin ( "green" ~ towel )
+2026-08-11T00:59:41.679Z 000132 010 /launder_towels:/2/[2]/-1 Invoke dry_towel:
+2026-08-11T00:59:41.679Z 000132 011 /dry_towel: Begin ( "green" ~ towel )
+2026-08-11T00:59:41.679Z 000132 012 /dry_towel:/1 Begin ( "green" ~ towel )
+2026-08-11T00:59:41.679Z 000132 012 /dry_towel:/1 Skip
+2026-08-11T00:59:41.679Z 000132 013 /dry_towel:/2 Begin ()
+2026-08-11T00:59:41.679Z 000132 013 /dry_towel:/2 Skip
+2026-08-11T00:59:41.679Z 000132 011 /dry_towel: Skip
+2026-08-11T00:59:41.679Z 000132 010 /launder_towels:/2/[2]/-1 Skip
+2026-08-11T00:59:41.679Z 000132 009 /launder_towels:/2/[2] Skip
+2026-08-11T00:59:41.679Z 000132 003 /launder_towels:/2 Skip
+2026-08-11T00:59:41.679Z 000132 001 /launder_towels: Done ()
+2026-08-11T00:59:41.679Z 000132 000 / Finish

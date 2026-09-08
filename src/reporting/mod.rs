@@ -1,4 +1,4 @@
-//! Present the trail of a recorded run. The PFFTT records are read back from
+//! Present the journal of a recorded run. The PFFTT records are read back from
 //! the store then rendered to terminal.
 
 mod column;

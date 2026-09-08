@@ -1,4 +1,4 @@
-use crate::engraving::{InvokeTarget, Record, RunId, State, Supplied};
+use crate::engraving::{InvokeTarget, Record, RunId, Serial, State, Supplied};
 use crate::formatting::Identity;
 use crate::reporting::{Column, render_console, render_json};
 use crate::value::Value;
@@ -7,12 +7,13 @@ fn record(recorded: &str, path: &str, state: State) -> Record {
     Record {
         recorded: recorded.to_string(),
         run_id: RunId(7),
+        serial: Serial::LIFECYCLE,
         path: path.to_string(),
         state,
     }
 }
 
-fn trail() -> Vec<Record> {
+fn journal() -> Vec<Record> {
     vec![
         record(
             "2026-08-04T22:50:36.869Z",
@@ -24,7 +25,7 @@ fn trail() -> Vec<Record> {
         record(
             "2026-08-04T22:50:36.870Z",
             "/connectivity_check:",
-            State::Begin,
+            State::Begin(Vec::new()),
         ),
         record(
             "2026-08-04T22:50:40.546Z",
@@ -39,7 +40,7 @@ fn trail() -> Vec<Record> {
 // to give is in the local zone, so only its lead-in is pinned here.
 #[test]
 fn heading_names_the_run() {
-    let text = render_console(&trail(), &[Column::Short], &Identity);
+    let text = render_console(&journal(), &[Column::Short], &Identity);
     let heading = text
         .lines()
         .next()
@@ -51,7 +52,7 @@ fn heading_names_the_run() {
 #[test]
 fn columns_align_in_the_order_given() {
     let columns = [Column::Short, Column::Offset, Column::State, Column::Value];
-    let text = render_console(&trail(), &columns, &Identity);
+    let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
         .skip(2)
@@ -61,7 +62,7 @@ fn columns_align_in_the_order_given() {
         body[0],
         "/                         +0.0  Start   file:///tmp/NetworkProbe.tq"
     );
-    assert_eq!(body[1], "connectivity_check:       +0.0  Begin");
+    assert_eq!(body[1], "connectivity_check:       +0.0  Begin   ()");
     assert_eq!(body[2], "connectivity_check:       +3.7  Done    ()");
     assert_eq!(body[3], "/                         +3.7  Finish");
 }
@@ -102,7 +103,7 @@ fn deep_paths_are_elided_at_the_front() {
 #[test]
 fn durations_fall_on_the_record_that_closed_the_scope() {
     let columns = [Column::Duration, Column::Short, Column::State];
-    let text = render_console(&trail(), &columns, &Identity);
+    let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
         .skip(2)
@@ -134,7 +135,7 @@ fn inputs_carry_the_wait_to_supply_them() {
         record(
             "2026-08-04T22:50:45.615Z",
             "/decomission_customer:/I/delete_resources:",
-            State::Input(vec![Supplied {
+            State::Begin(vec![Supplied {
                 value: Value::Literali("Rebecca".to_string()),
                 name: Some("authority".to_string()),
             }]),
@@ -142,7 +143,7 @@ fn inputs_carry_the_wait_to_supply_them() {
         record(
             "2026-08-04T22:50:45.615Z",
             "/decomission_customer:/I/delete_resources:",
-            State::Begin,
+            State::Begin(Vec::new()),
         ),
     ];
     let columns = [Column::Duration, Column::State];
@@ -153,7 +154,7 @@ fn inputs_carry_the_wait_to_supply_them() {
         .collect();
 
     assert_eq!(body[1], "       Invoke");
-    assert_eq!(body[2], "8.746  Input");
+    assert_eq!(body[2], "8.746  Begin");
 }
 
 // An Execute is closed by the Return that carries what the host call produced,
@@ -197,7 +198,7 @@ fn executions_are_spanned_by_their_return() {
 #[test]
 fn json_carries_one_field_per_column() {
     let columns = [Column::Short, Column::Duration, Column::State];
-    let text = render_json(&trail(), &columns);
+    let text = render_json(&journal(), &columns);
     let body: Vec<&str> = text
         .lines()
         .collect();
@@ -217,7 +218,7 @@ fn json_carries_one_field_per_column() {
 #[test]
 fn timestamp_and_path_are_as_recorded() {
     let columns = [Column::Timestamp, Column::Path, Column::State];
-    let text = render_console(&trail(), &columns, &Identity);
+    let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
         .skip(2)
@@ -248,7 +249,7 @@ fn state_and_value_are_separate_columns() {
         record(
             "2026-08-04T22:50:36.870Z",
             "/connectivity_check:",
-            State::Input(vec![Supplied {
+            State::Begin(vec![Supplied {
                 value: Value::Quanticle(crate::value::Numeric::Integral(0)),
                 name: Some("s".to_string()),
             }]),
@@ -274,7 +275,7 @@ fn state_and_value_are_separate_columns() {
         .collect();
 
     assert_eq!(body[0], "Start    file:///tmp/NetworkProbe.tq");
-    assert_eq!(body[1], "Input    ( 0 ~ s )");
+    assert_eq!(body[1], "Begin    ( 0 ~ s )");
     assert_eq!(body[2], "Execute  exec()");
     assert_eq!(body[3], "Fail     \"unreachable\"");
 }

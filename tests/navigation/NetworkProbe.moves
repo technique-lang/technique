@@ -1,0 +1,514 @@
+# Every record of run 000181 of NetworkProbe.tq, interrupted at the live prompt
+# /connectivity_check:/VII/service_endpoint:/2, against all six keys. Blocks are
+# in journal order. A record is named by its FQP and verb, matching the .pfftt
+# beside this file with the timestamp, run id, and payload elided; (live) is the
+# prompt the run is waiting at, and (refused) is a keystroke that does not move.
+#
+# The motions are described in src/engraving/navigation.rs; this table is the
+# authority where that prose is ambiguous.
+#
+# origin                                            key         destination
+
+/ Start                                             Up          (refused)
+/ Start                                             Down        /connectivity_check: Begin
+/ Start                                             Left        (refused)
+/ Start                                             Right       /connectivity_check: Begin
+/ Start                                             PageUp      (refused)
+/ Start                                             PageDown    (refused)
+
+/connectivity_check: Begin                          Up          / Start
+/connectivity_check: Begin                          Down        /connectivity_check:/I Begin
+/connectivity_check: Begin                          Left        / Start
+/connectivity_check: Begin                          Right       /connectivity_check:/I Begin
+/connectivity_check: Begin                          PageUp      (refused)
+/connectivity_check: Begin                          PageDown    (refused)
+
+/connectivity_check:/I Begin                        Up          /connectivity_check: Begin
+/connectivity_check:/I Begin                        Down        /connectivity_check:/I Invoke
+/connectivity_check:/I Begin                        Left        /connectivity_check: Begin
+/connectivity_check:/I Begin                        Right       /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I Begin                        PageUp      (refused)
+/connectivity_check:/I Begin                        PageDown    /connectivity_check:/II Begin
+
+/connectivity_check:/I Invoke                       Up          /connectivity_check:/I Begin
+/connectivity_check:/I Invoke                       Down        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I Invoke                       Left        /connectivity_check: Begin
+/connectivity_check:/I Invoke                       Right       /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I Invoke                       PageUp      (refused)
+/connectivity_check:/I Invoke                       PageDown    /connectivity_check:/II Begin
+
+/connectivity_check:/I/local_network: Begin         Up          /connectivity_check:/I Invoke
+/connectivity_check:/I/local_network: Begin         Down        /connectivity_check:/I/local_network:/1 Begin
+/connectivity_check:/I/local_network: Begin         Left        /connectivity_check:/I Begin
+/connectivity_check:/I/local_network: Begin         Right       /connectivity_check:/I/local_network:/1 Begin
+/connectivity_check:/I/local_network: Begin         PageUp      (refused)
+/connectivity_check:/I/local_network: Begin         PageDown    (refused)
+
+/connectivity_check:/I/local_network:/1 Begin       Up          /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/1 Begin       Down        /connectivity_check:/I/local_network:/1 Execute
+/connectivity_check:/I/local_network:/1 Begin       Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/1 Begin       Right       (refused)
+/connectivity_check:/I/local_network:/1 Begin       PageUp      (refused)
+/connectivity_check:/I/local_network:/1 Begin       PageDown    /connectivity_check:/I/local_network:/2 Begin
+
+/connectivity_check:/I/local_network:/1 Execute     Up          /connectivity_check:/I/local_network:/1 Begin
+/connectivity_check:/I/local_network:/1 Execute     Down        /connectivity_check:/I/local_network:/1 Return
+/connectivity_check:/I/local_network:/1 Execute     Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/1 Execute     Right       (refused)
+/connectivity_check:/I/local_network:/1 Execute     PageUp      (refused)
+/connectivity_check:/I/local_network:/1 Execute     PageDown    /connectivity_check:/I/local_network:/2 Begin
+
+/connectivity_check:/I/local_network:/1 Return      Up          /connectivity_check:/I/local_network:/1 Execute
+/connectivity_check:/I/local_network:/1 Return      Down        /connectivity_check:/I/local_network:/1 Done
+/connectivity_check:/I/local_network:/1 Return      Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/1 Return      Right       (refused)
+/connectivity_check:/I/local_network:/1 Return      PageUp      (refused)
+/connectivity_check:/I/local_network:/1 Return      PageDown    /connectivity_check:/I/local_network:/2 Begin
+
+/connectivity_check:/I/local_network:/1 Done        Up          /connectivity_check:/I/local_network:/1 Return
+/connectivity_check:/I/local_network:/1 Done        Down        /connectivity_check:/I/local_network:/2 Begin
+/connectivity_check:/I/local_network:/1 Done        Left        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/1 Done        Right       (refused)
+/connectivity_check:/I/local_network:/1 Done        PageUp      (refused)
+/connectivity_check:/I/local_network:/1 Done        PageDown    /connectivity_check:/I/local_network:/2 Done
+
+/connectivity_check:/I/local_network:/2 Begin       Up          /connectivity_check:/I/local_network:/1 Done
+/connectivity_check:/I/local_network:/2 Begin       Down        /connectivity_check:/I/local_network:/2 Done
+/connectivity_check:/I/local_network:/2 Begin       Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/2 Begin       Right       (refused)
+/connectivity_check:/I/local_network:/2 Begin       PageUp      /connectivity_check:/I/local_network:/1 Begin
+/connectivity_check:/I/local_network:/2 Begin       PageDown    /connectivity_check:/I/local_network:/3 Begin
+
+/connectivity_check:/I/local_network:/2 Done        Up          /connectivity_check:/I/local_network:/2 Begin
+/connectivity_check:/I/local_network:/2 Done        Down        /connectivity_check:/I/local_network:/3 Begin
+/connectivity_check:/I/local_network:/2 Done        Left        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/2 Done        Right       (refused)
+/connectivity_check:/I/local_network:/2 Done        PageUp      /connectivity_check:/I/local_network:/1 Done
+/connectivity_check:/I/local_network:/2 Done        PageDown    /connectivity_check:/I/local_network:/3 Done
+
+/connectivity_check:/I/local_network:/3 Begin       Up          /connectivity_check:/I/local_network:/2 Done
+/connectivity_check:/I/local_network:/3 Begin       Down        /connectivity_check:/I/local_network:/3 Done
+/connectivity_check:/I/local_network:/3 Begin       Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/3 Begin       Right       (refused)
+/connectivity_check:/I/local_network:/3 Begin       PageUp      /connectivity_check:/I/local_network:/2 Begin
+/connectivity_check:/I/local_network:/3 Begin       PageDown    /connectivity_check:/I/local_network:/4 Begin
+
+/connectivity_check:/I/local_network:/3 Done        Up          /connectivity_check:/I/local_network:/3 Begin
+/connectivity_check:/I/local_network:/3 Done        Down        /connectivity_check:/I/local_network:/4 Begin
+/connectivity_check:/I/local_network:/3 Done        Left        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/3 Done        Right       (refused)
+/connectivity_check:/I/local_network:/3 Done        PageUp      /connectivity_check:/I/local_network:/2 Done
+/connectivity_check:/I/local_network:/3 Done        PageDown    /connectivity_check:/I/local_network:/4 Done
+
+/connectivity_check:/I/local_network:/4 Begin       Up          /connectivity_check:/I/local_network:/3 Done
+/connectivity_check:/I/local_network:/4 Begin       Down        /connectivity_check:/I/local_network:/4 Done
+/connectivity_check:/I/local_network:/4 Begin       Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/4 Begin       Right       (refused)
+/connectivity_check:/I/local_network:/4 Begin       PageUp      /connectivity_check:/I/local_network:/3 Begin
+/connectivity_check:/I/local_network:/4 Begin       PageDown    /connectivity_check:/I/local_network:/5 Begin
+
+/connectivity_check:/I/local_network:/4 Done        Up          /connectivity_check:/I/local_network:/4 Begin
+/connectivity_check:/I/local_network:/4 Done        Down        /connectivity_check:/I/local_network:/5 Begin
+/connectivity_check:/I/local_network:/4 Done        Left        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/4 Done        Right       (refused)
+/connectivity_check:/I/local_network:/4 Done        PageUp      /connectivity_check:/I/local_network:/3 Done
+/connectivity_check:/I/local_network:/4 Done        PageDown    /connectivity_check:/I/local_network:/5 Done
+
+/connectivity_check:/I/local_network:/5 Begin       Up          /connectivity_check:/I/local_network:/4 Done
+/connectivity_check:/I/local_network:/5 Begin       Down        /connectivity_check:/I/local_network:/5 Done
+/connectivity_check:/I/local_network:/5 Begin       Left        /connectivity_check:/I/local_network: Begin
+/connectivity_check:/I/local_network:/5 Begin       Right       (refused)
+/connectivity_check:/I/local_network:/5 Begin       PageUp      /connectivity_check:/I/local_network:/4 Begin
+/connectivity_check:/I/local_network:/5 Begin       PageDown    (refused)
+
+/connectivity_check:/I/local_network:/5 Done        Up          /connectivity_check:/I/local_network:/5 Begin
+/connectivity_check:/I/local_network:/5 Done        Down        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/5 Done        Left        /connectivity_check:/I/local_network: Done
+/connectivity_check:/I/local_network:/5 Done        Right       (refused)
+/connectivity_check:/I/local_network:/5 Done        PageUp      /connectivity_check:/I/local_network:/4 Done
+/connectivity_check:/I/local_network:/5 Done        PageDown    (refused)
+
+/connectivity_check:/I/local_network: Done          Up          /connectivity_check:/I/local_network:/5 Done
+/connectivity_check:/I/local_network: Done          Down        /connectivity_check:/I Done
+/connectivity_check:/I/local_network: Done          Left        /connectivity_check:/I Done
+/connectivity_check:/I/local_network: Done          Right       /connectivity_check:/I/local_network:/5 Done
+/connectivity_check:/I/local_network: Done          PageUp      (refused)
+/connectivity_check:/I/local_network: Done          PageDown    (refused)
+
+/connectivity_check:/I Done                         Up          /connectivity_check:/I/local_network: Done
+/connectivity_check:/I Done                         Down        /connectivity_check:/II Begin
+/connectivity_check:/I Done                         Left        /connectivity_check: Begin
+/connectivity_check:/I Done                         Right       /connectivity_check:/I/local_network: Done
+/connectivity_check:/I Done                         PageUp      (refused)
+/connectivity_check:/I Done                         PageDown    /connectivity_check:/II Done
+
+/connectivity_check:/II Begin                       Up          /connectivity_check:/I Done
+/connectivity_check:/II Begin                       Down        /connectivity_check:/II Invoke
+/connectivity_check:/II Begin                       Left        /connectivity_check: Begin
+/connectivity_check:/II Begin                       Right       /connectivity_check:/II/home_border: Begin
+/connectivity_check:/II Begin                       PageUp      /connectivity_check:/I Begin
+/connectivity_check:/II Begin                       PageDown    /connectivity_check:/III Begin
+
+/connectivity_check:/II Invoke                      Up          /connectivity_check:/II Begin
+/connectivity_check:/II Invoke                      Down        /connectivity_check:/II/home_border: Begin
+/connectivity_check:/II Invoke                      Left        /connectivity_check: Begin
+/connectivity_check:/II Invoke                      Right       /connectivity_check:/II/home_border: Begin
+/connectivity_check:/II Invoke                      PageUp      /connectivity_check:/I Begin
+/connectivity_check:/II Invoke                      PageDown    /connectivity_check:/III Begin
+
+/connectivity_check:/II/home_border: Begin          Up          /connectivity_check:/II Invoke
+/connectivity_check:/II/home_border: Begin          Down        /connectivity_check:/II/home_border:/1 Begin
+/connectivity_check:/II/home_border: Begin          Left        /connectivity_check:/II Begin
+/connectivity_check:/II/home_border: Begin          Right       /connectivity_check:/II/home_border:/1 Begin
+/connectivity_check:/II/home_border: Begin          PageUp      (refused)
+/connectivity_check:/II/home_border: Begin          PageDown    (refused)
+
+/connectivity_check:/II/home_border:/1 Begin        Up          /connectivity_check:/II/home_border: Begin
+/connectivity_check:/II/home_border:/1 Begin        Down        /connectivity_check:/II/home_border:/1 Done
+/connectivity_check:/II/home_border:/1 Begin        Left        /connectivity_check:/II/home_border: Begin
+/connectivity_check:/II/home_border:/1 Begin        Right       (refused)
+/connectivity_check:/II/home_border:/1 Begin        PageUp      (refused)
+/connectivity_check:/II/home_border:/1 Begin        PageDown    (refused)
+
+/connectivity_check:/II/home_border:/1 Done         Up          /connectivity_check:/II/home_border:/1 Begin
+/connectivity_check:/II/home_border:/1 Done         Down        /connectivity_check:/II/home_border: Done
+/connectivity_check:/II/home_border:/1 Done         Left        /connectivity_check:/II/home_border: Done
+/connectivity_check:/II/home_border:/1 Done         Right       (refused)
+/connectivity_check:/II/home_border:/1 Done         PageUp      (refused)
+/connectivity_check:/II/home_border:/1 Done         PageDown    (refused)
+
+/connectivity_check:/II/home_border: Done           Up          /connectivity_check:/II/home_border:/1 Done
+/connectivity_check:/II/home_border: Done           Down        /connectivity_check:/II Done
+/connectivity_check:/II/home_border: Done           Left        /connectivity_check:/II Done
+/connectivity_check:/II/home_border: Done           Right       /connectivity_check:/II/home_border:/1 Done
+/connectivity_check:/II/home_border: Done           PageUp      (refused)
+/connectivity_check:/II/home_border: Done           PageDown    (refused)
+
+/connectivity_check:/II Done                        Up          /connectivity_check:/II/home_border: Done
+/connectivity_check:/II Done                        Down        /connectivity_check:/III Begin
+/connectivity_check:/II Done                        Left        /connectivity_check: Begin
+/connectivity_check:/II Done                        Right       /connectivity_check:/II/home_border: Done
+/connectivity_check:/II Done                        PageUp      /connectivity_check:/I Done
+/connectivity_check:/II Done                        PageDown    /connectivity_check:/III Done
+
+/connectivity_check:/III Begin                      Up          /connectivity_check:/II Done
+/connectivity_check:/III Begin                      Down        /connectivity_check:/III Invoke
+/connectivity_check:/III Begin                      Left        /connectivity_check: Begin
+/connectivity_check:/III Begin                      Right       /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III Begin                      PageUp      /connectivity_check:/II Begin
+/connectivity_check:/III Begin                      PageDown    /connectivity_check:/IV Begin
+
+/connectivity_check:/III Invoke                     Up          /connectivity_check:/III Begin
+/connectivity_check:/III Invoke                     Down        /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III Invoke                     Left        /connectivity_check: Begin
+/connectivity_check:/III Invoke                     Right       /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III Invoke                     PageUp      /connectivity_check:/II Begin
+/connectivity_check:/III Invoke                     PageDown    /connectivity_check:/IV Begin
+
+/connectivity_check:/III/public_network: Begin      Up          /connectivity_check:/III Invoke
+/connectivity_check:/III/public_network: Begin      Down        /connectivity_check:/III/public_network:/1 Begin
+/connectivity_check:/III/public_network: Begin      Left        /connectivity_check:/III Begin
+/connectivity_check:/III/public_network: Begin      Right       /connectivity_check:/III/public_network:/1 Begin
+/connectivity_check:/III/public_network: Begin      PageUp      (refused)
+/connectivity_check:/III/public_network: Begin      PageDown    (refused)
+
+/connectivity_check:/III/public_network:/1 Begin    Up          /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III/public_network:/1 Begin    Down        /connectivity_check:/III/public_network:/1 Done
+/connectivity_check:/III/public_network:/1 Begin    Left        /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III/public_network:/1 Begin    Right       (refused)
+/connectivity_check:/III/public_network:/1 Begin    PageUp      (refused)
+/connectivity_check:/III/public_network:/1 Begin    PageDown    /connectivity_check:/III/public_network:/2 Begin
+
+/connectivity_check:/III/public_network:/1 Done     Up          /connectivity_check:/III/public_network:/1 Begin
+/connectivity_check:/III/public_network:/1 Done     Down        /connectivity_check:/III/public_network:/2 Begin
+/connectivity_check:/III/public_network:/1 Done     Left        /connectivity_check:/III/public_network: Done
+/connectivity_check:/III/public_network:/1 Done     Right       (refused)
+/connectivity_check:/III/public_network:/1 Done     PageUp      (refused)
+/connectivity_check:/III/public_network:/1 Done     PageDown    /connectivity_check:/III/public_network:/2 Skip
+
+/connectivity_check:/III/public_network:/2 Begin    Up          /connectivity_check:/III/public_network:/1 Done
+/connectivity_check:/III/public_network:/2 Begin    Down        /connectivity_check:/III/public_network:/2 Skip
+/connectivity_check:/III/public_network:/2 Begin    Left        /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III/public_network:/2 Begin    Right       (refused)
+/connectivity_check:/III/public_network:/2 Begin    PageUp      /connectivity_check:/III/public_network:/1 Begin
+/connectivity_check:/III/public_network:/2 Begin    PageDown    /connectivity_check:/III/public_network:/3 Begin
+
+/connectivity_check:/III/public_network:/2 Skip     Up          /connectivity_check:/III/public_network:/2 Begin
+/connectivity_check:/III/public_network:/2 Skip     Down        /connectivity_check:/III/public_network:/3 Begin
+/connectivity_check:/III/public_network:/2 Skip     Left        /connectivity_check:/III/public_network: Done
+/connectivity_check:/III/public_network:/2 Skip     Right       (refused)
+/connectivity_check:/III/public_network:/2 Skip     PageUp      /connectivity_check:/III/public_network:/1 Done
+/connectivity_check:/III/public_network:/2 Skip     PageDown    /connectivity_check:/III/public_network:/3 Done
+
+/connectivity_check:/III/public_network:/3 Begin    Up          /connectivity_check:/III/public_network:/2 Skip
+/connectivity_check:/III/public_network:/3 Begin    Down        /connectivity_check:/III/public_network:/3 Done
+/connectivity_check:/III/public_network:/3 Begin    Left        /connectivity_check:/III/public_network: Begin
+/connectivity_check:/III/public_network:/3 Begin    Right       (refused)
+/connectivity_check:/III/public_network:/3 Begin    PageUp      /connectivity_check:/III/public_network:/2 Begin
+/connectivity_check:/III/public_network:/3 Begin    PageDown    (refused)
+
+/connectivity_check:/III/public_network:/3 Done     Up          /connectivity_check:/III/public_network:/3 Begin
+/connectivity_check:/III/public_network:/3 Done     Down        /connectivity_check:/III/public_network: Done
+/connectivity_check:/III/public_network:/3 Done     Left        /connectivity_check:/III/public_network: Done
+/connectivity_check:/III/public_network:/3 Done     Right       (refused)
+/connectivity_check:/III/public_network:/3 Done     PageUp      /connectivity_check:/III/public_network:/2 Skip
+/connectivity_check:/III/public_network:/3 Done     PageDown    (refused)
+
+/connectivity_check:/III/public_network: Done       Up          /connectivity_check:/III/public_network:/3 Done
+/connectivity_check:/III/public_network: Done       Down        /connectivity_check:/III Done
+/connectivity_check:/III/public_network: Done       Left        /connectivity_check:/III Done
+/connectivity_check:/III/public_network: Done       Right       /connectivity_check:/III/public_network:/3 Done
+/connectivity_check:/III/public_network: Done       PageUp      (refused)
+/connectivity_check:/III/public_network: Done       PageDown    (refused)
+
+/connectivity_check:/III Done                       Up          /connectivity_check:/III/public_network: Done
+/connectivity_check:/III Done                       Down        /connectivity_check:/IV Begin
+/connectivity_check:/III Done                       Left        /connectivity_check: Begin
+/connectivity_check:/III Done                       Right       /connectivity_check:/III/public_network: Done
+/connectivity_check:/III Done                       PageUp      /connectivity_check:/II Done
+/connectivity_check:/III Done                       PageDown    /connectivity_check:/IV Done
+
+/connectivity_check:/IV Begin                       Up          /connectivity_check:/III Done
+/connectivity_check:/IV Begin                       Down        /connectivity_check:/IV Invoke
+/connectivity_check:/IV Begin                       Left        /connectivity_check: Begin
+/connectivity_check:/IV Begin                       Right       /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV Begin                       PageUp      /connectivity_check:/III Begin
+/connectivity_check:/IV Begin                       PageDown    /connectivity_check:/V Begin
+
+/connectivity_check:/IV Invoke                      Up          /connectivity_check:/IV Begin
+/connectivity_check:/IV Invoke                      Down        /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV Invoke                      Left        /connectivity_check: Begin
+/connectivity_check:/IV Invoke                      Right       /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV Invoke                      PageUp      /connectivity_check:/III Begin
+/connectivity_check:/IV Invoke                      PageDown    /connectivity_check:/V Begin
+
+/connectivity_check:/IV/overlay_network: Begin      Up          /connectivity_check:/IV Invoke
+/connectivity_check:/IV/overlay_network: Begin      Down        /connectivity_check:/IV/overlay_network:/1 Begin
+/connectivity_check:/IV/overlay_network: Begin      Left        /connectivity_check:/IV Begin
+/connectivity_check:/IV/overlay_network: Begin      Right       /connectivity_check:/IV/overlay_network:/1 Begin
+/connectivity_check:/IV/overlay_network: Begin      PageUp      (refused)
+/connectivity_check:/IV/overlay_network: Begin      PageDown    (refused)
+
+/connectivity_check:/IV/overlay_network:/1 Begin    Up          /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV/overlay_network:/1 Begin    Down        /connectivity_check:/IV/overlay_network:/1 Done
+/connectivity_check:/IV/overlay_network:/1 Begin    Left        /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV/overlay_network:/1 Begin    Right       (refused)
+/connectivity_check:/IV/overlay_network:/1 Begin    PageUp      (refused)
+/connectivity_check:/IV/overlay_network:/1 Begin    PageDown    /connectivity_check:/IV/overlay_network:/2 Begin
+
+/connectivity_check:/IV/overlay_network:/1 Done     Up          /connectivity_check:/IV/overlay_network:/1 Begin
+/connectivity_check:/IV/overlay_network:/1 Done     Down        /connectivity_check:/IV/overlay_network:/2 Begin
+/connectivity_check:/IV/overlay_network:/1 Done     Left        /connectivity_check:/IV/overlay_network: Done
+/connectivity_check:/IV/overlay_network:/1 Done     Right       (refused)
+/connectivity_check:/IV/overlay_network:/1 Done     PageUp      (refused)
+/connectivity_check:/IV/overlay_network:/1 Done     PageDown    /connectivity_check:/IV/overlay_network:/2 Skip
+
+/connectivity_check:/IV/overlay_network:/2 Begin    Up          /connectivity_check:/IV/overlay_network:/1 Done
+/connectivity_check:/IV/overlay_network:/2 Begin    Down        /connectivity_check:/IV/overlay_network:/2 Skip
+/connectivity_check:/IV/overlay_network:/2 Begin    Left        /connectivity_check:/IV/overlay_network: Begin
+/connectivity_check:/IV/overlay_network:/2 Begin    Right       (refused)
+/connectivity_check:/IV/overlay_network:/2 Begin    PageUp      /connectivity_check:/IV/overlay_network:/1 Begin
+/connectivity_check:/IV/overlay_network:/2 Begin    PageDown    (refused)
+
+/connectivity_check:/IV/overlay_network:/2 Skip     Up          /connectivity_check:/IV/overlay_network:/2 Begin
+/connectivity_check:/IV/overlay_network:/2 Skip     Down        /connectivity_check:/IV/overlay_network: Done
+/connectivity_check:/IV/overlay_network:/2 Skip     Left        /connectivity_check:/IV/overlay_network: Done
+/connectivity_check:/IV/overlay_network:/2 Skip     Right       (refused)
+/connectivity_check:/IV/overlay_network:/2 Skip     PageUp      /connectivity_check:/IV/overlay_network:/1 Done
+/connectivity_check:/IV/overlay_network:/2 Skip     PageDown    (refused)
+
+/connectivity_check:/IV/overlay_network: Done       Up          /connectivity_check:/IV/overlay_network:/2 Skip
+/connectivity_check:/IV/overlay_network: Done       Down        /connectivity_check:/IV Done
+/connectivity_check:/IV/overlay_network: Done       Left        /connectivity_check:/IV Done
+/connectivity_check:/IV/overlay_network: Done       Right       /connectivity_check:/IV/overlay_network:/2 Skip
+/connectivity_check:/IV/overlay_network: Done       PageUp      (refused)
+/connectivity_check:/IV/overlay_network: Done       PageDown    (refused)
+
+/connectivity_check:/IV Done                        Up          /connectivity_check:/IV/overlay_network: Done
+/connectivity_check:/IV Done                        Down        /connectivity_check:/V Begin
+/connectivity_check:/IV Done                        Left        /connectivity_check: Begin
+/connectivity_check:/IV Done                        Right       /connectivity_check:/IV/overlay_network: Done
+/connectivity_check:/IV Done                        PageUp      /connectivity_check:/III Done
+/connectivity_check:/IV Done                        PageDown    /connectivity_check:/V Done
+
+/connectivity_check:/V Begin                        Up          /connectivity_check:/IV Done
+/connectivity_check:/V Begin                        Down        /connectivity_check:/V Invoke
+/connectivity_check:/V Begin                        Left        /connectivity_check: Begin
+/connectivity_check:/V Begin                        Right       /connectivity_check:/V/away_border: Begin
+/connectivity_check:/V Begin                        PageUp      /connectivity_check:/IV Begin
+/connectivity_check:/V Begin                        PageDown    /connectivity_check:/VI Begin
+
+/connectivity_check:/V Invoke                       Up          /connectivity_check:/V Begin
+/connectivity_check:/V Invoke                       Down        /connectivity_check:/V/away_border: Begin
+/connectivity_check:/V Invoke                       Left        /connectivity_check: Begin
+/connectivity_check:/V Invoke                       Right       /connectivity_check:/V/away_border: Begin
+/connectivity_check:/V Invoke                       PageUp      /connectivity_check:/IV Begin
+/connectivity_check:/V Invoke                       PageDown    /connectivity_check:/VI Begin
+
+/connectivity_check:/V/away_border: Begin           Up          /connectivity_check:/V Invoke
+/connectivity_check:/V/away_border: Begin           Down        /connectivity_check:/V/away_border:/1 Begin
+/connectivity_check:/V/away_border: Begin           Left        /connectivity_check:/V Begin
+/connectivity_check:/V/away_border: Begin           Right       /connectivity_check:/V/away_border:/1 Begin
+/connectivity_check:/V/away_border: Begin           PageUp      (refused)
+/connectivity_check:/V/away_border: Begin           PageDown    (refused)
+
+/connectivity_check:/V/away_border:/1 Begin         Up          /connectivity_check:/V/away_border: Begin
+/connectivity_check:/V/away_border:/1 Begin         Down        /connectivity_check:/V/away_border:/1 Done
+/connectivity_check:/V/away_border:/1 Begin         Left        /connectivity_check:/V/away_border: Begin
+/connectivity_check:/V/away_border:/1 Begin         Right       (refused)
+/connectivity_check:/V/away_border:/1 Begin         PageUp      (refused)
+/connectivity_check:/V/away_border:/1 Begin         PageDown    (refused)
+
+/connectivity_check:/V/away_border:/1 Done          Up          /connectivity_check:/V/away_border:/1 Begin
+/connectivity_check:/V/away_border:/1 Done          Down        /connectivity_check:/V/away_border: Done
+/connectivity_check:/V/away_border:/1 Done          Left        /connectivity_check:/V/away_border: Done
+/connectivity_check:/V/away_border:/1 Done          Right       (refused)
+/connectivity_check:/V/away_border:/1 Done          PageUp      (refused)
+/connectivity_check:/V/away_border:/1 Done          PageDown    (refused)
+
+/connectivity_check:/V/away_border: Done            Up          /connectivity_check:/V/away_border:/1 Done
+/connectivity_check:/V/away_border: Done            Down        /connectivity_check:/V Done
+/connectivity_check:/V/away_border: Done            Left        /connectivity_check:/V Done
+/connectivity_check:/V/away_border: Done            Right       /connectivity_check:/V/away_border:/1 Done
+/connectivity_check:/V/away_border: Done            PageUp      (refused)
+/connectivity_check:/V/away_border: Done            PageDown    (refused)
+
+/connectivity_check:/V Done                         Up          /connectivity_check:/V/away_border: Done
+/connectivity_check:/V Done                         Down        /connectivity_check:/VI Begin
+/connectivity_check:/V Done                         Left        /connectivity_check: Begin
+/connectivity_check:/V Done                         Right       /connectivity_check:/V/away_border: Done
+/connectivity_check:/V Done                         PageUp      /connectivity_check:/IV Done
+/connectivity_check:/V Done                         PageDown    /connectivity_check:/VI Done
+
+/connectivity_check:/VI Begin                       Up          /connectivity_check:/V Done
+/connectivity_check:/VI Begin                       Down        /connectivity_check:/VI Invoke
+/connectivity_check:/VI Begin                       Left        /connectivity_check: Begin
+/connectivity_check:/VI Begin                       Right       /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI Begin                       PageUp      /connectivity_check:/V Begin
+/connectivity_check:/VI Begin                       PageDown    /connectivity_check:/VII Begin
+
+/connectivity_check:/VI Invoke                      Up          /connectivity_check:/VI Begin
+/connectivity_check:/VI Invoke                      Down        /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI Invoke                      Left        /connectivity_check: Begin
+/connectivity_check:/VI Invoke                      Right       /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI Invoke                      PageUp      /connectivity_check:/V Begin
+/connectivity_check:/VI Invoke                      PageDown    /connectivity_check:/VII Begin
+
+/connectivity_check:/VI/away_network: Begin         Up          /connectivity_check:/VI Invoke
+/connectivity_check:/VI/away_network: Begin         Down        /connectivity_check:/VI/away_network:/1 Begin
+/connectivity_check:/VI/away_network: Begin         Left        /connectivity_check:/VI Begin
+/connectivity_check:/VI/away_network: Begin         Right       /connectivity_check:/VI/away_network:/1 Begin
+/connectivity_check:/VI/away_network: Begin         PageUp      (refused)
+/connectivity_check:/VI/away_network: Begin         PageDown    (refused)
+
+/connectivity_check:/VI/away_network:/1 Begin       Up          /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI/away_network:/1 Begin       Down        /connectivity_check:/VI/away_network:/1 Done
+/connectivity_check:/VI/away_network:/1 Begin       Left        /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI/away_network:/1 Begin       Right       (refused)
+/connectivity_check:/VI/away_network:/1 Begin       PageUp      (refused)
+/connectivity_check:/VI/away_network:/1 Begin       PageDown    /connectivity_check:/VI/away_network:/2 Begin
+
+/connectivity_check:/VI/away_network:/1 Done        Up          /connectivity_check:/VI/away_network:/1 Begin
+/connectivity_check:/VI/away_network:/1 Done        Down        /connectivity_check:/VI/away_network:/2 Begin
+/connectivity_check:/VI/away_network:/1 Done        Left        /connectivity_check:/VI/away_network: Done
+/connectivity_check:/VI/away_network:/1 Done        Right       (refused)
+/connectivity_check:/VI/away_network:/1 Done        PageUp      (refused)
+/connectivity_check:/VI/away_network:/1 Done        PageDown    /connectivity_check:/VI/away_network:/2 Done
+
+/connectivity_check:/VI/away_network:/2 Begin       Up          /connectivity_check:/VI/away_network:/1 Done
+/connectivity_check:/VI/away_network:/2 Begin       Down        /connectivity_check:/VI/away_network:/2 Invoke
+/connectivity_check:/VI/away_network:/2 Begin       Left        /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI/away_network:/2 Begin       Right       /connectivity_check:/VI/check_aws_health: Begin
+/connectivity_check:/VI/away_network:/2 Begin       PageUp      /connectivity_check:/VI/away_network:/1 Begin
+/connectivity_check:/VI/away_network:/2 Begin       PageDown    (refused)
+
+/connectivity_check:/VI/away_network:/2 Invoke      Up          /connectivity_check:/VI/away_network:/2 Begin
+/connectivity_check:/VI/away_network:/2 Invoke      Down        /connectivity_check:/VI/check_aws_health: Begin
+/connectivity_check:/VI/away_network:/2 Invoke      Left        /connectivity_check:/VI/away_network: Begin
+/connectivity_check:/VI/away_network:/2 Invoke      Right       /connectivity_check:/VI/check_aws_health: Begin
+/connectivity_check:/VI/away_network:/2 Invoke      PageUp      /connectivity_check:/VI/away_network:/1 Begin
+/connectivity_check:/VI/away_network:/2 Invoke      PageDown    (refused)
+
+/connectivity_check:/VI/check_aws_health: Begin     Up          /connectivity_check:/VI/away_network:/2 Invoke
+/connectivity_check:/VI/check_aws_health: Begin     Down        /connectivity_check:/VI/check_aws_health: Done
+/connectivity_check:/VI/check_aws_health: Begin     Left        /connectivity_check:/VI/away_network:/2 Begin
+/connectivity_check:/VI/check_aws_health: Begin     Right       (refused)
+/connectivity_check:/VI/check_aws_health: Begin     PageUp      (refused)
+/connectivity_check:/VI/check_aws_health: Begin     PageDown    (refused)
+
+/connectivity_check:/VI/check_aws_health: Done      Up          /connectivity_check:/VI/check_aws_health: Begin
+/connectivity_check:/VI/check_aws_health: Done      Down        /connectivity_check:/VI/away_network:/2 Done
+/connectivity_check:/VI/check_aws_health: Done      Left        /connectivity_check:/VI/away_network:/2 Done
+/connectivity_check:/VI/check_aws_health: Done      Right       (refused)
+/connectivity_check:/VI/check_aws_health: Done      PageUp      (refused)
+/connectivity_check:/VI/check_aws_health: Done      PageDown    (refused)
+
+/connectivity_check:/VI/away_network:/2 Done        Up          /connectivity_check:/VI/check_aws_health: Done
+/connectivity_check:/VI/away_network:/2 Done        Down        /connectivity_check:/VI/away_network: Done
+/connectivity_check:/VI/away_network:/2 Done        Left        /connectivity_check:/VI/away_network: Done
+/connectivity_check:/VI/away_network:/2 Done        Right       /connectivity_check:/VI/check_aws_health: Done
+/connectivity_check:/VI/away_network:/2 Done        PageUp      /connectivity_check:/VI/away_network:/1 Done
+/connectivity_check:/VI/away_network:/2 Done        PageDown    (refused)
+
+/connectivity_check:/VI/away_network: Done          Up          /connectivity_check:/VI/away_network:/2 Done
+/connectivity_check:/VI/away_network: Done          Down        /connectivity_check:/VI Done
+/connectivity_check:/VI/away_network: Done          Left        /connectivity_check:/VI Done
+/connectivity_check:/VI/away_network: Done          Right       /connectivity_check:/VI/away_network:/2 Done
+/connectivity_check:/VI/away_network: Done          PageUp      (refused)
+/connectivity_check:/VI/away_network: Done          PageDown    (refused)
+
+/connectivity_check:/VI Done                        Up          /connectivity_check:/VI/away_network: Done
+/connectivity_check:/VI Done                        Down        /connectivity_check:/VII Begin
+/connectivity_check:/VI Done                        Left        /connectivity_check: Begin
+/connectivity_check:/VI Done                        Right       /connectivity_check:/VI/away_network: Done
+/connectivity_check:/VI Done                        PageUp      /connectivity_check:/V Done
+/connectivity_check:/VI Done                        PageDown    /connectivity_check:/VII Begin
+
+/connectivity_check:/VII Begin                      Up          /connectivity_check:/VI Done
+/connectivity_check:/VII Begin                      Down        /connectivity_check:/VII Invoke
+/connectivity_check:/VII Begin                      Left        /connectivity_check: Begin
+/connectivity_check:/VII Begin                      Right       /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII Begin                      PageUp      /connectivity_check:/VI Begin
+/connectivity_check:/VII Begin                      PageDown    (refused)
+
+/connectivity_check:/VII Invoke                     Up          /connectivity_check:/VII Begin
+/connectivity_check:/VII Invoke                     Down        /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII Invoke                     Left        /connectivity_check: Begin
+/connectivity_check:/VII Invoke                     Right       /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII Invoke                     PageUp      /connectivity_check:/VI Begin
+/connectivity_check:/VII Invoke                     PageDown    (refused)
+
+/connectivity_check:/VII/service_endpoint: Begin    Up          /connectivity_check:/VII Invoke
+/connectivity_check:/VII/service_endpoint: Begin    Down        /connectivity_check:/VII/service_endpoint:/1 Begin
+/connectivity_check:/VII/service_endpoint: Begin    Left        /connectivity_check:/VII Begin
+/connectivity_check:/VII/service_endpoint: Begin    Right       /connectivity_check:/VII/service_endpoint:/1 Begin
+/connectivity_check:/VII/service_endpoint: Begin    PageUp      (refused)
+/connectivity_check:/VII/service_endpoint: Begin    PageDown    (refused)
+
+/connectivity_check:/VII/service_endpoint:/1 Begin  Up          /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII/service_endpoint:/1 Begin  Down        /connectivity_check:/VII/service_endpoint:/1 Done
+/connectivity_check:/VII/service_endpoint:/1 Begin  Left        /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII/service_endpoint:/1 Begin  Right       (refused)
+/connectivity_check:/VII/service_endpoint:/1 Begin  PageUp      (refused)
+/connectivity_check:/VII/service_endpoint:/1 Begin  PageDown    /connectivity_check:/VII/service_endpoint:/2 Begin
+
+/connectivity_check:/VII/service_endpoint:/1 Done   Up          /connectivity_check:/VII/service_endpoint:/1 Begin
+/connectivity_check:/VII/service_endpoint:/1 Done   Down        /connectivity_check:/VII/service_endpoint:/2 Begin
+/connectivity_check:/VII/service_endpoint:/1 Done   Left        /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII/service_endpoint:/1 Done   Right       (refused)
+/connectivity_check:/VII/service_endpoint:/1 Done   PageUp      (refused)
+/connectivity_check:/VII/service_endpoint:/1 Done   PageDown    /connectivity_check:/VII/service_endpoint:/2 Begin
+
+/connectivity_check:/VII/service_endpoint:/2 Begin  Up          /connectivity_check:/VII/service_endpoint:/1 Done
+/connectivity_check:/VII/service_endpoint:/2 Begin  Down        (live)
+/connectivity_check:/VII/service_endpoint:/2 Begin  Left        /connectivity_check:/VII/service_endpoint: Begin
+/connectivity_check:/VII/service_endpoint:/2 Begin  Right       (refused)
+/connectivity_check:/VII/service_endpoint:/2 Begin  PageUp      /connectivity_check:/VII/service_endpoint:/1 Begin
+/connectivity_check:/VII/service_endpoint:/2 Begin  PageDown    (refused)
+
+(live)                                              Up          /connectivity_check:/VII/service_endpoint:/2 Begin
+(live)                                              Down        (refused)
+(live)                                              Left        (refused)
+(live)                                              Right       (refused)
+(live)                                              PageUp      (refused)
+(live)                                              PageDown    (refused)
