@@ -37,6 +37,11 @@ impl Environment {
             .insert(name, value);
     }
 
+    pub fn bindings(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.bindings
+            .iter()
+    }
+
     /// Pre-styled fragments for each bound value, for splicing into a step's
     /// prose where it interpolates that variable. See `render_value`.
     pub fn substitutions(&self) -> Substitutions {
@@ -378,7 +383,7 @@ pub fn dispatch<'i>(
     match &executable.target {
         ExecutableRef::Resolved(id) => {
             if let Some(args) = override_args {
-                library.call(*id, context, args)
+                library.call(*id, context, env, args)
             } else {
                 let mut args = Vec::with_capacity(
                     executable
@@ -388,7 +393,7 @@ pub fn dispatch<'i>(
                 for arg in &executable.arguments {
                     args.push(evaluate(library, context, env, arg)?);
                 }
-                library.call(*id, context, &args)
+                library.call(*id, context, env, &args)
             }
         }
         ExecutableRef::Unresolved(target) => Err(RunnerError::UnknownFunction(

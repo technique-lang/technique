@@ -1,4 +1,5 @@
 use crate::runner::context::Context;
+use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::RunnerError;
 use crate::value::{Numeric, Value};
@@ -19,7 +20,7 @@ fn call(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     let id = library
         .resolve(name)
         .expect("builtin registered");
-    library.call(id, &context, args)
+    library.call(id, &context, &Environment::new(), args)
 }
 
 // Invoke a system-layer builtin (exec, now) through an assembled core+system
@@ -31,7 +32,7 @@ fn call_system(name: &str, args: &[Value]) -> Result<Value, RunnerError> {
     let id = library
         .resolve(name)
         .expect("builtin registered");
-    library.call(id, &context, args)
+    library.call(id, &context, &Environment::new(), args)
 }
 
 #[test]
@@ -142,10 +143,38 @@ fn exec_tees_output_through_context() {
         .resolve("exec")
         .expect("builtin registered");
     let result = library
-        .call(id, &context, &[text("printf 'streamed'")])
+        .call(
+            id,
+            &context,
+            &Environment::new(),
+            &[text("printf 'streamed'")],
+        )
         .expect("exec");
     assert_eq!(result, text("streamed"));
     assert_eq!(context.captured(), b"streamed".to_vec());
+}
+
+#[test]
+fn exec_exports_bindings_to_environment() {
+    let mut library = Library::core();
+    library.extend(Library::system());
+    let context = Context::capture();
+    let mut env = Environment::new();
+    env.extend("customer".to_string(), text("acme"));
+    env.extend("region".to_string(), text("us-east-1"));
+    env.extend("count".to_string(), int(3));
+    let id = library
+        .resolve("exec")
+        .expect("builtin registered");
+    let result = library
+        .call(
+            id,
+            &context,
+            &env,
+            &[text("printf '%s' \"$customer-$region-$count\"")],
+        )
+        .expect("exec");
+    assert_eq!(result, text("acme-us-east-1-3"));
 }
 
 #[test]

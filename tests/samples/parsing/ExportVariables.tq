@@ -1,0 +1,10 @@
+fill_in_the_blanks(income) : Income -> Tax
+
+The amount of tax you owe is your total annual salary, plus interest. Please
+pay by close of business on Friday.
+
+    1.  Please fill in the blanks { exec(
+        ```bash
+            echo "amount payable ${income}"
+        ```
+        ) }
