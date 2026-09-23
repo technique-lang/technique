@@ -29,7 +29,7 @@ pub use store::{Appender, Store};
 pub(crate) use record::{
     fail_reason, format_record, format_supplied, serialize_value, split_top_level, unescape_literal,
 };
-pub(crate) use store::{construct_state_path, parse_run_uri};
+pub(crate) use store::construct_state_path;
 
 #[cfg(test)]
 pub(crate) use record::parse_record;

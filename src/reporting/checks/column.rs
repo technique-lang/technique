@@ -36,26 +36,12 @@ fn journal() -> Vec<Record> {
     ]
 }
 
-// The heading carries the run and the document; the wall clock time it goes on
-// to give is in the local zone, so only its lead-in is pinned here.
-#[test]
-fn heading_names_the_run() {
-    let text = render_console(&journal(), &[Column::Short], &Identity);
-    let heading = text
-        .lines()
-        .next()
-        .unwrap();
-
-    assert!(heading.starts_with("NetworkProbe #000007 started "));
-}
-
 #[test]
 fn columns_align_in_the_order_given() {
     let columns = [Column::Short, Column::Offset, Column::State, Column::Value];
     let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(
@@ -90,7 +76,6 @@ fn deep_paths_are_elided_at_the_front() {
     let text = render_console(&records, &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(body[0], "/                         Start");
@@ -106,7 +91,6 @@ fn durations_fall_on_the_record_that_closed_the_scope() {
     let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(body[0], "       /                         Start");
@@ -150,7 +134,6 @@ fn inputs_carry_the_wait_to_supply_them() {
     let text = render_console(&records, &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(body[1], "       Invoke");
@@ -186,7 +169,6 @@ fn executions_are_spanned_by_their_return() {
     let text = render_console(&records, &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(body[1], "connectivity_check:/1            Execute");
@@ -221,7 +203,6 @@ fn timestamp_and_path_are_as_recorded() {
     let text = render_console(&journal(), &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(
@@ -271,7 +252,6 @@ fn state_and_value_are_separate_columns() {
     let text = render_console(&records, &columns, &Identity);
     let body: Vec<&str> = text
         .lines()
-        .skip(2)
         .collect();
 
     assert_eq!(body[0], "Start    file:///tmp/NetworkProbe.tq");

@@ -6,8 +6,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::engraving::{
-    InvokeTarget, Record, State, display_path, format_record, format_supplied, parse_run_uri,
-    serialize_value,
+    InvokeTarget, Record, State, display_path, format_record, format_supplied, serialize_value,
 };
 use crate::formatting::{Render, Syntax};
 
@@ -139,15 +138,8 @@ enum Cell {
 pub fn render_console(records: &[Record], columns: &[Column], renderer: &impl Render) -> String {
     let mut text = String::new();
 
-    let first = match records.first() {
-        Some(first) => first,
-        None => return text,
-    };
-
     let zone = local_offset();
     let (stamps, spans) = measure_times(records);
-
-    render_heading(&mut text, first, zone, renderer);
 
     let rows: Vec<Vec<(Syntax, String)>> = records
         .iter()
@@ -233,45 +225,6 @@ pub fn render_pfftt(records: &[Record]) -> String {
         .iter()
         .map(format_record)
         .collect()
-}
-
-// The line above the stream: `NetworkProbe #000001 started ...`, taking the
-// document's name from the URI the opening Start record carries.
-fn render_heading(out: &mut String, first: &Record, zone: UtcOffset, renderer: &dyn Render) {
-    let label = match &first.state {
-        State::Start { uri } => {
-            let (document, _) = parse_run_uri(uri);
-            document
-                .file_stem()
-                .map(|stem| {
-                    stem.to_string_lossy()
-                        .into_owned()
-                })
-                .unwrap_or_default()
-        }
-        _ => String::new(),
-    };
-
-    let started = parse_timestamp(&first.recorded)
-        .and_then(|millis| format_stamp(millis, zone))
-        .unwrap_or_else(|| {
-            first
-                .recorded
-                .clone()
-        });
-
-    out.push_str(&renderer.style(
-        Syntax::Neutral,
-        &format!(
-            "{} #{}",
-            label,
-            first
-                .run_id
-                .render()
-        ),
-    ));
-    out.push_str(&renderer.style(Syntax::Marker, &format!(" started {}", started)));
-    out.push_str("\n\n");
 }
 
 // What one column holds for one record.
@@ -577,21 +530,6 @@ fn format_date(millis: i64, zone: UtcOffset) -> Option<String> {
         moment.year(),
         u8::from(moment.month()),
         moment.day()
-    ))
-}
-
-fn format_stamp(millis: i64, zone: UtcOffset) -> Option<String> {
-    let moment = moment(millis, zone)?;
-    let (hours, minutes, _) = moment
-        .offset()
-        .as_hms();
-    Some(format!(
-        "{} {} {}{:02}:{:02}",
-        format_date(millis, zone)?,
-        format_clock(millis, zone)?,
-        if hours < 0 || minutes < 0 { '-' } else { '+' },
-        hours.abs(),
-        minutes.abs()
     ))
 }
 
