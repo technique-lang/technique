@@ -12,15 +12,16 @@ use std::process::{Command, Stdio};
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 use super::context::{Context, Stream};
+use super::evaluator::Environment;
 use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
 
 /// A native function: implemented in Rust, taking an execution Context (host
-/// capabilities) and the already-evaluated arguments. Pure builtins disregard
-/// the Context; effectful functions from the host domain (e.g. `exec`) use
-/// it.
-pub type Native = fn(&Context, &[Value]) -> Result<Value, RunnerError>;
+/// capabilities), the variables in scope, and the already-evaluated arguments.
+/// Pure builtins disregard the Context and Environment; effectful functions
+/// from the host domain (e.g. `exec`) use them.
+pub type Native = fn(&Context, &Environment, &[Value]) -> Result<Value, RunnerError>;
 
 /// How a builtin is presented to the user. `Pure` just runs. `Command` (e.g.
 /// `exec()`) is host-run and vetted on an editable prompt. `Instant`
@@ -189,6 +190,7 @@ impl Library {
         &self,
         id: ExecutableId,
         context: &Context,
+        env: &Environment,
         args: &[Value],
     ) -> Result<Value, RunnerError> {
         let builtin = &self.functions[id.0];
@@ -199,7 +201,7 @@ impl Library {
                 actual: args.len(),
             });
         }
-        (builtin.function)(context, args)
+        (builtin.function)(context, env, args)
     }
 }
 
@@ -217,7 +219,7 @@ pub fn library_for(name: &str) -> Option<Vec<Builtin>> {
 
 /// `seq(a, b)` — the inclusive integer range from `a` to `b` as a list,
 /// empty when `a > b`.
-fn seq(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn seq(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let a = as_integer("seq", &args[0])?;
     let b = as_integer("seq", &args[1])?;
     let range = (a..=b)
@@ -228,7 +230,7 @@ fn seq(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `zip(xs, ys)` — a list of `(x, y)` pairs, one per position, truncated to
 /// the shorter input.
-fn zip(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn zip(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let xs = as_list("zip", &args[0])?;
     let ys = as_list("zip", &args[1])?;
     let pairs = xs
@@ -240,7 +242,7 @@ fn zip(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 }
 
 /// `values(form)` — the values of a tablet's entries, in order, as a list.
-fn values(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn values(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("values", &args[0])?;
     let values = entries
         .iter()
@@ -251,7 +253,7 @@ fn values(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `labels(form)` — the labels of a tablet's entries, in order, as a list of
 /// text values.
-fn labels(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn labels(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("labels", &args[0])?;
     let labels = entries
         .iter()
@@ -262,7 +264,7 @@ fn labels(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 
 /// `pairs(form)` — a tablet's entries as a list of `(label, value)` pairs,
 /// so `foreach (k, v) in pairs(form)` destructures through the usual rule.
-fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn pairs(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let entries = as_tablet("pairs", &args[0])?;
     let pairs = entries
         .iter()
@@ -279,9 +281,10 @@ fn pairs(_context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 /// red; both are drained together using `poll()` so neither deadlocks. Bytes
 /// are decoded at the end, so a chunk split mid-UTF-8 is harmless; trailing
 /// newlines are trimmed (matching shell substitution). A non-zero exit is an
-/// error.
+/// error. Variables in scope are exported to the script's environment, so
+/// `customer` is available as `$customer`.
 #[cfg(unix)]
-fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
+fn exec(context: &Context, env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
         Value::Literali(script) => script,
         _ => {
@@ -292,9 +295,17 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
         }
     };
 
+    let variables = env
+        .bindings()
+        .map(|(name, value)| match value {
+            Value::Literali(text) => (name, text.clone()),
+            other => (name, other.to_string()),
+        });
+
     let mut child = Command::new("bash")
         .arg("-c")
         .arg(script)
+        .envs(variables)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -426,7 +437,7 @@ fn exec(context: &Context, args: &[Value]) -> Result<Value, RunnerError> {
 }
 
 #[cfg(not(unix))]
-fn exec(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+fn exec(_context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
     Err(RunnerError::ExecError(io::Error::new(
         io::ErrorKind::Unsupported,
         "exec() is not supported on this platform",
@@ -464,7 +475,7 @@ fn tee(
 
 /// `now()` — the current wall-clock time as an ISO 8601 string, emitted
 /// through Context the same way `exec` tees its output.
-fn now(context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+fn now(context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
     let text = super::runner::now_iso8601();
     context
         .emit(&format!("{}\n", text))
@@ -474,7 +485,7 @@ fn now(context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
 
 /// A browser-library action: the user performs the UI manipulation when the
 /// runner presents the step, so the call settles to unit.
-fn interact(_context: &Context, _args: &[Value]) -> Result<Value, RunnerError> {
+fn interact(_context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Unitus)
 }
 
@@ -517,7 +528,7 @@ fn as_tablet<'a>(
 #[cfg(test)]
 impl Library {
     pub fn stub() -> Self {
-        fn unit(_: &Context, _: &[Value]) -> Result<Value, RunnerError> {
+        fn unit(_: &Context, _: &Environment, _: &[Value]) -> Result<Value, RunnerError> {
             Ok(Value::Unitus)
         }
         Library {
