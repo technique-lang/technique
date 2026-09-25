@@ -105,25 +105,44 @@ impl<'i> Journal<'i> {
                 State::Begin(_) => {
                     // Re-entry keeps the scope it already opened, and closes
                     // whatever the previous walk left open inside it.
-                    if let Some(at) = open
-                        .iter()
-                        .position(|s| *s == serial)
-                    {
-                        open.truncate(at);
-                    } else {
-                        scopes.insert(
-                            serial,
-                            Scope {
-                                parent: open
-                                    .last()
-                                    .copied(),
-                                begin: i,
-                                outcome: None,
-                            },
-                        );
-                        opened.push(serial);
+                    match scopes.get_mut(&serial) {
+                        Some(scope) => {
+                            scope.begin = i;
+                            if let Some(at) = open
+                                .iter()
+                                .position(|s| *s == serial)
+                            {
+                                open.truncate(at);
+                            }
+                        }
+                        None => {
+                            scopes.insert(
+                                serial,
+                                Scope {
+                                    parent: open
+                                        .last()
+                                        .copied(),
+                                    begin: i,
+                                    outcome: None,
+                                },
+                            );
+                            opened.push(serial);
+                        }
                     }
                     open.push(serial);
+                }
+                State::Revoke => {
+                    // The replay redoes the revoked scope from its parent.
+                    if let Some(at) = scopes
+                        .get(&serial)
+                        .and_then(|scope| scope.parent)
+                        .and_then(|parent| {
+                            open.iter()
+                                .position(|s| *s == parent)
+                        })
+                    {
+                        open.truncate(at + 1);
+                    }
                 }
                 State::Done(_) | State::Skip | State::Fail(_) => {
                     if let Some(scope) = scopes.get_mut(&serial) {
@@ -152,6 +171,74 @@ impl<'i> Journal<'i> {
             })
             .map(|record| record.serial)
             .collect();
+        // A resumed walk rewrites lines it already recorded; only the last
+        // stands, in the place the first took. Two records are the same record
+        // when they would write the same line, so a step calling two procedures
+        // keeps both. Entering a scope is the same entry whatever it was given.
+        let stated: Vec<String> = records
+            .iter()
+            .map(|record| {
+                let mut out = String::new();
+                match record.state {
+                    State::Start { .. } | State::Begin(_) => return out,
+                    _ => {}
+                }
+                format_state(&mut out, &record.state);
+                out
+            })
+            .collect();
+        let mut latest: HashMap<(Serial, &str, &str), usize> = HashMap::new();
+        let mut first: HashMap<(Serial, &str, &str), usize> = HashMap::new();
+        for (i, record) in records
+            .iter()
+            .enumerate()
+        {
+            let address = (
+                record.serial,
+                record
+                    .path
+                    .as_str(),
+                stated[i].as_str(),
+            );
+            latest.insert(address, i);
+            first
+                .entry(address)
+                .or_insert(i);
+        }
+
+        // A redone scope stands where the first scope revoked at its path did,
+        // and what a scope holds moves with it.
+        let path = |serial: Serial| {
+            records[scopes[&serial].begin]
+                .path
+                .as_str()
+        };
+        let entry = |serial: Serial| first[&(serial, path(serial), "")];
+        let mut slot: HashMap<Serial, usize> = HashMap::new();
+        for serial in &opened {
+            let parent = scopes[serial].parent;
+            let original = opened
+                .iter()
+                .find(|o| {
+                    revoked.contains(*o)
+                        && *o != serial
+                        && scopes[*o].parent == parent
+                        && path(**o) == path(*serial)
+                });
+            let at = match (original, parent) {
+                (Some(o), _) => slot
+                    .get(o)
+                    .copied()
+                    .unwrap_or_else(|| entry(*o)),
+                (None, Some(p)) => match slot.get(&p) {
+                    Some(at) => *at,
+                    None => continue,
+                },
+                (None, None) => continue,
+            };
+            slot.insert(*serial, at);
+        }
+
         let superseded = |serial: Serial| {
             let mut at = serial;
             loop {
@@ -170,37 +257,13 @@ impl<'i> Journal<'i> {
 
         // A scope the cursor cannot rest in is not one to cross into either.
         opened.retain(|serial| !superseded(*serial));
-
-        // A resumed walk rewrites lines it already recorded; only the last
-        // stands. Two records are the same record when they would write the
-        // same line, so a step calling two procedures keeps both.
-        let stated: Vec<String> = records
-            .iter()
-            .map(|record| {
-                let mut out = String::new();
-                format_state(&mut out, &record.state);
-                out
-            })
-            .collect();
-        let mut latest: HashMap<(Serial, &str, &str), usize> = HashMap::new();
-        for (i, record) in records
-            .iter()
-            .enumerate()
-        {
-            latest.insert(
-                (
-                    record.serial,
-                    record
-                        .path
-                        .as_str(),
-                    stated[i].as_str(),
-                ),
-                i,
-            );
-        }
+        opened.sort_by_key(|serial| {
+            slot.get(serial)
+                .copied()
+                .unwrap_or_else(|| entry(*serial))
+        });
 
         let mut order = Vec::with_capacity(records.len());
-        let mut rank = vec![None; records.len()];
         for (i, record) in records
             .iter()
             .enumerate()
@@ -222,8 +285,29 @@ impl<'i> Journal<'i> {
             if latest.get(&address) != Some(&i) {
                 continue;
             }
-            rank[i] = Some(order.len());
             order.push(i);
+        }
+        order.sort_by_key(|i| {
+            let at = first[&(
+                records[*i].serial,
+                records[*i]
+                    .path
+                    .as_str(),
+                stated[*i].as_str(),
+            )];
+            (
+                slot.get(&within[*i])
+                    .copied()
+                    .unwrap_or(at),
+                at,
+            )
+        });
+        let mut rank = vec![None; records.len()];
+        for (k, i) in order
+            .iter()
+            .enumerate()
+        {
+            rank[*i] = Some(k);
         }
 
         Journal {
@@ -245,7 +329,8 @@ impl<'i> Journal<'i> {
     /// last thing the walk did rather than the `Resume` that reopened it.
     pub fn last(&self) -> Option<Position> {
         self.order
-            .last()
+            .iter()
+            .max()
             .map(|at| Position::At(*at))
     }
 
