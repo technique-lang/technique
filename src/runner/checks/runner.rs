@@ -2536,12 +2536,11 @@ connectivity_check(e, s, address) :
         "10 Downing Street".to_string(),
     ];
     let env = bind_parameters(&program, &args).expect("bind");
-    let params = program
+    let params = &program
         .subroutines
         .first()
         .unwrap()
-        .parameters
-        .unwrap();
+        .parameters;
     let echo = render_argument_echo(params, &env);
     assert_eq!(echo, "([] ~ e, 0 ~ s, \"10 Downing Street\" ~ address)");
 }

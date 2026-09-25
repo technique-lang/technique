@@ -1,6 +1,6 @@
 // Translation of the parser's abstract syntax tree into a runnable Program.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::language;
 use crate::language::{Document, Span};
@@ -68,6 +68,13 @@ pub enum TranslationError<'i> {
         parameters: usize,
         requires: usize,
     },
+    /// Two of a procedure's input types lower to the same parameter name, so
+    /// there is no telling which of them a read of it meant. The author has
+    /// to name the parameters rather than leave them to be derived.
+    AmbiguousParameters {
+        procedure: language::Identifier<'i>,
+        name: String,
+    },
     /// Binding the result of a `repeat` to a variable is an error; the
     /// `repeat` keyword does not terminate naturally and does not produces a
     /// value so cannot be bound. Note: we could reconsider this in the fugure
@@ -84,6 +91,7 @@ impl<'i> TranslationError<'i> {
             TranslationError::DuplicateTitle { at, .. } => *at,
             TranslationError::InterleavedDescription { at, .. } => *at,
             TranslationError::SignatureParameterMismatch { procedure, .. } => procedure.span,
+            TranslationError::AmbiguousParameters { procedure, .. } => procedure.span,
             TranslationError::BoundRepeat { at } => *at,
         }
     }
@@ -177,7 +185,7 @@ impl<'i> Translator<'i> {
         );
         self.known
             .insert(name, id);
-        let mut subroutine = Subroutine::new(procedure.name);
+        let mut subroutine = Subroutine::new(procedure);
         subroutine.locale = self
             .locus
             .iter()
@@ -239,15 +247,14 @@ impl<'i> Translator<'i> {
         }
         let body = Operation::Sequence(ops, procedure.span);
 
+        let parameters = self.name_parameters(procedure);
+
         let entry = &mut self
             .program
             .subroutines[id.0];
         entry.title = title;
         entry.description = description;
-        entry.parameters = procedure
-            .parameters
-            .as_ref()
-            .map(Vec::as_slice);
+        entry.parameters = parameters;
         entry.signature = procedure
             .signature
             .as_ref();
@@ -267,6 +274,63 @@ impl<'i> Translator<'i> {
                     });
             }
         }
+    }
+
+    // The name each argument binds to: a written parameter list as it stands,
+    // otherwise lowered from the signature's input types.
+    fn name_parameters(&mut self, procedure: &'i language::Procedure<'i>) -> Vec<Option<String>> {
+        if let Some(parameters) = &procedure.parameters {
+            return parameters
+                .iter()
+                .map(|parameter| {
+                    Some(
+                        parameter
+                            .value
+                            .to_string(),
+                    )
+                })
+                .collect();
+        }
+
+        let signature = match &procedure.signature {
+            Some(signature) => signature,
+            None => return Vec::new(),
+        };
+
+        // A list argument is the plural of its element type: `[Design]` binds
+        // as `designs`.
+        let (formae, plural) = match &signature.requires {
+            language::Genus::Unit => (Vec::new(), false),
+            language::Genus::List(forma) => (vec![forma], true),
+            genus => (genus.formae(), false),
+        };
+
+        // A wildcard is not a name, so that argument stays anonymous.
+        let names: Vec<Option<String>> = formae
+            .iter()
+            .map(|forma| match lower_forma(forma) {
+                Some(name) if plural => Some(name + "s"),
+                lowered => lowered,
+            })
+            .collect();
+
+        // Two inputs of the same type lower to the one name.
+        let mut seen = HashSet::new();
+        for name in names
+            .iter()
+            .flatten()
+        {
+            if !seen.insert(name) {
+                self.problems
+                    .push(TranslationError::AmbiguousParameters {
+                        procedure: procedure.name,
+                        name: name.clone(),
+                    });
+                break;
+            }
+        }
+
+        names
     }
 
     fn translate_scope(
@@ -888,4 +952,41 @@ impl<'i> Translator<'i> {
             elided,
         }
     }
+}
+
+// A type name lowered to the identifier it binds as: `LocalEnvironment`
+// becomes `local_environment`. The wildcard `*` is not a name.
+fn lower_forma(forma: &language::Forma) -> Option<String> {
+    if forma.value == "*" {
+        return None;
+    }
+
+    let letters: Vec<char> = forma
+        .value
+        .chars()
+        .collect();
+    let mut name = String::with_capacity(
+        forma
+            .value
+            .len()
+            + 2,
+    );
+
+    for (i, letter) in letters
+        .iter()
+        .enumerate()
+    {
+        // A boundary is a capital after a lowercase or digit, or the last of
+        // a run: `HTTPServer` lowers to `http_server`.
+        if i > 0 && letter.is_ascii_uppercase() {
+            let previous = letters[i - 1];
+            let next = letters.get(i + 1);
+            if !previous.is_ascii_uppercase() || next.is_some_and(|c| c.is_ascii_lowercase()) {
+                name.push('_');
+            }
+        }
+        name.push(letter.to_ascii_lowercase());
+    }
+
+    Some(name)
 }
