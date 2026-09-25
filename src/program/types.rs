@@ -53,7 +53,10 @@ pub struct Subroutine<'i> {
     pub name: Option<language::Identifier<'i>>,
     pub title: Option<&'i str>,
     pub description: &'i [language::Paragraph<'i>],
-    pub parameters: Option<&'i [language::Identifier<'i>]>,
+    /// The name each argument binds to; a wildcard `*` gives none.
+    pub parameters: Vec<Option<String>>,
+    /// The declaration as written, for rendering it back.
+    pub source: Option<&'i language::Procedure<'i>>,
     pub signature: Option<&'i language::Signature<'i>>,
     pub body: Operation<'i>,
     pub responses: Vec<&'i language::Response<'i>>,
@@ -65,12 +68,13 @@ impl<'i> Subroutine<'i> {
     /// Stub procedure with the given name and otherwise empty fields.
     /// Subsequent translation passes fill in title, description, parameters,
     /// signature, and body.
-    pub fn new(name: language::Identifier<'i>) -> Self {
+    pub fn new(procedure: &'i language::Procedure<'i>) -> Self {
         Subroutine {
-            name: Some(name),
+            name: Some(procedure.name),
             title: None,
             description: &[],
-            parameters: None,
+            parameters: Vec::new(),
+            source: Some(procedure),
             signature: None,
             body: Operation::Sequence(Vec::new(), Span::default()),
             responses: Vec::new(),
@@ -78,18 +82,12 @@ impl<'i> Subroutine<'i> {
         }
     }
 
-    /// The number of arguments an invocation must supply. The signature's
-    /// `requires` is authoritative when present; otherwise the count falls
-    /// back to the named parameter list, or zero when neither is declared.
-    /// Translation guarantees the two agree when both are present.
+    /// The number of arguments an invocation must supply. Translation fills
+    /// `parameters` with one entry per argument, taken from the signature's
+    /// `requires` or, failing that, the declared parameter list.
     pub fn arity(&self) -> usize {
-        match (self.signature, self.parameters) {
-            (Some(signature), _) => signature
-                .requires
-                .cardinality(),
-            (None, Some(parameters)) => parameters.len(),
-            (None, None) => 0,
-        }
+        self.parameters
+            .len()
     }
 
     /// Synthetic anonymous-wrapper procedure used when a document has no
@@ -99,7 +97,8 @@ impl<'i> Subroutine<'i> {
             name: None,
             title: None,
             description: &[],
-            parameters: None,
+            parameters: Vec::new(),
+            source: None,
             signature: None,
             body: Operation::Sequence(Vec::new(), Span::default()),
             responses: Vec::new(),

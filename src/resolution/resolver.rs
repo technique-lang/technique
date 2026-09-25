@@ -340,17 +340,19 @@ fn mark_iterated<'i>(op: &mut Operation<'i>, iterated: &HashSet<&str>) {
 // narrowed on leaving a step, substep, or section.
 fn check_bindings<'i>(subroutine: &Subroutine<'i>, problems: &mut Vec<ResolutionError<'i>>) {
     let mut scope = HashSet::new();
-    if let Some(parameters) = subroutine.parameters {
-        for parameter in parameters {
-            scope.insert(parameter.value);
-        }
+    for parameter in subroutine
+        .parameters
+        .iter()
+        .flatten()
+    {
+        scope.insert(parameter.as_str());
     }
     check_scope(&subroutine.body, &mut scope, problems);
 }
 
-fn check_scope<'i>(
-    op: &Operation<'i>,
-    scope: &mut HashSet<&'i str>,
+fn check_scope<'a, 'i>(
+    op: &'a Operation<'i>,
+    scope: &mut HashSet<&'a str>,
     problems: &mut Vec<ResolutionError<'i>>,
 ) {
     match op {
