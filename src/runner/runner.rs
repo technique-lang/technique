@@ -1,6 +1,6 @@
 //! Interactive walker over a translated Program.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io;
 
 use super::context::Context;
@@ -145,7 +145,7 @@ pub struct Runner<'i, D: Driver> {
     opening: &'static str,
     /// A verdict chosen at a reviewed position, waiting for the replay to reach
     /// it. Survives the restart, which is the whole point of it.
-    amending: Option<(Serial, UserInput)>,
+    amending: Option<(String, UserInput)>,
     /// How deep inside completed scopes the walk is replaying. While non-zero
     /// it descends and displays but takes no prompt, writes no record, and
     /// announces an `Execute` rather than dispatching it.
@@ -1779,11 +1779,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         let qualified = question
             .qualified
             .to_string();
-        let serial = self.serial;
         // A verdict already chosen for this position in review settles it
         // without asking: the answer was given there.
         let mut chosen = match &self.amending {
-            Some((at, _)) if *at == serial => self
+            Some((at, _)) if *at == qualified => self
                 .amending
                 .take()
                 .map(|(_, verdict)| verdict),
@@ -1890,8 +1889,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             None => return Ok(Reviewed::Left),
         };
         loop {
-            let record = match at {
-                Position::At(i) => &records[i],
+            let (i, record) = match at {
+                Position::At(i) => (i, &records[i]),
                 Position::Live => return Ok(Reviewed::Left),
             };
             let qualified = record
@@ -1913,17 +1912,33 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // again: the walk restarts and settles it on the way back
                     // through, and what depended on it is redone.
                     Offer::Skip => {
-                        self.amend(serial, &qualified, UserInput::Skip)?;
+                        self.amend(serial, &qualified, UserInput::Skip, journal.beneath(i))?;
                         return Ok(Reviewed::Amended);
                     }
                     Offer::Override => {
-                        self.amend(serial, &qualified, UserInput::Override)?;
+                        self.amend(serial, &qualified, UserInput::Override, journal.beneath(i))?;
                         return Ok(Reviewed::Amended);
                     }
-                    // Edit has no value and Fail no reason until someone types
-                    // one, so these two withdraw and let the replay ask.
-                    Offer::Edit | Offer::Fail => {
-                        self.revoke(serial, &qualified)?;
+                    Offer::Fail => match self
+                        .driver
+                        .reason(marker, &qualified)
+                    {
+                        UserInput::Fail(reason) => {
+                            self.amend(
+                                serial,
+                                &qualified,
+                                UserInput::Fail(reason),
+                                journal.beneath(i),
+                            )?;
+                            return Ok(Reviewed::Amended);
+                        }
+                        UserInput::Quit => return Ok(Reviewed::Quit),
+                        _ => continue,
+                    },
+                    // Edit has no value until someone types one, so it
+                    // withdraws and lets the replay ask.
+                    Offer::Edit => {
+                        self.revoke(serial, &qualified, journal.beneath(i))?;
                         return Ok(Reviewed::Amended);
                     }
                 },
@@ -1947,8 +1962,28 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// Nothing is collected here: correcting a value is a `Revoke` plus
     /// ordinary re-execution. The walk restarts, replays what still stands,
     /// arrives at the step and prompts exactly as it did the first time.
-    fn revoke(&mut self, serial: Serial, qualified: &str) -> Result<(), RunnerError> {
-        self.stamp(serial, qualified, State::Revoke)
+    fn revoke(
+        &mut self,
+        serial: Serial,
+        qualified: &str,
+        kept: Vec<Record>,
+    ) -> Result<(), RunnerError> {
+        self.stamp(serial, qualified, State::Revoke)?;
+        let mut fresh: HashMap<Serial, Serial> = HashMap::new();
+        for record in kept {
+            let at = match fresh.get(&record.serial) {
+                Some(at) => *at,
+                None => {
+                    let at = self
+                        .ledger
+                        .next_serial();
+                    fresh.insert(record.serial, at);
+                    at
+                }
+            };
+            self.stamp(at, &record.path, record.state)?;
+        }
+        Ok(())
     }
 
     /// Withdraw a recorded value and say what replaces it. The verdict is held
@@ -1960,9 +1995,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         serial: Serial,
         qualified: &str,
         verdict: UserInput,
+        kept: Vec<Record>,
     ) -> Result<(), RunnerError> {
-        self.revoke(serial, qualified)?;
-        self.amending = Some((serial, verdict));
+        self.revoke(serial, qualified, kept)?;
+        self.amending = Some((qualified.to_string(), verdict));
         Ok(())
     }
 

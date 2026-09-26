@@ -137,16 +137,18 @@ impl<'i> Journal<'i> {
                 }
                 State::Revoke => {
                     // The replay redoes the revoked scope from its parent.
-                    if let Some(at) = scopes
+                    let mut chain = Vec::new();
+                    let mut at = scopes
                         .get(&serial)
-                        .and_then(|scope| scope.parent)
-                        .and_then(|parent| {
-                            open.iter()
-                                .position(|s| *s == parent)
-                        })
-                    {
-                        open.truncate(at + 1);
+                        .and_then(|scope| scope.parent);
+                    while let Some(parent) = at {
+                        chain.push(parent);
+                        at = scopes
+                            .get(&parent)
+                            .and_then(|scope| scope.parent);
                     }
+                    chain.reverse();
+                    open = chain;
                 }
                 State::Done(_) | State::Skip | State::Fail(_) => {
                     if let Some(scope) = scopes.get_mut(&serial) {
@@ -223,9 +225,9 @@ impl<'i> Journal<'i> {
             let parent = scopes[serial].parent;
             let original = opened
                 .iter()
+                .take_while(|o| *o != serial)
                 .find(|o| {
                     revoked.contains(*o)
-                        && *o != serial
                         && scopes[*o].parent == parent
                         && path(**o) == path(*serial)
                 });
@@ -349,6 +351,32 @@ impl<'i> Journal<'i> {
             })
             .last()
             .map(|at| Position::At(*at))
+    }
+
+    /// The records that stand inside the scope a record was written against,
+    /// with the scope's own `Begin` and `Invoke` ahead of them; empty for a
+    /// scope that holds nothing.
+    pub fn beneath(&self, at: usize) -> Vec<Record> {
+        let scope = self.within[at];
+        let kept: Vec<&Record> = self
+            .order
+            .iter()
+            .map(|i| &self.records[*i])
+            .filter(|record| self.inside(record.serial, scope))
+            .collect();
+        if kept
+            .iter()
+            .all(|record| record.serial == scope)
+        {
+            return Vec::new();
+        }
+        kept.into_iter()
+            .filter(|record| match record.state {
+                State::Begin(_) | State::Invoke(_) => true,
+                _ => record.serial != scope,
+            })
+            .cloned()
+            .collect()
     }
 
     /// Take one keystroke. `None` is a refusal, which changes nothing.

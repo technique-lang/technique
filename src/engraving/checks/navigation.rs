@@ -376,6 +376,37 @@ fn a_redone_step_awaiting_its_outcome_has_none_from_the_first_pass() {
 }
 
 #[test]
+fn a_step_redone_twice_keeps_the_place_of_the_first() {
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        record(3, "/task:/2", State::Begin(Vec::new())),
+        record(3, "/task:/2", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(4, "/task:/1", State::Begin(Vec::new())),
+        record(4, "/task:/1", State::Done(None)),
+        record(4, "/task:/1", State::Revoke),
+        record(5, "/task:/1", State::Begin(Vec::new())),
+        record(5, "/task:/1", State::Done(None)),
+    ];
+    let journal = Journal::new(&records, None);
+
+    assert_eq!(journal.last(), Some(Position::At(5)));
+    assert_eq!(
+        journal.step(Position::At(4), Motion::Up),
+        Some(Position::At(11))
+    );
+}
+
+#[test]
 fn review_opens_on_the_last_thing_the_walk_did_when_the_prompt_is_ahead_of_survivors() {
     let records = vec![
         record(

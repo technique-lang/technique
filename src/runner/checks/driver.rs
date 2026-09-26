@@ -4,7 +4,7 @@ use crate::engraving::Motion;
 use crate::runner::driver::{
     Automatic, Console, Driver, Event, Intent, Keys, Kind, Mock, MockKeyboard, Offer, Prompt,
     Question, Review, Reviewing, Standing, UserInput, draw, draw_action, edit, intent,
-    is_list_forma,
+    is_list_forma, prompt_reason,
 };
 use crate::value::{Numeric, Value};
 
@@ -643,6 +643,35 @@ fn ctrl_c_reads_as_interrupted() {
     // is the same answer.
     let mut keys = MockKeyboard::new([]);
     assert_eq!(keys.next(), None);
+}
+
+#[test]
+fn a_reason_is_read_to_enter_and_esc_returns_to_review() {
+    let mut out = Vec::new();
+    let mut keys = MockKeyboard::new([
+        KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    ]);
+    assert_eq!(
+        prompt_reason(&mut out, &mut keys, "→", "/survey:/2"),
+        UserInput::Fail("x".to_string())
+    );
+
+    let mut keys = MockKeyboard::new([KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)]);
+    assert_eq!(
+        prompt_reason(&mut out, &mut keys, "→", "/survey:/2"),
+        UserInput::Review
+    );
+}
+
+#[test]
+fn ctrl_c_at_a_reason_quits() {
+    let mut out = Vec::new();
+    let mut keys = MockKeyboard::new([KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)]);
+    assert_eq!(
+        prompt_reason(&mut out, &mut keys, "→", "/survey:/2"),
+        UserInput::Quit
+    );
 }
 
 #[test]
