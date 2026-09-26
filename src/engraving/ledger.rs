@@ -135,6 +135,23 @@ impl Ledger {
                 entry.revoked = true;
             }
         }
+        let mut chain = Vec::new();
+        let mut at = self
+            .scopes
+            .get(&serial)
+            .map(|scope| scope.parent);
+        while let Some(parent) = at {
+            if parent == Serial::LIFECYCLE {
+                break;
+            }
+            chain.push(parent);
+            at = self
+                .scopes
+                .get(&parent)
+                .map(|scope| scope.parent);
+        }
+        chain.reverse();
+        self.open = chain;
         // Descendants are left standing, their entries keeping them reachable.
         let mut at = serial;
         while let Some(parent) = self

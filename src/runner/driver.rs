@@ -341,11 +341,19 @@ pub trait Driver {
         &mut self,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
-        let _ = (marker, qualified, settled, offers);
+        let _ = (marker, qualified, bound, settled, offers);
         Review::Leave
+    }
+
+    /// Ask why a reviewed position is being failed: `Fail` with the reason,
+    /// `Review` to change one's mind, `Quit` to stop the run.
+    fn reason(&mut self, marker: &str, qualified: &str) -> UserInput {
+        let _ = (marker, qualified);
+        UserInput::Fail(String::new())
     }
 
     /// Render the settled verdict line for a step or scope close: `marker`
@@ -449,11 +457,17 @@ pub trait Verdict {
         out: &mut O,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
-        let _ = (out, marker, qualified, settled, offers);
+        let _ = (out, marker, qualified, bound, settled, offers);
         Review::Leave
+    }
+
+    fn reason<O: Output>(&mut self, out: &mut O, marker: &str, qualified: &str) -> UserInput {
+        let _ = (out, marker, qualified);
+        UserInput::Fail(String::new())
     }
 }
 
@@ -675,6 +689,7 @@ impl<K: Keys> Verdict for Interactive<K> {
         out: &mut O,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
@@ -683,9 +698,14 @@ impl<K: Keys> Verdict for Interactive<K> {
             &mut self.keys,
             marker,
             qualified,
+            bound,
             settled,
             offers,
         )
+    }
+
+    fn reason<O: Output>(&mut self, out: &mut O, marker: &str, qualified: &str) -> UserInput {
+        prompt_reason(out.surface(), &mut self.keys, marker, qualified)
     }
 }
 
@@ -836,6 +856,7 @@ impl Verdict for Script {
         _out: &mut O,
         _marker: &str,
         _qualified: &str,
+        _bound: &str,
         _settled: Option<&UserInput>,
         _offers: &[Offer],
     ) -> Review {
@@ -922,11 +943,17 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
         &mut self,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
         self.verdict
-            .review(&mut self.out, marker, qualified, settled, offers)
+            .review(&mut self.out, marker, qualified, bound, settled, offers)
+    }
+
+    fn reason(&mut self, marker: &str, qualified: &str) -> UserInput {
+        self.verdict
+            .reason(&mut self.out, marker, qualified)
     }
 
     fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
@@ -1112,6 +1139,81 @@ fn prompt<K: Keys>(
     result
 }
 
+/// Read the reason for failing a reviewed position, on the line the live prompt
+/// asks it on. `<Esc>` backs out of it to review, which is not a failure.
+fn prompt_reason<K: Keys>(
+    mut out: &mut dyn Write,
+    keys: &mut K,
+    marker: &str,
+    qualified: &str,
+) -> UserInput {
+    let qualified = display_path(qualified);
+    let mut reason = Reason {
+        buffer: String::new(),
+        cursor: 0,
+    };
+    let _raw = match keys.hold() {
+        Some(raw) => raw,
+        None => return UserInput::Quit,
+    };
+    let result = loop {
+        if draw_reason(out, marker, &qualified, &reason).is_err() {
+            break UserInput::Quit;
+        }
+        match keys.next() {
+            None => break UserInput::Quit,
+            Some(Intent::Decline) => break UserInput::Review,
+            Some(Intent::Accept) => break UserInput::Fail(reason.buffer),
+            Some(other) => {
+                text_key(&mut reason.buffer, &mut reason.cursor, other);
+            }
+        }
+    };
+    let _ = queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine),
+        cursor::Show
+    );
+    let _ = out.flush();
+    result
+}
+
+fn draw_reason(
+    mut out: &mut dyn Write,
+    marker: &str,
+    qualified: &str,
+    reason: &Reason,
+) -> io::Result<()> {
+    queue!(
+        &mut out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine)
+    )?;
+    write!(
+        out,
+        "{} {} {}{}",
+        format!("{} {}", marker, qualified).with(MARKER_GREY),
+        PROMPT_SYMBOL.blue(),
+        REASON_PREFIX,
+        reason.buffer
+    )?;
+    let lead = prompt_prefix_width(qualified, marker)
+        + REASON_PREFIX
+            .chars()
+            .count() as u16;
+    let column = |text: &str| {
+        lead + text
+            .chars()
+            .count() as u16
+    };
+    place_cursor(
+        out,
+        Some(column(&reason.buffer[..reason.cursor])),
+        column(&reason.buffer),
+    )
+}
+
 /// Show one reviewed position on the live prompt line and read the next key.
 /// Up and Down step through what the walk has settled, Left goes up and out to
 /// the enclosing scope and Right retraces that descent, and `<Esc>` opens the
@@ -1132,6 +1234,7 @@ fn prompt_review<K: Keys>(
     keys: &mut K,
     marker: &str,
     qualified: &str,
+    bound: &str,
     settled: Option<&UserInput>,
     offered: &[Offer],
 ) -> Review {
@@ -1146,7 +1249,7 @@ fn prompt_review<K: Keys>(
             }
         };
         loop {
-            if draw_review(out, marker, &qualified, settled, &reviewing).is_err() {
+            if draw_review(out, marker, &qualified, bound, settled, &reviewing).is_err() {
                 break Review::Quit;
             }
             match keys.next() {
@@ -1187,6 +1290,7 @@ fn draw_review(
     mut out: &mut dyn Write,
     marker: &str,
     qualified: &str,
+    bound: &str,
     settled: Option<&UserInput>,
     reviewing: &Reviewing,
 ) -> io::Result<()> {
@@ -1201,6 +1305,9 @@ fn draw_review(
         "{}",
         format!("{} {} ", marker, qualified).with(MARKER_GREY)
     )?;
+    if !bound.is_empty() {
+        write!(out, "{}", format!("{} ", bound).with(MARKER_GREY))?;
+    }
     if let Some((glyph, syntax)) = settled.and_then(verdict_glyph) {
         write!(out, "{}", Terminal.style(syntax, glyph))?;
     }

@@ -4206,6 +4206,159 @@ survey :
     );
 }
 
+#[test]
+fn a_skip_chosen_in_review_is_recorded_by_the_restarted_walk() {
+    let source = r#"
+% technique v1
+
+survey :
+
+    1.  Note the reading
+    2.  File the report { 42 }
+    3.  Post the notice
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        Scripted::reviewing(
+            [("/survey:/3".to_string(), UserInput::Review)],
+            [Review::Move(Motion::Up), Review::Chose(Offer::Skip)],
+        ),
+        Library::stub(),
+    );
+    let conclusion = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(conclusion, Conclusion::Restarting);
+
+    let mut runner = runner.restart();
+    runner
+        .run(Environment::new())
+        .expect("restart");
+    let journal = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        journal
+            .lines()
+            .any(|line| line.ends_with("/survey:/2 Skip")),
+        "{}",
+        journal
+    );
+}
+
+#[test]
+fn a_fail_chosen_in_review_is_recorded_by_the_restarted_walk() {
+    let source = r#"
+% technique v1
+
+survey :
+
+    1.  Note the reading
+    2.  File the report
+    3.  Post the notice
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        Scripted::reviewing(
+            [("/survey:/3".to_string(), UserInput::Review)],
+            [Review::Move(Motion::Up), Review::Chose(Offer::Fail)],
+        ),
+        Library::stub(),
+    );
+    let conclusion = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(conclusion, Conclusion::Restarting);
+
+    let mut runner = runner.restart();
+    runner
+        .run(Environment::new())
+        .expect("restart");
+    let journal = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        journal
+            .lines()
+            .any(|line| line.contains("/survey:/2 Fail")),
+        "{}",
+        journal
+    );
+}
+
+#[test]
+fn a_skip_chosen_on_a_section_keeps_what_it_held() {
+    let source = r#"
+% technique v1
+
+survey :
+
+I.  First
+
+    1.  Note the reading
+
+II. Second
+
+    1.  File the report
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        Scripted::reviewing(
+            [
+                ("/survey:/I/1".to_string(), UserInput::Fail("x".to_string())),
+                ("/survey:/II/1".to_string(), UserInput::Review),
+            ],
+            [
+                Review::Move(Motion::Up),
+                Review::Move(Motion::Up),
+                Review::Chose(Offer::Skip),
+            ],
+        ),
+        Library::stub(),
+    );
+    let conclusion = runner
+        .run(Environment::new())
+        .expect("run");
+    assert_eq!(conclusion, Conclusion::Restarting);
+
+    let mut runner = runner.restart();
+    runner
+        .run(Environment::new())
+        .expect("restart");
+    let journal = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    let count = |tail: &str| {
+        journal
+            .lines()
+            .filter(|line| line.contains(tail))
+            .count()
+    };
+    assert_eq!(count("/survey:/I/1 Fail"), 2, "{}", journal);
+    assert_eq!(count("/survey:/I Skip"), 1, "{}", journal);
+}
+
 /// The re-prompt at an amended acquire opens on what was recorded there, so
 /// correcting one character of a long list is not retyping the whole list.
 /// This is a default the user still commits at the real prompt, against the
