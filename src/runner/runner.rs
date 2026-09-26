@@ -1884,7 +1884,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         let records = self
             .records
             .clone();
-        let journal = Journal::new(&records);
+        let journal = Journal::new(&records, Some(self.serial));
         let mut at = match journal.last() {
             Some(at) => at,
             None => return Ok(Reviewed::Left),
@@ -1900,10 +1900,11 @@ impl<'i, D: Driver> Runner<'i, D> {
             let serial = record.serial;
             let settled = settled_by(&record.state);
             let marker = marker_of(record);
+            let bound = names_bound(&record.state);
             let offers = reviewing(settled.as_ref());
             let motion = match self
                 .driver
-                .review(marker, &qualified, settled.as_ref(), &offers)
+                .review(marker, &qualified, &bound, settled.as_ref(), &offers)
             {
                 Review::Move(motion) => motion,
                 Review::Chose(offer) => match offer {
@@ -2750,6 +2751,23 @@ fn marker_of(record: &Record) -> &'static str {
         (true, false) => "\u{2198}",
         (false, _) => "\u{2192}",
     }
+}
+
+/// The names a `Bind` record bound, as `~ a, b`; empty for any other record.
+fn names_bound(state: &State) -> String {
+    let bound = match state {
+        State::Bind(bound) => bound,
+        _ => return String::new(),
+    };
+    let names: Vec<&str> = bound
+        .iter()
+        .filter_map(|item| {
+            item.name
+                .as_ref()
+                .map(|name| name.as_str())
+        })
+        .collect();
+    format!("~ {}", names.join(", "))
 }
 
 fn verdict_of(state: &State) -> UserInput {

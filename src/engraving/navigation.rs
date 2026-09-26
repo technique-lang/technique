@@ -3,7 +3,8 @@
 //! motions climb is the one the walk took, a callee enclosed by the step that
 //! invoked it rather than by the path it was written at.
 //!
-//!   Up          previous record; from `Live`, the last record
+//!   Up          previous record; from `Live`, the last record of the scope
+//!               the prompt belongs to
 //!   Down        next record; from the last record, `Live`, unless the run
 //!               reached `Finish` and has no prompt to return to
 //!   Left        out to the enclosing scope
@@ -71,13 +72,15 @@ pub struct Journal<'i> {
     /// Each record's place in `order`, where it has one.
     rank: Vec<Option<usize>>,
     finished: bool,
+    /// The scope the run is prompting in, or `None` if it is not at a prompt.
+    prompt: Option<Serial>,
 }
 
 impl<'i> Journal<'i> {
     /// Fold a journal into the tree it built. The enclosing scope of each is
     /// whichever was innermost open when its `Begin` landed, so a procedure is
     /// enclosed by the step that invoked it.
-    pub fn new(records: &'i [Record]) -> Journal<'i> {
+    pub fn new(records: &'i [Record], prompt: Option<Serial>) -> Journal<'i> {
         let mut scopes: HashMap<Serial, Scope> = HashMap::new();
         let mut within = Vec::with_capacity(records.len());
         let mut opened = Vec::new();
@@ -108,6 +111,7 @@ impl<'i> Journal<'i> {
                     match scopes.get_mut(&serial) {
                         Some(scope) => {
                             scope.begin = i;
+                            scope.outcome = None;
                             if let Some(at) = open
                                 .iter()
                                 .position(|s| *s == serial)
@@ -270,6 +274,13 @@ impl<'i> Journal<'i> {
         {
             match record.state {
                 State::Stop | State::Resume | State::Finish => continue,
+                State::Done(_) | State::Skip | State::Fail(_)
+                    if scopes
+                        .get(&record.serial)
+                        .map_or(false, |scope| i < scope.begin) =>
+                {
+                    continue;
+                }
                 _ => {}
             }
             if superseded(record.serial) {
@@ -318,6 +329,7 @@ impl<'i> Journal<'i> {
             order,
             rank,
             finished,
+            prompt,
         }
     }
 
@@ -325,12 +337,17 @@ impl<'i> Journal<'i> {
         self.records
     }
 
-    /// Where review opens: the last position, which on a resumed run is the
-    /// last thing the walk did rather than the `Resume` that reopened it.
+    /// Where review opens: the last position within the scope the prompt
+    /// belongs to, which the journal alone cannot name when a replay passed
+    /// steps without writing anything.
     pub fn last(&self) -> Option<Position> {
         self.order
             .iter()
-            .max()
+            .filter(|at| {
+                self.prompt
+                    .map_or(true, |prompt| self.inside(self.within[**at], prompt))
+            })
+            .last()
             .map(|at| Position::At(*at))
     }
 
@@ -435,6 +452,17 @@ impl<'i> Journal<'i> {
     fn scope(&self, at: usize) -> Option<&Scope> {
         self.scopes
             .get(&self.within[at])
+    }
+
+    // Whether a scope is the one given or lies within it.
+    fn inside(&self, mut serial: Serial, scope: Serial) -> bool {
+        while serial != scope {
+            match self.parent_of(serial) {
+                Some(parent) => serial = parent,
+                None => return false,
+            }
+        }
+        true
     }
 
     fn parent_of(&self, serial: Serial) -> Option<Serial> {

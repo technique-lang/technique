@@ -341,10 +341,11 @@ pub trait Driver {
         &mut self,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
-        let _ = (marker, qualified, settled, offers);
+        let _ = (marker, qualified, bound, settled, offers);
         Review::Leave
     }
 
@@ -449,10 +450,11 @@ pub trait Verdict {
         out: &mut O,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
-        let _ = (out, marker, qualified, settled, offers);
+        let _ = (out, marker, qualified, bound, settled, offers);
         Review::Leave
     }
 }
@@ -675,6 +677,7 @@ impl<K: Keys> Verdict for Interactive<K> {
         out: &mut O,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
@@ -683,6 +686,7 @@ impl<K: Keys> Verdict for Interactive<K> {
             &mut self.keys,
             marker,
             qualified,
+            bound,
             settled,
             offers,
         )
@@ -836,6 +840,7 @@ impl Verdict for Script {
         _out: &mut O,
         _marker: &str,
         _qualified: &str,
+        _bound: &str,
         _settled: Option<&UserInput>,
         _offers: &[Offer],
     ) -> Review {
@@ -922,11 +927,12 @@ impl<O: Output, V: Verdict> Driver for Interface<O, V> {
         &mut self,
         marker: &str,
         qualified: &str,
+        bound: &str,
         settled: Option<&UserInput>,
         offers: &[Offer],
     ) -> Review {
         self.verdict
-            .review(&mut self.out, marker, qualified, settled, offers)
+            .review(&mut self.out, marker, qualified, bound, settled, offers)
     }
 
     fn show_verdict(&mut self, marker: &str, qualified: &str, verdict: &UserInput) {
@@ -1132,6 +1138,7 @@ fn prompt_review<K: Keys>(
     keys: &mut K,
     marker: &str,
     qualified: &str,
+    bound: &str,
     settled: Option<&UserInput>,
     offered: &[Offer],
 ) -> Review {
@@ -1146,7 +1153,7 @@ fn prompt_review<K: Keys>(
             }
         };
         loop {
-            if draw_review(out, marker, &qualified, settled, &reviewing).is_err() {
+            if draw_review(out, marker, &qualified, bound, settled, &reviewing).is_err() {
                 break Review::Quit;
             }
             match keys.next() {
@@ -1187,6 +1194,7 @@ fn draw_review(
     mut out: &mut dyn Write,
     marker: &str,
     qualified: &str,
+    bound: &str,
     settled: Option<&UserInput>,
     reviewing: &Reviewing,
 ) -> io::Result<()> {
@@ -1201,6 +1209,9 @@ fn draw_review(
         "{}",
         format!("{} {} ", marker, qualified).with(MARKER_GREY)
     )?;
+    if !bound.is_empty() {
+        write!(out, "{}", format!("{} ", bound).with(MARKER_GREY))?;
+    }
     if let Some((glyph, syntax)) = settled.and_then(verdict_glyph) {
         write!(out, "{}", Terminal.style(syntax, glyph))?;
     }
