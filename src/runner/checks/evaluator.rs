@@ -1,11 +1,11 @@
 use crate::language::{Identifier, Multiline, Numeric as LangNumeric, Span};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
+use crate::runner::error::RunnerError;
 use crate::runner::evaluator::{
     Environment, coerce_to_list, combine, evaluate, is_list_literal, parse_list_literal,
 };
 use crate::runner::library::Library;
-use crate::runner::runner::RunnerError;
 use crate::value;
 
 #[test]

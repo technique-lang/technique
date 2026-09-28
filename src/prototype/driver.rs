@@ -1,8 +1,9 @@
 //! Driver trait, console and automatic implementations, and a test mock.
 //!
 //! A driver is what walks through a run; the run's `Mode` selects whether
-//! this is a human user or a program running non-interactively.
-
+//! this is a human user running interactively or a program running
+//! non-interactively on automatic.
+//!
 //! The walker tells the driver what to show and then asks for the step's
 //! outcome. A driver is assembled from two orthogonal axes: an `Output`
 //! presentation policy (`Visual` renders a trail, `Silent` shows nothing) and
@@ -2059,7 +2060,7 @@ impl Prompt {
                         // A list field submits its buffer as elements, the
                         // same way a command-line argument is read. A buffer
                         // that does not parse is not accepted.
-                        super::evaluator::parse_list_literal(&format!("[{}]", buffer))
+                        crate::runner::evaluator::parse_list_literal(&format!("[{}]", buffer))
                             .map(|items| UserInput::Done(Value::Arraeum(items)))
                     } else if !*edited {
                         // Unchanged: return the original value verbatim, with

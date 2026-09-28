@@ -12,8 +12,8 @@ use std::process::{Command, Stdio};
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 use super::context::{Context, Stream};
+use super::error::RunnerError;
 use super::evaluator::Environment;
-use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
 
@@ -476,7 +476,7 @@ fn tee(
 /// `now()` — the current wall-clock time as an ISO 8601 string, emitted
 /// through Context the same way `exec` tees its output.
 fn now(context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
-    let text = super::runner::now_iso8601();
+    let text = now_iso8601();
     context
         .emit(&format!("{}\n", text))
         .map_err(RunnerError::ExecError)?;
@@ -523,6 +523,20 @@ fn as_tablet<'a>(
             expected: "a tablet",
         })
     }
+}
+
+pub(crate) fn now_iso8601() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
+        now.millisecond(),
+    )
 }
 
 #[cfg(test)]

@@ -1,22 +1,21 @@
 //! Interactive walker over a translated Program.
 
 use std::collections::HashSet;
-use std::io;
 
-use super::context::Context;
 use super::driver::{Driver, Kind, Offer, Question, Review, Standing, UserInput};
-use super::evaluator::Environment;
-use super::library::{Library, Nature};
-use super::path::{PathSegment, QualifiedPath};
 use crate::engraving::{
-    Appender, Entry, InvokeTarget, Journal, Ledger, Position, Record, Serial, State, StoreError,
-    Supplied,
+    Appender, Entry, InvokeTarget, Journal, Ledger, Position, Record, Serial, State, Supplied,
 };
 use crate::language;
 use crate::program::{
     Executable, ExecutableRef, Fragment, Invocable, Locale, Operation, Ordinal, Program,
     Subroutine, SubroutineRef,
 };
+use crate::runner::context::Context;
+use crate::runner::error::RunnerError;
+use crate::runner::evaluator::Environment;
+use crate::runner::library::{Library, Nature, now_iso8601};
+use crate::runner::path::{PathSegment, QualifiedPath};
 use crate::value::Value;
 
 /// A step's result. `Done(Value)` is the natural success — for a leaf Step the
@@ -51,65 +50,6 @@ pub enum Conclusion {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
     Aborted(String),
-}
-
-/// Anything that can go wrong while preparing or running a Technique.
-/// Variants are populated as the implementing steps land; the formatter
-/// in `crate::problem` knows how to render each one.
-#[derive(Debug)]
-pub enum RunnerError {
-    Store(StoreError),
-    MissingEntryProcedure,
-    UnboundVariable(String),
-    BindArityMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    BindNotTuple {
-        expected: usize,
-    },
-    NotIterable,
-    InvalidCost,
-    InvalidArgument {
-        function: &'static str,
-        expected: &'static str,
-    },
-    UnknownFunction(String),
-    FunctionArityMismatch {
-        function: &'static str,
-        expected: usize,
-        actual: usize,
-    },
-    ExecError(io::Error),
-    CommandFailed(i32),
-    IncompatibleCombination {
-        left: &'static str,
-        right: &'static str,
-    },
-    ParameterArityMismatch {
-        procedure: String,
-        parameters: Vec<String>,
-        actual: usize,
-    },
-    ParameterUnexpected {
-        procedure: String,
-        actual: usize,
-    },
-    MalformedArgument {
-        parameter: String,
-        argument: String,
-    },
-    MalformedList {
-        text: String,
-    },
-    TerminalRequired,
-    UserQuit,
-}
-
-impl From<StoreError> for RunnerError {
-    fn from(error: StoreError) -> Self {
-        RunnerError::Store(error)
-    }
 }
 
 /// Execute a Technique interactively by walking the `Program` tree. Tracks
@@ -503,7 +443,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // Nothing to vet, and cannot fail, so we skip the command
                     // prompt.
                     Kind::System if nature == Nature::Instant => {
-                        let value = super::evaluator::dispatch(
+                        let value = crate::runner::evaluator::dispatch(
                             &self.library,
                             &self.context,
                             env,
@@ -515,7 +455,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     Kind::System => {
                         let script = self.script_text(env, executable)?;
                         match self.lift(|driver| driver.command(&qualified, &script))? {
-                            Answer::Done(chosen) => match super::evaluator::dispatch(
+                            Answer::Done(chosen) => match crate::runner::evaluator::dispatch(
                                 &self.library,
                                 &self.context,
                                 env,
@@ -546,7 +486,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             .lift(|driver| driver.action(&qualified, &function, &verb, &value))?
                         {
                             Answer::Done(_) => {
-                                let value = super::evaluator::dispatch(
+                                let value = crate::runner::evaluator::dispatch(
                                     &self.library,
                                     &self.context,
                                     env,
@@ -565,7 +505,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     Kind::Computable => {
                         self.driver
                             .announce(&describe_execute(&function));
-                        let value = super::evaluator::dispatch(
+                        let value = crate::runner::evaluator::dispatch(
                             &self.library,
                             &self.context,
                             env,
@@ -610,7 +550,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             | Operation::Prose(_, _)
             | Operation::Hole(_)
             | Operation::Unit(_) => {
-                let value = super::evaluator::evaluate(&self.library, &self.context, env, op)?;
+                let value =
+                    crate::runner::evaluator::evaluate(&self.library, &self.context, env, op)?;
                 Ok(Conclusion::Completed(Outcome::Done(value)))
             }
         }
@@ -642,7 +583,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             .first()
         {
             Some(arg) => {
-                match super::evaluator::evaluate(&self.library, &self.context, env, arg)? {
+                match crate::runner::evaluator::evaluate(&self.library, &self.context, env, arg)? {
                     Value::Literali(s) => Ok(s),
                     other => Ok(other.to_string()),
                 }
@@ -665,7 +606,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
         let mut parts = Vec::new();
         for arg in arguments {
-            let value = super::evaluator::evaluate(&self.library, &self.context, env, arg)?;
+            let value = crate::runner::evaluator::evaluate(&self.library, &self.context, env, arg)?;
             let part = if let Operation::Variable(id, _) = arg {
                 format!("{} ~ {}", value, id.value)
             } else {
@@ -696,7 +637,9 @@ impl<'i, D: Driver> Runner<'i, D> {
             .arguments
             .first()
         {
-            Some(arg) => super::evaluator::evaluate(&self.library, &self.context, env, arg)?,
+            Some(arg) => {
+                crate::runner::evaluator::evaluate(&self.library, &self.context, env, arg)?
+            }
             None => Value::Unitus,
         };
         Ok((verb, value))
@@ -758,7 +701,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             Locale::Section(n) => PathSegment::Section(n),
                         })
                         .collect();
-                    let lexical = super::path::render_path(&lexical_segments);
+                    let lexical = crate::runner::path::render_path(&lexical_segments);
                     let formae = render_parameter_formae(subroutine.signature);
 
                     // A prior run's recorded arguments for this callee, in
@@ -829,7 +772,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                                         .clone()
                                 })
                         } else {
-                            Some(super::evaluator::evaluate(
+                            Some(crate::runner::evaluator::evaluate(
                                 &self.library,
                                 &self.context,
                                 env,
@@ -1158,7 +1101,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         // to the name resolves.
                         Conclusion::Completed(Outcome::Skip(value)) => {
                             for name in names {
-                                super::evaluator::bind_names(
+                                crate::runner::evaluator::bind_names(
                                     env,
                                     std::slice::from_ref(name),
                                     Value::Unitus,
@@ -1174,7 +1117,11 @@ impl<'i, D: Driver> Runner<'i, D> {
                 .iter()
                 .zip(&acquired)
             {
-                super::evaluator::bind_names(env, std::slice::from_ref(name), value.clone())?;
+                crate::runner::evaluator::bind_names(
+                    env,
+                    std::slice::from_ref(name),
+                    value.clone(),
+                )?;
                 self.note_binding(name.value, value);
             }
             Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)))
@@ -1186,7 +1133,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             // equivalent to evaluating it.
             match self.walk(env, value)? {
                 Conclusion::Completed(Outcome::Done(value)) => {
-                    super::evaluator::bind_names(env, names, value.clone())?;
+                    crate::runner::evaluator::bind_names(env, names, value.clone())?;
                     for name in names {
                         self.note_binding(
                             name.value,
@@ -1197,7 +1144,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)))
                 }
                 Conclusion::Completed(Outcome::Skip(_)) => {
-                    super::evaluator::bind_names(env, names, Value::Unitus)?;
+                    crate::runner::evaluator::bind_names(env, names, Value::Unitus)?;
                     Ok(Conclusion::Completed(Outcome::Skip(Value::Unitus)))
                 }
                 // A failure, a stop or a restart binds nothing and propagates
@@ -1285,11 +1232,12 @@ impl<'i, D: Driver> Runner<'i, D> {
                         return Ok(Conclusion::Completed(Outcome::Done(Value::Unitus)));
                     }
                 }
-                let value = super::evaluator::evaluate(&self.library, &self.context, env, expr)?;
-                let items = super::evaluator::coerce_to_list(value)?;
+                let value =
+                    crate::runner::evaluator::evaluate(&self.library, &self.context, env, expr)?;
+                let items = crate::runner::evaluator::coerce_to_list(value)?;
                 let mut rollup = Rollup::new();
                 for item in items {
-                    super::evaluator::bind_names(env, names, item)?;
+                    crate::runner::evaluator::bind_names(env, names, item)?;
                     let number =
                         claim_iteration(&mut pool, &iteration_values(names, env), &mut highest);
                     match self.walk_iteration(env, names, number, body)? {
@@ -1318,7 +1266,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         bound: &'i Operation<'i>,
         body: &'i Operation<'i>,
     ) -> Result<Conclusion, RunnerError> {
-        let budget = super::evaluator::evaluate(&self.library, &self.context, env, bound)?;
+        let budget = crate::runner::evaluator::evaluate(&self.library, &self.context, env, bound)?;
         self.constraints
             .push(budget);
         let result = self.walk(env, body);
@@ -1508,10 +1456,12 @@ impl<'i, D: Driver> Runner<'i, D> {
             .path
             .render();
         let title_text = match title {
-            Some(op) => match super::evaluator::evaluate(&self.library, &self.context, env, op)? {
-                Value::Literali(s) => s,
-                other => other.to_string(),
-            },
+            Some(op) => {
+                match crate::runner::evaluator::evaluate(&self.library, &self.context, env, op)? {
+                    Value::Literali(s) => s,
+                    other => other.to_string(),
+                }
+            }
             None => String::new(),
         };
         self.driver
@@ -1795,7 +1745,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         _ => None,
                     };
                     if let Some(value) = bound {
-                        super::evaluator::bind_names(env, names, value)?;
+                        crate::runner::evaluator::bind_names(env, names, value)?;
                         for name in names {
                             self.note_binding(
                                 name.value,
@@ -3160,7 +3110,7 @@ pub(super) fn bind_parameters(
         .zip(arguments)
         .enumerate()
     {
-        let value = super::evaluator::parse_value(argument).ok_or_else(|| {
+        let value = crate::runner::evaluator::parse_value(argument).ok_or_else(|| {
             RunnerError::MalformedArgument {
                 parameter: bind
                     .clone()
@@ -3185,20 +3135,6 @@ pub(super) fn bind_parameters(
 /// truncated (not rounded) — sub-millisecond resolution is dropped —
 /// and the millisecond field is always rendered as three digits, even
 /// when trailing zeros would otherwise be elided.
-pub(super) fn now_iso8601() -> String {
-    let now = time::OffsetDateTime::now_utc();
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second(),
-        now.millisecond(),
-    )
-}
-
 #[cfg(test)]
 #[path = "checks/runner.rs"]
 mod check;

@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use super::context::Context;
+use super::error::RunnerError;
 use super::library::Library;
-use super::runner::RunnerError;
 use crate::formatting::{Substitutions, Syntax};
 use crate::program::{ExecutableRef, Fragment, Operation};
 use crate::value::{Numeric, Value};
@@ -240,7 +240,7 @@ pub fn evaluate<'i>(
 /// non-blank string may be a `[a, b]` literal, which parses into its elements
 /// and is an error if it doesn't, else it is a one-element list; a bare
 /// quantity widens likewise. A tablet, tuple, or future is not iterable.
-pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
+pub(crate) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
     match value {
         Value::Arraeum(items) => Ok(items),
         Value::Unitus => Ok(Vec::new()),
@@ -264,7 +264,7 @@ pub(super) fn coerce_to_list(value: Value) -> Result<Vec<Value>, RunnerError> {
 /// list element) into its natural Value type. A `[ ... ]` literal becomes a
 /// list, a number becomes a quantity, anything else stays a string. `None` if
 /// the text appears to be a list but does not parse.
-pub(super) fn parse_value(text: &str) -> Option<Value> {
+pub(crate) fn parse_value(text: &str) -> Option<Value> {
     let trimmed = text.trim();
     if is_list_literal(trimmed) {
         return parse_list_literal(trimmed).map(Value::Arraeum);
@@ -277,7 +277,7 @@ pub(super) fn parse_value(text: &str) -> Option<Value> {
 
 /// Whether text reads as a list literal, the guard distinguishing a malformed
 /// list from ordinary text that was never one.
-pub(super) fn is_list_literal(text: &str) -> bool {
+pub(crate) fn is_list_literal(text: &str) -> bool {
     let text = text.trim();
     text.starts_with('[') && text.ends_with(']')
 }
@@ -288,7 +288,7 @@ pub(super) fn is_list_literal(text: &str) -> bool {
 /// record format's escapes; an unquoted one takes its natural type via
 /// `parse_value`. Returns `None` for text that is not bracketed, and for text
 /// that is malformed (an unbalanced quote or bracket, or an unknown escape).
-pub(super) fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
+pub(crate) fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
     let inner = text
         .trim()
         .strip_prefix('[')?
@@ -329,7 +329,7 @@ pub(super) fn parse_list_literal(text: &str) -> Option<Vec<Value>> {
 /// Bind names to a value, shared by `Bind` evaluation and `foreach`
 /// iteration. One name takes the whole value; multiple names destructure a
 /// `Parametriq` of matching arity.
-pub(super) fn bind_names(
+pub(crate) fn bind_names(
     env: &mut Environment,
     names: &[crate::language::Identifier<'_>],
     value: Value,

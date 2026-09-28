@@ -1,7 +1,7 @@
 use crate::runner::context::Context;
+use crate::runner::error::RunnerError;
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
-use crate::runner::runner::RunnerError;
 use crate::value::{Numeric, Value};
 
 fn int(n: i64) -> Value {
