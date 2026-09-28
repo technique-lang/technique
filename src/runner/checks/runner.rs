@@ -20,7 +20,7 @@ use crate::runner::driver::{
 use crate::runner::evaluator::Environment;
 use crate::runner::library::Library;
 use crate::runner::runner::{
-    Conclusion, Outcome, Runner, RunnerError, bind_parameters, render_argument_echo,
+    Conclusion, Outcome, Runner, RunnerError, bind_parameters, render_argument_echo, reviewing,
 };
 use crate::translation::translate;
 use crate::value::Value;
@@ -4187,8 +4187,8 @@ survey :
         "the enclosing procedure already stands and is not written again: {}",
         second
     );
-    // Redone work is new work: the revoked line's serial is spent, and the
-    // redo is recorded under a fresh one.
+    // Redone work at the same place on the same inputs is the same activation,
+    // so the redo is recorded under the serial the revoked line wore.
     let spent = journal
         .lines()
         .find(|line| line.contains("/survey:/2 Begin"))
@@ -4198,8 +4198,8 @@ survey :
         })
         .expect("step 2 began in the first walk");
     assert!(
-        !second.contains(&format!("{} /survey:/2 Begin", spent)),
-        "the redo does not reuse serial {}: {}",
+        second.contains(&format!("{} /survey:/2 Begin", spent)),
+        "the redo reuses serial {}: {}",
         spent,
         second
     );
@@ -4354,8 +4354,275 @@ II. Second
             .filter(|line| line.contains(tail))
             .count()
     };
-    assert_eq!(count("/survey:/I/1 Fail"), 2, "{}", journal);
+    assert_eq!(count("/survey:/I/1 Begin"), 1, "{}", journal);
+    assert_eq!(count("/survey:/I/1 Fail"), 1, "{}", journal);
     assert_eq!(count("/survey:/I Skip"), 1, "{}", journal);
+}
+
+/// A callee entered again on a different argument is a new activation, so a
+/// step within it is redone even though it reads nothing that changed.
+#[test]
+fn a_callee_entered_on_other_arguments_is_redone_whole() {
+    let source = r#"
+% technique v1
+
+pack :
+
+    1.  Which towel? ~ colour
+    2.  <inspect>(colour)
+
+inspect(colour) : Colour -> ()
+
+    1.  Unfold the { colour } towel
+    2.  Check for holes
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let answers = |colour: &str| {
+        let mut answers = vec![UserInput::Done(Value::Literali(colour.to_string()))];
+        answers.extend(std::iter::repeat(UserInput::Done(Value::Unitus)).take(4));
+        Mock::with_answers(answers)
+    };
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        answers("blue"),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let first = runner
+        .into_appender()
+        .contents()
+        .to_string();
+
+    let mut ledger = Ledger::new();
+    let mut records = crate::engraving::parse_records(&first).expect("journal parses");
+    let step = records
+        .iter()
+        .find(|record| record.path == "/pack:/1")
+        .expect("step 1")
+        .clone();
+    records.push(Record {
+        state: State::Revoke,
+        ..step
+    });
+    for record in &records {
+        ledger.apply(record);
+    }
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        ledger,
+        answers("green"),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("rerun");
+    let second = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        second
+            .lines()
+            .any(|line| line.ends_with("/inspect:/2 Begin ()")),
+        "the step reading nothing is redone: {}",
+        second
+    );
+}
+
+/// What encloses other work offers only its verdict, a call whose arguments
+/// were asked offers them again, and anything else its answer.
+#[test]
+fn review_offers_follow_what_the_position_is() {
+    assert_eq!(
+        reviewing(Some(&UserInput::Done(Value::Unitus)), false, false),
+        vec![Offer::Edit, Offer::Skip, Offer::Fail, Offer::Quit]
+    );
+    assert_eq!(
+        reviewing(Some(&UserInput::Done(Value::Unitus)), true, false),
+        vec![Offer::Skip, Offer::Fail, Offer::Quit]
+    );
+    assert_eq!(reviewing(None, true, true), vec![Offer::Edit, Offer::Quit]);
+}
+
+/// Asking a call's arguments again opens on what was given, and a different
+/// answer redoes the call whole.
+#[test]
+fn a_call_asked_again_redoes_it_on_the_new_argument() {
+    let source = r#"
+% technique v1
+
+pack :
+
+    1.  Choose a towel <inspect>(?)
+
+inspect(colour) : Colour -> ()
+
+    1.  Check for holes
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let answers = |colour: &str| {
+        let mut answers = vec![UserInput::Done(Value::Literali(colour.to_string()))];
+        answers.extend(std::iter::repeat(UserInput::Done(Value::Unitus)).take(3));
+        Mock::with_answers(answers)
+    };
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        answers("blue"),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let first = runner
+        .into_appender()
+        .contents()
+        .to_string();
+
+    let mut records = crate::engraving::parse_records(&first).expect("journal parses");
+    let call = records
+        .iter()
+        .find(|record| record.path == "/inspect:")
+        .expect("the call")
+        .clone();
+    records.push(Record {
+        state: State::Revoke,
+        ..call.clone()
+    });
+    let mut ledger = Ledger::new();
+    for record in &records {
+        ledger.apply(record);
+    }
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        ledger,
+        answers("green"),
+        Library::stub(),
+    );
+    runner.reasking = Some(call.serial);
+    runner
+        .run(Environment::new())
+        .expect("rerun");
+    let seeds: Vec<Option<Value>> = runner
+        .driver
+        .events()
+        .iter()
+        .filter_map(|e| {
+            if let Event::Acquire { seed, .. } = e {
+                Some(seed.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(seeds, vec![Some(Value::Literali("blue".to_string()))]);
+    let second = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        second
+            .lines()
+            .any(|line| line.ends_with("/inspect: Begin ( \"green\" ~ colour )")),
+        "{}",
+        second
+    );
+    assert!(
+        second
+            .lines()
+            .any(|line| line.ends_with("/inspect:/1 Begin ()")),
+        "the step within is redone: {}",
+        second
+    );
+}
+
+/// Two calls to one procedure from a step are recorded at the same address,
+/// and a replay takes them in the order they were recorded: each finds its
+/// own, and neither is done again.
+#[test]
+fn two_calls_from_one_step_each_replay_their_own() {
+    let source = r#"
+% technique v1
+
+pack :
+
+    1.  Inspect { <inspect>("blue") } then { <inspect>("green") }
+    2.  Stow the towels
+
+inspect(colour) : Colour -> ()
+
+    1.  Check the { colour } towel
+"#;
+    let document = parsing::parse(Path::new("Test.tq"), source.trim_ascii()).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+
+    let answers = || Mock::with_answers(std::iter::repeat(UserInput::Done(Value::Unitus)).take(8));
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        Ledger::new(),
+        answers(),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("run");
+    let first = runner
+        .into_appender()
+        .contents()
+        .to_string();
+
+    let mut records = crate::engraving::parse_records(&first).expect("journal parses");
+    let step = records
+        .iter()
+        .find(|record| record.path == "/pack:/2")
+        .expect("step 2")
+        .clone();
+    records.push(Record {
+        state: State::Revoke,
+        ..step
+    });
+    let mut ledger = Ledger::new();
+    for record in &records {
+        ledger.apply(record);
+    }
+
+    let mut runner = Runner::new(
+        &program,
+        Appender::memory(),
+        ledger,
+        answers(),
+        Library::stub(),
+    );
+    runner
+        .run(Environment::new())
+        .expect("rerun");
+    let second = runner
+        .into_appender()
+        .contents()
+        .to_string();
+    assert!(
+        !second.contains("/inspect:"),
+        "both calls stand as recorded: {}",
+        second
+    );
+    assert!(second.contains("/pack:/2 Begin"), "{}", second);
 }
 
 /// The re-prompt at an amended acquire opens on what was recorded there, so

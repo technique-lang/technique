@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::engraving::{Ledger, Record, RunId, Serial, State, Supplied};
 use crate::value::Value;
 
@@ -112,9 +114,18 @@ fn serial_is_reused_on_re_entry_and_fresh_otherwise() {
         record(2, "/task:/1", State::Done(None)),
     ]);
 
-    assert_eq!(ledger.serial_for(Serial::LIFECYCLE, "/task:"), Serial(1));
-    assert_eq!(ledger.serial_for(Serial(1), "/task:/1"), Serial(2));
-    assert_eq!(ledger.serial_for(Serial(1), "/task:/2"), Serial(3));
+    assert_eq!(
+        ledger.serial_for(Serial::LIFECYCLE, "/task:", &HashSet::new()),
+        Serial(1)
+    );
+    assert_eq!(
+        ledger.serial_for(Serial(1), "/task:/1", &HashSet::new()),
+        Serial(2)
+    );
+    assert_eq!(
+        ledger.serial_for(Serial(1), "/task:/2", &HashSet::new()),
+        Serial(3)
+    );
 }
 
 // A Quit mid-step leaves its Begin standing with no outcome. The next walk
@@ -189,7 +200,7 @@ fn re_entry_keeps_a_serial_under_its_original_parent() {
 // A revocation is a path copy: the spine from the root to the target is
 // cleared, everything off it is shared unchanged, and no entry is removed.
 #[test]
-fn revoke_clears_the_spine_and_marks_only_its_target() {
+fn revoke_clears_the_spine_and_leaves_what_it_encloses() {
     let ledger = fold(vec![
         record(1, "/audit:", State::Begin(Vec::new())),
         record(2, "/audit:/I", State::Begin(Vec::new())),
@@ -212,7 +223,10 @@ fn revoke_clears_the_spine_and_marks_only_its_target() {
             .outcome
             .is_none()
     );
-    assert!(target.revoked, "the target is marked");
+    assert!(
+        !target.revoked,
+        "a target enclosing others has only its verdict withdrawn"
+    );
 
     for (parent, edge) in [(Serial::LIFECYCLE, "/audit:"), (Serial(1), "/I")] {
         let ancestor = ledger
@@ -248,6 +262,43 @@ fn revoke_clears_the_spine_and_marks_only_its_target() {
             .is_some(),
         "and a sibling off the spine is untouched"
     );
+}
+
+// The replay comes back into a revoked scope without writing its `Begin`, so
+// what it opens afresh is still filed beneath it.
+#[test]
+fn a_scope_opened_beneath_a_revoked_scope_is_filed_under_it() {
+    let ledger = fold(vec![
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(3, "/task:/1/[1]", State::Begin(Vec::new())),
+        record(3, "/task:/1/[1]", State::Done(None)),
+        record(2, "/task:/1", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(4, "/task:/1/[2]", State::Begin(Vec::new())),
+    ]);
+
+    assert!(
+        ledger
+            .look(Serial(2), "/task:/1/[2]")
+            .is_some()
+    );
+}
+
+// A target enclosing nothing has its value withdrawn, to be asked again.
+#[test]
+fn revoke_marks_a_target_enclosing_nothing() {
+    let ledger = fold(vec![
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+    ]);
+
+    let target = ledger
+        .look(Serial(1), "/1")
+        .expect("the target entry is retained");
+    assert!(target.revoked);
 }
 
 // Re-entering a revoked scope clears the mark: the entry is being rebuilt, so
@@ -326,7 +377,10 @@ fn a_resumed_scope_keeps_the_serial_it_was_entered_at() {
         record(4, "/task:/2", State::Done(None)),
     ]);
 
-    assert_eq!(ledger.serial_for(Serial(1), "/task:/2"), Serial(4));
+    assert_eq!(
+        ledger.serial_for(Serial(1), "/task:/2", &HashSet::new()),
+        Serial(4)
+    );
     let entry = ledger
         .look(Serial(1), "/task:/2")
         .expect("step 2 still keyed under its procedure after the resume");

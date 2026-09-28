@@ -76,9 +76,9 @@ pub struct Record {
 /// `Bind` states the bindings a scope made, written once immediately before
 /// that scope's outcome; a binding's own value is unit, so the value it
 /// captured is reachable only here.
-/// `Revoke` withdraws a scope's outcome so the walk redoes it, and carries no
-/// payload: correcting a value is a `Revoke` plus ordinary re-execution, with
-/// nothing pre-answered.
+/// `Revoke` withdraws a scope's outcome, and the value of one enclosing
+/// nothing, so the walk reaches it again. It carries no payload: correcting a
+/// value is a `Revoke` plus ordinary re-execution, with nothing pre-answered.
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Start { uri: String },
