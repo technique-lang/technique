@@ -499,3 +499,42 @@ good_cost :
     let mut program = translate(&document).expect("translate");
     resolve(&mut program).expect("resolve");
 }
+
+#[test]
+fn parameter_named_from_signature_is_in_scope() {
+    // A procedure written without a parameter list still binds its argument,
+    // under a name lowered from the input type, so reading it resolves.
+    let source = r#"
+% technique v1
+
+setup : Customer -> ()
+    1.  Apply { exec("terraform apply module.{ customer }") }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    resolve(&mut program).expect("resolve");
+}
+
+#[test]
+fn parameter_written_shadows_the_name_its_type_would_give() {
+    // Naming the parameters is a statement of intent, so the type's own name
+    // is not also in scope.
+    let source = r#"
+% technique v1
+
+setup(client) : Customer -> ()
+    1.  Apply { exec("terraform apply module.{ customer }") }
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let mut program = translate(&document).expect("translate");
+    let errors = resolve(&mut program).expect_err("unbound variable");
+
+    let ResolutionError::UnboundVariable { variable } = &errors[0] else {
+        panic!("expected UnboundVariable, got {:?}", errors[0]);
+    };
+    assert_eq!(variable.value, "customer");
+}
