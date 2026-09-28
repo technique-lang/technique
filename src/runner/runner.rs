@@ -298,9 +298,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         let qualified = self
             .path
             .render();
-        let params = entry
-            .parameters
-            .unwrap_or(&[]);
+        let params = &entry.parameters;
         let supplied = self.restore_or_collect_inputs(&mut env, &qualified, params)?;
         // A run already sealed at its entry replays for display alone: beginning
         // it again would state a second execution of the whole run and unsettle
@@ -314,7 +312,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
             _ => self.begin_scope(&qualified, supplied)?,
         }
-        if let Some(name) = name {
+        if name.is_some() {
             if params.is_empty() {
                 self.driver
                     .enter(&qualified, "");
@@ -323,15 +321,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                 self.driver
                     .enter(&qualified, &echo);
             }
-            let declaration = crate::formatting::formatter::render_declaration(
-                name,
-                entry.parameters,
-                entry.signature,
+            if let Some(source) = entry.source {
+                let declaration = crate::formatting::formatter::render_procedure_declaration(
+                    source,
+                    self.driver
+                        .renderer(),
+                );
                 self.driver
-                    .renderer(),
-            );
-            self.driver
-                .display(&declaration);
+                    .display(&declaration);
+            }
             if let Some(t) = entry.title {
                 let title_text = crate::formatting::formatter::render_title(
                     t,
@@ -707,9 +705,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // bind them positionally into a fresh environment for the
                 // callee. The callee sees only its parameters, not the caller's
                 // bindings.
-                let params = subroutine
-                    .parameters
-                    .unwrap_or(&[]);
+                let params = &subroutine.parameters;
                 let expected = subroutine.arity();
                 let actual = invocable
                     .arguments
@@ -799,7 +795,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     for i in 0..count {
                         let bind = params
                             .get(i)
-                            .map(|p| p.value);
+                            .and_then(|bind| bind.as_deref());
                         let prompted = if invocable.elided {
                             true
                         } else if let Operation::Hole(_) = &invocable.arguments[i] {
@@ -865,7 +861,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             .replace(lexical_segments);
                         let outer = self.replaying;
                         self.replaying = outer + 1;
-                        self.announce_procedure(subroutine, name, &lexical, &local);
+                        self.announce_procedure(subroutine, &lexical, &local);
                         let result = self.walk(&mut local, &subroutine.body);
                         self.replaying = outer;
                         self.path
@@ -926,7 +922,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             None => {
                                 let bind = params
                                     .get(i)
-                                    .map(|p| p.value);
+                                    .and_then(|bind| bind.as_deref());
                                 let forma = formae
                                     .get(i)
                                     .map(|s| s.as_str());
@@ -962,7 +958,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                     let saved = self
                         .path
                         .replace(lexical_segments);
-                    self.announce_procedure(subroutine, name, &lexical, &local);
+                    self.announce_procedure(subroutine, &lexical, &local);
 
                     // Walk the callee's body in its own `local` environment,
                     // then close its scope; a Quit or error skips the close,
@@ -2033,13 +2029,10 @@ impl<'i, D: Driver> Runner<'i, D> {
     fn announce_procedure(
         &mut self,
         subroutine: &'i Subroutine<'i>,
-        name: &'i str,
         qualified: &str,
         env: &Environment,
     ) {
-        let params = subroutine
-            .parameters
-            .unwrap_or(&[]);
+        let params = &subroutine.parameters;
         if params.is_empty() {
             self.driver
                 .enter(qualified, "");
@@ -2048,15 +2041,15 @@ impl<'i, D: Driver> Runner<'i, D> {
             self.driver
                 .enter(qualified, &echo);
         }
-        let declaration = crate::formatting::formatter::render_declaration(
-            name,
-            subroutine.parameters,
-            subroutine.signature,
+        if let Some(source) = subroutine.source {
+            let declaration = crate::formatting::formatter::render_procedure_declaration(
+                source,
+                self.driver
+                    .renderer(),
+            );
             self.driver
-                .renderer(),
-        );
-        self.driver
-            .display(&declaration);
+                .display(&declaration);
+        }
         if let Some(t) = subroutine.title {
             let title_text = crate::formatting::formatter::render_title(
                 t,
@@ -2257,7 +2250,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         &mut self,
         env: &mut Environment,
         qualified: &str,
-        params: &[language::Identifier<'i>],
+        params: &[Option<String>],
     ) -> Result<Vec<Supplied>, RunnerError> {
         if let Some(supplied) = self
             .ledger
@@ -2282,15 +2275,13 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
         let supplied = params
             .iter()
-            .map(|p| Supplied {
-                value: env
-                    .lookup(p.value)
+            .map(|bind| Supplied {
+                value: bind
+                    .as_ref()
+                    .and_then(|name| env.lookup(name))
                     .cloned()
                     .unwrap_or(Value::Unitus),
-                name: Some(
-                    p.value
-                        .to_string(),
-                ),
+                name: bind.clone(),
             })
             .collect();
         Ok(supplied)
@@ -2888,8 +2879,13 @@ fn binds_descriptively(op: &Operation) -> bool {
 
 /// Render a procedure's bound arguments in `value ~ name` form, e.g.
 /// `([] ~ e, 0 ~ s)`, to announce alongside the qualified path.
-fn render_argument_echo(params: &[language::Identifier], env: &Environment) -> String {
-    format!("({})", render_bindings(params, env))
+fn render_argument_echo(params: &[Option<String>], env: &Environment) -> String {
+    let names: Vec<&str> = params
+        .iter()
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    format!("({})", render_bindings(&names, env))
 }
 
 /// Render a loop iteration's bound variable(s) in `value ~ name` form, e.g.
@@ -2899,7 +2895,11 @@ fn render_iteration_echo(names: &[language::Identifier], env: &Environment) -> S
     if names.is_empty() {
         String::new()
     } else {
-        format!("({})", render_bindings(names, env))
+        let names: Vec<&str> = names
+            .iter()
+            .map(|n| n.value)
+            .collect();
+        format!("({})", render_bindings(&names, env))
     }
 }
 
@@ -2921,15 +2921,15 @@ fn render_constraints(constraints: &[Value]) -> Option<String> {
 
 /// Comma-join a set of bindings in `value ~ name` form with each value read
 /// from the environment.
-fn render_bindings(names: &[language::Identifier], env: &Environment) -> String {
+fn render_bindings(names: &[&str], env: &Environment) -> String {
     let bindings: Vec<String> = names
         .iter()
-        .map(|n| {
-            let value = match env.lookup(n.value) {
+        .map(|name| {
+            let value = match env.lookup(name) {
                 Some(value) => value.to_string(),
                 None => String::new(),
             };
-            format!("{} ~ {}", value, n.value)
+            format!("{} ~ {}", value, name)
         })
         .collect();
     bindings.join(", ")
@@ -2961,7 +2961,7 @@ fn render_parameter_formae(signature: Option<&language::Signature>) -> Vec<Strin
 /// Describe a procedure's expected parameters as `name : Type` fragments for
 /// an arity error, falling back to whichever of name or forma is known.
 fn describe_parameters(
-    params: &[language::Identifier],
+    params: &[Option<String>],
     signature: Option<&language::Signature>,
 ) -> Vec<String> {
     let formae = signature
@@ -2977,7 +2977,7 @@ fn describe_parameters(
         .map(|i| {
             let name = params
                 .get(i)
-                .map(|p| p.value);
+                .and_then(|bind| bind.as_deref());
             let forma = formae
                 .get(i)
                 .map(|f| f.value);
@@ -3001,9 +3001,7 @@ pub(super) fn bind_parameters(
         .subroutines
         .first()
         .ok_or(RunnerError::MissingEntryProcedure)?;
-    let params = entry
-        .parameters
-        .unwrap_or(&[]);
+    let params = &entry.parameters;
     let expected = params.len();
     let actual = arguments.len();
     let procedure = entry
@@ -3022,21 +3020,31 @@ pub(super) fn bind_parameters(
             actual,
         });
     }
+    // A wildcard binds nothing, but its argument is still taken; its forma
+    // names it if there is a complaint.
+    let formae = render_parameter_formae(entry.signature);
     let mut env = Environment::new();
-    for (param, argument) in params
+    for (i, (bind, argument)) in params
         .iter()
         .zip(arguments)
+        .enumerate()
     {
-        let parameter = param
-            .value
-            .to_string();
         let value = super::evaluator::parse_value(argument).ok_or_else(|| {
             RunnerError::MalformedArgument {
-                parameter: parameter.clone(),
+                parameter: bind
+                    .clone()
+                    .or_else(|| {
+                        formae
+                            .get(i)
+                            .cloned()
+                    })
+                    .unwrap_or_else(|| "?".to_string()),
                 argument: argument.to_string(),
             }
         })?;
-        env.extend(parameter, value);
+        if let Some(name) = bind {
+            env.extend(name.clone(), value);
+        }
     }
     Ok(env)
 }

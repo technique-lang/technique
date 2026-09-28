@@ -9,7 +9,7 @@ use crate::language;
 use crate::parsing;
 use crate::program::{ExecutableRef, Fragment, Operation, Ordinal, SubroutineId, SubroutineRef};
 use crate::resolution::resolve;
-use crate::translation::translate;
+use crate::translation::{TranslationError, translate};
 
 #[test]
 fn empty_input_yields_empty_program() {
@@ -129,12 +129,11 @@ make_coffee(beans, water) :
     let document = parsing::parse(path, source).expect("parse");
     let program = translate(&document).expect("translate");
 
-    let params = program.subroutines[0]
-        .parameters
-        .expect("parameters present");
-    assert_eq!(params.len(), 2);
-    assert_eq!(params[0].value, "beans");
-    assert_eq!(params[1].value, "water");
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(
+        params,
+        &[Some("beans".to_string()), Some("water".to_string())]
+    );
 }
 
 #[test]
@@ -1825,4 +1824,130 @@ init : () -> ()
         panic!("expected Invoke, got {:?}", section_body[1]);
     };
     assert_eq!(invocable.target, SubroutineRef::Resolved(SubroutineId(1)));
+}
+
+#[test]
+fn procedure_parameters_named_from_signature() {
+    // A procedure with a signature but no parameter list takes each
+    // argument's name from its input type.
+    let source = r#"
+% technique v1
+
+configure : LocalEnvironment -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(params, &[Some("local_environment".to_string())]);
+}
+
+#[test]
+fn procedure_parameters_named_from_tuple_and_list() {
+    let source = r#"
+% technique v1
+
+deploy : Design, Component -> ()
+
+register : [Hostname] -> ()
+
+nothing : () -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(
+        params,
+        &[Some("design".to_string()), Some("component".to_string())]
+    );
+
+    // a list argument is the plural of its element type
+    let params = &program.subroutines[1].parameters;
+    assert_eq!(params, &[Some("hostnames".to_string())]);
+
+    // and unit requires nothing, so there is nothing to name
+    assert!(
+        program.subroutines[2]
+            .parameters
+            .is_empty()
+    );
+}
+
+#[test]
+fn procedure_parameters_written_win_over_derived() {
+    let source = r#"
+% technique v1
+
+survey_site(before, after) : Photograph, Photograph -> Report
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(
+        params,
+        &[Some("before".to_string()), Some("after".to_string())]
+    );
+}
+
+#[test]
+fn procedure_parameters_wildcard_stays_anonymous() {
+    // A wildcard is a legal input — anything can be passed to it — but it is
+    // not a name, so the body cannot read the argument back.
+    let source = r#"
+% technique v1
+
+passthrough : * -> *
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(params, &[None]);
+}
+
+#[test]
+fn procedure_parameters_name_the_slots_they_can() {
+    // Nameable and unnameable inputs mix, so it is each argument that has a
+    // name or lacks one, not the parameter list as a whole.
+    let source = r#"
+% technique v1
+
+deploy : Customer, * -> ()
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let params = &program.subroutines[0].parameters;
+    assert_eq!(params, &[Some("customer".to_string()), None]);
+    assert_eq!(program.subroutines[0].arity(), 2);
+}
+
+#[test]
+fn procedure_parameters_repeated_type_is_ambiguous() {
+    let source = r#"
+% technique v1
+
+survey_site : Photograph, Photograph -> Report
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let errors = translate(&document).expect_err("expected an ambiguity");
+
+    let TranslationError::AmbiguousParameters { name, .. } = &errors[0] else {
+        panic!("expected AmbiguousParameters, got {:?}", errors[0]);
+    };
+    assert_eq!(name, "photograph");
 }

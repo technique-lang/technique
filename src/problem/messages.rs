@@ -1214,7 +1214,7 @@ Hyphens, underscores, spaces, or subscripts are not valid in unit symbols.
 /// translation phase.
 pub fn generate_translation_error<'i>(
     error: &TranslationError<'i>,
-    _renderer: &dyn Render,
+    renderer: &dyn Render,
 ) -> (String, String) {
     match error {
         TranslationError::DuplicateProcedure(Identifier { value: name, .. }) => (
@@ -1257,6 +1257,43 @@ requires.
             .trim_ascii()
             .to_string(),
         ),
+        TranslationError::AmbiguousParameters {
+            procedure: Identifier {
+                value: procedure, ..
+            },
+            name,
+        } => {
+            let examples = vec![Procedure {
+                name: Identifier::new("survey_site"),
+                parameters: Some(vec![Identifier::new("before"), Identifier::new("after")]),
+                signature: Some(Signature {
+                    requires: Genus::Naked(vec![
+                        Forma::new("Photograph"),
+                        Forma::new("Photograph"),
+                    ]),
+                    provides: Genus::Single(Forma::new("Report")),
+                }),
+                elements: Vec::new(),
+                span: Span::default(),
+            }];
+
+            (
+                format!("Inputs of '{}' both name '{}'", procedure, name),
+                format!(
+                    r#"
+A procedure written without a parameter list implicitly binds a parameter with
+the name of each of its required types. If, however, two inputs of the same
+type are givem then they can't both have the same automatic name. If you find
+yourself in this scenario, just give the two parameters explicit names.
+
+    {}
+                    "#,
+                    examples[0].present(renderer)
+                )
+                .trim_ascii()
+                .to_string(),
+            )
+        }
         TranslationError::BoundRepeat { .. } => (
             "Cannot use the result of `repeat`".to_string(),
             r#"
