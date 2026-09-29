@@ -9,7 +9,8 @@ use super::evaluator::Environment;
 use super::library::{Library, Nature};
 use super::path::{PathSegment, QualifiedPath};
 use crate::engraving::{
-    Appender, InvokeTarget, Journal, Ledger, Position, Record, Serial, State, StoreError, Supplied,
+    Appender, Entry, InvokeTarget, Journal, Ledger, Position, Record, Serial, State, StoreError,
+    Supplied,
 };
 use crate::language;
 use crate::program::{
@@ -146,6 +147,13 @@ pub struct Runner<'i, D: Driver> {
     /// A verdict chosen at a reviewed position, waiting for the replay to reach
     /// it. Survives the restart, which is the whole point of it.
     amending: Option<(Serial, UserInput)>,
+    /// A call whose asked arguments are to be asked again when the replay
+    /// reaches it, chosen in review and carried across the restart as
+    /// `amending` is.
+    reasking: Option<Serial>,
+    /// Calls this walk has passed whose arguments were asked rather than
+    /// written, which review offers to ask again.
+    asked: HashSet<Serial>,
     /// How deep inside completed scopes the walk is replaying. While non-zero
     /// it descends and displays but takes no prompt, writes no record, and
     /// announces an `Execute` rather than dispatching it.
@@ -177,6 +185,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             records: Vec::new(),
             opening: "\u{2198}",
             amending: None,
+            reasking: None,
+            asked: HashSet::new(),
             replaying: 0,
             constraints: Vec::new(),
             library,
@@ -231,6 +241,8 @@ impl<'i, D: Driver> Runner<'i, D> {
             // Carried across: it is the answer given in review, and the walk
             // restarts precisely so it can be delivered.
             amending: self.amending,
+            reasking: self.reasking,
+            asked: HashSet::new(),
             replaying: 0,
             constraints: Vec::new(),
             library: self.library,
@@ -760,12 +772,15 @@ impl<'i, D: Driver> Runner<'i, D> {
                     // so restoring from it would put the old value back and the
                     // amendment would silently do nothing. It is still what the
                     // prompt is seeded from: a default the user commits at the
-                    // real prompt is an ordinary prompt.
-                    let entry = self
-                        .ledger
-                        .look(self.serial, &lexical);
+                    // real prompt is an ordinary prompt. A call being asked
+                    // again is treated the same way.
+                    let entry = self.prior(&lexical);
+                    let reask = match entry {
+                        Some(entry) => entry.revoked || self.reasking == Some(entry.serial),
+                        None => false,
+                    };
                     let revoked = match entry {
-                        Some(entry) if entry.revoked => Some(
+                        Some(entry) if reask => Some(
                             entry
                                 .began
                                 .clone(),
@@ -773,7 +788,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         _ => None,
                     };
                     let began = match entry {
-                        Some(entry) if !entry.revoked => Some(
+                        Some(entry) if !reask => Some(
                             entry
                                 .began
                                 .clone(),
@@ -792,6 +807,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                             .len()
                     };
                     let mut supplied: Vec<Option<Supplied>> = Vec::with_capacity(count);
+                    let mut asks = false;
                     for i in 0..count {
                         let bind = params
                             .get(i)
@@ -803,6 +819,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         } else {
                             false
                         };
+                        asks |= prompted;
                         let value = if prompted {
                             began
                                 .as_ref()
@@ -843,6 +860,10 @@ impl<'i, D: Driver> Runner<'i, D> {
                         // Descend for display, in the callee's own environment
                         // rebuilt from its arguments. The callee's bindings are
                         // its own and do not escape.
+                        if asks {
+                            self.asked
+                                .insert(serial);
+                        }
                         self.enter_replayed(serial);
                         for item in known
                             .iter()
@@ -897,7 +918,7 @@ impl<'i, D: Driver> Runner<'i, D> {
                         Some(known) => {
                             let serial = self
                                 .ledger
-                                .serial_for(self.serial, &lexical);
+                                .serial_for(self.serial, &lexical, &self.entered);
                             !self
                                 .ledger
                                 .standing(serial, &lexical, known)
@@ -954,6 +975,13 @@ impl<'i, D: Driver> Runner<'i, D> {
                     }
 
                     self.begin_scope(&lexical, settled)?;
+                    if asks {
+                        self.asked
+                            .insert(self.serial);
+                    }
+                    if self.reasking == Some(self.serial) {
+                        self.reasking = None;
+                    }
 
                     let saved = self
                         .path
@@ -1024,7 +1052,7 @@ impl<'i, D: Driver> Runner<'i, D> {
 
                 let serial = self
                     .ledger
-                    .serial_for(self.serial, &qualified);
+                    .serial_for(self.serial, &qualified, &self.entered);
                 if !self
                     .ledger
                     .standing(serial, &qualified, &[])
@@ -1041,14 +1069,18 @@ impl<'i, D: Driver> Runner<'i, D> {
                 // Prompt at the departure, echoing the arguments flowing into
                 // the external Technque.
                 let echo = self.render_deferred_echo(env, &invocable.arguments)?;
-                let embarked = self
-                    .lift(|driver| driver.depart(&qualified, &echo))?
-                    .completed();
-                let conclusion = match embarked {
-                    Conclusion::Completed(Outcome::Done(_)) => self
-                        .lift(|driver| driver.external(&qualified))?
-                        .completed(),
-                    declined => declined,
+                let conclusion = if self.amends() {
+                    self.amended(Conclusion::Completed(Outcome::Done(Value::Unitus)))
+                } else {
+                    let embarked = self
+                        .lift(|driver| driver.depart(&qualified, &echo))?
+                        .completed();
+                    match embarked {
+                        Conclusion::Completed(Outcome::Done(_)) => self
+                            .lift(|driver| driver.external(&qualified))?
+                            .completed(),
+                        declined => declined,
+                    }
                 };
                 if let Conclusion::Completed(_) = &conclusion {
                     self.driver
@@ -1350,7 +1382,10 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.begin_scope(qualified, supplied)?;
         self.driver
             .enter(qualified, &echo);
-        let result = self.walk(env, body);
+        let result = match self.walk(env, body) {
+            Ok(conclusion) => Ok(self.amended(conclusion)),
+            failed => failed,
+        };
         // A stopped or errored pass leaves its Begin unpaired, which is what
         // marks the iteration to be redone.
         if let Ok(conclusion) = &result {
@@ -1568,6 +1603,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         if let Conclusion::Stopping | Conclusion::Restarting = conclusion {
             return Ok(conclusion);
         }
+        let conclusion = self.amended(conclusion);
         // Translation emits a Prologue only when the description carries real
         // work (prose-only descriptions never become step 0)
         self.record_outcome(qualified, record_state(&conclusion))?;
@@ -1620,15 +1656,17 @@ impl<'i, D: Driver> Runner<'i, D> {
             }
         }
 
-        // A revoked step's recorded bindings, for its acquire prompts to open
-        // on. Taken here because the `Begin` below rebuilds the entry.
-        self.seeds = match self
-            .ledger
-            .look(self.serial, qualified)
-        {
-            Some(entry) if entry.revoked => entry
+        // What a revoked or amended step recorded binding, for its acquire
+        // prompts to open on or to keep. Taken here because the `Begin` below
+        // rebuilds the entry.
+        let kept = match self.prior(qualified) {
+            Some(entry) => entry
                 .bound
                 .clone(),
+            None => Vec::new(),
+        };
+        self.seeds = match self.prior(qualified) {
+            Some(entry) if entry.revoked => kept.clone(),
             _ => Vec::new(),
         };
 
@@ -1640,6 +1678,18 @@ impl<'i, D: Driver> Runner<'i, D> {
         self.record(qualified, State::Begin(reads))?;
 
         self.display_step(env, source, qualified);
+
+        // A verdict chosen in review stands in for doing the step again: its
+        // body is passed over as a replay would, keeping what it bound.
+        if self.amends() {
+            self.replay(env, body, &kept)?;
+            let conclusion = self.amended(Conclusion::Completed(Outcome::Done(Value::Unitus)));
+            self.driver
+                .show_verdict("→", qualified, &verdict_from(&conclusion));
+            self.bound = kept;
+            self.record_outcome(qualified, record_state(&conclusion))?;
+            return Ok(conclusion);
+        }
 
         // A descriptive binding on a step with response choices takes its value
         // from the chosen response, not a separate acquire: skip the body walk
@@ -1868,8 +1918,8 @@ impl<'i, D: Driver> Runner<'i, D> {
     }
 
     /// Run the review cursor over the Enter-sites this walk has passed, until
-    /// the user leaves it or amends one. `true` means they amended: the
-    /// `Revoke` is written and the walk is to restart.
+    /// the user leaves it or amends one. `Amended` means the `Revoke` is
+    /// written and the walk is to restart.
     ///
     /// The walker's position does not move — it is a Rust call stack, which
     /// cannot be rewound — so this is a modal loop at the live prompt.
@@ -1880,7 +1930,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         let records = self
             .records
             .clone();
-        let journal = Journal::new(&records);
+        let journal = Journal::new(&records, Some(self.serial));
         let mut at = match journal.last() {
             Some(at) => at,
             None => return Ok(Reviewed::Left),
@@ -1896,10 +1946,20 @@ impl<'i, D: Driver> Runner<'i, D> {
             let serial = record.serial;
             let settled = settled_by(&record.state);
             let marker = marker_of(record);
-            let offers = reviewing(settled.as_ref());
+            let bound = names_bound(&record.state);
+            let encloses = self
+                .ledger
+                .encloses(serial);
+            let asked = match record.state {
+                State::Begin(_) => self
+                    .asked
+                    .contains(&serial),
+                _ => false,
+            };
+            let offers = reviewing(settled.as_ref(), encloses, asked);
             let motion = match self
                 .driver
-                .review(marker, &qualified, settled.as_ref(), &offers)
+                .review(marker, &qualified, &bound, settled.as_ref(), &offers)
             {
                 Review::Move(motion) => motion,
                 Review::Chose(offer) => match offer {
@@ -1915,9 +1975,27 @@ impl<'i, D: Driver> Runner<'i, D> {
                         self.amend(serial, &qualified, UserInput::Override)?;
                         return Ok(Reviewed::Amended);
                     }
-                    // Edit has no value and Fail no reason until someone types
-                    // one, so these two withdraw and let the replay ask.
-                    Offer::Edit | Offer::Fail => {
+                    // A call's arguments are asked again at the call, where
+                    // a changed one redoes the whole of it.
+                    Offer::Edit if asked => {
+                        self.revoke(serial, &qualified)?;
+                        self.reasking = Some(serial);
+                        return Ok(Reviewed::Amended);
+                    }
+                    Offer::Fail => match self
+                        .driver
+                        .reason(marker, &qualified)
+                    {
+                        UserInput::Fail(reason) => {
+                            self.amend(serial, &qualified, UserInput::Fail(reason))?;
+                            return Ok(Reviewed::Amended);
+                        }
+                        UserInput::Quit => return Ok(Reviewed::Quit),
+                        _ => continue,
+                    },
+                    // Edit has no value until someone types one, so it
+                    // withdraws and lets the replay ask.
+                    Offer::Edit => {
                         self.revoke(serial, &qualified)?;
                         return Ok(Reviewed::Amended);
                     }
@@ -1935,18 +2013,19 @@ impl<'i, D: Driver> Runner<'i, D> {
         }
     }
 
-    /// Withdraw a recorded value. The `Revoke` reaches the file before the
-    /// restart, so a crash in between leaves a resumable state that redoes the
-    /// step rather than one that has lost the amendment.
+    /// Withdraw a recorded verdict, and the value of a position enclosing
+    /// nothing. The `Revoke` reaches the file before the restart, so a crash in
+    /// between leaves a resumable state that asks again rather than one that
+    /// has lost the amendment.
     ///
     /// Nothing is collected here: correcting a value is a `Revoke` plus
     /// ordinary re-execution. The walk restarts, replays what still stands,
-    /// arrives at the step and prompts exactly as it did the first time.
+    /// arrives at the position and prompts exactly as it did the first time.
     fn revoke(&mut self, serial: Serial, qualified: &str) -> Result<(), RunnerError> {
         self.stamp(serial, qualified, State::Revoke)
     }
 
-    /// Withdraw a recorded value and say what replaces it. The verdict is held
+    /// Withdraw a recorded verdict and say what replaces it. The verdict is held
     /// in memory across the restart and settles the position when the replay
     /// reaches it; a crash in between leaves the `Revoke` on disk, so the
     /// position is redone by asking rather than silently keeping the old value.
@@ -1961,11 +2040,47 @@ impl<'i, D: Driver> Runner<'i, D> {
         Ok(())
     }
 
+    /// Whether a verdict chosen in review waits for the scope being closed.
+    fn amends(&self) -> bool {
+        match &self.amending {
+            Some((at, _)) => *at == self.serial,
+            None => false,
+        }
+    }
+
+    /// The conclusion a scope closes on: the verdict chosen for it in review
+    /// if one waits, otherwise the one the walk arrived at.
+    fn amended(&mut self, conclusion: Conclusion) -> Conclusion {
+        match conclusion {
+            Conclusion::Completed(_) | Conclusion::Throwing(_) if self.amends() => {}
+            _ => return conclusion,
+        }
+        let produced = match &conclusion {
+            Conclusion::Completed(Outcome::Done(value)) => value.clone(),
+            _ => Value::Unitus,
+        };
+        match self
+            .amending
+            .take()
+            .map(|(_, verdict)| verdict)
+        {
+            Some(UserInput::Skip) => Conclusion::Completed(Outcome::Skip(produced)),
+            Some(UserInput::Fail(reason)) => {
+                Conclusion::Completed(Outcome::Fail(Failure::Aborted(reason)))
+            }
+            Some(UserInput::Override) => Conclusion::Completed(Outcome::Done(Value::Unitus)),
+            Some(UserInput::Done(value)) => Conclusion::Completed(Outcome::Done(value)),
+            _ => conclusion,
+        }
+    }
+
     /// Stand at a position the walk is replaying. The records it wrote the
     /// first time are already in the journal, so review reaches it without the
     /// replay having to announce itself.
     fn enter_replayed(&mut self, serial: Serial) {
         self.serial = serial;
+        self.entered
+            .insert(serial);
     }
 
     /// Show a replayed position's recorded verdict.
@@ -2143,22 +2258,26 @@ impl<'i, D: Driver> Runner<'i, D> {
             });
     }
 
+    /// What a prior walk recorded at this position that this walk has not
+    /// already taken: a second call to one procedure from a step is the next
+    /// one recorded there.
+    fn prior(&self, qualified: &str) -> Option<&Entry> {
+        self.ledger
+            .recorded(self.serial, qualified)
+            .find(|entry| {
+                !self
+                    .entered
+                    .contains(&entry.serial)
+            })
+    }
+
     /// What a prior walk left at this position, as it bears on the walk
     /// arriving here now. `reads` is what the node reads at this moment.
     fn recall(&self, qualified: &str, reads: &[Supplied]) -> Recall {
-        let entry = match self
-            .ledger
-            .look(self.serial, qualified)
-        {
+        let entry = match self.prior(qualified) {
             Some(entry) => entry,
             None => return Recall::Nothing,
         };
-        if self
-            .entered
-            .contains(&entry.serial)
-        {
-            return Recall::Nothing;
-        }
         let outcome = match &entry.outcome {
             Some(outcome) => outcome,
             None => return Recall::Nothing,
@@ -2214,20 +2333,9 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// its own recorded descendants. The caller restores the enclosing scope's
     /// serial on the way back out.
     fn allocate(&mut self, qualified: &str) {
-        let serial = self
+        self.serial = self
             .ledger
-            .serial_for(self.serial, qualified);
-        // A serial this walk has already entered is another execution of the
-        // same address, not a return to the one recorded there.
-        self.serial = if self
-            .entered
-            .contains(&serial)
-        {
-            self.ledger
-                .next_serial()
-        } else {
-            serial
-        };
+            .serial_for(self.serial, qualified, &self.entered);
         self.entered
             .insert(self.serial);
     }
@@ -2253,8 +2361,7 @@ impl<'i, D: Driver> Runner<'i, D> {
         params: &[Option<String>],
     ) -> Result<Vec<Supplied>, RunnerError> {
         if let Some(supplied) = self
-            .ledger
-            .look(self.serial, qualified)
+            .prior(qualified)
             .filter(|entry| !entry.revoked)
             .map(|entry| {
                 entry
@@ -2601,11 +2708,18 @@ fn iteration_values(names: &[language::Identifier], env: &Environment) -> Vec<Su
 
 /// The actions on offer at a reviewed position: the ones it was answered with,
 /// so changing an answer means giving a different one. A frame the walk never
-/// asked about has no answer to change, leaving only Quit.
-fn reviewing(settled: Option<&UserInput>) -> Vec<Offer> {
+/// asked about has no answer to change, leaving only Quit. What encloses other
+/// work has only its verdict to change, its value being what that work rolled
+/// up to. A call whose arguments were `asked` can have them asked again.
+fn reviewing(settled: Option<&UserInput>, encloses: bool, asked: bool) -> Vec<Offer> {
     let mut offers = Vec::new();
-    if let Some(verdict) = settled {
+    if asked {
         offers.push(Offer::Edit);
+    }
+    if let Some(verdict) = settled {
+        if !encloses {
+            offers.push(Offer::Edit);
+        }
         offers.push(Offer::Skip);
         offers.push(Offer::Fail);
         if let UserInput::Fail(_) = verdict {
@@ -2665,9 +2779,9 @@ enum Recall {
     /// recorded, so the work stands: its serial, outcome, and bindings.
     Valid(Serial, State, Vec<Supplied>),
     /// Completed, but an input has been amended since. This is the whole of
-    /// staleness propagation — the node is redone, and redoing it invalidates
-    /// its own consumers in turn, with nothing computed or stored beyond the
-    /// amendment itself.
+    /// staleness propagation — the node is redone with nothing beneath it
+    /// standing, and redoing it invalidates its own consumers in turn, with
+    /// nothing computed or stored beyond the amendment itself.
     Stale,
 }
 
@@ -2741,6 +2855,23 @@ fn marker_of(record: &Record) -> &'static str {
         (true, false) => "\u{2198}",
         (false, _) => "\u{2192}",
     }
+}
+
+/// The names a `Bind` record bound, as `~ a, b`; empty for any other record.
+fn names_bound(state: &State) -> String {
+    let bound = match state {
+        State::Bind(bound) => bound,
+        _ => return String::new(),
+    };
+    let names: Vec<&str> = bound
+        .iter()
+        .filter_map(|item| {
+            item.name
+                .as_ref()
+                .map(|name| name.as_str())
+        })
+        .collect();
+    format!("~ {}", names.join(", "))
 }
 
 fn verdict_of(state: &State) -> UserInput {

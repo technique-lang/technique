@@ -1,13 +1,14 @@
 //! Execute a fold over a series of PFFTT records.
 
 use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::record::{Record, Serial, State, Supplied};
 
 /// A single record line in a PFFTT file. This is refined by the enclosing
 /// scope and the edge reaching it, so two executions of the same document
-/// address will be recorded as separate entries with different serials.
+/// address will be recorded as separate entries with different serials, taken
+/// in serial order.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub serial: Serial,
@@ -16,8 +17,9 @@ pub struct Entry {
     /// Results bound to variables coming out of scope.
     pub bound: Vec<Supplied>,
     pub outcome: Option<State>,
-    /// Only the target of a revocation is marked, never an ancestor, which is
-    /// what stops `walk_invoke` restoring the very argument being amended.
+    /// Only a target enclosing nothing is marked, never an ancestor, so its
+    /// value is asked again, seeded with what it recorded, rather than
+    /// restored.
     pub revoked: bool,
 }
 
@@ -32,7 +34,7 @@ struct Scope {
 /// A summary of the state of a run, after the fold used to construct it.
 #[derive(Debug)]
 pub struct Ledger {
-    entries: BTreeMap<(Serial, String), Entry>,
+    entries: BTreeMap<(Serial, String, Serial), Entry>,
     scopes: HashMap<Serial, Scope>,
     open: Vec<Serial>,
     highest: Serial,
@@ -123,18 +125,37 @@ impl Ledger {
         }
     }
 
-    // A Section short-circuits before descending, so an ancestor left standing
-    // on its empty `Begin` would be skipped on the replay.
+    // Withdraw a scope's outcome, and its value too if it encloses nothing, so
+    // that is asked again. Its ancestors' outcomes go with it: a Section left
+    // standing on its empty `Begin` would short-circuit the replay.
     fn revoke(&mut self, serial: Serial) {
+        let encloses = self.encloses(serial);
         if let Some(key) = self.key_of(serial) {
             if let Some(entry) = self
                 .entries
                 .get_mut(&key)
             {
                 entry.outcome = None;
-                entry.revoked = true;
+                entry.revoked = !encloses;
             }
         }
+        let mut chain = vec![serial];
+        let mut at = self
+            .scopes
+            .get(&serial)
+            .map(|scope| scope.parent);
+        while let Some(parent) = at {
+            if parent == Serial::LIFECYCLE {
+                break;
+            }
+            chain.push(parent);
+            at = self
+                .scopes
+                .get(&parent)
+                .map(|scope| scope.parent);
+        }
+        chain.reverse();
+        self.open = chain;
         // Descendants are left standing, their entries keeping them reachable.
         let mut at = serial;
         while let Some(parent) = self
@@ -159,6 +180,9 @@ impl Ledger {
 
     fn open_scope(&mut self, record: &Record, supplied: Vec<Supplied>) {
         let standing = self.standing(record.serial, &record.path, &supplied);
+        let known = self
+            .scopes
+            .contains_key(&record.serial);
         // Without this, a resume after a mid-step Quit parents the second
         // walk's records under the step that was in flight.
         if let Some(at) = self
@@ -183,7 +207,7 @@ impl Ledger {
                 .unwrap_or(Serial::LIFECYCLE),
         };
         let edge = self.edge_under(parent, &record.path);
-        let key = (parent, edge.clone());
+        let key = (parent, edge.clone(), record.serial);
 
         // Serial to path is a function: the same scope re-entered on a later
         // walk keeps its number, so a serial appearing at a path it has not
@@ -217,6 +241,11 @@ impl Ledger {
                         .clone(),
                 },
             );
+        // Beginning again where the entry no longer stands is a new
+        // activation, and nothing the previous one recorded beneath it stands.
+        if !standing && known {
+            self.forget_beneath(record.serial);
+        }
         if !standing {
             self.entries
                 .insert(
@@ -244,7 +273,7 @@ impl Ledger {
             .to_string()
     }
 
-    fn key_of(&self, serial: Serial) -> Option<(Serial, String)> {
+    fn key_of(&self, serial: Serial) -> Option<(Serial, String, Serial)> {
         self.scopes
             .get(&serial)
             .map(|scope| {
@@ -253,6 +282,7 @@ impl Ledger {
                     scope
                         .edge
                         .clone(),
+                    serial,
                 )
             })
     }
@@ -291,6 +321,7 @@ impl Ledger {
                 scope
                     .edge
                     .clone(),
+                serial,
             )) {
             Some(entry) => {
                 !entry.revoked
@@ -308,9 +339,16 @@ impl Ledger {
 
     /// What a prior walk recorded at this position, if it reached it.
     pub fn look(&self, parent: Serial, path: &str) -> Option<&Entry> {
+        self.recorded(parent, path)
+            .next()
+    }
+
+    /// Every execution prior walks recorded at this position, in serial order.
+    pub fn recorded(&self, parent: Serial, path: &str) -> impl Iterator<Item = &Entry> {
         let edge = self.edge_under(parent, path);
         self.entries
-            .get(&(parent, edge))
+            .range((parent, edge.clone(), Serial::LIFECYCLE)..=(parent, edge, Serial(u32::MAX)))
+            .map(|(_, entry)| entry)
     }
 
     /// Every loop iteration a prior walk recorded within this scope, in index
@@ -320,12 +358,12 @@ impl Ledger {
     /// index is parsed rather than taken from key order, `[10]` sorting
     /// between `[1]` and `[2]`.
     pub fn iterations(&self, parent: Serial) -> Vec<(usize, &Entry)> {
-        let low = (parent, "/[".to_string());
-        let high = (parent, "/]".to_string());
+        let low = (parent, "/[".to_string(), Serial::LIFECYCLE);
+        let high = (parent, "/]".to_string(), Serial::LIFECYCLE);
         let mut found: Vec<(usize, &Entry)> = self
             .entries
             .range(low..high)
-            .filter_map(|((_, edge), entry)| {
+            .filter_map(|((_, edge, _), entry)| {
                 let number = edge
                     .strip_prefix("/[")?
                     .strip_suffix(']')?
@@ -338,12 +376,49 @@ impl Ledger {
         found
     }
 
-    /// The serial to record work at this address under: the one it already
-    /// wears while it still stands, a fresh one once revoked.
-    pub fn serial_for(&self, parent: Serial, path: &str) -> Serial {
-        match self.look(parent, path) {
-            Some(entry) if !entry.revoked => entry.serial,
-            _ => self.next_serial(),
+    /// The serial to record work at this address under: the first a prior
+    /// walk recorded here that is not already `taken`, a fresh one otherwise.
+    pub fn serial_for(&self, parent: Serial, path: &str, taken: &HashSet<Serial>) -> Serial {
+        match self
+            .recorded(parent, path)
+            .find(|entry| !taken.contains(&entry.serial))
+        {
+            Some(entry) => entry.serial,
+            None => self.next_serial(),
+        }
+    }
+
+    /// Whether any entry stands within this scope.
+    pub fn encloses(&self, serial: Serial) -> bool {
+        self.entries
+            .range((serial, String::new(), Serial::LIFECYCLE)..)
+            .next()
+            .map_or(false, |((parent, _, _), _)| *parent == serial)
+    }
+
+    // Drop every entry recorded within a scope, however deep.
+    fn forget_beneath(&mut self, serial: Serial) {
+        let within = |mut at: Serial| loop {
+            if at == serial {
+                return true;
+            }
+            match self
+                .scopes
+                .get(&at)
+            {
+                Some(scope) if scope.parent != Serial::LIFECYCLE => at = scope.parent,
+                _ => return false,
+            }
+        };
+        let doomed: Vec<(Serial, String, Serial)> = self
+            .entries
+            .keys()
+            .filter(|(parent, _, _)| within(*parent))
+            .cloned()
+            .collect();
+        for key in doomed {
+            self.entries
+                .remove(&key);
         }
     }
 

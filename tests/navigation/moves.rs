@@ -96,7 +96,11 @@ fn ensure_moves() {
         });
         let records = parse_records(&content)
             .unwrap_or_else(|e| panic!("journal {:?} is malformed: {:?}", expected_path, e));
-        let journal = Journal::new(&records);
+        let prompt = match records.last() {
+            Some(record) if record.state != State::Finish => Some(record.serial),
+            _ => None,
+        };
+        let journal = Journal::new(&records, prompt);
 
         let table = fs::read_to_string(file).expect("read the moves table");
         let mut at = 0;

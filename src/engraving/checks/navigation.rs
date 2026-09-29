@@ -1,4 +1,7 @@
-use crate::engraving::{InvokeTarget, Journal, Motion, Position, Record, RunId, Serial, State};
+use crate::engraving::{
+    InvokeTarget, Journal, Motion, Position, Record, RunId, Serial, State, Supplied,
+};
+use crate::value::Value;
 
 fn record(serial: u32, path: &str, state: State) -> Record {
     Record {
@@ -40,7 +43,7 @@ fn calling() -> Vec<Record> {
 #[test]
 fn a_callee_is_enclosed_by_its_call_site() {
     let records = calling();
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
     assert_eq!(
         journal.step(Position::At(4), Motion::Left),
@@ -59,7 +62,7 @@ fn a_callee_is_enclosed_by_its_call_site() {
 #[test]
 fn down_off_the_end_leaves_review() {
     let records = calling();
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
     assert_eq!(
         journal.step(Position::At(7), Motion::Down),
         Some(Position::Live)
@@ -72,7 +75,7 @@ fn down_off_the_end_leaves_review() {
 
     let mut ended = calling();
     ended.push(record(0, "/", State::Finish));
-    let journal = Journal::new(&ended);
+    let journal = Journal::new(&ended, None);
     assert_eq!(journal.last(), Some(Position::At(7)));
     assert_eq!(journal.step(Position::At(7), Motion::Down), None);
     assert_eq!(journal.step(Position::At(0), Motion::Up), None);
@@ -88,7 +91,7 @@ fn a_session_boundary_is_not_a_position() {
     records.insert(6, record(0, "/", State::Stop));
     records.push(record(0, "/", State::Stop));
     records.push(record(0, "/", State::Resume));
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
     assert_eq!(journal.last(), Some(Position::At(9)));
     assert_eq!(
@@ -143,7 +146,7 @@ fn a_redispatched_call_is_one_place_to_stand() {
     // them; the cursor stops on the last. A second call in the same step writes
     // a different line at the same address, and stands on its own.
     let records = redispatched();
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
     let at = journal
         .last()
@@ -172,7 +175,7 @@ fn two_invocations_of_one_procedure_both_stand() {
         record(5, "/task:/check:", State::Done(None)),
         record(4, "/task:/2", State::Done(None)),
     ];
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
     let mut at = Position::At(8);
     for expected in [7, 6, 5, 4, 3, 2, 1, 0] {
@@ -185,8 +188,8 @@ fn two_invocations_of_one_procedure_both_stand() {
 
 #[test]
 fn an_amended_answer_is_the_only_one_review_reaches() {
-    // Withdrawing an answer and giving a different one writes a second outcome
-    // at the same path under a fresh serial. Navigating back shows the value
+    // Withdrawing an answer and giving a different one writes a second entry
+    // and outcome under the same serial. Navigating back shows the value
     // the position carries now; the one it replaced, the `Revoke` that took it
     // away, and the entry line above it are all recorded and none of them are
     // places to go.
@@ -195,10 +198,10 @@ fn an_amended_answer_is_the_only_one_review_reaches() {
         record(2, "/task:/1", State::Begin(Vec::new())),
         record(2, "/task:/1", State::Skip),
         record(2, "/task:/1", State::Revoke),
-        record(3, "/task:/1", State::Begin(Vec::new())),
-        record(3, "/task:/1", State::Done(None)),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
     ];
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
     let at = journal
         .last()
@@ -212,10 +215,9 @@ fn an_amended_answer_is_the_only_one_review_reaches() {
 }
 
 #[test]
-fn a_revoked_scope_takes_what_it_held_with_it() {
-    // Revoking a call withdraws the whole subtree beneath it: the replay redoes
-    // that work under fresh serials, so the records the first pass left are no
-    // more current than the call that held them.
+fn a_revoked_scope_keeps_what_it_holds() {
+    // Revoking a call withdraws its verdict alone: the replay passes over the
+    // work beneath it, which stands, and records the call's new outcome.
     let records = vec![
         record(1, "/task:", State::Begin(Vec::new())),
         record(2, "/task:/check:", State::Begin(Vec::new())),
@@ -223,19 +225,283 @@ fn a_revoked_scope_takes_what_it_held_with_it() {
         record(3, "/task:/check:/1", State::Done(None)),
         record(2, "/task:/check:", State::Done(None)),
         record(2, "/task:/check:", State::Revoke),
-        record(4, "/task:/check:", State::Begin(Vec::new())),
-        record(5, "/task:/check:/1", State::Begin(Vec::new())),
-        record(5, "/task:/check:/1", State::Done(None)),
-        record(4, "/task:/check:", State::Done(None)),
+        record(2, "/task:/check:", State::Skip),
     ];
-    let journal = Journal::new(&records);
+    let journal = Journal::new(&records, None);
 
-    let mut at = Position::At(9);
-    for expected in [8, 7, 6, 0] {
+    let mut at = Position::At(6);
+    for expected in [3, 2, 1, 0] {
         at = journal
             .step(at, Motion::Up)
-            .expect("the standing execution walks back to the root");
+            .expect("what the call held walks back to the root");
         assert_eq!(at, Position::At(expected));
     }
     assert_eq!(journal.step(at, Motion::Up), None);
+}
+
+#[test]
+fn a_scope_opened_beneath_a_revoked_scope_is_enclosed_by_it() {
+    // The replay comes back into the revoked call without writing its `Begin`,
+    // so what it opens afresh is parented by the call, not the call's parent.
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(3, "/task:/1/[1]", State::Begin(Vec::new())),
+        record(3, "/task:/1/[1]", State::Done(None)),
+        record(2, "/task:/1", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(4, "/task:/1/[2]", State::Begin(Vec::new())),
+        record(4, "/task:/1/[2]", State::Done(None)),
+        record(2, "/task:/1", State::Skip),
+    ];
+    let journal = Journal::new(&records, None);
+
+    let mut at = Position::At(9);
+    for expected in [8, 7, 4, 3, 2, 1, 0] {
+        at = journal
+            .step(at, Motion::Up)
+            .expect("the document walks back to the root");
+        assert_eq!(at, Position::At(expected));
+    }
+    assert_eq!(
+        journal.step(Position::At(7), Motion::Left),
+        Some(Position::At(2))
+    );
+}
+
+// A scope entered with one argument, as a replay enters it again with another.
+fn entering(serial: u32, path: &str, arg: &str) -> Record {
+    record(
+        serial,
+        path,
+        State::Begin(vec![Supplied {
+            value: Value::Literali(arg.to_string()),
+            name: None,
+        }]),
+    )
+}
+
+#[test]
+fn a_redone_step_takes_the_place_of_the_one_it_replaced() {
+    // Step 1 is revoked from the prompt at step 4 and redone, written after
+    // the steps that survived it. The replay enters step 2 again with what the
+    // redone step gave, and the call beneath it afresh. Review walks the
+    // document: 1, 2, 3, 4, and only the second entry to step 2 is a place to
+    // stand.
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        entering(3, "/task:/2", "a"),
+        record(
+            3,
+            "/task:/2",
+            State::Invoke(InvokeTarget::Procedure("check:".to_string())),
+        ),
+        entering(4, "/check:", "a"),
+        record(4, "/check:", State::Done(None)),
+        record(3, "/task:/2", State::Done(None)),
+        record(5, "/task:/3", State::Begin(Vec::new())),
+        record(5, "/task:/3", State::Done(None)),
+        record(6, "/task:/4", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Revoke),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        entering(3, "/task:/2", "b"),
+        record(
+            3,
+            "/task:/2",
+            State::Invoke(InvokeTarget::Procedure("check:".to_string())),
+        ),
+        entering(7, "/check:", "b"),
+        record(7, "/check:", State::Done(None)),
+        record(3, "/task:/2", State::Done(None)),
+    ];
+    let journal = Journal::new(&records, None);
+
+    let mut at = Position::At(11);
+    for expected in [10, 9, 19, 18, 17, 16, 15, 14, 13, 1, 0] {
+        at = journal
+            .step(at, Motion::Up)
+            .expect("the document walks back to the root");
+        assert_eq!(at, Position::At(expected));
+    }
+    assert_eq!(journal.step(at, Motion::Up), None);
+    assert_eq!(
+        journal.step(Position::At(11), Motion::Down),
+        Some(Position::Live)
+    );
+
+    assert_eq!(journal.step(Position::At(13), Motion::PageUp), None);
+    assert_eq!(
+        journal.step(Position::At(13), Motion::PageDown),
+        Some(Position::At(15))
+    );
+    assert_eq!(
+        journal.step(Position::At(15), Motion::PageDown),
+        Some(Position::At(9))
+    );
+    assert_eq!(
+        journal.step(Position::At(9), Motion::PageUp),
+        Some(Position::At(15))
+    );
+    assert_eq!(
+        journal.step(Position::At(11), Motion::PageUp),
+        Some(Position::At(9))
+    );
+}
+
+#[test]
+fn a_redone_step_awaiting_its_outcome_has_none_from_the_first_pass() {
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        entering(3, "/task:/2", "a"),
+        record(
+            3,
+            "/task:/2",
+            State::Invoke(InvokeTarget::Procedure("check:".to_string())),
+        ),
+        entering(4, "/check:", "a"),
+        record(4, "/check:", State::Done(None)),
+        record(3, "/task:/2", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        entering(3, "/task:/2", "b"),
+        record(
+            3,
+            "/task:/2",
+            State::Invoke(InvokeTarget::Procedure("check:".to_string())),
+        ),
+        entering(5, "/check:", "b"),
+        record(5, "/check:", State::Done(None)),
+    ];
+    let journal = Journal::new(&records, Some(Serial(3)));
+
+    assert_eq!(journal.last(), Some(Position::At(15)));
+    assert_eq!(
+        journal.step(Position::At(15), Motion::Left),
+        Some(Position::At(12))
+    );
+}
+
+#[test]
+fn a_step_redone_twice_keeps_the_place_of_the_first() {
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        record(3, "/task:/2", State::Begin(Vec::new())),
+        record(3, "/task:/2", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        record(2, "/task:/1", State::Revoke),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+    ];
+    let journal = Journal::new(&records, None);
+
+    assert_eq!(journal.last(), Some(Position::At(5)));
+    assert_eq!(
+        journal.step(Position::At(4), Motion::Up),
+        Some(Position::At(11))
+    );
+}
+
+#[test]
+fn review_opens_on_the_last_thing_the_walk_did_when_the_prompt_is_ahead_of_survivors() {
+    let records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Done(None)),
+        record(3, "/task:/2", State::Begin(Vec::new())),
+        record(3, "/task:/2", State::Done(None)),
+        record(4, "/task:/3", State::Begin(Vec::new())),
+        record(2, "/task:/1", State::Revoke),
+        record(2, "/task:/1", State::Begin(Vec::new())),
+        record(0, "/", State::Stop),
+    ];
+    let journal = Journal::new(&records, Some(Serial(2)));
+
+    assert_eq!(journal.last(), Some(Position::At(8)));
+}
+
+// Three steps done and a fourth begun, each written once.
+fn stepping() -> Vec<Record> {
+    let mut records = vec![
+        record(
+            0,
+            "/",
+            State::Start {
+                uri: "file://x".to_string(),
+            },
+        ),
+        record(1, "/task:", State::Begin(Vec::new())),
+    ];
+    for n in 1..=3 {
+        let path = format!("/task:/{}", n);
+        records.push(record(n + 1, &path, State::Begin(Vec::new())));
+        records.push(record(n + 1, &path, State::Done(None)));
+    }
+    records.push(record(5, "/task:/4", State::Begin(Vec::new())));
+    records
+}
+
+/// A replay passes the steps that stand without writing anything, so the
+/// prompt's scope, not the last record written, is where review opens.
+#[test]
+fn review_opens_within_the_scope_the_prompt_belongs_to() {
+    let mut records = stepping();
+    records.push(record(5, "/task:/4", State::Done(None)));
+    records.push(record(2, "/task:/1", State::Revoke));
+    records.push(record(2, "/task:/1", State::Begin(Vec::new())));
+    let journal = Journal::new(&records, Some(Serial(2)));
+
+    assert_eq!(journal.last(), Some(Position::At(11)));
+
+    let mut records = stepping();
+    records.push(record(2, "/task:/1", State::Revoke));
+    records.push(record(2, "/task:/1", State::Begin(Vec::new())));
+    records.push(record(2, "/task:/1", State::Done(None)));
+    let journal = Journal::new(&records, Some(Serial(5)));
+
+    assert_eq!(journal.last(), Some(Position::At(8)));
 }
