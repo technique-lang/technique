@@ -1754,6 +1754,22 @@ together.
             .trim_ascii()
             .to_string(),
         ),
+        RunnerError::RecursionLimit { procedure, depth } => (
+            format!(
+                "Recursion limit: {} invoked more than {} levels deep",
+                procedure, depth
+            ),
+            format!(
+                r#"
+Each invocation of a procedure runs inside the one that called it. {} was
+invoked more than {} levels deep; a procedure that invokes itself needs a step
+that stops before reaching that depth.
+                "#,
+                procedure, depth
+            )
+            .trim_ascii()
+            .to_string(),
+        ),
         RunnerError::TerminalRequired => (
             "Running interactively requires a terminal".to_string(),
             r#"
@@ -1761,15 +1777,6 @@ An interactive run writes its prompts to the terminal and reads user input
 directly, so its output can't be redirected to a file or pipe. Use `technique
 run` in a terminal, or use `--mode=automatic` to run on auto; you can then
 safely redirect the output.
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
-        RunnerError::UserQuit => (
-            "Interrupted".to_string(),
-            r#"
-The user quit before the procedure was completed. Use `technique resume
-<id>` to continue.
             "#
             .trim_ascii()
             .to_string(),

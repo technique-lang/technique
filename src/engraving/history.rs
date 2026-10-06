@@ -62,7 +62,7 @@ pub struct Activation {
 pub struct History {
     activations: HashMap<Serial, Activation>,
     slots: HashMap<(Serial, String, usize), Serial>,
-    /// Children of the lifecycle root, i.e. the entry procedure's activation.
+    /// Children of the root, i.e. the entry procedure's activation.
     roots: Vec<Serial>,
     highest: Serial,
     finished: bool,
@@ -79,7 +79,7 @@ impl History {
             activations: HashMap::new(),
             slots: HashMap::new(),
             roots: Vec::new(),
-            highest: Serial::LIFECYCLE,
+            highest: Serial::ROOT,
             finished: false,
             retired: HashMap::new(),
             counts: HashMap::new(),
@@ -93,7 +93,7 @@ impl History {
             let serial = record.serial;
             match &record.state {
                 // A corrupt journal's `Begin` on 000 would make the root its own ancestor.
-                State::Begin(_) if serial == Serial::LIFECYCLE => {}
+                State::Begin(_) if serial == Serial::ROOT => {}
                 State::Begin(began) => {
                     history.finished = false;
                     if history
@@ -109,7 +109,7 @@ impl History {
                         let parent = open
                             .last()
                             .copied()
-                            .unwrap_or(Serial::LIFECYCLE);
+                            .unwrap_or(Serial::ROOT);
                         history.introduce(serial, parent, i, record, began);
                         open.push(serial);
                     }
@@ -422,7 +422,7 @@ impl History {
 
     // Place a child among its parent's in slot order.
     fn attach(&mut self, parent: Serial, serial: Serial) {
-        let children = if parent == Serial::LIFECYCLE {
+        let children = if parent == Serial::ROOT {
             &mut self.roots
         } else {
             match self

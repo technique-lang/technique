@@ -61,7 +61,7 @@ fn run_id_render_six_digit_padding() {
 
 #[test]
 fn serial_render_three_digit_padding() {
-    assert_eq!(Serial::LIFECYCLE.render(), "000");
+    assert_eq!(Serial::ROOT.render(), "000");
     assert_eq!(Serial(8).render(), "008");
     assert_eq!(Serial(131).render(), "131");
     // Three digits is the convention, but larger values render unpadded.
@@ -219,7 +219,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-16T12:50:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Start {
             uri: "file:///home/user/NetworkProbe.tq".to_string(),
@@ -233,7 +233,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:25Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Resume,
     };
@@ -245,7 +245,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Finish,
     };
@@ -257,7 +257,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Stop,
     };
@@ -449,7 +449,7 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-16T12:50:30Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Start {
                 uri: "file:///foo/Bar.tq".to_string(),
@@ -458,21 +458,21 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Finish,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Stop,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(15003),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Resume,
         },
@@ -556,7 +556,7 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Stop,
         },

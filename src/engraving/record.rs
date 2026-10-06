@@ -36,7 +36,7 @@ pub struct Serial(pub u32);
 impl Serial {
     /// The serial for the root-level metadata records `Start`, `Finish`,
     /// `Stop` and `Resume`.
-    pub const LIFECYCLE: Serial = Serial(0);
+    pub const ROOT: Serial = Serial(0);
 
     /// Render as a three-digit zero-padded number.
     pub fn render(self) -> String {
@@ -73,9 +73,9 @@ pub struct Record {
 /// implicit — the next event's path reveals the resumed procedure).
 /// `Execute` and `Return` bracket an effectful host call (a `Command` or
 /// `Action`) with the value it returned; Pure builtins are not recorded.
-/// `Bind` states the bindings a scope made, written once immediately before
-/// that scope's outcome; a binding's own value is unit, so the value it
-/// captured is reachable only here.
+/// `Bind` states a binding a scope made, written when it is made; a later one
+/// of the same name replaces it. A binding's own value is unit, so the value
+/// it captured is reachable only here.
 /// `Revoke` withdraws a scope's outcome, and the value of one enclosing
 /// nothing, so the walk reaches it again. It carries no payload: correcting a
 /// value is a `Revoke` plus ordinary re-execution, with nothing pre-answered.

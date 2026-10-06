@@ -57,7 +57,7 @@ fn fresh_walk_folds_into_the_tree_it_took() {
     let survey = history
         .get(Serial(1))
         .unwrap();
-    assert_eq!(survey.parent, Serial::LIFECYCLE);
+    assert_eq!(survey.parent, Serial::ROOT);
     assert_eq!(survey.edge, "/survey:");
     assert_eq!(survey.children, vec![Serial(2), Serial(3)]);
     assert_eq!(survey.standing, Standing::Closed);
@@ -650,7 +650,7 @@ fn finished_is_how_the_last_session_ended() {
 }
 
 #[test]
-fn a_begin_on_the_lifecycle_serial_is_ignored() {
+fn a_begin_on_the_root_serial_is_ignored() {
     let history = fold(
         r#"
         000 / Start file://Survey.tq
@@ -661,7 +661,7 @@ fn a_begin_on_the_lifecycle_serial_is_ignored() {
     );
     assert!(
         history
-            .get(Serial::LIFECYCLE)
+            .get(Serial::ROOT)
             .is_none()
     );
     assert!(
@@ -686,7 +686,7 @@ fn assert_consistent(file: &Path) {
         .iter()
         .enumerate()
     {
-        if record.serial == Serial::LIFECYCLE {
+        if record.serial == Serial::ROOT {
             continue;
         }
         let activation = history
@@ -709,7 +709,7 @@ fn assert_consistent(file: &Path) {
                 .all(|k| records[*k].serial == record.serial)
         );
         assert_eq!(activation.records[0], activation.begun_at);
-        let kin = if activation.parent == Serial::LIFECYCLE {
+        let kin = if activation.parent == Serial::ROOT {
             history.roots()
         } else {
             &history

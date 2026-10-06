@@ -118,7 +118,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             ledger,
             driver,
             path: QualifiedPath::new(),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             entered: HashSet::new(),
             bound: Vec::new(),
             seeds: Vec::new(),
@@ -172,7 +172,7 @@ impl<'i, D: Driver> Runner<'i, D> {
             ledger: self.ledger,
             driver: self.driver,
             path: QualifiedPath::new(),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             entered: HashSet::new(),
             bound: Vec::new(),
             seeds: Vec::new(),
@@ -2149,7 +2149,7 @@ impl<'i, D: Driver> Runner<'i, D> {
     /// Append a record bracketing no scope — the run lifecycle events at the
     /// root path, which wear serial `000` however deep the walk had reached.
     fn record_lifecycle(&mut self, state: State) -> Result<(), RunnerError> {
-        self.stamp(Serial::LIFECYCLE, "/", state)
+        self.stamp(Serial::ROOT, "/", state)
     }
 
     fn stamp(&mut self, serial: Serial, qualified: &str, state: State) -> Result<(), RunnerError> {

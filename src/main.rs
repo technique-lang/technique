@@ -1051,14 +1051,10 @@ fn main() {
                     );
                     std::process::exit(0);
                 }
-                Ok((_, Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_))) => {
-                    std::process::exit(1)
-                }
+                Ok((_, Conclusion::Completed(Outcome::Fail(_)))) => std::process::exit(1),
                 Ok((_, Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_)))) => {
                     std::process::exit(0)
                 }
-                // drive() walks again rather than returning a restart
-                Ok((_, Conclusion::Restarting)) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
@@ -1173,22 +1169,18 @@ fn main() {
                 std::process::exit(1);
             }
 
-            match runner::resume(run_id, &program, library) {
+            match runner::resume(run_id, Mode::Interactive, true, &program, library) {
                 Ok(Conclusion::Stopping) => {
                     eprintln!(
-                        "stopped; continue with `technique resume {}`",
+                        "stopped; resume with `technique resume {}`",
                         run_id.render()
                     );
                     std::process::exit(0);
                 }
-                Ok(Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_)) => {
-                    std::process::exit(1)
-                }
+                Ok(Conclusion::Completed(Outcome::Fail(_))) => std::process::exit(1),
                 Ok(Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_))) => {
                     std::process::exit(0)
                 }
-                // drive() walks again rather than returning a restart
-                Ok(Conclusion::Restarting) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);

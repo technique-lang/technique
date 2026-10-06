@@ -46,7 +46,7 @@ impl Ledger {
             entries: BTreeMap::new(),
             scopes: HashMap::new(),
             open: Vec::new(),
-            highest: Serial::LIFECYCLE,
+            highest: Serial::ROOT,
         }
     }
 
@@ -145,7 +145,7 @@ impl Ledger {
             .get(&serial)
             .map(|scope| scope.parent);
         while let Some(parent) = at {
-            if parent == Serial::LIFECYCLE {
+            if parent == Serial::ROOT {
                 break;
             }
             chain.push(parent);
@@ -163,7 +163,7 @@ impl Ledger {
             .get(&at)
             .map(|scope| scope.parent)
         {
-            if parent == Serial::LIFECYCLE {
+            if parent == Serial::ROOT {
                 break;
             }
             if let Some(key) = self.key_of(parent) {
@@ -204,7 +204,7 @@ impl Ledger {
                 .open
                 .last()
                 .copied()
-                .unwrap_or(Serial::LIFECYCLE),
+                .unwrap_or(Serial::ROOT),
         };
         let edge = self.edge_under(parent, &record.path);
         let key = (parent, edge.clone(), record.serial);
@@ -347,7 +347,7 @@ impl Ledger {
     pub fn recorded(&self, parent: Serial, path: &str) -> impl Iterator<Item = &Entry> {
         let edge = self.edge_under(parent, path);
         self.entries
-            .range((parent, edge.clone(), Serial::LIFECYCLE)..=(parent, edge, Serial(u32::MAX)))
+            .range((parent, edge.clone(), Serial::ROOT)..=(parent, edge, Serial(u32::MAX)))
             .map(|(_, entry)| entry)
     }
 
@@ -358,8 +358,8 @@ impl Ledger {
     /// index is parsed rather than taken from key order, `[10]` sorting
     /// between `[1]` and `[2]`.
     pub fn iterations(&self, parent: Serial) -> Vec<(usize, &Entry)> {
-        let low = (parent, "/[".to_string(), Serial::LIFECYCLE);
-        let high = (parent, "/]".to_string(), Serial::LIFECYCLE);
+        let low = (parent, "/[".to_string(), Serial::ROOT);
+        let high = (parent, "/]".to_string(), Serial::ROOT);
         let mut found: Vec<(usize, &Entry)> = self
             .entries
             .range(low..high)
@@ -391,7 +391,7 @@ impl Ledger {
     /// Whether any entry stands within this scope.
     pub fn encloses(&self, serial: Serial) -> bool {
         self.entries
-            .range((serial, String::new(), Serial::LIFECYCLE)..)
+            .range((serial, String::new(), Serial::ROOT)..)
             .next()
             .map_or(false, |((parent, _, _), _)| *parent == serial)
     }
@@ -406,7 +406,7 @@ impl Ledger {
                 .scopes
                 .get(&at)
             {
-                Some(scope) if scope.parent != Serial::LIFECYCLE => at = scope.parent,
+                Some(scope) if scope.parent != Serial::ROOT => at = scope.parent,
                 _ => return false,
             }
         };

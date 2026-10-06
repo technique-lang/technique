@@ -84,7 +84,7 @@ impl Store {
         let record = Record {
             recorded: started,
             run_id,
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Start { uri },
         };

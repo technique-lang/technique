@@ -115,7 +115,7 @@ fn serial_is_reused_on_re_entry_and_fresh_otherwise() {
     ]);
 
     assert_eq!(
-        ledger.serial_for(Serial::LIFECYCLE, "/task:", &HashSet::new()),
+        ledger.serial_for(Serial::ROOT, "/task:", &HashSet::new()),
         Serial(1)
     );
     assert_eq!(
@@ -228,7 +228,7 @@ fn revoke_clears_the_spine_and_leaves_what_it_encloses() {
         "a target enclosing others has only its verdict withdrawn"
     );
 
-    for (parent, edge) in [(Serial::LIFECYCLE, "/audit:"), (Serial(1), "/I")] {
+    for (parent, edge) in [(Serial::ROOT, "/audit:"), (Serial(1), "/I")] {
         let ancestor = ledger
             .look(parent, edge)
             .expect("ancestor");
@@ -330,7 +330,7 @@ fn revoking_an_unknown_serial_changes_nothing() {
 
     assert!(
         ledger
-            .look(Serial::LIFECYCLE, "/task:")
+            .look(Serial::ROOT, "/task:")
             .expect("entry")
             .outcome
             .is_some()

@@ -184,13 +184,16 @@ pub fn resume<'i>(
     let pfftt = construct_state_path(&run_dir, &document);
     let (mut appender, mut records) = Appender::open(pfftt, run_id)?;
     let mut ledger = Ledger::new();
-    for record in records.iter().skip(1) {
+    for record in records
+        .iter()
+        .skip(1)
+    {
         ledger.apply(record);
     }
     let record = Record {
         recorded: now_iso8601(),
         run_id,
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Resume,
     };

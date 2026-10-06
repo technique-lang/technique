@@ -8,13 +8,14 @@ pub(crate) mod error;
 pub(crate) mod evaluator;
 pub(crate) mod library;
 pub(crate) mod path;
+mod session;
+mod walker;
 
 pub use context::Context;
 pub use error::RunnerError;
 pub use evaluator::Environment;
 pub use library::{Builtin, Library, Native, library_for};
 
-pub use crate::prototype::{
-    Conclusion, Headless, Intent, Mode, Outcome, Runner, inspect, intent, load, locate, resume,
-    start,
-};
+pub use driver::{Headless, Intent, Mode, intent};
+pub use session::{Conclusion, Runner, bind_parameters, inspect, load, locate, resume, start};
+pub use walker::Outcome;

@@ -224,7 +224,7 @@ impl<'i> Journal<'i> {
     // Where a motion lands in the scope it reaches, holding the plane the
     // cursor was on.
     fn landing(&self, at: usize, serial: Serial) -> Option<usize> {
-        if serial == Serial::LIFECYCLE {
+        if serial == Serial::ROOT {
             return self.start;
         }
         let activation = self
@@ -242,7 +242,7 @@ impl<'i> Journal<'i> {
 
     // The standing scopes a scope encloses.
     fn kin(&self, serial: Serial) -> Vec<Serial> {
-        let children = if serial == Serial::LIFECYCLE {
+        let children = if serial == Serial::ROOT {
             self.history
                 .roots()
         } else {
@@ -273,7 +273,7 @@ impl<'i> Journal<'i> {
     }
 
     fn parent_of(&self, serial: Serial) -> Option<Serial> {
-        if serial == Serial::LIFECYCLE {
+        if serial == Serial::ROOT {
             return None;
         }
         Some(

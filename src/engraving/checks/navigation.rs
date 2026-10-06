@@ -370,7 +370,7 @@ fn a_withdrawn_step_leaves_a_gap_the_cursor_crosses() {
         000 / Stop
         "#,
     );
-    let journal = Journal::new(&records, Some(Serial::LIFECYCLE));
+    let journal = Journal::new(&records, Some(Serial::ROOT));
 
     assert_eq!(journal.last(), Some(Position::At(7)));
     walk(&journal, 3, Motion::Down, &[7]);
