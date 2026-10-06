@@ -6,7 +6,6 @@ pub mod language;
 pub mod linking;
 pub mod parsing;
 pub mod program;
-pub mod prototype;
 pub(crate) mod regex;
 pub mod reporting;
 pub mod resolution;
