@@ -439,7 +439,7 @@ fn main() {
                 .about("Print the journal recorded for a procedure run.")
                 .long_about("Print the journal recorded when a Technique procedure was run. \
                     Each line is one recorded event: entering a step, executing a command, \
-                    and the result the step settled on. Times are relative to the start of \
+                    and the result recorded for the step. Times are relative to the start of \
                     the run, which is given in the heading.")
                 .arg(
                     Arg::new("id")

@@ -361,8 +361,7 @@ fn measure_times(records: &[Record]) -> (Vec<Option<i64>>, Vec<Option<i64>>) {
                     spans[i] = elapsed(stamps[opened], stamps[i]);
                 }
             }
-            // A Bind sits immediately before its scope's outcome, so it
-            // brackets no interval of its own.
+            // These bracket no interval of their own.
             State::Resume | State::Invoke(_) | State::Bind(_) => {}
         }
     }
@@ -436,7 +435,7 @@ fn payload(state: &State) -> Option<String> {
     }
 }
 
-// The three states a step settles in are coloured as they are when the run
+// The three states a step can end in are coloured as they are when the run
 // was live; everything else is structural.
 fn tint(column: Column, state: &State) -> Syntax {
     match column {

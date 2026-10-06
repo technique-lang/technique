@@ -172,8 +172,8 @@ fn bind_extends_env_for_subsequent_lookup() {
     assert_eq!(v, value::Value::Literali("Hello".to_string()));
 }
 
-// A sequence is statement composition: its value is the last member's value
-// (not a ⊕-fold — that will be the `+` operator's job).
+// A sequence is statement composition: its value is the last member's value,
+// not a ⊕-fold.
 
 #[test]
 fn sequence_evaluation() {

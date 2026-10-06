@@ -1745,7 +1745,7 @@ together.
             "Running interactively requires a terminal".to_string(),
             r#"
 An interactive run writes its prompts to the terminal and reads user input
-direclty, so its output can't be redirected to a file or pipe. Use `technique
+directly, so its output can't be redirected to a file or pipe. Use `technique
 run` in a terminal, or use `--mode=automatic` to run on auto; you can then
 safely redirect the output.
             "#

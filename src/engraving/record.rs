@@ -25,7 +25,7 @@ impl RunId {
     }
 }
 
-/// Identifier for one scope within a run. Ths is effectively an interned
+/// Identifier for one scope within a run. This is effectively an interned
 /// route from /, shared by its `Begin`, its outcome, and by every record
 /// written inside it. Written by convention as a three-digit wide zero-padded
 /// string; `000` is reserved for the metadata records that bracket the
