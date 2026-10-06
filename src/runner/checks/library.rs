@@ -151,7 +151,8 @@ fn exec_tees_output_through_context() {
         )
         .expect("exec");
     assert_eq!(result, text("streamed"));
-    assert_eq!(context.captured(), b"streamed".to_vec());
+    // The unterminated line is finished so what follows starts at the margin.
+    assert_eq!(context.captured(), b"streamed\n".to_vec());
 }
 
 #[test]
