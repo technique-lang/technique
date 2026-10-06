@@ -1011,7 +1011,11 @@ fn main() {
             let names = library_names(submatches);
             let mut library = Library::core();
             library.extend(resolve_libraries(&names));
-            if let Err(errors) = linking::link(&mut program, &library) {
+            let linked = linking::link(&mut program, &library).and_then(|()| match mode {
+                Mode::Interactive => Ok(()),
+                Mode::Automatic | Mode::Quiet => linking::scan_for_unusable_keywords(&program),
+            });
+            if let Err(errors) = linked {
                 for (i, error) in errors
                     .iter()
                     .enumerate()

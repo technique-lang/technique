@@ -1516,6 +1516,16 @@ functions calls:
             format!("Unknown function {}()", name),
             "The function is neither builtin nor provided by the selected domain.".to_string(),
         ),
+        LinkingError::UnattendedRepeat { .. } => (
+            "The repeat keyword cannot be used in an unattended procedure".to_string(),
+            r#"
+A `repeat` loop does not terminate, so in automatic or quiet mode it would
+never finish. You can still run the Technique document interactively if you
+wish.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
     }
 }
 
