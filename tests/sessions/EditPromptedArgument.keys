@@ -1,0 +1,7 @@
+"42" Enter              # /1
+"calm" Enter            # note
+Enter*3                 # report:/1 report: /2
+Up Up*8 Esc "e"         # at /3, review to /1 Done and edit
+Backspace*2 "73" Enter  # /1 seeded 42
+"er" Enter              # note asked again seeded calm
+Enter*5                 # report:/1 report: /2 /3 survey:

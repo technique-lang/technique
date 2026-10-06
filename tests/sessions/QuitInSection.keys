@@ -1,0 +1,5 @@
+"5" Enter               # I/1
+Enter*2                 # I/2 I
+Esc "q"                 # II/3
+--- resume
+Enter*4                 # II/3 II/4 II survey:

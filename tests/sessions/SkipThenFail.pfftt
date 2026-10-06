@@ -1,0 +1,14 @@
+2026-09-28T00:00:00.000Z 000000 000 / Start file://tests/sessions/SkipThenFail.tq
+2026-10-04T05:19:25.125Z 000000 001 /survey: Begin ()
+2026-10-04T05:19:25.125Z 000000 002 /survey:/1 Begin ()
+2026-10-04T05:19:25.125Z 000000 002 /survey:/1 Execute exec()
+2026-10-04T05:19:25.125Z 000000 002 /survey:/1 Return
+2026-10-04T05:19:25.125Z 000000 003 /survey:/1/a Begin ()
+2026-10-04T05:19:25.125Z 000000 003 /survey:/1/a Execute exec()
+2026-10-04T05:19:25.136Z 000000 003 /survey:/1/a Return
+2026-10-04T05:19:25.136Z 000000 003 /survey:/1/a Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:25.136Z 000000 002 /survey:/1 Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:25.136Z 000000 004 /survey:/2 Begin ()
+2026-10-04T05:19:25.136Z 000000 004 /survey:/2 Done ()
+2026-10-04T05:19:25.136Z 000000 001 /survey: Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:25.136Z 000000 000 / Finish

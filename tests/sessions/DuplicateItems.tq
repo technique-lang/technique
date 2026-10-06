@@ -1,0 +1,8 @@
+survey :
+
+    1.  First sample ~ a
+    2.  Second sample ~ b
+    3.  Collect { [a, b] ~ samples }
+    4.  { foreach s in samples }
+        -   Bottle { s }
+    5.  Seal the crate

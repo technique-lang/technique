@@ -1,0 +1,5 @@
+survey :
+
+    1.  Take a reading { exec("echo 4") ~ b }
+    2.  Note { b } on the chart
+    3.  Sign the log

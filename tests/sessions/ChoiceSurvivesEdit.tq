@@ -1,0 +1,9 @@
+% technique v1
+
+inspect :
+
+    1.  Is the valve open?
+            'Yes' | 'No'
+        a.  Read the gauge
+        b.  Log the reading
+    2.  Sign off

@@ -1,0 +1,6 @@
+survey :
+
+    1.  Check each sample
+        { foreach s in ["a", "b"] }
+            { exec("false") }
+    2.  Seal the crate

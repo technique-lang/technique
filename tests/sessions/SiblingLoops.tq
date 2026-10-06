@@ -1,0 +1,4 @@
+survey :
+
+    1.  Go { foreach s in exec("echo x") ; foreach s in ["x"] }
+    2.  Finish up

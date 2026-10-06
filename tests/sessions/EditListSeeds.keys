@@ -1,0 +1,8 @@
+"a, b" Enter            # <sample>
+"x" Enter "y" Enter     # [1]/-1 [2]/-1
+Enter*3                 # sample:/1 sample: /1
+Up Up*15 Esc "e"        # at /2, review to the sample: Begin and ask again
+Backspace*10 "a, c" Enter  # <sample> seeded ["a", "b"]
+"z" Enter               # [1]/-1 seeded x, its item unchanged
+"z" Enter               # [2]/-1 unseeded, its item changed
+Enter*4                 # sample:/1 sample: /2 survey:

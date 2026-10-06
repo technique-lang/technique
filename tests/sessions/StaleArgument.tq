@@ -1,0 +1,8 @@
+survey :
+
+    1.  Measure { exec("echo 5") ~ reading } and file <report>(reading, ?)
+    2.  Sign the log
+
+report(r, note) : Reading, Note -> ()
+
+    1.  File { r } with the office

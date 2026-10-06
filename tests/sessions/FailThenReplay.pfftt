@@ -1,0 +1,12 @@
+2026-09-28T00:00:00.000Z 000000 000 / Start file://tests/sessions/FailThenReplay.tq
+2026-10-04T05:17:02.813Z 000000 001 /survey: Begin ()
+2026-10-04T05:17:02.813Z 000000 002 /survey:/1 Begin ()
+2026-10-04T05:17:02.813Z 000000 003 /survey:/1/[1] Begin ( 1 ~ s )
+2026-10-04T05:17:02.813Z 000000 003 /survey:/1/[1] Done ()
+2026-10-04T05:17:02.814Z 000000 002 /survey:/1 Execute exec()
+2026-10-04T05:17:02.823Z 000000 002 /survey:/1 Return
+2026-10-04T05:17:02.824Z 000000 002 /survey:/1 Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:17:02.824Z 000000 004 /survey:/2 Begin ()
+2026-10-04T05:17:02.824Z 000000 004 /survey:/2 Done ()
+2026-10-04T05:17:02.824Z 000000 001 /survey: Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:17:02.824Z 000000 000 / Finish

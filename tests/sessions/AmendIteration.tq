@@ -1,0 +1,5 @@
+survey :
+
+    1.  { foreach s in ["a", "b"] }
+        -   Label it ~ tag
+    2.  Finish up

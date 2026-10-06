@@ -1,0 +1,8 @@
+Enter                   # /1
+Esc "f" Enter           # <count> declined
+Enter                   # /2
+Up*3 Esc "o"            # at /3, review to count: and override it
+Enter                   # /2
+Up*4 Esc "e"            # at /3, review to <count> and edit its argument
+"75" Enter              # <count>
+Enter*4                 # count:/1 count: /3 survey:

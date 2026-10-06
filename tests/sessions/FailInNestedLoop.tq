@@ -1,0 +1,7 @@
+survey :
+
+    1.  Check each crate
+        { foreach c in ["x", "y"] }
+            { foreach s in ["a", "b"] }
+                { exec("false") }
+    2.  Seal the crate

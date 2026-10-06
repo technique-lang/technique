@@ -1,0 +1,5 @@
+"5" Enter               # /1
+Enter                   # /1/a
+Esc "q"                 # /1/b
+--- resume
+Enter*4                 # /1/b /1 /2 survey:, reading not asked again

@@ -1,0 +1,12 @@
+survey :
+
+    1.  Take a reading ~ reading
+    2.  Note { reading } on the chart
+    3.  Check the gauge
+    4.  <report>(reading)
+    5.  Sign the log
+
+report(r) : Reading -> ()
+
+    1.  File { r } with the office
+    2.  Phone it in

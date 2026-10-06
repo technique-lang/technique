@@ -1,0 +1,8 @@
+"x" Enter "y" Enter     # [1]/-1 [2]/-1
+Enter                   # /1
+Up Up*7 Esc "s"         # at /2, review to [1] Done and skip it
+Enter                   # /1
+Up Up*8 Esc "e"         # at /2, review to [1]/-1 Done and edit
+Backspace "z" Enter     # [1]/-1 seeded x
+Esc "s"                 # [1], asked as its former Skip differs from Done
+Enter*3                 # /1 /2 survey:
