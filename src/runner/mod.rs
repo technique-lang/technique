@@ -3,6 +3,7 @@
 //! so a run can be resumed after interruption.
 
 pub(crate) mod context;
+pub mod driver;
 pub(crate) mod error;
 pub(crate) mod evaluator;
 pub(crate) mod library;
