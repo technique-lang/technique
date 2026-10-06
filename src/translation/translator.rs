@@ -309,7 +309,7 @@ impl<'i> Translator<'i> {
         let names: Vec<Option<String>> = formae
             .iter()
             .map(|forma| match lower_forma(forma) {
-                Some(name) if plural => Some(name + "s"),
+                Some(name) if plural && !name.ends_with('s') => Some(name + "s"),
                 lowered => lowered,
             })
             .collect();
