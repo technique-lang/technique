@@ -37,6 +37,7 @@ pub fn start<'i>(
     mode: Mode,
     colour: bool,
     document: &Path,
+    source: &str,
     program: &'i Program<'i>,
     arguments: &[String],
     library: Library,
@@ -44,12 +45,12 @@ pub fn start<'i>(
 ) -> Result<(RunId, Conclusion), RunnerError> {
     let env = bind_parameters(program, arguments)?;
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (run_id, run_dir) = store.create(document, now_iso8601(), libraries)?;
+    let (run_id, run_dir) = store.create(document, source, now_iso8601(), libraries)?;
     // The opening `Start` is written by the store, not the walk, so read it
     // back: it is the root position review climbs out to.
     let opening = store.read(run_id)?;
     let pfftt = construct_state_path(&run_dir, document);
-    let appender = Appender::open(pfftt, run_id)?;
+    let (appender, _) = Appender::open(pfftt, run_id)?;
     let ledger = Ledger::new();
     let label = document_label(document);
     let outcome = match mode {
@@ -157,7 +158,7 @@ pub fn inspect<'i>(
 /// re-translate, and re-link it before resuming.
 pub fn locate(run_id: RunId) -> Result<(PathBuf, Vec<String>), RunnerError> {
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, libraries, _, _) = store.open(run_id)?;
+    let (document, libraries, _) = store.open(run_id)?;
     Ok((document, libraries))
 }
 
@@ -179,10 +180,13 @@ pub fn resume<'i>(
         return Err(RunnerError::TerminalRequired);
     }
     let store = Store::new(PathBuf::from(STORE_ROOT));
-    let (document, _, ledger, run_dir) = store.open(run_id)?;
-    let mut records = store.read(run_id)?;
+    let (document, _, run_dir) = store.open(run_id)?;
     let pfftt = construct_state_path(&run_dir, &document);
-    let mut appender = Appender::open(pfftt, run_id)?;
+    let (mut appender, mut records) = Appender::open(pfftt, run_id)?;
+    let mut ledger = Ledger::new();
+    for record in records.iter().skip(1) {
+        ledger.apply(record);
+    }
     let record = Record {
         recorded: now_iso8601(),
         run_id,

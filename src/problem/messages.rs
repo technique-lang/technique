@@ -1538,12 +1538,25 @@ pub fn generate_store_error(error: &StoreError, _renderer: &dyn Render) -> (Stri
             "The directory for this run identifier was not found in the local state store."
                 .to_string(),
         ),
+        StoreError::InUse(run_id) => (
+            format!("Run '{:06}' is in use by another session", run_id.0),
+            r#"
+Another technique process is recording against this RunId. Only one session at
+a time can write into the store for any given run at a time; finish or quit
+the other session first.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         StoreError::Io { path, error } => (
             format!("I/O error with local state store at {}", path.display()),
             format!("{}", error),
         ),
-        StoreError::MalformedRecord { run_id, .. } => (
-            format!("Malformed record for run '{:06}'", run_id.0),
+        StoreError::MalformedRecord { run_id, line, .. } => (
+            format!(
+                "Malformed record at line {} for run '{:06}'",
+                line, run_id.0
+            ),
             "The PFFTT state file for this run could not be parsed.".to_string(),
         ),
         StoreError::StartMissing(run_id) => (

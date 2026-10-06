@@ -198,7 +198,7 @@ pub(super) fn format_state(out: &mut String, state: &State) {
             out.push_str("Return");
             if let Some(v) = value {
                 out.push(' ');
-                out.push_str(&serialize_value(v));
+                write_value(out, v);
             }
         }
         State::Begin(supplied) => {
@@ -213,7 +213,7 @@ pub(super) fn format_state(out: &mut String, state: &State) {
             out.push_str("Done");
             if let Some(v) = value {
                 out.push(' ');
-                out.push_str(&serialize_value(v));
+                write_value(out, v);
             }
         }
         State::Skip => out.push_str("Skip"),
@@ -221,7 +221,7 @@ pub(super) fn format_state(out: &mut String, state: &State) {
             out.push_str("Fail");
             if let Some(v) = value {
                 out.push(' ');
-                out.push_str(&serialize_value(v));
+                write_value(out, v);
             }
         }
     }
@@ -244,7 +244,7 @@ pub(crate) fn format_supplied(out: &mut String, supplied: &[Supplied]) {
             out.push(',');
         }
         out.push(' ');
-        out.push_str(&serialize_value(&item.value));
+        write_value(out, &item.value);
         if let Some(name) = &item.name {
             out.push_str(" ~ ");
             out.push_str(name);
