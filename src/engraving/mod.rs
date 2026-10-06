@@ -4,6 +4,7 @@
 use std::io;
 use std::path::PathBuf;
 
+mod history;
 mod ledger;
 mod navigation;
 mod record;
@@ -19,6 +20,7 @@ pub enum StoreError {
     Io { path: PathBuf, error: io::Error },
 }
 
+pub use history::{Activation, Effect, History, Standing, edge};
 pub use ledger::{Entry, Ledger};
 pub use navigation::{Journal, Motion, Position};
 pub use record::{
