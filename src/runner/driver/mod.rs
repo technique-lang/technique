@@ -2,7 +2,6 @@
 //! told back. Everything shown goes through `show`, every question through
 //! `ask`, and each frame of the review cursor through `review`.
 
-use std::collections::VecDeque;
 use std::io::{self, Write};
 
 use crate::engraving::Motion;
@@ -13,15 +12,17 @@ use crate::value::Value;
 mod batch;
 mod console;
 mod keys;
+#[cfg(test)]
+mod prepared;
 mod prompt;
-mod script;
 mod trail;
 mod transcript;
 
 pub use batch::{Batch, unattended};
 pub use console::Interactive;
 pub use keys::{Intent, Keys, MockKeyboard, Raw, RealKeyboard, intent};
-pub use script::{Mock, Script};
+#[cfg(test)]
+pub use prepared::{Mock, Prepared};
 pub use trail::{Silent, Visual};
 pub use transcript::Transcript;
 
@@ -275,7 +276,8 @@ pub type Automatic<W = io::Stdout> = Interface<Visual<W>, Batch>;
 
 pub type Headless = Interface<Silent, Batch>;
 
-pub type Scripted = Interface<Silent, Script>;
+#[cfg(test)]
+pub type Testing = Interface<Silent, Prepared>;
 
 impl Console<io::Stdout> {
     pub fn new() -> Self {
@@ -344,9 +346,10 @@ impl Headless {
     }
 }
 
-impl Scripted {
+#[cfg(test)]
+impl Testing {
     pub fn new<I: IntoIterator<Item = (String, Answer)>>(answers: I) -> Self {
-        Scripted::reviewing(answers, [])
+        Testing::reviewing(answers, [])
     }
 
     /// Review frames take `reviews` in order, then leave.
@@ -359,13 +362,13 @@ impl Scripted {
             out: Silent {
                 discard: io::sink(),
             },
-            policy: Script {
+            policy: Prepared {
                 answers: answers
                     .into_iter()
                     .collect(),
                 reviews: reviews
                     .into_iter()
-                    .collect::<VecDeque<_>>(),
+                    .collect(),
             },
         }
     }

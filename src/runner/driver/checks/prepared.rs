@@ -1,5 +1,5 @@
 use crate::engraving::Motion;
-use crate::runner::driver::{Kind, Offer, Scripted};
+use crate::runner::driver::{Kind, Offer, Testing};
 
 use super::*;
 
@@ -37,9 +37,9 @@ fn frame(path: &str) -> Frame<'_> {
 }
 
 #[test]
-fn scripted_answers_a_path_once_then_unattended() {
+fn prepared_answers_a_path_once_then_unattended() {
     let value = Value::Literali("ran".to_string());
-    let mut driver = Scripted::new([("/probe:/1".to_string(), Answer::Quit)]);
+    let mut driver = Testing::new([("/probe:/1".to_string(), Answer::Quit)]);
     assert_eq!(
         driver.ask(confirm("/probe:/1", Marker::Step, Standing::Done, &value)),
         Answer::Quit
@@ -55,8 +55,8 @@ fn scripted_answers_a_path_once_then_unattended() {
 }
 
 #[test]
-fn scripted_reviews_in_order_then_leaves() {
-    let mut driver = Scripted::reviewing(
+fn prepared_reviews_in_order_then_leaves() {
+    let mut driver = Testing::reviewing(
         [],
         [Review::Move(Motion::Up), Review::Reason("why".to_string())],
     );

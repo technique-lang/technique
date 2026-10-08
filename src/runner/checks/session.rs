@@ -8,7 +8,7 @@ use crate::parsing;
 use crate::resolution::resolve;
 use crate::runner::context::Context;
 use crate::runner::driver::{
-    Answer, Driver, Headless, Marker, Mock, Offer, Review, Scripted, Verdict,
+    Answer, Driver, Headless, Marker, Mock, Offer, Review, Testing, Verdict,
 };
 use crate::runner::library::Library;
 use crate::runner::session::{Conclusion, Runner};
@@ -93,7 +93,7 @@ fn finished_run_replays_its_trail_before_review() {
 fn amending_a_finished_run_resumes_it() {
     let (records, _, _) = session(Vec::new(), Headless::new());
     let finished = records.len();
-    let driver = Scripted::reviewing([], [Review::Chose(Offer::Override)]);
+    let driver = Testing::reviewing([], [Review::Chose(Offer::Override)]);
     let (records, conclusion, _) = session(records, driver);
     assert_eq!(
         lines(&records[finished..]),

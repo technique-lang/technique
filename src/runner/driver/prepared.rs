@@ -13,12 +13,12 @@ use crate::formatting::{Identity, Render};
 /// A prepared answer at named paths, each given the first time its path is
 /// asked; every other question is answered unattended. Review frames take
 /// prepared moves in order, then leave.
-pub struct Script {
+pub struct Prepared {
     pub(super) answers: HashMap<String, Answer>,
     pub(super) reviews: VecDeque<Review>,
 }
 
-impl Policy for Script {
+impl Policy for Prepared {
     fn ask<O: Output>(&mut self, out: &mut O, question: Question<'_>) -> Answer {
         match self
             .answers
@@ -123,5 +123,5 @@ impl Driver for Mock {
 }
 
 #[cfg(test)]
-#[path = "checks/script.rs"]
+#[path = "checks/prepared.rs"]
 mod check;

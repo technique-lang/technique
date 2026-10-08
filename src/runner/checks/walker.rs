@@ -9,7 +9,7 @@ use crate::linking::link;
 use crate::parsing;
 use crate::resolution::resolve;
 use crate::runner::context::Context;
-use crate::runner::driver::{Answer, Driver, Headless, Mock, Offer, Review, Scripted};
+use crate::runner::driver::{Answer, Driver, Headless, Mock, Offer, Review, Testing};
 use crate::runner::error::RunnerError;
 use crate::runner::library::Library;
 use crate::runner::session::{Conclusion, Runner, bind_parameters};
@@ -172,7 +172,7 @@ survey :
     1.  Pair up { exec("echo a") ~ (a, b) }
     "#
     .trim_ascii();
-    let driver = Scripted::new([("/survey:/1".to_string(), Answer::Skip)]);
+    let driver = Testing::new([("/survey:/1".to_string(), Answer::Skip)]);
     let (records, _) = walk(source, Vec::new(), &[], driver);
     let lines = lines(&records);
     assert!(lines.contains(&"002 /survey:/1 Bind ( () ~ a, () ~ b )".to_string()));
@@ -256,7 +256,7 @@ survey :
     2.  Note { reading } on the chart
     "#
     .trim_ascii();
-    let driver = Scripted::new([("/survey:/1".to_string(), Answer::Skip)]);
+    let driver = Testing::new([("/survey:/1".to_string(), Answer::Skip)]);
     let (records, _) = walk(source, Vec::new(), &[], driver);
     let lines = lines(&records);
     assert_eq!(lines[2], "002 /survey:/1 Bind ( () ~ reading )");
@@ -276,7 +276,7 @@ survey :
     3.  Sign the log
     "#
     .trim_ascii();
-    let driver = Scripted::new([
+    let driver = Testing::new([
         (
             "/survey:/1".to_string(),
             Answer::Done(Value::Literali("42".to_string())),
@@ -315,7 +315,7 @@ survey :
     2.  Sign the log
     "#
     .trim_ascii();
-    let driver = Scripted::new([
+    let driver = Testing::new([
         ("/survey:/1".to_string(), Answer::Fail("broke".to_string())),
         ("/survey:/2".to_string(), Answer::Quit),
     ]);
@@ -348,7 +348,7 @@ survey :
         a.  Look at it
     "#
     .trim_ascii();
-    let driver = Scripted::new([("/survey:/1/a".to_string(), Answer::Quit)]);
+    let driver = Testing::new([("/survey:/1/a".to_string(), Answer::Quit)]);
     let (records, _) = walk(source, Vec::new(), &[], driver);
     let stopped = records.len();
     let (records, _) = walk(source, records, &[], Headless::new());
