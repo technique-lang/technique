@@ -160,8 +160,9 @@ impl Spot {
 }
 
 /// Back to the first row of a draw the cursor sits `up` rows below, clearing
-/// from there down.
+/// from there down; the cursor is hidden until placed again.
 fn clear<W: Write>(out: &mut W, up: u16) {
+    let _ = queue!(out, cursor::Hide);
     if up > 0 {
         let _ = queue!(out, cursor::MoveUp(up));
     }
@@ -199,9 +200,19 @@ pub(super) fn ask<W: Write, K: Keys>(out: &mut W, keys: &mut K, question: &Quest
             }
         }
     };
-    clear(out, up);
-    let _ = queue!(out, cursor::Show);
-    let _ = out.flush();
+    // Review draws over the line standing, without the cursor flashing at
+    // column 0 in between.
+    if let Answer::Review(_) = answer {
+        let _ = queue!(out, cursor::Hide);
+        if up > 0 {
+            let _ = queue!(out, cursor::MoveUp(up));
+        }
+        let _ = out.flush();
+    } else {
+        clear(out, up);
+        let _ = queue!(out, cursor::Show);
+        let _ = out.flush();
+    }
     answer
 }
 
@@ -389,7 +400,6 @@ fn draw_review<W: Write>(
         let (at, end) = draw_reason(out, reason, columns(&lead) + 3, width)?;
         return place_cursor(out, at, end, width);
     }
-    queue!(out, cursor::Hide)?;
     write!(out, "{}", format!("{} ", lead).with(MARKER_GREY))?;
     let mut cells = columns(&lead) + 1;
     if !frame
@@ -479,10 +489,7 @@ fn render_choices<W: Write>(out: &mut W, choices: &[String], active: usize) -> i
 /// absolute column clamps at the right margin.
 fn place_cursor<W: Write>(out: &mut W, at: Option<Spot>, end: Spot, width: u16) -> io::Result<u16> {
     let row = match at {
-        None => {
-            queue!(out, cursor::Hide)?;
-            end.row
-        }
+        None => end.row,
         Some(target) if target >= end => {
             queue!(out, cursor::Show)?;
             end.row
@@ -493,11 +500,10 @@ fn place_cursor<W: Write>(out: &mut W, at: Option<Spot>, end: Spot, width: u16) 
             } else {
                 (target.row, target.col)
             };
-            queue!(out, cursor::Show)?;
             if end.row > row {
                 queue!(out, cursor::MoveUp(end.row - row))?;
             }
-            queue!(out, cursor::MoveToColumn(col))?;
+            queue!(out, cursor::MoveToColumn(col), cursor::Show)?;
             row
         }
     };

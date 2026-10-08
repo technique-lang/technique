@@ -83,12 +83,15 @@ pub trait Keys {
     }
 }
 
-/// Raw mode, restored when this drops, including on an unwind.
+/// Raw mode, restored when this drops, including on an unwind. The cursor is
+/// left as drawn, but for an unwind which could leave it hidden.
 pub struct Raw;
 
 impl Drop for Raw {
     fn drop(&mut self) {
-        let _ = execute!(std::io::stdout(), cursor::Show);
+        if std::thread::panicking() {
+            let _ = execute!(std::io::stdout(), cursor::Show);
+        }
         let _ = disable_raw_mode();
     }
 }

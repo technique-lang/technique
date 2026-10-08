@@ -763,7 +763,7 @@ fn a_wrapped_line_is_cleared_from_its_first_row() {
         asked(Marker::Step, "/probe:/6", prompt.clone(), &BOUNDARY),
         keys(&[KeyCode::Backspace, ENTER]),
     );
-    let redraw = format!("{}\x1b[?25h\x1b[1A\x1b[1G\x1b[J", script);
+    let redraw = format!("{}\x1b[?25h\x1b[?25l\x1b[1A\x1b[1G\x1b[J", script);
     assert!(drawn.contains(&redraw));
     assert!(drawn.ends_with("\x1b[1A\x1b[1G\x1b[J\x1b[?25h"));
 
