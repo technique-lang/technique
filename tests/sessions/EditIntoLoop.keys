@@ -1,0 +1,5 @@
+"1" Enter               # /1
+Enter*3                 # [1]/-1 [2]/-1 /2
+Up Up*11 Esc "e"        # at /3, review to /1 Done and edit
+Backspace "2" Enter     # /1 seeded 1
+Enter*7                 # [1]/-1 [1] [2]/-1 [2] /2 /3 survey:

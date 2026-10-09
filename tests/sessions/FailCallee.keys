@@ -1,0 +1,4 @@
+"42" Enter              # /1
+Enter*6                 # /2 /3 report:/1 report:/2 report: /4
+Up Up*2 Esc "f" "broke" Enter   # at /5, review to report: Done and fail it
+Enter*3                 # /4 /5 survey:

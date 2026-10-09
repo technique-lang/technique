@@ -439,7 +439,7 @@ fn main() {
                 .about("Print the journal recorded for a procedure run.")
                 .long_about("Print the journal recorded when a Technique procedure was run. \
                     Each line is one recorded event: entering a step, executing a command, \
-                    and the result the step settled on. Times are relative to the start of \
+                    and the result recorded for the step. Times are relative to the start of \
                     the run, which is given in the heading.")
                 .arg(
                     Arg::new("id")
@@ -1011,7 +1011,11 @@ fn main() {
             let names = library_names(submatches);
             let mut library = Library::core();
             library.extend(resolve_libraries(&names));
-            if let Err(errors) = linking::link(&mut program, &library) {
+            let linked = linking::link(&mut program, &library).and_then(|()| match mode {
+                Mode::Interactive => Ok(()),
+                Mode::Automatic | Mode::Quiet => linking::scan_for_unusable_keywords(&program),
+            });
+            if let Err(errors) = linked {
                 for (i, error) in errors
                     .iter()
                     .enumerate()
@@ -1038,7 +1042,7 @@ fn main() {
             }
 
             match runner::start(
-                mode, colour, filename, &program, &arguments, library, &names,
+                mode, colour, filename, &content, &program, &arguments, library, &names,
             ) {
                 Ok((run_id, Conclusion::Stopping)) => {
                     eprintln!(
@@ -1047,14 +1051,10 @@ fn main() {
                     );
                     std::process::exit(0);
                 }
-                Ok((_, Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_))) => {
-                    std::process::exit(1)
-                }
+                Ok((_, Conclusion::Completed(Outcome::Fail(_)))) => std::process::exit(1),
                 Ok((_, Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_)))) => {
                     std::process::exit(0)
                 }
-                // drive() walks again rather than returning a restart
-                Ok((_, Conclusion::Restarting)) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);
@@ -1169,22 +1169,18 @@ fn main() {
                 std::process::exit(1);
             }
 
-            match runner::resume(run_id, &program, library) {
+            match runner::resume(run_id, Mode::Interactive, true, &program, library) {
                 Ok(Conclusion::Stopping) => {
                     eprintln!(
-                        "stopped; continue with `technique resume {}`",
+                        "stopped; resume with `technique resume {}`",
                         run_id.render()
                     );
                     std::process::exit(0);
                 }
-                Ok(Conclusion::Completed(Outcome::Fail(_)) | Conclusion::Throwing(_)) => {
-                    std::process::exit(1)
-                }
+                Ok(Conclusion::Completed(Outcome::Fail(_))) => std::process::exit(1),
                 Ok(Conclusion::Completed(Outcome::Done(_) | Outcome::Skip(_))) => {
                     std::process::exit(0)
                 }
-                // drive() walks again rather than returning a restart
-                Ok(Conclusion::Restarting) => unreachable!(),
                 Err(error) => {
                     eprintln!("{}", problem::concise_runner_error(&error, &Terminal));
                     std::process::exit(1);

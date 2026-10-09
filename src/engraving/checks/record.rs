@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use crate::engraving::{
-    InvokeTarget, Ledger, Record, RecordError, RunId, Serial, State, Store, StoreError, Supplied,
+    Appender, InvokeTarget, Record, RecordError, RunId, Serial, State, Store, StoreError, Supplied,
     display_path, fail_reason, format_record, parse_record,
 };
 use crate::value::Value;
 
-// A scratch directory under the system temp dir, cleaned up on drop so panics
+// A scratch directory under the project's target/, cleaned up on drop so panics
 // in a test do not leak it. Tests construct one per fixture they need.
 struct TempDir {
     path: PathBuf,
@@ -14,7 +14,9 @@ struct TempDir {
 
 impl TempDir {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!("technique-{}", name));
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("technique-{}", name));
         let _ = std::fs::remove_dir_all(&path);
         TempDir { path }
     }
@@ -59,7 +61,7 @@ fn run_id_render_six_digit_padding() {
 
 #[test]
 fn serial_render_three_digit_padding() {
-    assert_eq!(Serial::LIFECYCLE.render(), "000");
+    assert_eq!(Serial::ROOT.render(), "000");
     assert_eq!(Serial(8).render(), "008");
     assert_eq!(Serial(131).render(), "131");
     // Three digits is the convention, but larger values render unpadded.
@@ -115,7 +117,7 @@ fn create_writes_start_record_at_head() {
             .clone(),
     );
     let (run_id, run_dir) = store
-        .create(&document, started, &[])
+        .create(&document, "", started, &[])
         .expect("create");
 
     let pfftt = run_dir.join("NetworkProbe.pfftt");
@@ -130,6 +132,27 @@ fn create_writes_start_record_at_head() {
 }
 
 #[test]
+fn create_copies_source_document_into_run() {
+    let dir = TempDir::new("create-copy");
+
+    let document = PathBuf::from("/somewhere/NetworkProbe.tq");
+    let source = "% technique v1\n\nprobe :\n\n1. Ping the host\n";
+    let started = "2026-05-14T12:34:56Z".to_string();
+
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let (_, run_dir) = store
+        .create(&document, source, started, &[])
+        .expect("create");
+
+    let copy = run_dir.join("NetworkProbe.tq");
+    let on_disk = std::fs::read_to_string(&copy).expect("read copy");
+    assert_eq!(on_disk, source);
+}
+
+#[test]
 fn create_and_open_round_trips_document_path() {
     let dir = TempDir::new("create-open-roundtrip");
 
@@ -141,19 +164,14 @@ fn create_and_open_round_trips_document_path() {
             .clone(),
     );
     let (run_id, _) = store
-        .create(&document, started, &[])
+        .create(&document, "", started, &[])
         .expect("create");
-    let (read_document, libraries, ledger, _) = store
+    let (read_document, libraries, _) = store
         .open(run_id)
         .expect("open");
 
     assert_eq!(read_document, document);
     assert!(libraries.is_empty());
-    assert!(
-        ledger
-            .look(Serial::LIFECYCLE, "/")
-            .is_none()
-    );
 }
 
 #[test]
@@ -169,114 +187,14 @@ fn create_and_open_round_trips_libraries() {
             .clone(),
     );
     let (run_id, _) = store
-        .create(&document, started, &selected)
+        .create(&document, "", started, &selected)
         .expect("create");
-    let (read_document, libraries, _, _) = store
+    let (read_document, libraries, _) = store
         .open(run_id)
         .expect("open");
 
     assert_eq!(read_document, document);
     assert_eq!(libraries, selected);
-}
-
-// One record line, for building a journal a test then writes to disk.
-fn line(serial: u32, path: &str, state: State) -> String {
-    format_record(&Record {
-        recorded: format!("2026-05-14T12:00:{:02}Z", serial),
-        run_id: RunId(1),
-        serial: Serial(serial),
-        path: path.to_string(),
-        state,
-    })
-}
-
-fn trail_of(dir: &TempDir, lines: &[String]) -> Ledger {
-    let run_dir = dir
-        .path
-        .join("000001");
-    std::fs::create_dir_all(&run_dir).unwrap();
-    let mut file = line(
-        0,
-        "/",
-        State::Start {
-            uri: "file:///foo/Test.tq".to_string(),
-        },
-    );
-    for text in lines {
-        file.push_str(text);
-    }
-    std::fs::write(run_dir.join("Test.pfftt"), file).unwrap();
-    let store = Store::new(
-        dir.path
-            .clone(),
-    );
-    let (_, _, ledger, _) = store
-        .open(RunId(1))
-        .expect("open");
-    ledger
-}
-
-#[test]
-fn open_folds_done_skip_and_fail_into_outcomes() {
-    let dir = TempDir::new("replay-three");
-    let ledger = trail_of(
-        &dir,
-        &[
-            line(1, "/test:1", State::Begin(Vec::new())),
-            line(1, "/test:1", State::Done(None)),
-            line(2, "/test:2", State::Begin(Vec::new())),
-            line(2, "/test:2", State::Skip),
-            line(3, "/test:3", State::Begin(Vec::new())),
-            line(3, "/test:3", State::Fail(None)),
-        ],
-    );
-
-    for path in ["/test:1", "/test:2", "/test:3"] {
-        let entry = ledger
-            .look(Serial::LIFECYCLE, path)
-            .expect("entry");
-        assert!(
-            entry
-                .outcome
-                .is_some(),
-            "{} has an outcome",
-            path
-        );
-    }
-}
-
-// A scope the walk entered but never closed is not a completion: the entry
-// stands, holding what it began with, and a resume redoes it.
-#[test]
-fn open_leaves_an_unfinished_scope_without_an_outcome() {
-    let dir = TempDir::new("replay-unfinished");
-    let ledger = trail_of(
-        &dir,
-        &[
-            line(1, "/test:1", State::Begin(Vec::new())),
-            line(1, "/test:1", State::Done(Some(Value::Unitus))),
-            line(2, "/test:2", State::Begin(Vec::new())),
-            line(0, "/", State::Resume),
-        ],
-    );
-
-    let finished = ledger
-        .look(Serial::LIFECYCLE, "/test:1")
-        .expect("entry");
-    assert!(
-        finished
-            .outcome
-            .is_some()
-    );
-
-    let unfinished = ledger
-        .look(Serial::LIFECYCLE, "/test:2")
-        .expect("entry");
-    assert!(
-        unfinished
-            .outcome
-            .is_none()
-    );
 }
 
 #[test]
@@ -301,7 +219,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-16T12:50:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Start {
             uri: "file:///home/user/NetworkProbe.tq".to_string(),
@@ -315,7 +233,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:25Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Resume,
     };
@@ -327,7 +245,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Finish,
     };
@@ -339,7 +257,7 @@ fn format_record_pins_on_disk_text() {
     let record = Record {
         recorded: "2026-05-17T00:28:30Z".to_string(),
         run_id: RunId(15003),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: "/".to_string(),
         state: State::Stop,
     };
@@ -531,7 +449,7 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-16T12:50:30Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Start {
                 uri: "file:///foo/Bar.tq".to_string(),
@@ -540,21 +458,21 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Finish,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Stop,
         },
         Record {
             recorded: "2026-05-17T00:28:25Z".to_string(),
             run_id: RunId(15003),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Resume,
         },
@@ -638,7 +556,7 @@ fn record_round_trips_through_format_and_parse() {
         Record {
             recorded: "2026-05-14T12:00:03Z".to_string(),
             run_id: RunId(1),
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Stop,
         },
@@ -786,6 +704,161 @@ fn open_missing_start_record() {
     match store.open(RunId(1)) {
         Err(StoreError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
         other => panic!("expected StartMissing, got {:?}", other),
+    }
+}
+
+const JOURNAL: &str = "2026-05-14T12:00:00Z 000001 000 / Start file:///somewhere/Test.tq
+2026-05-14T12:00:01Z 000001 001 /test:/1 Done
+";
+
+fn journal(name: &str, content: &str) -> (TempDir, PathBuf) {
+    let dir = TempDir::new(name);
+    let run_dir = dir
+        .path
+        .join("000001");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    let pfftt = run_dir.join("Test.pfftt");
+    std::fs::write(&pfftt, content).unwrap();
+    (dir, pfftt)
+}
+
+#[test]
+fn a_torn_last_line_is_ignored_and_cut_before_appending() {
+    let (dir, pfftt) = journal(
+        "torn-last-line",
+        &format!("{}2026-05-14T12:00:02Z 0000", JOURNAL),
+    );
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let records = store
+        .read(RunId(1))
+        .expect("read");
+    assert_eq!(records.len(), 2);
+
+    let record = Record {
+        recorded: "2026-05-14T12:00:03Z".to_string(),
+        run_id: RunId(1),
+        serial: Serial(2),
+        path: "/test:/2".to_string(),
+        state: State::Done(None),
+    };
+    let (mut appender, _) = Appender::open(pfftt.clone(), RunId(1)).expect("open");
+    appender
+        .append(&record)
+        .expect("append");
+    assert_eq!(
+        std::fs::read_to_string(&pfftt).unwrap(),
+        format!("{}{}", JOURNAL, format_record(&record))
+    );
+    let records = store
+        .read(RunId(1))
+        .expect("read");
+    assert_eq!(records.len(), 3);
+}
+
+#[test]
+fn an_unterminated_last_line_is_cut_even_if_it_parses() {
+    let content = JOURNAL.trim_end();
+    let (dir, pfftt) = journal("unterminated-last-line", content);
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let records = store
+        .read(RunId(1))
+        .expect("read");
+    assert_eq!(records.len(), 1);
+
+    let _ = Appender::open(pfftt.clone(), RunId(1)).expect("open");
+    let (head, _) = JOURNAL
+        .split_once('\n')
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&pfftt).unwrap(),
+        format!("{}\n", head)
+    );
+}
+
+#[test]
+fn a_line_torn_inside_a_character_is_cut() {
+    let mut content = format!(
+        "{}2026-05-14T12:00:02Z 000001 002 /test:/2 Done \"é",
+        JOURNAL
+    )
+    .into_bytes();
+    content.pop();
+    let (dir, pfftt) = journal("torn-inside-character", "");
+    std::fs::write(&pfftt, &content).unwrap();
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    let records = store
+        .read(RunId(1))
+        .expect("read");
+    assert_eq!(records.len(), 2);
+
+    let _ = Appender::open(pfftt.clone(), RunId(1)).expect("open");
+    assert_eq!(std::fs::read_to_string(&pfftt).unwrap(), JOURNAL);
+}
+
+#[test]
+fn a_torn_start_line_is_refused_and_left_in_place() {
+    let (head, _) = JOURNAL
+        .split_once('\n')
+        .unwrap();
+    let (dir, pfftt) = journal("torn-start-line", head);
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    match store.open(RunId(1)) {
+        Err(StoreError::StartMissing(run_id)) => assert_eq!(run_id, RunId(1)),
+        other => panic!("expected StartMissing, got {:?}", other),
+    }
+    assert_eq!(std::fs::read_to_string(&pfftt).unwrap(), head);
+}
+
+#[test]
+fn a_run_records_one_session_at_a_time() {
+    let (_dir, pfftt) = journal("one-session", JOURNAL);
+    let first = Appender::open(pfftt.clone(), RunId(1)).expect("open");
+    let Err(StoreError::InUse(RunId(1))) = Appender::open(pfftt.clone(), RunId(1)) else {
+        panic!("expected InUse");
+    };
+    drop(first);
+    let _ = Appender::open(pfftt.clone(), RunId(1)).expect("open after release");
+}
+
+#[test]
+fn a_malformed_line_names_its_line_number() {
+    let (dir, _) = journal(
+        "malformed-line",
+        &format!("{}\ngarbage\n{}", JOURNAL, JOURNAL),
+    );
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    match store.read(RunId(1)) {
+        Err(StoreError::MalformedRecord { run_id, line, .. }) => {
+            assert_eq!(run_id, RunId(1));
+            assert_eq!(line, 4);
+        }
+        other => panic!("expected MalformedRecord, got {:?}", other),
+    }
+
+    // Opening reads only the Start line.
+    let (dir, _) = journal("malformed-head", "garbage\n");
+    let store = Store::new(
+        dir.path
+            .clone(),
+    );
+    match store.open(RunId(1)) {
+        Err(StoreError::MalformedRecord { line, .. }) => assert_eq!(line, 1),
+        other => panic!("expected MalformedRecord, got {:?}", other),
     }
 }
 

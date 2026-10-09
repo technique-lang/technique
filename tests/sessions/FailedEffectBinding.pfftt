@@ -1,0 +1,13 @@
+2026-09-28T00:00:00.000Z 000000 000 / Start file://tests/sessions/FailedEffectBinding.tq
+2026-09-29T13:11:00.734Z 000000 001 /slow: Begin ()
+2026-09-29T13:11:00.734Z 000000 002 /slow:/1 Begin ()
+2026-09-29T13:11:00.734Z 000000 002 /slow:/1 Execute exec()
+2026-09-29T13:11:00.752Z 000000 002 /slow:/1 Return
+2026-09-29T13:11:00.752Z 000000 002 /slow:/1 Bind ( () ~ w )
+2026-09-29T13:11:00.752Z 000000 002 /slow:/1 Fail [ "reason" = "External command exited with status 1" ]
+2026-09-29T13:11:00.752Z 000000 003 /slow:/2 Begin ( () ~ w )
+2026-09-29T13:11:00.752Z 000000 000 / Stop
+2026-09-29T13:11:00.752Z 000000 000 / Resume
+2026-09-29T13:11:00.752Z 000000 003 /slow:/2 Done ()
+2026-09-29T13:11:00.752Z 000000 001 /slow: Fail [ "reason" = "External command exited with status 1" ]
+2026-09-29T13:11:00.752Z 000000 000 / Finish

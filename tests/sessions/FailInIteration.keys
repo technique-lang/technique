@@ -1,0 +1,5 @@
+Enter                   # [1] exec
+Enter                   # [2] exec
+Esc "q"                 # /1
+--- resume
+Enter*3                 # /1 /2 survey:

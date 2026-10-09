@@ -3,4 +3,4 @@
 
 mod linker;
 
-pub use linker::{LinkingError, link};
+pub use linker::{LinkingError, link, scan_for_unusable_keywords};

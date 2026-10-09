@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use technique::engraving::{Appender, Ledger};
+use technique::engraving::Appender;
 use technique::parsing;
-use technique::runner::{Conclusion, Context, Environment, Headless, Library, Outcome, Runner};
+use technique::runner::{Conclusion, Context, Headless, Library, Outcome, Runner};
 use technique::translation;
 
 use crate::common::list_technique_documents;
@@ -120,12 +120,12 @@ fn ensure_run() {
         let mut runner = Runner::new(
             &program,
             Appender::memory(),
-            Ledger::new(),
+            Vec::new(),
             Headless::new(),
             library,
         )
         .with_context(Context::capture());
-        let outcome = match runner.run(Environment::new()) {
+        let outcome = match runner.run(Vec::new()) {
             Ok(outcome) => outcome,
             Err(e) => {
                 println!("File {:?} did not run cleanly: {:?}", file, e);

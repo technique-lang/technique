@@ -77,7 +77,7 @@ fn motion(key: &str) -> Motion {
     }
 }
 
-/// Walk every table beside a journal and require that the reusltant cursor
+/// Walk every table beside a journal and require that the resultant cursor
 /// conforms to it. The table is a specification.
 #[test]
 fn ensure_moves() {

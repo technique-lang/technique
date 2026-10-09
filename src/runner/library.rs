@@ -12,8 +12,8 @@ use std::process::{Command, Stdio};
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 use super::context::{Context, Stream};
+use super::error::RunnerError;
 use super::evaluator::Environment;
-use super::runner::RunnerError;
 use crate::program::ExecutableId;
 use crate::value::{Numeric, Value};
 
@@ -275,14 +275,10 @@ fn pairs(_context: &Context, _env: &Environment, args: &[Value]) -> Result<Value
     Ok(Value::Arraeum(pairs))
 }
 
-/// Run a shell script, teeing its output to the user chunk by chunk as it
-/// streams while accumulating the output as the return value. The child's
-/// stdout and stderr are kept on separate pipes so stderr can be shown in
-/// red; both are drained together using `poll()` so neither deadlocks. Bytes
-/// are decoded at the end, so a chunk split mid-UTF-8 is harmless; trailing
-/// newlines are trimmed (matching shell substitution). A non-zero exit is an
-/// error. Variables in scope are exported to the script's environment, so
-/// `customer` is available as `$customer`.
+/// Run a shell script, teeing its output to the user while capturing it as
+/// the return value, trailing newlines trimmed as shell substitution does.
+/// Stderr is a separate pipe so it can be shown in red. Bindings in scope are
+/// exported, so `customer` is available as `$customer`.
 #[cfg(unix)]
 fn exec(context: &Context, env: &Environment, args: &[Value]) -> Result<Value, RunnerError> {
     let script = match &args[0] {
@@ -416,6 +412,9 @@ fn exec(context: &Context, env: &Environment, args: &[Value]) -> Result<Value, R
             .write_run(&err_pending, Stream::Stderr)
             .map_err(RunnerError::ExecError)?;
     }
+    context
+        .end_line()
+        .map_err(RunnerError::ExecError)?;
 
     let status = child
         .wait()
@@ -476,7 +475,7 @@ fn tee(
 /// `now()` — the current wall-clock time as an ISO 8601 string, emitted
 /// through Context the same way `exec` tees its output.
 fn now(context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
-    let text = super::runner::now_iso8601();
+    let text = now_iso8601();
     context
         .emit(&format!("{}\n", text))
         .map_err(RunnerError::ExecError)?;
@@ -484,7 +483,7 @@ fn now(context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, 
 }
 
 /// A browser-library action: the user performs the UI manipulation when the
-/// runner presents the step, so the call settles to unit.
+/// runner presents the step, so the call yields unit.
 fn interact(_context: &Context, _env: &Environment, _args: &[Value]) -> Result<Value, RunnerError> {
     Ok(Value::Unitus)
 }
@@ -523,6 +522,20 @@ fn as_tablet<'a>(
             expected: "a tablet",
         })
     }
+}
+
+pub(crate) fn now_iso8601() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
+        now.millisecond(),
+    )
 }
 
 #[cfg(test)]

@@ -1,0 +1,5 @@
+"1" Enter               # /1
+Enter*3                 # report:/1 report: report:/1
+Esc "q"                 # report: of the second call
+--- resume
+Enter*8                 # report: /2 exec report:/1 report: /3 /4 survey:

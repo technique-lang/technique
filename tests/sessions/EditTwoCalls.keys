@@ -1,0 +1,7 @@
+"1" Enter               # /1
+Enter*5                 # report:/1 report: report:/1 report: /2
+Enter*3                 # exec report:/1 report:
+Enter                   # /3
+Up Up*22 Esc "e"        # at /4, review to /1 Done and edit
+Backspace "2" Enter     # /1 seeded 1
+Enter*7                 # report:/1 report: report:/1 report: /2 /4 survey:

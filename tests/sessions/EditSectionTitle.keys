@@ -1,0 +1,5 @@
+"5" Enter               # I/1
+Enter*3                 # I II/2 II
+Up Up*5 Esc "e"         # at survey:, review to I/1 Done and edit
+Backspace "6" Enter     # I/1 seeded 5
+Enter*4                 # I II/2 II survey:

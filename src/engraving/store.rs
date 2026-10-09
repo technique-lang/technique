@@ -5,8 +5,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use super::StoreError;
-use super::ledger::Ledger;
-use super::record::{Record, RunId, Serial, State, format_record, parse_record, parse_records};
+use super::record::{Record, RunId, Serial, State, format_record, parse_record};
 
 /// On-disk store of runs, rooted at some base directory (conventionally
 /// `.store/` relative to the user's current directory).
@@ -14,10 +13,8 @@ pub struct Store {
     base: PathBuf,
 }
 
-// Cap the number of times the allocator retries when another process has
-// taken the identifier we just computed. The race window is small; a
-// handful of retries is more than enough in practice.
-const ALLOCATE_RETRIES: usize = 4;
+// Retries when another process takes the identifier just computed.
+const MAX_RETRIES: usize = 4;
 
 impl Store {
     /// Build a handle to a store rooted at `base`. No I/O happens here; the
@@ -26,8 +23,7 @@ impl Store {
         Store { base }
     }
 
-    /// Allocate a new run identifier and create its directory. Returns the
-    /// identifier and the path of the new directory.
+    /// Allocate a new run identifier and create its directory.
     pub fn allocate(&self) -> Result<(RunId, PathBuf), StoreError> {
         // Make sure the store root exists before scanning for siblings.
         if let Err(error) = std::fs::create_dir_all(&self.base) {
@@ -39,7 +35,7 @@ impl Store {
             });
         }
 
-        for _ in 0..ALLOCATE_RETRIES {
+        for _ in 0..MAX_RETRIES {
             let next = self.next_identifier()?;
             let path = self
                 .base
@@ -62,12 +58,13 @@ impl Store {
         })
     }
 
-    /// Allocate a new run and write its opening `Start` record. The PFFTT
-    /// file is named after the source document's basename (e.g.
-    /// `NetworkProbe.pfftt`).
+    /// Allocate a new run, copy the source document into it, and write its
+    /// opening `Start` record. The PFFTT file is named after the source
+    /// document's basename (e.g. `NetworkProbe.pfftt`).
     pub fn create(
         &self,
         document: &Path,
+        source: &str,
         started: String,
         libraries: &[String],
     ) -> Result<(RunId, PathBuf), StoreError> {
@@ -76,6 +73,8 @@ impl Store {
             error,
         })?;
         let (run_id, run_dir) = self.allocate()?;
+        let copy = construct_source_path(&run_dir, &absolute);
+        std::fs::write(&copy, source).map_err(|error| StoreError::Io { path: copy, error })?;
         let pfftt = construct_state_path(&run_dir, &absolute);
         let mut uri = format!("file://{}", absolute.display());
         if !libraries.is_empty() {
@@ -85,7 +84,7 @@ impl Store {
         let record = Record {
             recorded: started,
             run_id,
-            serial: Serial::LIFECYCLE,
+            serial: Serial::ROOT,
             path: "/".to_string(),
             state: State::Start { uri },
         };
@@ -104,21 +103,20 @@ impl Store {
             return Err(StoreError::NoSuchRun(run_id));
         }
         let pfftt = find_pfftt_file(&run_dir, run_id)?;
-        let content = std::fs::read_to_string(&pfftt).map_err(|error| StoreError::Io {
+        let mut content = std::fs::read(&pfftt).map_err(|error| StoreError::Io {
             path: pfftt.clone(),
             error,
         })?;
-
-        parse_records(&content).map_err(|error| StoreError::MalformedRecord { run_id, error })
+        if let Some(start) = torn(&content) {
+            content.truncate(start);
+        }
+        parse_journal(content, &pfftt, run_id)
     }
 
     /// Open an existing run. Parses the leading `Start` record to recover the
-    /// source document and the libraries it was run with, then folds every
-    /// record that follows into the `Ledger` a resume walks against.
-    pub fn open(
-        &self,
-        run_id: RunId,
-    ) -> Result<(PathBuf, Vec<String>, Ledger, PathBuf), StoreError> {
+    /// source document and the libraries it was run with, and names the run's
+    /// directory.
+    pub fn open(&self, run_id: RunId) -> Result<(PathBuf, Vec<String>, PathBuf), StoreError> {
         let run_dir = self
             .base
             .join(run_id.render());
@@ -130,32 +128,34 @@ impl Store {
             path: pfftt.clone(),
             error,
         })?;
+        if let Some(start) = torn(content.as_bytes()) {
+            if content[..start]
+                .trim()
+                .is_empty()
+            {
+                return Err(StoreError::StartMissing(run_id));
+            }
+        }
 
-        let mut lines = content
+        let (i, first) = content
             .lines()
-            .filter(|line| {
+            .enumerate()
+            .find(|(_, line)| {
                 !line
                     .trim()
                     .is_empty()
-            });
-
-        let first = lines
-            .next()
+            })
             .ok_or(StoreError::StartMissing(run_id))?;
-        let head =
-            parse_record(first).map_err(|error| StoreError::MalformedRecord { run_id, error })?;
+        let head = parse_record(first).map_err(|error| StoreError::MalformedRecord {
+            run_id,
+            line: i + 1,
+            error,
+        })?;
         let (document, libraries) = match head.state {
             State::Start { uri, .. } => parse_run_uri(&uri),
             _ => return Err(StoreError::StartMissing(run_id)),
         };
-
-        let mut ledger = Ledger::new();
-        for line in lines {
-            let record = parse_record(line)
-                .map_err(|error| StoreError::MalformedRecord { run_id, error })?;
-            ledger.apply(&record);
-        }
-        Ok((document, libraries, ledger, run_dir))
+        Ok((document, libraries, run_dir))
     }
 
     // Scan the store for the highest existing run identifier and return
@@ -192,12 +192,8 @@ impl Store {
     }
 }
 
-// Recover the source document's file path and the libraries that were
-// selected from a Start URI of the form
-//
-// file://{path}?library=a,b
-
-// written by `create` records. The query string parameters are optional.
+// Recover the document path and selected libraries from the Start URI
+// `file://{path}?library=a,b` that `create` records; the query is optional.
 pub(crate) fn parse_run_uri(uri: &str) -> (PathBuf, Vec<String>) {
     let (location, query) = match uri.split_once('?') {
         Some((location, query)) => (location, Some(query)),
@@ -218,6 +214,43 @@ pub(crate) fn parse_run_uri(uri: &str) -> (PathBuf, Vec<String>) {
     (PathBuf::from(path), libraries)
 }
 
+// Where a last line cut short mid-write begins: every record is written with
+// its newline, so one lacking it is broken even if it parses.
+fn torn(content: &[u8]) -> Option<usize> {
+    if content.is_empty() || content.ends_with(b"\n") {
+        return None;
+    }
+    let start = content
+        .iter()
+        .rposition(|b| *b == b'\n')
+        .map_or(0, |i| i + 1);
+    Some(start)
+}
+
+// Parse a journal's records, its torn last line already cut.
+fn parse_journal(content: Vec<u8>, path: &Path, run_id: RunId) -> Result<Vec<Record>, StoreError> {
+    let content = String::from_utf8(content).map_err(|error| StoreError::Io {
+        path: path.to_path_buf(),
+        error: std::io::Error::new(std::io::ErrorKind::InvalidData, error),
+    })?;
+    content
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .map(|(i, line)| {
+            parse_record(line).map_err(|error| StoreError::MalformedRecord {
+                run_id,
+                line: i + 1,
+                error,
+            })
+        })
+        .collect()
+}
+
 // Compute the on-disk PFFTT file path for a run, named using the source
 // document's stem.
 pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
@@ -227,6 +260,15 @@ pub(crate) fn construct_state_path(run_dir: &Path, document: &Path) -> PathBuf {
         .unwrap_or_default();
     let mut name = PathBuf::from(stem);
     name.set_extension("pfftt");
+    run_dir.join(name)
+}
+
+// Compute the path of the copy of the source document kept in a run's
+// directory, named with the source document's basename.
+pub(crate) fn construct_source_path(run_dir: &Path, document: &Path) -> PathBuf {
+    let name = document
+        .file_name()
+        .unwrap_or_default();
     run_dir.join(name)
 }
 
@@ -242,27 +284,47 @@ enum Target {
 /// Append-only writer for a PFFTT file. Used by the runner to append a
 /// record for each step boundary and lifecycle event. Carries the
 /// `RunId` so callers can stamp it onto records.
-/// through every layer.
 pub struct Appender {
     target: Target,
     run_id: RunId,
 }
 
 impl Appender {
-    /// Open the PFFTT file for append. The file must already exist (the
-    /// runner writes the opening `Start` record first via `Store::create`).
-    pub fn open(path: PathBuf, run_id: RunId) -> Result<Self, StoreError> {
-        let file = std::fs::OpenOptions::new()
+    /// Open an existing PFFTT file for append, and read back its records.
+    /// Holds a lock on the file until dropped so if a second session is
+    /// attempted from another process it won't be able to run.
+    pub fn open(path: PathBuf, run_id: RunId) -> Result<(Self, Vec<Record>), StoreError> {
+        use std::io::Read;
+        let failed = |error| StoreError::Io {
+            path: path.clone(),
+            error,
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
             .append(true)
             .open(&path)
-            .map_err(|error| StoreError::Io {
-                path: path.clone(),
-                error,
-            })?;
-        Ok(Appender {
-            target: Target::File { file, path },
-            run_id,
-        })
+            .map_err(failed)?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => return Err(StoreError::InUse(run_id)),
+            Err(std::fs::TryLockError::Error(error)) => return Err(failed(error)),
+        }
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .map_err(failed)?;
+        if let Some(start) = torn(&content) {
+            file.set_len(start as u64)
+                .map_err(failed)?;
+            content.truncate(start);
+        }
+        let records = parse_journal(content, &path, run_id)?;
+        Ok((
+            Appender {
+                target: Target::File { file, path },
+                run_id,
+            },
+            records,
+        ))
     }
 
     /// An Appender that discards every record for use in tests.

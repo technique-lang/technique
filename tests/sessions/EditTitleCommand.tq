@@ -1,0 +1,19 @@
+survey :
+
+    1.  Choose a command ~ cmd
+    2.  File it <report>(exec(cmd))
+
+I. Sampling at { exec(cmd) }
+
+    3.  { foreach s in ["a", "b"] }
+        -   Test { s } with { exec(cmd) }
+
+II. Closing
+
+closing :
+
+    4.  Seal the crate
+
+report(r) : Reading -> ()
+
+    1.  Record { r }

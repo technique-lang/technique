@@ -1,0 +1,6 @@
+"false" Enter           # /1
+Enter*7                 # /2 exec, I exec, I, closing:/4 closing: II survey:
+--- resume
+Up*15 Esc "e"           # review from II Done to /1 Done and edit
+Backspace*5 "true" Enter  # /1 seeded false
+Enter*12                # /2 exec report:/1 report: /2, I exec, [1]/-1 exec and step, [2]/-1 exec and step, I/3 I survey:

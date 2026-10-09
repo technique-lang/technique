@@ -14,6 +14,8 @@ pub enum LinkingError<'i> {
     /// A function call naming nothing in the function table — neither a core
     /// nor system builtin nor a function the selected domain provides.
     UnresolvedFunction { function: language::Identifier<'i> },
+    /// A `repeat` in a program run unattended, where nobody can quit it.
+    UnattendedRepeat { at: Span },
 }
 
 impl<'i> LinkingError<'i> {
@@ -21,6 +23,7 @@ impl<'i> LinkingError<'i> {
         match self {
             LinkingError::ArityMismatch { function, .. } => function.span,
             LinkingError::UnresolvedFunction { function } => function.span,
+            LinkingError::UnattendedRepeat { at } => *at,
         }
     }
 }
@@ -120,6 +123,80 @@ fn link_operation<'i>(
         Operation::List(items, _) | Operation::Tuple(items, _) => {
             for item in items {
                 link_operation(item, library, problems);
+            }
+        }
+        Operation::Variable(_, _)
+        | Operation::Number(_, _)
+        | Operation::Response(_, _)
+        | Operation::Verbatim(_, _)
+        | Operation::Prose(_, _)
+        | Operation::Hole(_)
+        | Operation::Unit(_) => {}
+    }
+}
+
+/// Certain keywords cannot be used if the user attempts to run a Technique
+/// unattended (ie automatic or quiet mode).
+pub fn scan_for_unusable_keywords<'i>(program: &Program<'i>) -> Result<(), Vec<LinkingError<'i>>> {
+    let mut problems = Vec::new();
+    for subroutine in &program.subroutines {
+        find_repeats(&subroutine.body, &mut problems);
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(problems)
+    }
+}
+
+fn find_repeats<'i>(op: &Operation<'i>, problems: &mut Vec<LinkingError<'i>>) {
+    match op {
+        Operation::Loop {
+            over, body, span, ..
+        } => {
+            match over {
+                Some(over) => find_repeats(over, problems),
+                None => problems.push(LinkingError::UnattendedRepeat { at: *span }),
+            }
+            find_repeats(body, problems);
+        }
+        Operation::Execute(executable, _) => {
+            for arg in &executable.arguments {
+                find_repeats(arg, problems);
+            }
+        }
+        Operation::Invoke(invocable, _) => {
+            for arg in &invocable.arguments {
+                find_repeats(arg, problems);
+            }
+        }
+        Operation::Sequence(ops, _)
+        | Operation::Prologue(ops, _)
+        | Operation::List(ops, _)
+        | Operation::Tuple(ops, _) => {
+            for op in ops {
+                find_repeats(op, problems);
+            }
+        }
+        Operation::Section { body, .. } | Operation::Step { body, .. } => {
+            find_repeats(body, problems)
+        }
+        Operation::Within { bound, body, .. } => {
+            find_repeats(bound, problems);
+            find_repeats(body, problems);
+        }
+        Operation::Cost(inner, _) => find_repeats(inner, problems),
+        Operation::Bind { value, .. } => find_repeats(value, problems),
+        Operation::String(fragments, _) => {
+            for fragment in fragments {
+                if let Fragment::Interpolation(op) = fragment {
+                    find_repeats(op, problems);
+                }
+            }
+        }
+        Operation::Tablet(entries, _) => {
+            for entry in entries {
+                find_repeats(&entry.value, problems);
             }
         }
         Operation::Variable(_, _)

@@ -1,0 +1,9 @@
+survey :
+
+    1.  Take a reading ~ reading
+    2.  <report>(reading, ?)
+    3.  Sign the log
+
+report(r, note) : Reading, Note -> ()
+
+    1.  File { r } with the office

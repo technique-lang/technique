@@ -1,0 +1,7 @@
+"42" Enter              # /1
+Enter*8                 # /2 /3 report:/1 report:/2 report: /4 /5 survey:
+--- resume
+Up*15 Esc "e"           # review from /5 Done to /1 Done and edit
+Esc "q"                 # quit at /1 seeded 42, writing nothing
+--- resume
+End                     # review opens, leaves

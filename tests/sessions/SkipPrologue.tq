@@ -1,0 +1,5 @@
+survey :
+
+Arrive at the site { "home" ~ site }
+
+    1.  Visit { site }

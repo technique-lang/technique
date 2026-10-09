@@ -1,0 +1,14 @@
+2026-09-28T00:00:00.000Z 000000 000 / Start file://tests/sessions/FailInPrologue.tq
+2026-09-29T13:11:00.697Z 000000 001 /survey: Begin ()
+2026-09-29T13:11:00.697Z 000000 002 /survey:/0 Begin ()
+2026-09-29T13:11:00.697Z 000000 002 /survey:/0 Execute exec()
+2026-09-29T13:11:00.715Z 000000 002 /survey:/0 Return
+2026-09-29T13:11:00.715Z 000000 002 /survey:/0 Fail [ "reason" = "External command exited with status 1" ]
+2026-09-29T13:11:00.715Z 000000 003 /survey:/1 Begin ()
+2026-09-29T13:11:00.715Z 000000 003 /survey:/1 Done ()
+2026-09-29T13:11:00.715Z 000000 004 /survey:/2 Begin ()
+2026-09-29T13:11:00.715Z 000000 000 / Stop
+2026-09-29T13:11:00.715Z 000000 000 / Resume
+2026-09-29T13:11:00.715Z 000000 004 /survey:/2 Done ()
+2026-09-29T13:11:00.715Z 000000 001 /survey: Fail [ "reason" = "External command exited with status 1" ]
+2026-09-29T13:11:00.715Z 000000 000 / Finish

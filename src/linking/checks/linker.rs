@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::linking::{LinkingError, link};
+use crate::linking::{LinkingError, link, scan_for_unusable_keywords};
 use crate::parsing;
 use crate::program::{Executable, ExecutableRef, Operation};
 use crate::runner::Library;
@@ -101,4 +101,28 @@ powerdown :
     assert_eq!(function.value, "cmd");
     assert_eq!(*expected, 1);
     assert_eq!(*actual, 2);
+}
+
+#[test]
+fn repeat_is_refused_unattended() {
+    let source = r#"
+% technique v1
+
+watch :
+    1.  Walk the perimeter { repeat <check_gate> }
+
+check_gate :
+    1.  Check the gate
+        "#
+    .trim_ascii();
+    let path = Path::new("Test.tq");
+    let document = parsing::parse(path, source).expect("parse");
+    let program = translate(&document).expect("translate");
+
+    let errors = scan_for_unusable_keywords(&program).expect_err("repeat error");
+    assert_eq!(errors.len(), 1);
+    let LinkingError::UnattendedRepeat { at } = &errors[0] else {
+        panic!("expected UnattendedRepeat, got {:?}", errors[0]);
+    };
+    assert!(source[at.offset..].starts_with("repeat"));
 }

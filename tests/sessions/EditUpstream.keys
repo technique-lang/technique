@@ -1,0 +1,5 @@
+"42" Enter              # /1
+Enter*6                 # /2 /3 report:/1 report:/2 report: /4
+Up Up*14 Esc "e"        # at /5, review to /1 Done and edit
+Backspace*2 "73" Enter  # /1 seeded 42
+Enter*7                 # /2 report:/1 report:/2 report: /4 /5 survey:

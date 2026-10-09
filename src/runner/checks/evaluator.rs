@@ -1,11 +1,11 @@
 use crate::language::{Identifier, Multiline, Numeric as LangNumeric, Span};
 use crate::program::{Entry, Executable, ExecutableRef, Fragment, Operation};
 use crate::runner::context::Context;
+use crate::runner::error::RunnerError;
 use crate::runner::evaluator::{
     Environment, coerce_to_list, combine, evaluate, is_list_literal, parse_list_literal,
 };
 use crate::runner::library::Library;
-use crate::runner::runner::RunnerError;
 use crate::value;
 
 #[test]
@@ -172,8 +172,8 @@ fn bind_extends_env_for_subsequent_lookup() {
     assert_eq!(v, value::Value::Literali("Hello".to_string()));
 }
 
-// A sequence is statement composition: its value is the last member's value
-// (not a ⊕-fold — that will be the `+` operator's job).
+// A sequence is statement composition: its value is the last member's value,
+// not a ⊕-fold.
 
 #[test]
 fn sequence_evaluation() {

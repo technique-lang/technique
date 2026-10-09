@@ -1,7 +1,8 @@
 //! Moving over the records of a journal: where the review cursor can rest and
-//! what each keystroke reaches. Every record that still stands is a position;
-//! the tree the motions climb is the one the walk took, a callee enclosed by
-//! the step that invoked it rather than by the path it was written at.
+//! what each keystroke reaches. The records of the activations that stand are
+//! the positions, in document order; the tree the motions climb is the one the
+//! walk took, a callee enclosed by the step that invoked it rather than by the
+//! path it was written at.
 //!
 //!   Up          previous record; from `Live`, the last record of the scope
 //!               the prompt belongs to
@@ -25,10 +26,13 @@
 //! no peer that way, and all four of those at `Live`, where the run is at a
 //! prompt and they are cursor motion within the answer being typed.
 //!
+//! After an amendment the prompt need not follow the last position: work
+//! beyond it that still stands keeps its place, and `Up`/`Down` pass across
+//! the prompt as though it were not there.
+//!
 //! `tests/navigation/` holds the worked examples.
 
-use std::collections::{HashMap, HashSet};
-
+use super::history::{History, Standing};
 use super::record::{Record, Serial, State};
 
 /// Where the cursor rests. `Live` is the prompt the run is waiting at, which
@@ -50,241 +54,41 @@ pub enum Motion {
     PageDown,
 }
 
-// One scope the walk entered, as the cursor sees it.
-struct Scope {
-    parent: Option<Serial>,
-    /// Where it first opened, which is where it stands among its peers.
-    first: usize,
-    /// Its latest activation's `Begin`.
-    begin: usize,
-    outcome: Option<usize>,
-}
-
-/// The live tree of a journal, and the motions over it.
+/// The standing tree of a journal, and the motions over it.
 pub struct Journal<'i> {
     records: &'i [Record],
-    scopes: HashMap<Serial, Scope>,
-    /// The scope each record was written against.
-    within: Vec<Serial>,
-    /// The scopes that stand, in document order, which is the order peers
-    /// stand in.
-    opened: Vec<Serial>,
-    /// The records the cursor stops on, in document order. `Stop`, `Resume`
-    /// and `Finish` bracket a session rather than state anything the walk did,
-    /// so they are not positions; `Start` is, being the root's own entry.
+    history: History,
+    /// The root's own entry, which is a position.
+    start: Option<usize>,
+    /// The records the cursor stops on, in document order.
     order: Vec<usize>,
     /// Each record's place in `order`, where it has one.
     rank: Vec<Option<usize>>,
-    finished: bool,
     /// The scope the run is prompting in, or `None` if it is not at a prompt.
     prompt: Option<Serial>,
 }
 
 impl<'i> Journal<'i> {
-    /// Fold a journal into the tree it built. The enclosing scope of each is
-    /// whichever was innermost open when its `Begin` landed, so a procedure is
-    /// enclosed by the step that invoked it.
-    ///
-    /// A `Begin` written again for a scope already open is a new activation of
-    /// it, and nothing recorded in or beneath it before then stands. A `Revoke`
-    /// withdraws what its scope recorded but not what it encloses. Positions
-    /// run in document order: a scope keeps the place its first `Begin` took.
+    /// Fold a journal and lay out its positions: each activation's own
+    /// records in the order written, with each child enclosed placed where
+    /// its current `Begin` falls among them, children in slot order.
     pub fn new(records: &'i [Record], prompt: Option<Serial>) -> Journal<'i> {
-        let mut scopes: HashMap<Serial, Scope> = HashMap::new();
-        let mut within = Vec::with_capacity(records.len());
-        let mut open: Vec<Serial> = Vec::new();
-        let mut revoked: HashMap<Serial, usize> = HashMap::new();
-        let mut bound: HashMap<Serial, usize> = HashMap::new();
-        // An `Invoke` introduces the next scope to open beneath its caller.
-        let mut pending: HashMap<Serial, usize> = HashMap::new();
-        let mut introduces: HashMap<usize, Serial> = HashMap::new();
-        let mut introduced: HashMap<Serial, usize> = HashMap::new();
-        let mut redispatched: HashSet<usize> = HashSet::new();
-        let mut finished = false;
-
-        for (i, record) in records
+        let history = History::new(records);
+        let start = records
             .iter()
-            .enumerate()
-        {
-            let serial = record.serial;
-            match &record.state {
-                State::Start { .. } => {
-                    scopes.insert(
-                        serial,
-                        Scope {
-                            parent: None,
-                            first: i,
-                            begin: i,
-                            outcome: None,
-                        },
-                    );
-                    open.push(serial);
+            .position(|record| {
+                if let State::Start { .. } = record.state {
+                    true
+                } else {
+                    false
                 }
-                State::Begin(_) => {
-                    match scopes.get_mut(&serial) {
-                        Some(scope) => {
-                            scope.begin = i;
-                            scope.outcome = None;
-                            if let Some(at) = open
-                                .iter()
-                                .position(|s| *s == serial)
-                            {
-                                open.truncate(at);
-                            }
-                        }
-                        None => {
-                            scopes.insert(
-                                serial,
-                                Scope {
-                                    parent: open
-                                        .last()
-                                        .copied(),
-                                    first: i,
-                                    begin: i,
-                                    outcome: None,
-                                },
-                            );
-                        }
-                    }
-                    if let Some(caller) = scopes[&serial].parent {
-                        if let Some(at) = pending.remove(&caller) {
-                            introduces.insert(at, serial);
-                            introduced.insert(serial, at);
-                        }
-                    }
-                    open.push(serial);
-                }
-                State::Invoke(_) => {
-                    // A later session reaching the same call writes it again.
-                    if let Some(at) = pending.insert(serial, i) {
-                        if records[at].state == record.state {
-                            redispatched.insert(at);
-                        }
-                    }
-                }
-                State::Bind(_) => {
-                    bound.insert(serial, i);
-                }
-                State::Done(_) | State::Skip | State::Fail(_) => {
-                    if let Some(scope) = scopes.get_mut(&serial) {
-                        scope.outcome = Some(i);
-                    }
-                    if open.last() == Some(&serial) {
-                        open.pop();
-                    }
-                }
-                State::Revoke => {
-                    revoked.insert(serial, i);
-                    bound.remove(&serial);
-                    // The verdicts it rolled up into are withdrawn with it,
-                    // and the replay comes back into it, writing nothing to
-                    // reopen what it encloses.
-                    let mut chain = vec![serial];
-                    let mut at = Some(serial);
-                    while let Some(scope) = at.and_then(|s| scopes.get_mut(&s)) {
-                        scope.outcome = None;
-                        at = scope.parent;
-                        if let Some(parent) = at {
-                            chain.push(parent);
-                        }
-                    }
-                    chain.reverse();
-                    open = chain;
-                }
-                State::Finish => finished = true,
-                _ => {}
-            }
-            within.push(serial);
+            });
+
+        let mut order = Vec::new();
+        order.extend(start);
+        for serial in history.roots() {
+            place(&history, *serial, &mut order);
         }
-
-        // Whether a record falls within its scope's latest activation and
-        // after that of every scope enclosing it.
-        let live = |i: usize, serial: Serial| {
-            let mut at = match scopes.get(&serial) {
-                Some(scope) if i >= scope.begin => scope.parent,
-                _ => return false,
-            };
-            while let Some(parent) = at {
-                let scope = &scopes[&parent];
-                if i <= scope.begin {
-                    return false;
-                }
-                at = scope.parent;
-            }
-            true
-        };
-        let place = |serial: Serial| {
-            let mut key = Vec::new();
-            let mut at = Some(serial);
-            while let Some(scope) = at.map(|s| &scopes[&s]) {
-                key.push(scope.first + 1);
-                at = scope.parent;
-            }
-            key.reverse();
-            key
-        };
-
-        let mut order: Vec<usize> = records
-            .iter()
-            .enumerate()
-            .filter(|(i, record)| {
-                let i = *i;
-                let serial = record.serial;
-                let scope = match scopes.get(&serial) {
-                    Some(scope) => scope,
-                    None => return false,
-                };
-                match record.state {
-                    State::Stop | State::Resume | State::Finish | State::Revoke => false,
-                    State::Start { .. } => true,
-                    State::Begin(_) => scope.begin == i && live(i, serial),
-                    State::Done(_) | State::Skip | State::Fail(_) => {
-                        scope.outcome == Some(i) && live(i, serial)
-                    }
-                    State::Bind(_) => bound.get(&serial) == Some(&i) && live(i, serial),
-                    State::Invoke(_) => match introduces.get(&i) {
-                        Some(callee) => {
-                            introduced[callee] == i && live(scopes[callee].begin, *callee)
-                        }
-                        None => !redispatched.contains(&i) && live(i, serial),
-                    },
-                    _ => {
-                        live(i, serial)
-                            && revoked
-                                .get(&serial)
-                                .map_or(true, |at| i > *at)
-                    }
-                }
-            })
-            .map(|(i, _)| i)
-            .collect();
-        // An `Invoke` stands just ahead of the scope it introduced, and every
-        // other record after its scope's `Begin`, in the order written.
-        order.sort_by_cached_key(|i| {
-            let record = &records[*i];
-            match record.state {
-                State::Invoke(_) if introduces.contains_key(i) => place(introduces[i]),
-                State::Start { .. } | State::Begin(_) => {
-                    let mut key = place(record.serial);
-                    key.push(0);
-                    key
-                }
-                _ => {
-                    let mut key = place(record.serial);
-                    key.push(i + 1);
-                    key
-                }
-            }
-        });
-        let opened: Vec<Serial> = order
-            .iter()
-            .map(|i| &records[*i])
-            .filter(|record| match record.state {
-                State::Start { .. } | State::Begin(_) => true,
-                _ => false,
-            })
-            .map(|record| record.serial)
-            .collect();
         let mut rank = vec![None; records.len()];
         for (k, i) in order
             .iter()
@@ -295,12 +99,10 @@ impl<'i> Journal<'i> {
 
         Journal {
             records,
-            scopes,
-            within,
-            opened,
+            history,
+            start,
             order,
             rank,
-            finished,
             prompt,
         }
     }
@@ -315,12 +117,27 @@ impl<'i> Journal<'i> {
     pub fn last(&self) -> Option<Position> {
         self.order
             .iter()
-            .filter(|at| {
+            .rev()
+            .find(|at| {
                 self.prompt
-                    .map_or(true, |prompt| self.inside(self.within[**at], prompt))
+                    .map_or(true, |prompt| self.inside(self.within(**at), prompt))
             })
-            .last()
             .map(|at| Position::At(*at))
+    }
+
+    /// Where review opens: a finished run on the outcome of the last scope the
+    /// root encloses rather than the root's own close, otherwise `last()`.
+    pub fn opening(&self) -> Option<Position> {
+        let last = self.last()?;
+        if self
+            .history
+            .finished()
+        {
+            return self
+                .step(last, Motion::Right)
+                .or(Some(last));
+        }
+        Some(last)
     }
 
     /// Take one keystroke. `None` is a refusal, which changes nothing.
@@ -335,7 +152,9 @@ impl<'i> Journal<'i> {
             Position::At(at) => at,
         };
         // A record the cursor cannot rest on is no origin.
-        let k = self.rank[at]?;
+        let k = (*self
+            .rank
+            .get(at)?)?;
         match motion {
             Motion::Up => {
                 let back = k.checked_sub(1)?;
@@ -349,26 +168,25 @@ impl<'i> Journal<'i> {
                     Some(at) => Some(Position::At(*at)),
                     // A run that walked to its end has no live prompt to
                     // return to.
-                    None if self.finished => None,
+                    None if self
+                        .history
+                        .finished() =>
+                    {
+                        None
+                    }
                     None => Some(Position::Live),
                 }
             }
             Motion::Left => {
-                let parent = self
-                    .scope(at)?
-                    .parent?;
+                let parent = self.parent_of(self.within(at))?;
                 self.rest_at(self.landing(at, parent)?)
             }
             Motion::Right => {
-                let serial = self.within[at];
-                let mut kin = self
-                    .opened
-                    .iter()
-                    .filter(|s| self.parent_of(**s) == Some(serial));
+                let kin = self.kin(self.within(at));
                 let child = if self.is_outcome(at) {
                     kin.last()
                 } else {
-                    kin.next()
+                    kin.first()
                 }?;
                 self.rest_at(self.landing(at, *child)?)
             }
@@ -385,14 +203,8 @@ impl<'i> Journal<'i> {
 
     // The peer scope beside this record's.
     fn peer(&self, at: usize, back: bool) -> Option<Position> {
-        let serial = self.within[at];
-        let parent = self.parent_of(serial);
-        let kin: Vec<Serial> = self
-            .opened
-            .iter()
-            .copied()
-            .filter(|s| self.parent_of(*s) == parent)
-            .collect();
+        let serial = self.within(at);
+        let kin = self.kin(self.parent_of(serial)?);
         let k = kin
             .iter()
             .position(|s| *s == serial)?;
@@ -412,18 +224,41 @@ impl<'i> Journal<'i> {
     // Where a motion lands in the scope it reaches, holding the plane the
     // cursor was on.
     fn landing(&self, at: usize, serial: Serial) -> Option<usize> {
-        let scope = self
-            .scopes
-            .get(&serial)?;
-        match (self.is_outcome(at), scope.outcome) {
-            (true, Some(outcome)) => Some(outcome),
-            _ => Some(scope.begin),
+        if serial == Serial::ROOT {
+            return self.start;
+        }
+        let activation = self
+            .history
+            .get(serial)?;
+        match (self.is_outcome(at), activation.closed_at) {
+            (true, Some(closed)) => Some(closed),
+            _ => Some(activation.begun_at),
         }
     }
 
-    fn scope(&self, at: usize) -> Option<&Scope> {
-        self.scopes
-            .get(&self.within[at])
+    fn within(&self, at: usize) -> Serial {
+        self.records[at].serial
+    }
+
+    // The standing scopes a scope encloses.
+    fn kin(&self, serial: Serial) -> Vec<Serial> {
+        let children = if serial == Serial::ROOT {
+            self.history
+                .roots()
+        } else {
+            match self
+                .history
+                .get(serial)
+            {
+                Some(activation) => &activation.children,
+                None => return Vec::new(),
+            }
+        };
+        children
+            .iter()
+            .copied()
+            .filter(|s| standing(&self.history, *s))
+            .collect()
     }
 
     // Whether a scope is the one given or lies within it.
@@ -438,10 +273,46 @@ impl<'i> Journal<'i> {
     }
 
     fn parent_of(&self, serial: Serial) -> Option<Serial> {
-        self.scopes
-            .get(&serial)?
-            .parent
+        if serial == Serial::ROOT {
+            return None;
+        }
+        Some(
+            self.history
+                .get(serial)?
+                .parent,
+        )
     }
+}
+
+// A withdrawn activation holds nothing to rest on until it is begun again.
+fn standing(history: &History, serial: Serial) -> bool {
+    match history.get(serial) {
+        Some(activation) => activation.standing != Standing::Withdrawn,
+        None => false,
+    }
+}
+
+fn place(history: &History, serial: Serial, order: &mut Vec<usize>) {
+    let activation = match history.get(serial) {
+        Some(activation) if standing(history, serial) => activation,
+        _ => return,
+    };
+    let mut own = activation
+        .records
+        .iter()
+        .copied()
+        .peekable();
+    for child in &activation.children {
+        let begun = match history.get(*child) {
+            Some(child) => child.begun_at,
+            None => continue,
+        };
+        while let Some(i) = own.next_if(|i| *i < begun) {
+            order.push(i);
+        }
+        place(history, *child, order);
+    }
+    order.extend(own);
 }
 
 #[cfg(test)]

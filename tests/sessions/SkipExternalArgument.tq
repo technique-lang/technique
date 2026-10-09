@@ -1,0 +1,4 @@
+survey :
+
+    1.  Visit the page <https://example.com>(exec("echo hi"))
+    2.  Seal the crate

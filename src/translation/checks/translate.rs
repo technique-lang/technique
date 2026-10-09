@@ -1853,6 +1853,8 @@ deploy : Design, Component -> ()
 
 register : [Hostname] -> ()
 
+tally : [Animals] -> ()
+
 nothing : () -> ()
         "#
     .trim_ascii();
@@ -1870,9 +1872,13 @@ nothing : () -> ()
     let params = &program.subroutines[1].parameters;
     assert_eq!(params, &[Some("hostnames".to_string())]);
 
+    // unless the element type is plural already
+    let params = &program.subroutines[2].parameters;
+    assert_eq!(params, &[Some("animals".to_string())]);
+
     // and unit requires nothing, so there is nothing to name
     assert!(
-        program.subroutines[2]
+        program.subroutines[3]
             .parameters
             .is_empty()
     );

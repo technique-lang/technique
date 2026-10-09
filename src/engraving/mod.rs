@@ -4,7 +4,7 @@
 use std::io;
 use std::path::PathBuf;
 
-mod ledger;
+mod history;
 mod navigation;
 mod record;
 mod store;
@@ -13,13 +13,21 @@ mod store;
 #[derive(Debug)]
 pub enum StoreError {
     NoSuchRun(RunId),
+    InUse(RunId),
     StartMissing(RunId),
     InvalidRunId(String),
-    MalformedRecord { run_id: RunId, error: RecordError },
-    Io { path: PathBuf, error: io::Error },
+    MalformedRecord {
+        run_id: RunId,
+        line: usize,
+        error: RecordError,
+    },
+    Io {
+        path: PathBuf,
+        error: io::Error,
+    },
 }
 
-pub use ledger::{Entry, Ledger};
+pub use history::{Activation, Effect, History, Standing, edge};
 pub use navigation::{Journal, Motion, Position};
 pub use record::{
     InvokeTarget, Record, RecordError, RunId, Serial, State, Supplied, display_path, parse_records,
@@ -29,7 +37,7 @@ pub use store::{Appender, Store};
 pub(crate) use record::{
     fail_reason, format_record, format_supplied, serialize_value, split_top_level, unescape_literal,
 };
-pub(crate) use store::construct_state_path;
+pub(crate) use store::{construct_source_path, construct_state_path};
 
 #[cfg(test)]
 pub(crate) use record::parse_record;

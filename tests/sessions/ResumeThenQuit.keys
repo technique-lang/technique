@@ -1,0 +1,6 @@
+"42" Enter              # /1
+Esc "q"                 # quit at /2
+--- resume
+Esc "q"                 # quit at /2 at once, writing nothing
+--- resume
+Enter*3                 # /2 /3 survey:

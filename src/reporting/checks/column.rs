@@ -7,7 +7,7 @@ fn record(recorded: &str, path: &str, state: State) -> Record {
     Record {
         recorded: recorded.to_string(),
         run_id: RunId(7),
-        serial: Serial::LIFECYCLE,
+        serial: Serial::ROOT,
         path: path.to_string(),
         state,
     }

@@ -1,0 +1,8 @@
+Esc "s"                 # exec skipped, reading unit
+"calm" Enter            # note
+Enter                   # report:/1
+Esc "q"                 # report:
+--- resume
+Enter                   # exec put again, reading 5
+"er" Enter              # note asked again seeded calm
+Enter*5                 # report:/1 report: /1 /2 survey:

@@ -1,0 +1,4 @@
+"5" Enter               # I/1
+Enter*5                 # I/2 I II/3 II/4 II
+Up Up*6 Esc "s"         # at survey:, review to I Done and skip it
+Enter                   # survey:

@@ -1,0 +1,5 @@
+Enter*2                 # /1/a /1/b
+Right Enter             # /1 answered No
+Up*3 Esc "e"            # at /2, review to /1/b Done and edit
+Enter                   # /1/b unchanged, so /1 keeps No
+Enter*2                 # /2 inspect:

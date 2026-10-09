@@ -1,0 +1,5 @@
+survey :
+
+    1.  Go { foreach s in [1] ; exec("false") ; exec("echo ran") }
+        a.  Look around
+    2.  Seal the crate

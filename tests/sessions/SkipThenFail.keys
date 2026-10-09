@@ -1,0 +1,4 @@
+Esc "s"                 # skip the exec gate
+Enter*5                 # a. exec, a., /1 /2 survey:
+--- resume
+End                     # review opens, leaves

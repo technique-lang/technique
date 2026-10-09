@@ -1,0 +1,4 @@
+Enter                   # /1 exec
+Esc "q"                 # /2
+--- resume
+Enter*2                 # /2 slow:

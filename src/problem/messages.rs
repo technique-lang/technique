@@ -1516,6 +1516,16 @@ functions calls:
             format!("Unknown function {}()", name),
             "The function is neither builtin nor provided by the selected domain.".to_string(),
         ),
+        LinkingError::UnattendedRepeat { .. } => (
+            "The repeat keyword cannot be used in an unattended procedure".to_string(),
+            r#"
+A `repeat` loop does not terminate, so in automatic or quiet mode it would
+never finish. You can still run the Technique document interactively if you
+wish.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
     }
 }
 
@@ -1528,12 +1538,25 @@ pub fn generate_store_error(error: &StoreError, _renderer: &dyn Render) -> (Stri
             "The directory for this run identifier was not found in the local state store."
                 .to_string(),
         ),
+        StoreError::InUse(run_id) => (
+            format!("Run '{:06}' is in use by another session", run_id.0),
+            r#"
+Another technique process is recording against this RunId. Only one session at
+a time can write into the store for any given run at a time; finish or quit
+the other session first.
+            "#
+            .trim_ascii()
+            .to_string(),
+        ),
         StoreError::Io { path, error } => (
             format!("I/O error with local state store at {}", path.display()),
             format!("{}", error),
         ),
-        StoreError::MalformedRecord { run_id, .. } => (
-            format!("Malformed record for run '{:06}'", run_id.0),
+        StoreError::MalformedRecord { run_id, line, .. } => (
+            format!(
+                "Malformed record at line {} for run '{:06}'",
+                line, run_id.0
+            ),
             "The PFFTT state file for this run could not be parsed.".to_string(),
         ),
         StoreError::StartMissing(run_id) => (
@@ -1731,22 +1754,29 @@ together.
             .trim_ascii()
             .to_string(),
         ),
+        RunnerError::RecursionLimit { procedure, depth } => (
+            format!(
+                "Recursion limit: {} invoked more than {} levels deep",
+                procedure, depth
+            ),
+            format!(
+                r#"
+Each invocation of a procedure runs inside the one that called it. {} was
+invoked more than {} levels deep; a procedure that invokes itself needs a step
+that stops before reaching that depth.
+                "#,
+                procedure, depth
+            )
+            .trim_ascii()
+            .to_string(),
+        ),
         RunnerError::TerminalRequired => (
             "Running interactively requires a terminal".to_string(),
             r#"
 An interactive run writes its prompts to the terminal and reads user input
-direclty, so its output can't be redirected to a file or pipe. Use `technique
+directly, so its output can't be redirected to a file or pipe. Use `technique
 run` in a terminal, or use `--mode=automatic` to run on auto; you can then
 safely redirect the output.
-            "#
-            .trim_ascii()
-            .to_string(),
-        ),
-        RunnerError::UserQuit => (
-            "Interrupted".to_string(),
-            r#"
-The user quit before the procedure was completed. Use `technique resume
-<id>` to continue.
             "#
             .trim_ascii()
             .to_string(),

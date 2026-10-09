@@ -1,0 +1,4 @@
+slow :
+
+    1.  Wait { exec("false") ~ w }
+    2.  After { w }

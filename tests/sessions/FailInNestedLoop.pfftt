@@ -1,0 +1,30 @@
+2026-09-28T00:00:00.000Z 000000 000 / Start file://tests/sessions/FailInNestedLoop.tq
+2026-10-04T05:19:24.915Z 000000 001 /survey: Begin ()
+2026-10-04T05:19:24.915Z 000000 002 /survey:/1 Begin ()
+2026-10-04T05:19:24.915Z 000000 003 /survey:/1/[1] Begin ( "x" ~ c )
+2026-10-04T05:19:24.915Z 000000 004 /survey:/1/[1]/[1] Begin ( "a" ~ s )
+2026-10-04T05:19:24.915Z 000000 004 /survey:/1/[1]/[1] Execute exec()
+2026-10-04T05:19:24.928Z 000000 004 /survey:/1/[1]/[1] Return
+2026-10-04T05:19:24.928Z 000000 004 /survey:/1/[1]/[1] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.928Z 000000 005 /survey:/1/[1]/[2] Begin ( "b" ~ s )
+2026-10-04T05:19:24.928Z 000000 005 /survey:/1/[1]/[2] Execute exec()
+2026-10-04T05:19:24.940Z 000000 005 /survey:/1/[1]/[2] Return
+2026-10-04T05:19:24.940Z 000000 005 /survey:/1/[1]/[2] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.940Z 000000 003 /survey:/1/[1] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.940Z 000000 006 /survey:/1/[2] Begin ( "y" ~ c )
+2026-10-04T05:19:24.940Z 000000 007 /survey:/1/[2]/[1] Begin ( "a" ~ s )
+2026-10-04T05:19:24.940Z 000000 007 /survey:/1/[2]/[1] Execute exec()
+2026-10-04T05:19:24.959Z 000000 007 /survey:/1/[2]/[1] Return
+2026-10-04T05:19:24.959Z 000000 007 /survey:/1/[2]/[1] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.959Z 000000 008 /survey:/1/[2]/[2] Begin ( "b" ~ s )
+2026-10-04T05:19:24.959Z 000000 008 /survey:/1/[2]/[2] Execute exec()
+2026-10-04T05:19:24.981Z 000000 008 /survey:/1/[2]/[2] Return
+2026-10-04T05:19:24.981Z 000000 008 /survey:/1/[2]/[2] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.981Z 000000 006 /survey:/1/[2] Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.981Z 000000 000 / Stop
+2026-10-04T05:19:24.981Z 000000 000 / Resume
+2026-10-04T05:19:24.981Z 000000 002 /survey:/1 Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.981Z 000000 009 /survey:/2 Begin ()
+2026-10-04T05:19:24.981Z 000000 009 /survey:/2 Done ()
+2026-10-04T05:19:24.981Z 000000 001 /survey: Fail [ "reason" = "External command exited with status 1" ]
+2026-10-04T05:19:24.981Z 000000 000 / Finish

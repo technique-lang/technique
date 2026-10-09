@@ -1,0 +1,9 @@
+"p" Enter               # /1
+"q" Enter               # /2
+Enter*4                 # /3 [1]/-1 [2]/-1 /4
+Up Up*14 Esc "e"        # at /5, review to /2 Done and edit
+Backspace "p" Enter     # /2 seeded q
+Enter*2                 # /3 [1]/-1
+Esc "q"                 # [2]/-1
+--- resume
+Enter*4                 # [2]/-1 /4 /5 survey:

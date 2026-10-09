@@ -1,0 +1,202 @@
+# Every record of a run of EditProbe.tq, stopped once at /survey:/3 and resumed,
+# then amended from the prompt at /survey:/5: step 1 was revoked and answered
+# again, and the replay is asking step 2 afresh because it reads what step 1
+# bound. The run waits at that prompt, so (live) is no longer the last position:
+# steps 3 to 5 still stand beyond it.
+#
+# Positions are the records of the activations standing now, in document order.
+# The superseded first answers to steps 1 and 2 and the Revoke are not, so they
+# refuse every key. Down from step 2 crosses the prompt to step 3, and Down from
+# the last record reaches (live); Up from (live) opens within the prompt's scope.
+# Conventions are as in NetworkProbe.moves.
+#
+# origin                                            key         destination
+
+/ Start                                             Up          (refused)
+/ Start                                             Down        /survey: Begin
+/ Start                                             Left        (refused)
+/ Start                                             Right       /survey: Begin
+/ Start                                             PageUp      (refused)
+/ Start                                             PageDown    (refused)
+
+/survey: Begin                                      Up          / Start
+/survey: Begin                                      Down        /survey:/1 Begin
+/survey: Begin                                      Left        / Start
+/survey: Begin                                      Right       /survey:/1 Begin
+/survey: Begin                                      PageUp      (refused)
+/survey: Begin                                      PageDown    (refused)
+
+/survey:/1 Begin                                    Up          (refused)
+/survey:/1 Begin                                    Down        (refused)
+/survey:/1 Begin                                    Left        (refused)
+/survey:/1 Begin                                    Right       (refused)
+/survey:/1 Begin                                    PageUp      (refused)
+/survey:/1 Begin                                    PageDown    (refused)
+
+/survey:/1 Bind                                     Up          (refused)
+/survey:/1 Bind                                     Down        (refused)
+/survey:/1 Bind                                     Left        (refused)
+/survey:/1 Bind                                     Right       (refused)
+/survey:/1 Bind                                     PageUp      (refused)
+/survey:/1 Bind                                     PageDown    (refused)
+
+/survey:/1 Done                                     Up          (refused)
+/survey:/1 Done                                     Down        (refused)
+/survey:/1 Done                                     Left        (refused)
+/survey:/1 Done                                     Right       (refused)
+/survey:/1 Done                                     PageUp      (refused)
+/survey:/1 Done                                     PageDown    (refused)
+
+/survey:/2 Begin                                    Up          (refused)
+/survey:/2 Begin                                    Down        (refused)
+/survey:/2 Begin                                    Left        (refused)
+/survey:/2 Begin                                    Right       (refused)
+/survey:/2 Begin                                    PageUp      (refused)
+/survey:/2 Begin                                    PageDown    (refused)
+
+/survey:/2 Done                                     Up          (refused)
+/survey:/2 Done                                     Down        (refused)
+/survey:/2 Done                                     Left        (refused)
+/survey:/2 Done                                     Right       (refused)
+/survey:/2 Done                                     PageUp      (refused)
+/survey:/2 Done                                     PageDown    (refused)
+
+/survey:/3 Begin                                    Up          /survey:/2 Begin
+/survey:/3 Begin                                    Down        /survey:/3 Done
+/survey:/3 Begin                                    Left        /survey: Begin
+/survey:/3 Begin                                    Right       (refused)
+/survey:/3 Begin                                    PageUp      /survey:/2 Begin
+/survey:/3 Begin                                    PageDown    /survey:/4 Begin
+
+/ Stop                                              Up          (refused)
+/ Stop                                              Down        (refused)
+/ Stop                                              Left        (refused)
+/ Stop                                              Right       (refused)
+/ Stop                                              PageUp      (refused)
+/ Stop                                              PageDown    (refused)
+
+/ Resume                                            Up          (refused)
+/ Resume                                            Down        (refused)
+/ Resume                                            Left        (refused)
+/ Resume                                            Right       (refused)
+/ Resume                                            PageUp      (refused)
+/ Resume                                            PageDown    (refused)
+
+/survey:/3 Done                                     Up          /survey:/3 Begin
+/survey:/3 Done                                     Down        /survey:/4 Begin
+/survey:/3 Done                                     Left        /survey: Begin
+/survey:/3 Done                                     Right       (refused)
+/survey:/3 Done                                     PageUp      /survey:/2 Begin
+/survey:/3 Done                                     PageDown    /survey:/4 Done
+
+/survey:/4 Begin                                    Up          /survey:/3 Done
+/survey:/4 Begin                                    Down        /survey:/4 Invoke
+/survey:/4 Begin                                    Left        /survey: Begin
+/survey:/4 Begin                                    Right       /report: Begin
+/survey:/4 Begin                                    PageUp      /survey:/3 Begin
+/survey:/4 Begin                                    PageDown    /survey:/5 Begin
+
+/survey:/4 Invoke                                   Up          /survey:/4 Begin
+/survey:/4 Invoke                                   Down        /report: Begin
+/survey:/4 Invoke                                   Left        /survey: Begin
+/survey:/4 Invoke                                   Right       /report: Begin
+/survey:/4 Invoke                                   PageUp      /survey:/3 Begin
+/survey:/4 Invoke                                   PageDown    /survey:/5 Begin
+
+/report: Begin                                      Up          /survey:/4 Invoke
+/report: Begin                                      Down        /report:/1 Begin
+/report: Begin                                      Left        /survey:/4 Begin
+/report: Begin                                      Right       /report:/1 Begin
+/report: Begin                                      PageUp      (refused)
+/report: Begin                                      PageDown    (refused)
+
+/report:/1 Begin                                    Up          /report: Begin
+/report:/1 Begin                                    Down        /report:/1 Done
+/report:/1 Begin                                    Left        /report: Begin
+/report:/1 Begin                                    Right       (refused)
+/report:/1 Begin                                    PageUp      (refused)
+/report:/1 Begin                                    PageDown    /report:/2 Begin
+
+/report:/1 Done                                     Up          /report:/1 Begin
+/report:/1 Done                                     Down        /report:/2 Begin
+/report:/1 Done                                     Left        /report: Done
+/report:/1 Done                                     Right       (refused)
+/report:/1 Done                                     PageUp      (refused)
+/report:/1 Done                                     PageDown    /report:/2 Done
+
+/report:/2 Begin                                    Up          /report:/1 Done
+/report:/2 Begin                                    Down        /report:/2 Done
+/report:/2 Begin                                    Left        /report: Begin
+/report:/2 Begin                                    Right       (refused)
+/report:/2 Begin                                    PageUp      /report:/1 Begin
+/report:/2 Begin                                    PageDown    (refused)
+
+/report:/2 Done                                     Up          /report:/2 Begin
+/report:/2 Done                                     Down        /report: Done
+/report:/2 Done                                     Left        /report: Done
+/report:/2 Done                                     Right       (refused)
+/report:/2 Done                                     PageUp      /report:/1 Done
+/report:/2 Done                                     PageDown    (refused)
+
+/report: Done                                       Up          /report:/2 Done
+/report: Done                                       Down        /survey:/4 Done
+/report: Done                                       Left        /survey:/4 Done
+/report: Done                                       Right       /report:/2 Done
+/report: Done                                       PageUp      (refused)
+/report: Done                                       PageDown    (refused)
+
+/survey:/4 Done                                     Up          /report: Done
+/survey:/4 Done                                     Down        /survey:/5 Begin
+/survey:/4 Done                                     Left        /survey: Begin
+/survey:/4 Done                                     Right       /report: Done
+/survey:/4 Done                                     PageUp      /survey:/3 Done
+/survey:/4 Done                                     PageDown    /survey:/5 Begin
+
+/survey:/5 Begin                                    Up          /survey:/4 Done
+/survey:/5 Begin                                    Down        (live)
+/survey:/5 Begin                                    Left        /survey: Begin
+/survey:/5 Begin                                    Right       (refused)
+/survey:/5 Begin                                    PageUp      /survey:/4 Begin
+/survey:/5 Begin                                    PageDown    (refused)
+
+/survey:/1 Revoke                                   Up          (refused)
+/survey:/1 Revoke                                   Down        (refused)
+/survey:/1 Revoke                                   Left        (refused)
+/survey:/1 Revoke                                   Right       (refused)
+/survey:/1 Revoke                                   PageUp      (refused)
+/survey:/1 Revoke                                   PageDown    (refused)
+
+/survey:/1 Begin                                    Up          /survey: Begin
+/survey:/1 Begin                                    Down        /survey:/1 Bind
+/survey:/1 Begin                                    Left        /survey: Begin
+/survey:/1 Begin                                    Right       (refused)
+/survey:/1 Begin                                    PageUp      (refused)
+/survey:/1 Begin                                    PageDown    /survey:/2 Begin
+
+/survey:/1 Bind                                     Up          /survey:/1 Begin
+/survey:/1 Bind                                     Down        /survey:/1 Done
+/survey:/1 Bind                                     Left        /survey: Begin
+/survey:/1 Bind                                     Right       (refused)
+/survey:/1 Bind                                     PageUp      (refused)
+/survey:/1 Bind                                     PageDown    /survey:/2 Begin
+
+/survey:/1 Done                                     Up          /survey:/1 Bind
+/survey:/1 Done                                     Down        /survey:/2 Begin
+/survey:/1 Done                                     Left        /survey: Begin
+/survey:/1 Done                                     Right       (refused)
+/survey:/1 Done                                     PageUp      (refused)
+/survey:/1 Done                                     PageDown    /survey:/2 Begin
+
+/survey:/2 Begin                                    Up          /survey:/1 Done
+/survey:/2 Begin                                    Down        /survey:/3 Begin
+/survey:/2 Begin                                    Left        /survey: Begin
+/survey:/2 Begin                                    Right       (refused)
+/survey:/2 Begin                                    PageUp      /survey:/1 Begin
+/survey:/2 Begin                                    PageDown    /survey:/3 Begin
+
+(live)                                              Up          /survey:/2 Begin
+(live)                                              Down        (refused)
+(live)                                              Left        (refused)
+(live)                                              Right       (refused)
+(live)                                              PageUp      (refused)
+(live)                                              PageDown    (refused)

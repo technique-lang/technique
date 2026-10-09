@@ -1,0 +1,7 @@
+Esc "s"                 # /1
+Esc "s"                 # /1/a
+Esc "q"                 # /1/b
+--- resume
+Esc "s"                 # /1/b
+Esc "s"                 # /1 close, asked again as its reading of () is a Done value
+Enter*2                 # /2 survey:

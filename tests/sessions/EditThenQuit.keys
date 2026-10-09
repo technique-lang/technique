@@ -1,0 +1,6 @@
+"42" Enter              # /1
+Enter*6                 # /2 /3 report:/1 report:/2 report: /4
+Up Up*14 Esc "e"        # at /5, review to /1 Done and edit
+Esc "q"                 # quit at /1 seeded 42, dropping its Revoke
+--- resume
+Enter*2                 # /5 survey:, /1 still 42

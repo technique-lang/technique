@@ -1,0 +1,10 @@
+survey :
+
+    1.  Take a reading ~ reading
+    2.  Report twice <report>(reading) then <report>("fixed")
+    3.  Stamp it <report>(exec("echo 5"))
+    4.  Finish up
+
+report(r) : Reading -> ()
+
+    1.  File { r }

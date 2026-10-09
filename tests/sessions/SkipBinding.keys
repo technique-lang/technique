@@ -1,0 +1,4 @@
+"42" Enter              # /1
+Enter*6                 # /2 /3 report:/1 report:/2 report: /4
+Up Up*14 Esc "s"        # at /5, review to /1 Done and skip it
+Enter*7                 # /2 report:/1 report:/2 report: /4 /5 survey:

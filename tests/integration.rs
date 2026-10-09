@@ -6,5 +6,6 @@ mod navigation;
 mod parsing;
 mod resolution;
 mod runner;
+mod sessions;
 mod templating;
 mod translation;

@@ -1,0 +1,9 @@
+survey :
+
+    1.  Open the crate
+    2.  <count>
+    3.  Seal the crate
+
+count(n) : Quantity -> ()
+
+    1.  Count { n } samples
