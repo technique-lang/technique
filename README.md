@@ -45,6 +45,10 @@ The _technique_ program has a number of subcommands in three main groups:
 - _resume_ \
   Resume a previously interrupted run of a Technique.
 
+- _log_ \
+  Output the journal from a previous run of a Technique, seeing timestamps,
+  durations, and results.
+
 ## Contents
 
 This repository contains the _technique_ binary, which is the compiler for

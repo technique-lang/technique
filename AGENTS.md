@@ -116,6 +116,15 @@ be continued
 
 where `42` is the run identifier.
 
+You can inspect the _.store/000042/File.pfftt_ file directly, or use 
+
+- `cargo run -- log 42`
+
+to output the journal from a previous run, selecting timestamps, durations,
+paths, states, and results using the `--columns` option. The PFFTT data can
+also be output in JSON form using `--output=json`.
+
+
 ## Running automatically as a script
 
 A document can instead be run automatically
